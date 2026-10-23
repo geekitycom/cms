@@ -104,6 +104,7 @@ function stable(html: string): string {
   return html
     .replace(/name="csrf_token"\s+value="[^"]*"/g, 'name="csrf_token" value=""')
     .replace(/nonce="[^"]*"/g, 'nonce=""')
+    .replace(/name="autosave" value="new-[0-9a-f]{32}"/g, 'name="autosave" value="new-"')
     .replace(/(id="editor-date"[^>]*value=")[^"]*"/, '$1"');
 }
 

@@ -175,3 +175,35 @@
 #editor-surface .cm-md-mark {
   color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
 }
+
+html.editor-focus #editor-surface .cm-editor {
+  height: auto;
+  min-height: 60dvh;
+  border-color: transparent;
+  background-color: transparent;
+  font-size: 1.0625rem;
+}
+
+html.editor-focus #editor-surface .cm-editor.cm-focused {
+  outline: none;
+}
+
+html.editor-focus #editor-surface .cm-scroller {
+  line-height: 1.8;
+}
+
+html.editor-focus #editor-surface .cm-content {
+  padding-block: 0;
+}
+
+html.editor-focus #editor-surface .cm-line {
+  padding-inline: 0;
+}
+
+html.editor-focus #editor-surface .cm-gutters {
+  display: none;
+}
+
+html.editor-focus #editor-surface .cm-activeLine {
+  background-color: transparent;
+}

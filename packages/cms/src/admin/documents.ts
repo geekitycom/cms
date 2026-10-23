@@ -1,5 +1,12 @@
 import type { Context, Hono } from 'hono';
 
+import {
+  AUTOSAVE_FIELD,
+  autosaveCopies,
+  isMintedAutosaveId,
+  mintAutosaveId,
+} from '../autosave/index.ts';
+import type { AutosaveCopy } from '../autosave/index.ts';
 import { CITATION_PROPERTIES, citedHost, citesAnImage, shownInFull } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { commentPolicyOf } from '../comments/policy.ts';
@@ -19,8 +26,8 @@ import {
 import type { EditorForm, ResolvedMedia } from '../content/document-form.ts';
 import { PAGE_KIND, POST_KIND } from '../content/document-kind.ts';
 import type { DocumentKind } from '../content/document-kind.ts';
-import { TRANSCRIPT_TYPES } from '../content/enclosure.ts';
-import { ENCLOSURE_FIELDS } from '../content/enclosure-form.ts';
+import { enclosureOf, TRANSCRIPT_TYPES } from '../content/enclosure.ts';
+import { ENCLOSURE_FIELDS, resolveEnclosure } from '../content/enclosure-form.ts';
 import { EVENT_FIELDS } from '../content/event-form.ts';
 import {
   isReviewKind,
@@ -28,13 +35,13 @@ import {
   REVIEW_KIND_WORDS,
   REVIEW_KINDS,
 } from '../content/review.ts';
-import { REVIEW_FIELDS } from '../content/review-form.ts';
+import { resolveReview, REVIEW_FIELDS } from '../content/review-form.ts';
 import type { Refusal } from '../content/form-error.ts';
 import { BLANK_LOCATION_FORM } from '../content/location-form.ts';
 import { postLocations } from '../content/locations.ts';
-import { PHOTO_FIELDS } from '../content/photo-form.ts';
+import { PHOTO_FIELDS, resolvePhotos } from '../content/photo-form.ts';
 import { syndicateToField } from '../content/post-fields.ts';
-import { postLabel } from '../content/post-type.ts';
+import { firstWords, postLabel } from '../content/post-type.ts';
 import { RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
 import { scheduledFor } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
@@ -44,7 +51,7 @@ import { zoneLabel } from '../content/time.ts';
 import { moveDocumentFile } from '../content/trash.ts';
 import { isVisibility, visibilityOf } from '../content/visibility.ts';
 import type { StoredVisibility } from '../content/visibility.ts';
-import { missingAltText, writeDocument } from '../content/write.ts';
+import { conflictWith, missingAltText, writeDocument } from '../content/write.ts';
 import { currentUsername, documentSite } from '../web/document-site.ts';
 import type { Conflict } from '../content/write.ts';
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
@@ -76,7 +83,7 @@ import {
 } from './editor-kinds.ts';
 import type { PostKind } from './editor-kinds.ts';
 import { editorSections, openGroups, sidebarLocation } from './editor-layout.ts';
-import { flash } from './flash.ts';
+import { flash, noteClearedAutosave } from './flash.ts';
 import {
   ITEM_LOOKUP_BUTTON,
   ITEM_LOOKUP_PATH,
@@ -85,6 +92,8 @@ import {
 } from './item-lookup.ts';
 import { formatInTimezone } from './formatting.ts';
 import { allowGeolocation } from './headers.ts';
+import { AUTOSAVE_DISCARD_JSON_PATH, AUTOSAVE_DISCARD_PATH, AUTOSAVE_PATH } from './autosave.ts';
+import { laterOrOnlyKnown } from './autosave-client.ts';
 import { PREVIEW_PATH } from './preview.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -224,6 +233,7 @@ export function mountDocumentScreens(
   const { kind, render } = options;
 
   app.get(kind.basePath, (c) => {
+    if (c.req.query('status') === UNSAVED) return renderUnsaved(c, kind, render);
     const filter = documentFilter(c.req.query('status'));
     const pageNumber = Math.max(1, Number(c.req.query('page') ?? '1') || 1);
     const offset = (pageNumber - 1) * DOCUMENTS_PER_PAGE;
@@ -241,12 +251,7 @@ export function mountDocumentScreens(
       child: 'all',
       kind,
       filter,
-      filters: DOCUMENT_FILTERS.map((name) => ({
-        name,
-        label: FILTER_LABELS[name],
-        url: listingUrl(kind, name, 1),
-        current: name === filter,
-      })),
+      filters: filterTabs(kind, filter),
       documents: rows.map((document) =>
         listRow(kind, document, c.var.store.now(), pageRole(kind, document, c), (url) =>
           c.var.replyContexts.read(url, c.var.siteAtRequestStart),
@@ -265,12 +270,20 @@ export function mountDocumentScreens(
   app.get(newEditorPath(kind), (c) => {
     const postKind = c.req.query('kind');
     if (kind.type === 'post' && !isPostKind(postKind)) return renderChooser(c, kind, render);
+    const id = mintedId(c.req.query(AUTOSAVE_FIELD));
+    const copy = id === undefined ? undefined : ownCopy(c, kind, id);
+    const restoring = copy !== undefined && c.req.query(RESTORE) !== undefined;
     return renderEditor(c, {
       kind,
       render,
       document: undefined,
-      form: blankForm(kind, siteTimezone(c), c.var.store.now()),
+      form: restoring
+        ? submittedForm(kind, copy.fields, c.var.config.contentDir)
+        : blankForm(kind, siteTimezone(c), c.var.store.now()),
       postKind: isPostKind(postKind) ? postKind : undefined,
+      autosave: id,
+      copy,
+      offer: !restoring,
     });
   });
 
@@ -283,15 +296,46 @@ export function mountDocumentScreens(
     );
   });
 
-  app.get(`${kind.basePath}/:slug`, (c) => {
+  app.get(`${kind.basePath}/:slug`, async (c) => {
     const document = findEdited(c.var.store, kind, c.req.param('slug'), c.req.query('path'));
     if (document === undefined) return c.notFound();
+    const copy = ownCopy(c, kind, document.path);
+    const restore = c.req.query(RESTORE);
+    if (copy !== undefined && restore !== undefined) {
+      const form = submittedForm(kind, copy.fields, c.var.config.contentDir);
+      const conflict = await conflictWith(c.var.config.contentDir, document, copy.hash);
+      if (restore === REBASE || conflict === undefined) {
+        return renderEditor(c, {
+          kind,
+          render,
+          document,
+          form: { ...form, hash: conflict?.hash ?? copy.hash },
+          postKind: isPostKind(copy.kind) ? copy.kind : undefined,
+          copy,
+        });
+      }
+      return renderConflict(c, {
+        kind,
+        render,
+        document,
+        form,
+        media: copyMedia(form, document, c.var.config.contentDir),
+        conflict,
+        restoring: {
+          rebaseUrl: withQuery(documentEditorPath(kind, document), { [RESTORE]: REBASE }),
+          discardUrl: AUTOSAVE_DISCARD_PATH,
+          key: copy.key,
+        },
+      });
+    }
     const location = postLocations(c.var.config.dataDir).read(document.permalink);
     return renderEditor(c, {
       kind,
       render,
       document,
       form: formFor(kind, document, siteTimezone(c), location),
+      copy,
+      offer: true,
     });
   });
 
@@ -371,6 +415,7 @@ function switchKind(
     document,
     form: submittedForm(kind, body, c.var.config.contentDir),
     postKind,
+    autosave: mintedId(body[AUTOSAVE_FIELD]),
   });
 }
 
@@ -390,6 +435,7 @@ function lookUpItem(
       form: { ...form, review: outcome.review },
       postKind: 'review',
       itemLookup: { message: outcome.message, failed: outcome.failed },
+      autosave: mintedId(body[AUTOSAVE_FIELD]),
     });
   })();
 }
@@ -451,6 +497,7 @@ async function saveFromForm(
       postKind: isPostKind(body['kind']) ? body['kind'] : undefined,
       refusal,
       status: 400,
+      autosave: mintedId(body[AUTOSAVE_FIELD]),
     });
   }
 
@@ -467,6 +514,7 @@ async function saveFromForm(
     });
   }
   const { saved, undescribed, respelled } = written;
+  discardAutosaves(c, [document?.path, saved.path, mintedId(body[AUTOSAVE_FIELD])]);
 
   flash(
     c,
@@ -567,6 +615,7 @@ interface RenderConflictOptions {
   /** The recording and the photos the submitted form resolved to. */
   media: ResolvedMedia;
   conflict: Conflict;
+  restoring?: { rebaseUrl: string; discardUrl: string; key: string } | undefined;
 }
 
 /**
@@ -603,7 +652,7 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     body: form.body,
   });
 
-  c.status(409);
+  if (options.restoring === undefined) c.status(409);
   return options.render(c, ADMIN_TEMPLATES.documentConflict, {
     section: kind.section,
     // Editing something that exists, so the listing is where the menu stands.
@@ -618,7 +667,20 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     editUrl: documentEditorPath(kind, document),
     saveUrl: documentEditorPath(kind, document),
     action: form.draft ? 'save-draft' : 'publish',
+    restoring: options.restoring,
   });
+}
+
+function copyMedia(form: EditorForm, document: Document, contentDir: string): ResolvedMedia {
+  const previous = enclosureOf(document.extra);
+  const recording = resolveEnclosure(form.enclosure, previous, contentDir);
+  const photos = resolvePhotos(form.photos, contentDir);
+  const review = resolveReview(form.review, contentDir);
+  return {
+    recording: 'error' in recording ? previous : recording.enclosure,
+    photos: 'error' in photos ? [] : photos.photos,
+    review: 'error' in review ? undefined : review.review,
+  };
 }
 
 /** What {@link moveDocument} is asked to do. */
@@ -650,6 +712,7 @@ async function moveDocument(
     action,
   );
   if (moved.outcome === 'refused') return backTo(c, options, moved.reason);
+  if (action === 'trash') discardAutosaves(c, [document.path]);
 
   const label = postLabel(document, (url) =>
     c.var.replyContexts.read(url, c.var.siteAtRequestStart),
@@ -662,6 +725,148 @@ async function moveDocument(
       (action === 'trash' ? kind.basePath : documentEditorPath(kind, moved.document)),
     303,
   );
+}
+
+const RESTORE = 'restore';
+const REBASE = 'rebase';
+const UNSAVED = 'unsaved';
+
+function ownCopy(
+  c: Context<GeekityEnv>,
+  kind: DocumentKind,
+  key: string,
+): AutosaveCopy | undefined {
+  const userId = c.var.session?.userId;
+  if (userId == null) return undefined;
+  const copy = autosaveCopies(c.var.config.dataDir).read(userId, key);
+  return copy?.type === kind.type ? copy : undefined;
+}
+
+function mintedId(value: unknown): string | undefined {
+  return isMintedAutosaveId(value) ? value : undefined;
+}
+
+function withQuery(address: string, query: Record<string, string>): string {
+  const search = new URLSearchParams(query).toString();
+  if (search === '') return address;
+  return `${address}${address.includes('?') ? '&' : '?'}${search}`;
+}
+
+function newDocumentQuery(
+  kind: DocumentKind,
+  id: string,
+  postKind: string | undefined,
+): Record<string, string> {
+  return kind.type === 'post' && postKind !== undefined
+    ? { kind: postKind, [AUTOSAVE_FIELD]: id }
+    : { [AUTOSAVE_FIELD]: id };
+}
+
+function resumeUrl(
+  kind: DocumentScreens,
+  document: Document | undefined,
+  key: string,
+  postKind: string | undefined,
+): string {
+  return document === undefined
+    ? withQuery(newEditorPath(kind), { ...newDocumentQuery(kind, key, postKind), [RESTORE]: '1' })
+    : withQuery(documentEditorPath(kind, document), { [RESTORE]: '1' });
+}
+
+interface UnsavedRow {
+  label: string;
+  kind: string;
+  savedAt: string;
+  at: string;
+  of: string;
+  resumeUrl: string | undefined;
+  key: string;
+}
+
+function renderUnsaved(
+  c: Context<GeekityEnv>,
+  kind: DocumentScreens,
+  render: AdminRender,
+): Response {
+  const userId = c.var.session?.userId;
+  const copies = userId == null ? [] : autosaveCopies(c.var.config.dataDir).list(userId);
+  const cited: CitedPageReader = (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart);
+  const rows = copies
+    .filter((copy) => copy.type === kind.type)
+    .map((copy): UnsavedRow => {
+      const document = copy.path === undefined ? undefined : c.var.store.getByPath(copy.path);
+      const postKind = isPostKind(copy.kind) ? copy.kind : undefined;
+      const gone = copy.path !== undefined && document === undefined;
+      return {
+        label: copyLabel(copy),
+        kind:
+          postKind !== undefined
+            ? EDITOR_KINDS[postKind].label
+            : kind.type === 'page'
+              ? PAGE_CHOICE.label
+              : 'Post',
+        savedAt: copy.savedAt,
+        at: formatInTimezone(copy.savedAt, siteTimezone(c)),
+        of:
+          document !== undefined
+            ? `Edits to ${postLabel(document, cited)}`
+            : gone
+              ? 'Edits to a document that is gone'
+              : `New ${kind.singular}`,
+        resumeUrl: gone ? undefined : resumeUrl(kind, document, copy.key, postKind),
+        key: copy.key,
+      };
+    });
+
+  return render(c, ADMIN_TEMPLATES.documentList, {
+    section: kind.section,
+    child: 'all',
+    kind,
+    filter: UNSAVED,
+    filters: filterTabs(kind, UNSAVED),
+    unsaved: rows,
+    discardUrl: AUTOSAVE_DISCARD_PATH,
+    newUrl: newEditorPath(kind),
+    returnUrl: `${kind.basePath}?status=${UNSAVED}`,
+  });
+}
+
+function copyLabel(copy: AutosaveCopy): string {
+  const title = (copy.fields['title'] ?? '').trim();
+  if (title !== '') return title;
+  const text = (copy.fields['body'] ?? '').replace(/\s+/g, ' ').trim();
+  return text === '' ? 'Untitled' : firstWords(text);
+}
+
+function filterTabs(
+  kind: DocumentScreens,
+  current: DocumentFilter | typeof UNSAVED,
+): { name: string; label: string; url: string; current: boolean }[] {
+  return [
+    ...DOCUMENT_FILTERS.map((name) => ({
+      name,
+      label: FILTER_LABELS[name],
+      url: listingUrl(kind, name, 1),
+      current: name === current,
+    })),
+    {
+      name: UNSAVED,
+      label: 'Unsaved',
+      url: `${kind.basePath}?status=${UNSAVED}`,
+      current: current === UNSAVED,
+    },
+  ];
+}
+
+function discardAutosaves(c: Context<GeekityEnv>, keys: readonly (string | undefined)[]): void {
+  const userId = c.var.session?.userId;
+  if (userId == null) return;
+  const copies = autosaveCopies(c.var.config.dataDir);
+  for (const key of new Set(keys)) {
+    if (key === undefined) continue;
+    copies.discard(userId, key);
+    noteClearedAutosave(c, key);
+  }
 }
 
 /** Report a move that did not happen and go back where the form came from. */
@@ -711,6 +916,9 @@ interface RenderEditorOptions {
   postKind?: PostKind | undefined;
   refusal?: Refusal | undefined;
   itemLookup?: { message: string; failed: boolean } | undefined;
+  autosave?: string | undefined;
+  copy?: AutosaveCopy | undefined;
+  offer?: boolean | undefined;
   /** The status to answer with. Defaults to 200. */
   status?: 200 | 400 | undefined;
 }
@@ -748,6 +956,29 @@ async function renderEditor(
   }
   if (trashed) actions.push({ value: 'restore', label: 'Restore' });
   else if (document !== undefined) actions.push({ value: 'trash', label: 'Move to trash' });
+
+  const autosaveKey = document?.path ?? options.autosave ?? mintAutosaveId();
+  const copy = options.copy;
+  const resume =
+    options.offer === true &&
+    copy !== undefined &&
+    laterOrOnlyKnown(copy.savedAt, document?.updated)
+      ? {
+          key: copy.key,
+          savedAt: copy.savedAt,
+          at: formatInTimezone(copy.savedAt, timezone),
+          changedSince:
+            document !== undefined &&
+            (await conflictWith(c.var.config.contentDir, document, copy.hash)) !== undefined,
+          noun: kind.singular,
+          restoreUrl: resumeUrl(kind, document, autosaveKey, postKind),
+          discardUrl: AUTOSAVE_DISCARD_PATH,
+          returnUrl:
+            document === undefined
+              ? withQuery(newEditorPath(kind), newDocumentQuery(kind, autosaveKey, postKind))
+              : documentEditorPath(kind, document),
+        }
+      : undefined;
 
   if (options.status !== undefined) c.status(options.status);
   const permissions = c.var.config.securityHeaders['permissions-policy'];
@@ -839,6 +1070,14 @@ async function renderEditor(
     saveUrl: document === undefined ? newEditorPath(kind) : documentEditorPath(kind, document),
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
+    autosaveUrl: AUTOSAVE_PATH,
+    autosaveKey,
+    autosaveDiscardUrl: AUTOSAVE_DISCARD_JSON_PATH,
+    autosaveUser: c.var.session?.userId ?? undefined,
+    autosaveCopySavedAt: copy?.savedAt,
+    autosaveFileTime: document?.updated,
+    autosaveTimezone: timezone,
+    resume,
     viewUrl: document !== undefined && isServed(document, now) ? document.permalink : undefined,
     // Named beside the date field, because a wall clock with no zone on it is
     // exactly the ambiguity decision-11 exists to remove.

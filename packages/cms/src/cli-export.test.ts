@@ -126,6 +126,7 @@ describe('geekity export', () => {
     assert.equal(run.code, 0, run.stderr);
     assert.match(run.stdout, /^data\/users\.json +kept +Every account/m);
     assert.match(run.stdout, /^data\/queue\.sqlite +pending +Queued deliveries/m);
+    assert.match(run.stdout, /^data\/autosave\/\*\* +pending +Each writer/m);
     assert.match(run.stdout, /^data\/mail\.json +credential +The Brevo key/m);
     assert.match(run.stdout, /^data\/geekity\.db +rebuildable +/m);
     assert.match(run.stdout, /^data\/exports\/\*\* +scratch +/m);

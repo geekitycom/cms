@@ -4,6 +4,7 @@ import type { Environment } from 'nunjucks';
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { mountAppActivity } from './app-activity.ts';
+import { mountAutosave } from './autosave.ts';
 import { mountConnectedApps } from './connected-apps.ts';
 import { CONSENT_PATH, mountConsentScreen } from './indieauth-consent.ts';
 import {
@@ -28,7 +29,7 @@ import {
   POST_SCREENS,
 } from './documents.ts';
 import { mountFederationScreen } from './federation.ts';
-import { takeFlash } from './flash.ts';
+import { takeClearedAutosaves, takeFlash } from './flash.ts';
 import { adminSecurityHeaders } from './headers.ts';
 import { mountCommentsScreen } from './comments.ts';
 import { MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
@@ -170,6 +171,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
           ? undefined
           : { name: user.profile?.displayName ?? user.username, url: editUserPath(user.id) },
       flash: takeFlash(c),
+      clearedAutosaves: takeClearedAutosaves(c),
       devModeUrl: c.var.devMode ? DEV_MODE_PATH : undefined,
       dataTheme: ACCOUNT_TEMPLATES.has(template) ? undefined : user?.adminTheme,
       barScheme: adminColorScheme(user?.adminTheme),
@@ -333,11 +335,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // read and written the way the settings are (TASK-218).
   mountSyndicationTargetsScreen(app, { render });
 
-  // The two endpoints the editor talks to rather than navigates to. Both are
-  // inside the guard, so both need the session's CSRF token like every other
-  // POST in the admin.
   mountPreview(app);
   mountUploads(app);
+  mountAutosave(app);
 
   // Every menu the site holds, and which of them the active theme renders. A
   // section of its own rather than a settings page: a menu is content a site

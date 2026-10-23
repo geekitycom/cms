@@ -28,6 +28,7 @@ import {
   notificationSwitches,
 } from '../site/notification-preferences.ts';
 import { revokeTokensForUser } from '../indieauth/tokens.ts';
+import { autosaveCopies } from '../autosave/index.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { ADMIN_THEMES, adminTheme } from '../site/admin-theme.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
@@ -555,6 +556,7 @@ export async function deleteUser(input: {
 }): Promise<boolean> {
   const deleted = await removeUserRecord(input);
   await revokeTokensForUser(input.dataDir, input.userId, input.now);
+  autosaveCopies(input.dataDir).discardUser(input.userId);
   return deleted;
 }
 

@@ -4,7 +4,7 @@
    saved last. #}
 {% extends "layouts/shell.njk" %}
 
-{% block title %}Conflicting edit{% endblock %}
+{% block title %}{% if restoring %}Restore unsaved changes{% else %}Conflicting edit{% endif %}{% endblock %}
 
 {% import "components/fields.njk" as field %}
 {% from "components/alert.njk" import alert %}
@@ -12,16 +12,29 @@
 {% from "components/card.njk" import card %}
 
 {% block content %}
-  <h1 class="mb-6 text-2xl font-bold">This {{ kind.singular }} changed while you were editing it</h1>
+  {% if restoring %}
+    <h1 class="mb-6 text-2xl font-bold">This {{ kind.singular }} changed since your unsaved changes</h1>
 
-  <div class="mb-6">
-    {% call alert(color='error', style='soft', polite=true) %}
-      <span>
-        Nothing has been saved. The file on disk is not the one this form was filled in
-        from — somebody else, or something else, has written to it.
-      </span>
-    {% endcall %}
-  </div>
+    <div class="mb-6">
+      {% call alert(color='warning', style='soft', polite=true) %}
+        <span>
+          Nothing has been saved. The file on disk has been written to since your
+          unsaved changes were made from it. Read both versions before you choose.
+        </span>
+      {% endcall %}
+    </div>
+  {% else %}
+    <h1 class="mb-6 text-2xl font-bold">This {{ kind.singular }} changed while you were editing it</h1>
+
+    <div class="mb-6">
+      {% call alert(color='error', style='soft', polite=true) %}
+        <span>
+          Nothing has been saved. The file on disk is not the one this form was filled in
+          from — somebody else, or something else, has written to it.
+        </span>
+      {% endcall %}
+    </div>
+  {% endif %}
 
   <div class="grid gap-6 lg:grid-cols-2">
     {% call card(title='Your version') %}
@@ -32,6 +45,17 @@
     {% endcall %}
   </div>
 
+  {% if restoring %}
+    <div class="mt-6 flex flex-wrap items-center gap-2">
+      <form method="post" action="{{ restoring.discardUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="autosave" value="{{ restoring.key }}" />
+        <input type="hidden" name="return" value="{{ editUrl }}" />
+        {{ button('Discard mine and edit the file on disk', type='submit', style='soft') }}
+      </form>
+      {{ buttonLink('Edit mine over the file', restoring.rebaseUrl, color='primary') }}
+    </div>
+  {% else %}
   {# Everything the refused form carried, with the hash the file has now. One
      click is then a deliberate overwrite of a version its author has read. #}
   <form class="mt-6 flex flex-wrap items-center gap-2" method="post" action="{{ saveUrl }}">
@@ -52,4 +76,5 @@
     {{ buttonLink('Discard mine and edit the file on disk', editUrl, style='soft') }}
     {{ button('Keep mine and overwrite the file', type='submit', name='action', value=action, color='error') }}
   </form>
+  {% endif %}
 {% endblock %}

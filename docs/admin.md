@@ -329,6 +329,11 @@ terms allow non-commercial use with attribution, which the panel gives.
   body and shows the response in a sandboxed frame.
 - An "Add file…" button, or a file dropped on the editor, posts to
   `/admin/uploads` and pastes the returned Markdown at the cursor.
+- The form is autosaved to `/admin/autosave` while you type. See
+  [Autosave in the editor](#autosave-in-the-editor).
+- A "Write in focus" button beside the Write/Preview tabs, or Ctrl+Shift+F
+  (Cmd+Shift+F on a Mac), shows only the title and the body. See
+  [Writing in focus](#writing-in-focus).
 
 `editor.js` is a build product. Its source is `packages/cms/editor/main.ts`,
 which has its own `tsconfig.json` with the DOM lib and no node types. esbuild
@@ -386,6 +391,180 @@ browser gets the 413 as plain text instead of JSON.
 
 Both endpoints are behind the admin's guard and need the session's CSRF token,
 like every other POST in the admin.
+
+### Writing in focus
+
+The "Write in focus" button, or Ctrl+Shift+F (Cmd+Shift+F on a Mac), turns on
+a distraction-free mode. The title and the body fill the window in a centred
+column about 70 characters wide, in the colours of your admin theme. The admin
+bar, the menu, the sidebar, the other sections of the post and the Preview,
+"Add file…" and "Add video…" controls are hidden. They are also `inert`, so Tab
+and a screen reader cannot reach them. Entering from the Preview tab switches
+to Write first.
+
+A status line under the body shows the word count and the autosave status.
+There is no save button in this mode: autosave keeps the copy, and you leave
+the mode to save draft, publish or update. The word count is not announced as
+you type. The autosave status is the same live region as outside the mode.
+
+The mode asks the browser for fullscreen. If the browser refuses, or has no
+Fullscreen API, the mode fills the window instead. These leave the mode:
+
+- Escape. When CodeMirror's search panel or a completion is open, the first
+  Escape closes that instead.
+- Ctrl+Shift+F or Cmd+Shift+F again.
+- The Exit focus button.
+- Leaving browser fullscreen.
+
+Focus then returns to the control that entered the mode: the button, or the
+field that had focus when you pressed the shortcut. The text, the cursor and
+the selection are unchanged. The choice is not remembered, so the editor always
+opens with the mode off.
+
+While an alert offers unsaved changes back (see
+[Resuming unsaved changes](#resuming-unsaved-changes)), the mode does not turn
+on. The editor's status line asks you to choose Restore or Discard first, so
+the alert is never hidden without a choice.
+
+With JavaScript off there is no button and no shortcut, and the editor is the
+plain form.
+
+### Autosaved copies
+
+`POST /admin/autosave` keeps a copy of an editor form that has not been saved
+yet (decision-62). A copy is never the document. The endpoint does not write
+the post or page, `locations.json` or any other store, and a published post
+does not change until you press Update.
+
+The request is the editor form, as `multipart/form-data` or urlencoded, with
+the session's CSRF token. The `autosave` field names the copy:
+
+- For a document that exists, it is the document's content path, such as
+  `posts/2026-01-02-hello.md`.
+- For a new document, it is an id of the form `new-` and 32 lowercase hex
+  digits, given to the editor when it opens.
+
+The server stores every text field of the form except `csrf_token`, the
+`hash` the form carries, the document's type, post kind and path, and the
+time. It answers `{ "key": "...", "savedAt": "<ISO time>" }`. A key that is
+neither a content path inside `content/` nor such an id gets a 400, and a
+content path that names no document gets a 404, both as `{ "error": "..." }`.
+A second autosave for the same key replaces the first.
+
+Copies are stored in `data/autosave/<user id>/`, one file for each key, mode
+`0600`. A copy belongs to the user who wrote it. Nobody else can read, restore
+or discard it, so two users editing one post each have their own copy.
+
+A copy is deleted when:
+
+- you save, publish or update the document in the editor. A save that is
+  refused or that conflicts with a newer file keeps the copy.
+- you move the document to the trash from the editor.
+- you post its key to `POST /admin/autosave/discard`. The answer is
+  `{ "discarded": true }`, or `false` when there was no copy. With a `return`
+  field that names a path under `/admin`, the answer is a redirect there
+  instead, for a form without JavaScript.
+- your user is deleted.
+- it is more than 30 days old when the site starts.
+
+#### Autosave in the editor
+
+With JavaScript on, `editor.js` posts the whole editor form to
+`/admin/autosave`:
+
+- about two seconds after the last change to the title, the body or any other
+  field
+- when a field loses focus, if something changed
+- when the page is hidden or closed (`pagehide`), with `navigator.sendBeacon`
+
+A form that is the same as the one the server last had is not posted again.
+Pressing Save draft, Publish or Update stops autosave for that page, so no
+copy is written after the save.
+
+The editor of a new document carries its id in the hidden `autosave` field.
+The script also puts the id in the address, as in
+`/admin/posts/new?kind=note&autosave=new-…`, so a reload opens the editor
+with the same id. The server keeps an id it finds in the address or in a
+posted form, and mints a new one otherwise.
+
+A status line under the body says where the latest copy is. It is a polite
+live region, and it changes only when an autosave finishes, not on each
+keystroke:
+
+| Status                                                 | Meaning                                                                                                                                |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Saved a copy at 12:03.                                 | The server has the copy.                                                                                                               |
+| Server unreachable — saved in this browser at 12:03.   | The post failed on the network or with a 5xx. The fields are in localStorage, and the script retries after 2, 4, 8 … up to 60 seconds. |
+| You are signed out — saved in this browser at 12:03. … | The answer was a 401 or 403, or a redirect to the login form. The fields are in localStorage. Sign in again in another tab.            |
+| The server's reason                                    | Any other refusal, such as a 400 for a key the server does not accept. The fields are in localStorage.                                 |
+
+A browser copy is stored under the localStorage key
+`geekity-autosave:<origin>:<user id>:<autosave key>`. The value is JSON with
+`version`, `key`, `hash`, `savedAt` and `fields`, a list of `[name, value]`
+pairs without the CSRF token. The script removes a copy it wrote when a later
+server autosave succeeds. After a successful save, the next editor page names
+the keys whose server copies the save deleted, and the script removes its
+browser copies of them too. A signed-out autosave is not retried on a timer,
+because the page's CSRF token no longer matches. The next change tries again.
+
+If you leave the page while the form holds changes the server does not have,
+the browser asks whether to leave. Submitting the form does not ask.
+
+With JavaScript off there is no autosave, and the form works as before.
+
+#### Resuming unsaved changes
+
+When you open the editor of a document and the server has your copy of it, an
+alert above the form says "Unsaved changes from <time>" and offers Restore and
+Discard. The time is in the site's time zone, for a browser copy too. The alert is shown only when the copy was saved after the document's
+`updated` time, which is when the document was last saved through the admin.
+A document with no `updated` time always shows the alert for a copy. An older
+copy is not offered in the editor, but it is still in the Unsaved list. A new
+document's editor shows the alert when it opens with the id of a copy in its
+address.
+
+- **Restore** opens the same editor with `restore=1` in the address. The
+  server fills every field from the copy, including the body, checkboxes,
+  selects and repeated fields such as photos. Nothing is saved until you press
+  Save draft, Publish or Update.
+- **Discard** posts the key to `POST /admin/autosave/discard`. It deletes the
+  server copy and the browser copy, and leaves the form as it loaded.
+
+If the copy's base `hash` is not the hash of the file now, the alert also says
+that the post has changed since. Restore then shows your unsaved version and
+the file on disk side by side, in the same layout as the conflict screen. From
+there, Edit mine over the file (`restore=rebase`) opens the editor from the copy
+with the file's current hash, so the next save overwrites the file on purpose.
+Discard mine deletes the copy and opens the editor on the file.
+
+With JavaScript on, the script also reads the browser copy for the key. It
+offers that copy instead of the server's when it is newer than the server copy
+and the file's `updated` time, and when it holds something the form does not.
+Restore for a browser copy first posts its fields to `/admin/autosave`, so the
+server has the copy, removes the browser copy, and then opens the editor with
+`restore=1`. Both kinds of copy are restored by the server in the same way.
+
+While the alert is shown, autosave is held. Typing does not overwrite the
+offered copy on the server or in the browser. When you choose Discard, autosave
+starts again and saves what you typed meanwhile. If you leave the page with
+such changes, the browser asks whether to leave.
+
+#### The Unsaved list
+
+The Posts and Pages lists have an Unsaved tab (`/admin/posts?status=unsaved`,
+`/admin/pages?status=unsaved`). It lists your copies of that type of document,
+newest first, including new documents that were never saved. Each row shows the
+copy's title, or the first words of its body, the post kind, the time it was
+saved, and whether it is a new document or edits to an existing one.
+
+- **Resume** opens the editor with `restore=1`. A copy of a new document opens
+  `/admin/posts/new?kind=<kind>&autosave=<id>&restore=1`, or
+  `/admin/pages/new?autosave=<id>&restore=1`. Saving it creates the document
+  and deletes the copy.
+- **Discard** deletes the copy and returns to the list.
+
+The list works without JavaScript. A copy of a document that has since been
+deleted has no Resume, only Discard.
 
 The editor's Visibility field chooses Public or Unlisted. An unlisted post or
 page:

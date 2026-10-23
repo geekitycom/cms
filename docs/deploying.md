@@ -367,6 +367,9 @@ before you export:
    [Tools > Export](admin.md#tools--export) shows it when the page loads.
    `geekity export` prints it before it writes.
 
+Editors' autosaved copies in `data/autosave/` are not in an archive either.
+Ask each writer to save or discard their unsaved changes before you export.
+
 A delivery to a server that is down stays in the queue between attempts, and
 Fedify can wait up to 12 hours between two attempts. If the number stops
 going down, you can export anyway. Those deliveries are lost, and the

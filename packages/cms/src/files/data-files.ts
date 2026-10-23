@@ -316,6 +316,12 @@ export const QUEUE_LOG = declareDataFile({
   lost: "The queue's write-ahead log, which goes with the queue.",
 });
 
+export const AUTOSAVE = declareDataFile({
+  pattern: 'autosave/**',
+  dataClass: PENDING,
+  lost: "Each writer's editor changes since their last save. The posts and pages themselves are not touched.",
+});
+
 export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
   LOCK_FILES,
@@ -348,6 +354,7 @@ export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   FONTS,
   QUEUE,
   QUEUE_LOG,
+  AUTOSAVE,
 ];
 
 export const WATCH_PROBE = declareDataFile({

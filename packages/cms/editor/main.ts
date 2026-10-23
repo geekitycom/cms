@@ -20,7 +20,11 @@ import { tags } from '@lezer/highlight';
 import { basicSetup, EditorView } from 'codemirror';
 
 import { ownParagraph } from '../src/admin/own-paragraph.ts';
+import type { Autosave } from '../src/admin/autosave-client.ts';
 import { videoOf } from '../src/content/video.ts';
+import { startAutosave } from './autosave.ts';
+import { focusMode } from './focus.ts';
+import type { FocusMode } from './focus.ts';
 import { LOOK } from './look.ts';
 
 /** The element the server hangs the editor's URLs off. */
@@ -63,6 +67,9 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   status.className = LOOK.status;
   status.setAttribute('role', 'status');
 
+  let autosave: Autosave | undefined = undefined;
+  let focus: FocusMode | undefined = undefined;
+
   const view = new EditorView({
     doc: textarea.value,
     extensions: [
@@ -76,7 +83,10 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
       EditorView.lineWrapping,
       // The textarea is the form's value; the view is only a view of it.
       EditorView.updateListener.of((update) => {
-        if (update.docChanged) textarea.value = update.state.doc.toString();
+        if (!update.docChanged) return;
+        textarea.value = update.state.doc.toString();
+        autosave?.changed();
+        focus?.changed(update.state.doc);
       }),
       EditorView.domEventHandlers({
         dragover: (event) => {
@@ -117,13 +127,16 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   const tabs = tabStrip();
   tools.insertAdjacentElement('afterbegin', tabs.element);
   tools.append(uploadControl(), videoControl(), status);
+  autosave = startAutosave(form, tools);
+  focus = focusMode({ view, form, surface, write: tabs.write, say });
+  if (focus !== undefined) tabs.element.after(focus.button);
 
   // The fallback did the job of the Preview tab; two of them would be one too
   // many.
   document.getElementById(FALLBACK_ID)?.setAttribute('hidden', 'hidden');
 
   /** The Write and Preview tabs, and what switching between them does. */
-  function tabStrip(): { element: HTMLElement } {
+  function tabStrip(): { element: HTMLElement; write: () => void } {
     const element = document.createElement('div');
     element.className = LOOK.tabs;
     element.setAttribute('role', 'tablist');
@@ -200,7 +213,12 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
       }
     }
 
-    return { element };
+    return {
+      element,
+      write: () => {
+        if (surface.hidden) show(true);
+      },
+    };
   }
 
   /** The button and the file input behind it. */

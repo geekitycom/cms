@@ -794,7 +794,7 @@ export interface Conflict {
  * The file is read and re-parsed rather than trusted to the index, so the
  * check is right even when the watcher is off or has not caught up.
  */
-async function conflictWith(
+export async function conflictWith(
   contentDir: string,
   document: Document,
   submittedHash: string,
