@@ -325,6 +325,11 @@ terms allow non-commercial use with attribution, which the panel gives.
 
 - CodeMirror 6 in Markdown mode replaces the textarea's _view_. The textarea
   stays in the form and holds the submitted value.
+- Tab and Shift-Tab indent and dedent the line, or every selected line. On a
+  list item, Tab nests the item under the item above it, at that item's text
+  column: two spaces under `- `, three under `1. `. Shift-Tab moves it back out
+  to its parent's indent. To move focus out of the editor with the keyboard,
+  press Escape and then Tab.
 - The Preview button becomes a Write/Preview tab. The tab posts the current
   body and shows the response in a sandboxed frame.
 - An "Add file…" button, or a file dropped on the editor, posts to

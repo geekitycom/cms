@@ -284,12 +284,18 @@ importers:
       '@11ty/eleventy':
         specifier: ^3.1.7
         version: 3.1.7(supports-color@7.2.0)
+      '@codemirror/commands':
+        specifier: ^6.11.0
+        version: 6.11.0
       '@codemirror/lang-markdown':
         specifier: ^6.5.2
         version: 6.5.2
       '@codemirror/language':
         specifier: ^6.13.1
         version: 6.13.1
+      '@codemirror/view':
+        specifier: ^6.43.10
+        version: 6.43.10
       '@fedify/cli':
         specifier: 2.4.4
         version: 2.4.4(@jimp/custom@0.22.12)(@types/node@26.6.5)(supports-color@7.2.0)(typescript@7.0.2)
