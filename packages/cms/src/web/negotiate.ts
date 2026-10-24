@@ -81,7 +81,8 @@ export function selectRepresentation(
   const ranges = parseAccept(accept);
   if (ranges.length === 0) return available[0];
 
-  let best: { representation: Representation; quality: number; specificity: number } | undefined;
+  let best:
+    { representation: Representation; quality: number; specificity: Specificity } | undefined;
 
   for (const representation of available) {
     const match = bestRange(ranges, MEDIA_TYPES[representation]);
@@ -152,8 +153,8 @@ export function prefersActivityStreams(accept: string | undefined): boolean {
 function bestOf(
   ranges: readonly AcceptRange[],
   mediaTypes: readonly string[],
-): { quality: number; specificity: number } | undefined {
-  let best: { quality: number; specificity: number } | undefined;
+): { quality: number; specificity: Specificity } | undefined {
+  let best: { quality: number; specificity: Specificity } | undefined;
 
   for (const mediaType of mediaTypes) {
     const match = bestRange(ranges, mediaType);
@@ -580,12 +581,12 @@ export function parseAccept(header: string): AcceptRange[] {
 function bestRange(
   ranges: readonly AcceptRange[],
   mediaType: string,
-): { quality: number; specificity: number } | undefined {
+): { quality: number; specificity: Specificity } | undefined {
   const slash = mediaType.indexOf('/');
   const type = mediaType.slice(0, slash);
   const subtype = mediaType.slice(slash + 1);
 
-  let best: { quality: number; specificity: number } | undefined;
+  let best: { quality: number; specificity: Specificity } | undefined;
 
   for (const range of ranges) {
     const specificity = specificityOf(range, type, subtype);
@@ -599,16 +600,16 @@ function bestRange(
   return best;
 }
 
+const ANY_TYPE = 0;
+const ANY_SUBTYPE = 1;
 const EXACT = 2;
 
-/**
- * How specifically a range names a media type: {@link EXACT} for an exact
- * match, 1 for `type/*`, 0 for `*\/*`, `undefined` for no match at all.
- */
-function specificityOf(range: AcceptRange, type: string, subtype: string): number | undefined {
-  if (range.type === '*' && range.subtype === '*') return 0;
+type Specificity = typeof ANY_TYPE | typeof ANY_SUBTYPE | typeof EXACT;
+
+function specificityOf(range: AcceptRange, type: string, subtype: string): Specificity | undefined {
+  if (range.type === '*' && range.subtype === '*') return ANY_TYPE;
   if (range.type !== type) return undefined;
-  if (range.subtype === '*') return 1;
+  if (range.subtype === '*') return ANY_SUBTYPE;
   return range.subtype === subtype ? EXACT : undefined;
 }
 
