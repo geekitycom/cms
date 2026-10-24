@@ -242,7 +242,7 @@ importers:
         specifier: ^2.4.4
         version: 2.4.4
       '@geekity/md2gemini':
-        specifier: workspace:^
+        specifier: workspace:^0.1.2
         version: link:../md2gemini
       '@hono/node-server':
         specifier: ^2.1.5
