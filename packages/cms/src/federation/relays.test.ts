@@ -15,6 +15,8 @@ import type { Cms } from '../index.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
+import type { Delivery } from '../store/admin-store.ts';
+import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 
 /** The site under test. Fedify answers by origin, so every request uses this one. */
@@ -56,6 +58,8 @@ const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const sent: Sent[] = [];
 
+/** What the relay's inbox answers a POST with. */
+let relayInboxStatus = 202;
 let relayKeys: CryptoKeyPair;
 let relayActorDocument: unknown;
 let restoreFetch: () => void;
@@ -102,7 +106,7 @@ function routeRelayHost(): () => void {
 
     if (request.method === 'POST') {
       sent.push({ url: request.url, body: (await request.json()) as Record<string, unknown> });
-      return new Response('', { status: 202 });
+      return new Response(relayInboxStatus < 300 ? '' : 'No.', { status: relayInboxStatus });
     }
     if (url.pathname === new URL(RELAY_ACTOR).pathname) {
       return new Response(JSON.stringify(relayActorDocument), {
@@ -136,7 +140,13 @@ interface Site {
  * off, because the relay host does not resolve.
  */
 async function site(
-  options: { relays?: readonly string[]; dataDir?: string; now?: () => Date } = {},
+  options: {
+    relays?: readonly string[];
+    dataDir?: string;
+    now?: () => Date;
+    /** Deliver through the queue in `data/queue.sqlite`, as a site that names none does. */
+    queued?: boolean;
+  } = {},
 ): Promise<Site> {
   const dataDir = options.dataDir ?? (await temporaryDir('geekity-relays-data-'));
   const contentDir = await temporaryDir('geekity-relays-content-');
@@ -162,7 +172,10 @@ async function site(
     port: 0,
     watch: false,
     baseUrl: BASE_URL,
-    federation: { queue: null, allowPrivateAddress: true },
+    federation:
+      options.queued === true
+        ? { allowPrivateAddress: true }
+        : { queue: null, allowPrivateAddress: true },
     ...(options.now === undefined ? {} : { now: options.now }),
   });
   started.push(cms);
@@ -247,6 +260,46 @@ describe('adding a relay on the settings screen', () => {
     assert.equal(stored?.state, 'pending');
     assert.equal(stored?.actorId, null, 'the relay has not said who it is yet');
     assert.equal(stored?.followId, ofType('Follow')[0]?.body['id']);
+  });
+});
+
+describe('the follow as a delivery to the relay', () => {
+  it('records the Follow it sent against the relay inbox', async () => {
+    const { cms } = await site();
+    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    await saveSettings(agent, { relays: RELAY_INBOX });
+    await cms.relays.settled();
+
+    const last = cms.admin.lastDeliveryToInbox(RELAY_INBOX);
+    assert.equal(last?.activityType, 'Follow');
+    assert.equal(last.activityId, ofType('Follow')[0]?.body['id']);
+    assert.equal(last.status, 'sent');
+  });
+
+  it('records a Follow the relay refused through the queue as failed, with the reason', async () => {
+    relayInboxStatus = 410;
+    try {
+      const { cms } = await site({ queued: true });
+      await cms.serve();
+      const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+      await saveSettings(agent, { relays: RELAY_INBOX });
+      await cms.relays.settled();
+
+      const last = await nextEvent<Delivery>('the Follow settling', (done) => {
+        const timer = setInterval(() => {
+          const delivery = cms.admin.lastDeliveryToInbox(RELAY_INBOX);
+          if (delivery !== undefined && delivery.status !== 'queued') done(delivery);
+        }, 10);
+        return () => {
+          clearInterval(timer);
+        };
+      });
+      assert.equal(last.activityType, 'Follow');
+      assert.equal(last.status, 'failed');
+      assert.match(last.error ?? '', /410/);
+    } finally {
+      relayInboxStatus = 202;
+    }
   });
 });
 

@@ -846,6 +846,33 @@ describe('the relays panel', () => {
     assert.match(html, /Create sent/, 'the last thing that went there, and how it went');
   });
 
+  it('says a follow the relay refused is being retried, and why', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    cms.admin.putRelay({
+      inboxId: RELAY_INBOX,
+      actorId: null,
+      state: 'pending',
+      reason: null,
+      followId: `${ACTOR_URL}#relay-follow/1`,
+    });
+    cms.admin.recordDelivery({
+      activityId: `${ACTOR_URL}#relay-follow/1`,
+      activityType: 'Follow',
+      objectId: 'https://www.w3.org/ns/activitystreams#Public',
+      slug: null,
+      actorId: RELAY_INBOX,
+      inboxId: RELAY_INBOX,
+      status: 'queued',
+      error: 'Failed to send activity (500 Internal Server Error)',
+    });
+
+    const html = await federationScreen(agent);
+
+    assert.match(html, /Follow retrying/);
+    assert.match(html, /500 Internal Server Error/);
+  });
+
   it('shows why a rejected relay refused (AC #2, AC #5)', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);
