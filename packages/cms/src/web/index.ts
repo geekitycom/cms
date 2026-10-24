@@ -203,7 +203,8 @@ export type {
 export { HEALTH_PATH, mountHealth } from './health.ts';
 export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
-export { createRenderer, OPTIONAL_TEMPLATES, TEMPLATES } from './render.ts';
+export { createRenderer } from './render.ts';
+export { OPTIONAL_TEMPLATES, TEMPLATES } from './theme-templates.ts';
 export type { CreateRendererOptions, Listing, Renderer, SearchPage } from './render.ts';
 export { feedHref, homeHref, listingPageHref } from './listing-subject.ts';
 export { commentsFeedHref } from './paths.ts';

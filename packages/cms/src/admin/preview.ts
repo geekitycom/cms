@@ -18,7 +18,7 @@ import { listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { authorContext } from '../site/authors.ts';
 import { documentContext } from '../web/context.ts';
-import { TEMPLATES } from '../web/render.ts';
+import { TEMPLATES } from '../web/theme-templates.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 
 /** Where the editor posts a body it wants to see rendered. */

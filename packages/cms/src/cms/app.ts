@@ -27,7 +27,7 @@ import {
 } from '../web/index.ts';
 import { DEV_MODE } from '../settings/dev-mode.ts';
 import { SITE } from '../site/namespace.ts';
-import { drawnWith } from '../web/render.ts';
+import { drawnWith } from '../web/render-scope.ts';
 import { serverError } from './server-error.ts';
 import type { Booted } from './boot.ts';
 import type { Services } from './services.ts';

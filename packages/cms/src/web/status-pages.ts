@@ -6,7 +6,7 @@ import type { GeekityEnv } from './env.ts';
 import { GEMTEXT, statusMarkdown } from './markdown-representation.ts';
 import { CONTENT_TYPES, representationOf } from './negotiate.ts';
 import type { TextRepresentation } from './negotiate.ts';
-import type { StatusPageName } from './render.ts';
+import type { StatusPageName } from './theme-templates.ts';
 import { requestPath } from './request.ts';
 
 /** The theme's 404 page, for a path that resolved to nothing. */

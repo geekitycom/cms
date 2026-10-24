@@ -15,7 +15,7 @@ import { siteLocale, siteTimezone } from '../theme/site-data.ts';
 import { hiddenReason } from '../content/served.ts';
 import type { HiddenReason } from '../content/served.ts';
 import { PRIVATE_CACHE_CONTROL } from '../web/negotiate.ts';
-import { drawnForSignedInReader } from '../web/render.ts';
+import { drawnForSignedInReader } from '../web/render-scope.ts';
 import { requestPath } from '../web/request.ts';
 import { formatDate } from '../theme/templates.ts';
 

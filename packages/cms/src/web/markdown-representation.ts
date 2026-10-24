@@ -44,8 +44,9 @@ import type { MarkdownChrome, MarkdownFeed, MarkdownLink, MarkdownUrl } from './
 import { representationHref } from './negotiate.ts';
 import type { TextFormat } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
-import { STATUS_PAGES } from './render.ts';
-import type { StatusPageName, ThemeText } from './render.ts';
+import type { ThemeText } from './render.ts';
+import { STATUS_PAGES } from './theme-templates.ts';
+import type { StatusPageName } from './theme-templates.ts';
 import { classifyPath } from './paths.ts';
 import { documentLabel, encodePath } from './request.ts';
 import { SEARCH_PATH, snippetMarkdown } from './search.ts';

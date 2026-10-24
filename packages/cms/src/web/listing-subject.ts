@@ -7,7 +7,7 @@ import type { AuthorContext } from '../site/authors.ts';
 import type { SiteData } from '../theme/site-data.ts';
 import { feedPathUnder } from './feeds.ts';
 import type { FeedFormat } from './feeds.ts';
-import { TEMPLATES } from './render.ts';
+import { TEMPLATES } from './theme-templates.ts';
 import type { Listing } from './render.ts';
 import type { AuthorListing, FrontPages, SiteView } from './site-view.ts';
 import { PAGE_SEGMENT, termHref } from '../content/taxonomy.ts';
