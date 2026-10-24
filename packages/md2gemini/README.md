@@ -8,6 +8,13 @@ levels, so each of those is rewritten into something gemtext can show.
 uses it to serve its pages over Gemini, but the package has no dependency on
 the CMS and works on any Markdown.
 
+## Status
+
+This package is new. It was written for Geekity CMS and has been tested only
+there so far. Its options and its output may change in any 0.x release. If
+another project uses it, pin an exact version and check the output after each
+upgrade.
+
 ## Usage
 
 ```sh
