@@ -32,7 +32,7 @@ export interface ConvertOptions {
   readonly codeTag?: string;
   /** Alt text of a table's preformatted block. Defaults to `table`. */
   readonly tableTag?: string;
-  /** Written once per level before a nested list item. Defaults to two spaces. */
+  /** Indents nested ordered items and later paragraphs, once per level. Defaults to two spaces. */
   readonly indent?: string;
   /** Draw GFM `[ ]` and `[x]` items as ☐ and ☑. Defaults to true. */
   readonly checklist?: boolean;

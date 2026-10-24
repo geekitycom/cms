@@ -114,7 +114,7 @@ function renderList(
   let number = Number(list.token.attrGet('start') ?? 1);
   const lines: string[] = [];
   for (const item of list.children) {
-    const marker = `${indent.repeat(depth)}${list.type === 'ordered_list' ? `${number++}.` : '*'} `;
+    const marker = list.type === 'ordered_list' ? `${indent.repeat(depth)}${number++}. ` : '* ';
     const continued = indent.repeat(depth + 1);
     if (state.options.checklist) drawCheckbox(item);
     let marked = false;
