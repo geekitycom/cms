@@ -20,7 +20,7 @@ const EXCEPTIONS: readonly Exception[] = [
     because: 'opens the database file and runs the migration ledger both stores are built on',
   },
   {
-    file: 'cli.ts',
+    file: 'cli/database-in-use.ts',
     because: 'probes whether a running server holds the database before a rebuild',
   },
   {

@@ -14,7 +14,8 @@ import {
   runCli,
   temporaryDir,
 } from './__testing__/cli.ts';
-import { parseArgs, readPassword } from './cli.ts';
+import { parseArgs } from './cli/args.ts';
+import { readPassword } from './cli/password.ts';
 import { findSiteTsx, loadConfig, registerTypeScriptLoader } from './config-loader.ts';
 
 /**

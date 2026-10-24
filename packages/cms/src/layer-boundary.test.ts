@@ -63,7 +63,8 @@ const LAYERS: readonly Layer[] = [
     units: ['exports.ts', 'testing.ts', 'config-entry.ts', 'config-loader.ts'],
   },
   { name: 'package index', units: ['index.ts'] },
-  { name: 'command line', units: ['cli.ts'] },
+  { name: 'command line', units: ['cli/'] },
+  { name: 'command line entry', units: ['cli.ts'] },
 ];
 
 const EXCEPTIONS: readonly Exception[] = [];

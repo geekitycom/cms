@@ -7,7 +7,8 @@ packages/cms/          published as @geekity/cms
   src/
     index.ts           public API: createCms(config), defineConfig, types
     config.ts          config schema, defaults, environment overrides
-    cli.ts             the `geekity` bin
+    cli.ts             the `geekity` bin: reads the command and dispatches it
+    cli/               one module per command, the option table and the help
     *.test.ts          node:test suites, run through tsx, excluded from the build
   editor/              the admin editor's browser code, bundled by esbuild
   admin/               admin templates and static files, editor.js among them
@@ -83,7 +84,8 @@ The layers, from the bottom:
 | composition root         | `cms/`                                         | `createCms`, which builds every service and mounts every route, and the error handler for the whole app.                                                   |
 | public API               | `exports.ts`, `testing.ts`, `config-loader.ts` | The package's export list ([The package API](public-api.md)), the test-only entry ([Testing a plugin](plugins.md#testing-a-plugin)) and the config loader. |
 | package index            | `index.ts`                                     | The package entry point.                                                                                                                                   |
-| command line             | `cli.ts`                                       | The `geekity` command.                                                                                                                                     |
+| command line             | `cli/`                                         | Each `geekity` command, the option table and the help text.                                                                                                |
+| command line entry       | `cli.ts`                                       | The `geekity` bin, which picks the command and runs it.                                                                                                    |
 
 A feature that needs a value from a higher layer gets it injected by
 `cms/`, the composition root, as `SiteRecords` does for the write path. A rule
