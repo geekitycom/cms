@@ -27,7 +27,7 @@ import { authorContext, siteAuthorContext } from '../site/authors.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
 import { siteTimezone } from '../theme/site-data.ts';
 import type { Archive } from './listing-subject.ts';
-import { commentedPost } from './conversation.ts';
+import { commentedPost } from './conversation-lookup.ts';
 import { markdownCommentThread } from './markdown-conversation.ts';
 import {
   bioOf,
