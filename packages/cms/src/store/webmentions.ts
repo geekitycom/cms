@@ -2,7 +2,16 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 
-import { countByStatus, inTransaction, nullableText, oneOf } from './rows.ts';
+import {
+  allRows,
+  countByStatus,
+  getRow,
+  inTransaction,
+  nullableText,
+  oneOf,
+  readCount,
+} from './rows.ts';
+import type { Row } from './rows.ts';
 
 /** How one webmention this site sent to one page ended. */
 export const WEBMENTION_SEND_STATUSES = ['sent', 'none', 'failed'] as const;
@@ -118,7 +127,9 @@ export function openWebmentionStore(db: DatabaseSync, clock: Clock): WebmentionS
   };
   return {
     recordSentWebmention(sent) {
-      const row = statements.recordSentWebmention.get(
+      const recorded = getRow(
+        statements.recordSentWebmention,
+        toSentWebmention,
         sent.slug,
         sent.source,
         sent.target,
@@ -126,21 +137,22 @@ export function openWebmentionStore(db: DatabaseSync, clock: Clock): WebmentionS
         sent.status,
         sent.error,
         sent.attemptedAt ?? clock().toISOString(),
-      ) as Record<string, unknown> | undefined;
-      if (row === undefined) {
+      );
+      if (recorded === undefined) {
         throw new Error(`The webmention to ${sent.target} could not be recorded.`);
       }
-      return toSentWebmention(row);
+      return recorded;
     },
 
     listSentWebmentions(slug) {
-      const rows = statements.listSentWebmentions.all(slug) as Record<string, unknown>[];
-      return rows.map(toSentWebmention);
+      return allRows(statements.listSentWebmentions, toSentWebmention, slug);
     },
 
     listSentWebmentionSources() {
-      const rows = statements.listSentWebmentionSources.all() as Record<string, unknown>[];
-      return rows.map((row) => ({ slug: String(row['slug']), source: String(row['source']) }));
+      return allRows(statements.listSentWebmentionSources, (row) => ({
+        slug: String(row['slug']),
+        source: String(row['source']),
+      }));
     },
 
     moveSentWebmentions(from, to) {
@@ -152,17 +164,20 @@ export function openWebmentionStore(db: DatabaseSync, clock: Clock): WebmentionS
     },
 
     countSentWebmentionsByStatus(slug) {
-      const rows = statements.countSentWebmentionsByStatus.all(slug) as Record<string, unknown>[];
-      return countByStatus(rows, WEBMENTION_SEND_STATUSES, webmentionSendStatus);
+      return countByStatus(
+        statements.countSentWebmentionsByStatus.all(slug),
+        WEBMENTION_SEND_STATUSES,
+        webmentionSendStatus,
+      );
     },
 
     countFailedWebmentionsSince(since) {
-      return Number(statements.countFailedWebmentionsSince.get(since)?.['count'] ?? 0);
+      return readCount(statements.countFailedWebmentionsSince, since);
     },
   };
 }
 
-function toSentWebmention(row: Record<string, unknown>): SentWebmention {
+function toSentWebmention(row: Row): SentWebmention {
   return {
     slug: String(row['slug']),
     source: String(row['source']),

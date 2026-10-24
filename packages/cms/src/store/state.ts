@@ -2,6 +2,8 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 
+import { getRow } from './rows.ts';
+
 export interface StateStore {
   /**
    * One piece of the CMS's own operational state, or `undefined`.
@@ -27,8 +29,7 @@ export function openStateStore(db: DatabaseSync, clock: Clock): StateStore {
   };
   return {
     getState(key) {
-      const row = statements.getState.get(key) as Record<string, unknown> | undefined;
-      return row === undefined ? undefined : String(row['value']);
+      return getRow(statements.getState, (row) => String(row['value']), key);
     },
 
     setState(key, value) {

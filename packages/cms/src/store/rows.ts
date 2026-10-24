@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, SQLInputValue, StatementSync } from 'node:sqlite';
 
 /** How {@link FollowerStore.listFollowers} and its inbox-log sibling page. */
 export interface ListPageOptions {
@@ -13,6 +13,33 @@ export interface ListPageOptions {
  * limit as "every row", which is what an unpaged list asks for.
  */
 export const NO_LIMIT = -1;
+
+/** A row as the stores read it: each column's value under its name. */
+export type Row = Record<string, unknown>;
+
+/** Every row a statement returns, each passed through `map`. */
+export function allRows<T>(
+  statement: StatementSync,
+  map: (row: Row) => T,
+  ...parameters: SQLInputValue[]
+): T[] {
+  return statement.all(...parameters).map(map);
+}
+
+/** The first row a statement returns passed through `map`, or `undefined` when it returns none. */
+export function getRow<T>(
+  statement: StatementSync,
+  map: (row: Row) => T,
+  ...parameters: SQLInputValue[]
+): T | undefined {
+  const row = statement.get(...parameters);
+  return row === undefined ? undefined : map(row);
+}
+
+/** The `count` column of a `SELECT COUNT(*) AS count` statement. */
+export function readCount(statement: StatementSync, ...parameters: SQLInputValue[]): number {
+  return getRow(statement, (row) => Number(row['count'] ?? 0), ...parameters) ?? 0;
+}
 
 /**
  * A `TEXT` column that may be `NULL`, as a string or `null`.
@@ -31,7 +58,7 @@ export function oneOf<T extends string>(value: unknown, allowed: readonly T[], f
 }
 
 export function countByStatus<S extends string>(
-  rows: readonly Record<string, unknown>[],
+  rows: readonly Row[],
   statuses: readonly S[],
   statusOf: (value: unknown) => S,
 ): Record<S, number> {

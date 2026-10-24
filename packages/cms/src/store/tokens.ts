@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 
+import { getRow } from './rows.ts';
 import { randomToken } from './sessions.ts';
 
 /**
@@ -117,14 +118,16 @@ export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
 
     getPasswordReset(token, now = clock()) {
       const hash = hashToken(token);
-      const row = statements.passwordResetByHash.get(hash) as Record<string, unknown> | undefined;
-      if (row === undefined) return undefined;
-
-      const reset: PasswordReset = {
-        userId: Number(row['user_id']),
-        createdAt: String(row['created_at']),
-        expiresAt: String(row['expires_at']),
-      };
+      const reset = getRow(
+        statements.passwordResetByHash,
+        (row): PasswordReset => ({
+          userId: Number(row['user_id']),
+          createdAt: String(row['created_at']),
+          expiresAt: String(row['expires_at']),
+        }),
+        hash,
+      );
+      if (reset === undefined) return undefined;
 
       // The same rule the sessions follow: an expired row is deleted rather
       // than ignored, so a clock that goes backwards cannot revive a link.

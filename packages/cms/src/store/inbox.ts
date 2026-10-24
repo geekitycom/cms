@@ -5,8 +5,8 @@ import type { Clock } from '../util/clock.ts';
 import { repliesKey } from '../content/guids.ts';
 import { REPLY_ACTIVITY_TYPE, replyIdOf, replyTargetOf } from './inbox-replies.ts';
 import type { ConversationWrite } from './conversation.ts';
-import { inTransaction, NO_LIMIT, nullableText } from './rows.ts';
-import type { ListPageOptions } from './rows.ts';
+import { allRows, getRow, inTransaction, NO_LIMIT, nullableText, readCount } from './rows.ts';
+import type { ListPageOptions, Row } from './rows.ts';
 
 /**
  * Which rows of the inbox log are replies: a `Create` that named something it
@@ -252,20 +252,22 @@ export function openInboxStore(
   };
   return {
     countInboxActivities() {
-      const row = statements.countInboxActivities.get() as Record<string, unknown> | undefined;
-      return Number(row?.['count'] ?? 0);
+      return readCount(statements.countInboxActivities);
     },
 
     listInboxActivities(options = {}) {
-      const rows = statements.listInboxActivities.all(
+      return allRows(
+        statements.listInboxActivities,
+        toInboxActivity,
         options.limit ?? NO_LIMIT,
         options.offset ?? 0,
-      ) as Record<string, unknown>[];
-      return rows.map(toInboxActivity);
+      );
     },
 
     logInboxActivity(activity) {
-      const row = statements.logInboxActivity.get(
+      const logged = getRow(
+        statements.logInboxActivity,
+        toInboxActivity,
         activity.activityId,
         activity.activityType,
         activity.actorId,
@@ -278,19 +280,18 @@ export function openInboxStore(
         activity.receivedAt ?? clock().toISOString(),
         activity.fetched === true ? 1 : 0,
         activity.json,
-      ) as Record<string, unknown> | undefined;
-      if (row === undefined) {
+      );
+      if (logged === undefined) {
         throw new Error(`The activity "${activity.activityType}" was not written to the log.`);
       }
-      const logged = toInboxActivity(row);
       written(activityWrite(logged));
       return logged;
     },
 
     deleteInboxActivity(id) {
-      const row = statements.deleteInboxActivity.get(id) as Record<string, unknown> | undefined;
-      if (row === undefined) return false;
-      written(activityWrite(toInboxActivity(row)));
+      const deleted = getRow(statements.deleteInboxActivity, toInboxActivity, id);
+      if (deleted === undefined) return false;
+      written(activityWrite(deleted));
       return true;
     },
 
@@ -318,30 +319,30 @@ export function openInboxStore(
     },
 
     countReplies() {
-      const row = statements.countReplies.get() as Record<string, unknown> | undefined;
-      return Number(row?.['count'] ?? 0);
+      return readCount(statements.countReplies);
     },
 
     listReplies(options = {}) {
-      const rows = statements.listReplies.all(
+      return allRows(
+        statements.listReplies,
+        toInboxActivity,
         options.limit ?? NO_LIMIT,
         options.offset ?? 0,
-      ) as Record<string, unknown>[];
-      return rows.map(toInboxActivity);
+      );
     },
 
     countRepliesTo(objectId) {
-      const row = statements.countRepliesTo.get(objectId) as Record<string, unknown> | undefined;
-      return Number(row?.['count'] ?? 0);
+      return readCount(statements.countRepliesTo, objectId);
     },
 
     listRepliesTo(objectId, options = {}) {
-      const rows = statements.listRepliesTo.all(
+      return allRows(
+        statements.listRepliesTo,
+        toInboxActivity,
         objectId,
         options.limit ?? NO_LIMIT,
         options.offset ?? 0,
-      ) as Record<string, unknown>[];
-      return rows.map(toInboxActivity);
+      );
     },
 
     listActivitiesAbout(objectIds) {
@@ -352,58 +353,70 @@ export function openInboxStore(
       // then about the notes that answered it, and neither count is known when
       // the statements are built.
       const placeholders = objectIds.map(() => '?').join(', ');
-      const rows = db
-        .prepare(
+      return allRows(
+        db.prepare(
           `SELECT * FROM ap_inbox
            WHERE object_id IN (${placeholders}) OR in_reply_to IN (${placeholders})
            ORDER BY id ASC`,
-        )
-        .all(...objectIds, ...objectIds) as Record<string, unknown>[];
-      return rows.map(toInboxActivity);
+        ),
+        toInboxActivity,
+        ...objectIds,
+        ...objectIds,
+      );
     },
 
     listRepliesByKey(key) {
-      return (statements.repliesByKey.all(key) as Record<string, unknown>[]).map(toInboxActivity);
+      return allRows(statements.repliesByKey, toInboxActivity, key);
     },
 
     listInteractionsSince(since) {
-      const rows = statements.interactionsSince.all(since) as Record<string, unknown>[];
-      return rows.flatMap((row) => {
-        const kind = INTERACTION_KINDS[String(row['activity_type'])];
-        return kind === undefined ? [] : [{ kind, receivedAt: String(row['received_at']) }];
-      });
+      return allRows(
+        statements.interactionsSince,
+        (row) => {
+          const kind = INTERACTION_KINDS[String(row['activity_type'])];
+          return kind === undefined ? [] : [{ kind, receivedAt: String(row['received_at']) }];
+        },
+        since,
+      ).flat();
     },
 
     listLatestInteractions(limit) {
-      const rows = statements.latestInteractions.all('', limit) as Record<string, unknown>[];
-      return rows.flatMap((row) => {
-        const kind = INTERACTION_KINDS[String(row['activity_type'])];
-        return kind === undefined
-          ? []
-          : [
-              {
-                kind,
-                actorId: String(row['actor_id']),
-                about: nullableText(row['about']),
-                receivedAt: String(row['received_at']),
-              },
-            ];
-      });
+      return allRows(
+        statements.latestInteractions,
+        (row) => {
+          const kind = INTERACTION_KINDS[String(row['activity_type'])];
+          return kind === undefined
+            ? []
+            : [
+                {
+                  kind,
+                  actorId: String(row['actor_id']),
+                  about: nullableText(row['about']),
+                  receivedAt: String(row['received_at']),
+                },
+              ];
+        },
+        '',
+        limit,
+      ).flat();
     },
 
     countInteractionsSince(since) {
-      const rows = statements.interactionCounts.all(since) as Record<string, unknown>[];
-      return rows.flatMap((row) => {
-        const kind = INTERACTION_KINDS[String(row['activity_type'])];
-        return kind === undefined
-          ? []
-          : [{ kind, about: nullableText(row['about']), count: Number(row['count']) }];
-      });
+      return allRows(
+        statements.interactionCounts,
+        (row) => {
+          const kind = INTERACTION_KINDS[String(row['activity_type'])];
+          return kind === undefined
+            ? []
+            : [{ kind, about: nullableText(row['about']), count: Number(row['count']) }];
+        },
+        since,
+      ).flat();
     },
   };
 }
 
-function toInboxActivity(row: Record<string, unknown>): InboxActivity {
+function toInboxActivity(row: Row): InboxActivity {
   return {
     id: Number(row['id']),
     activityId: nullableText(row['activity_id']),

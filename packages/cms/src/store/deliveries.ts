@@ -2,7 +2,8 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 
-import { countByStatus, nullableText, oneOf } from './rows.ts';
+import { allRows, countByStatus, getRow, nullableText, oneOf, readCount } from './rows.ts';
+import type { Row } from './rows.ts';
 
 /** How one delivery of one activity to one follower ended. */
 export const DELIVERY_STATUSES = ['sent', 'queued', 'failed'] as const;
@@ -143,7 +144,9 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
   };
   return {
     recordDelivery(delivery) {
-      const row = statements.recordDelivery.get(
+      const recorded = getRow(
+        statements.recordDelivery,
+        toDelivery,
         delivery.activityId,
         delivery.activityType,
         delivery.objectId,
@@ -153,49 +156,46 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
         delivery.status,
         delivery.error,
         delivery.attemptedAt ?? clock().toISOString(),
-      ) as Record<string, unknown> | undefined;
-      if (row === undefined) {
+      );
+      if (recorded === undefined) {
         throw new Error(
           `The delivery of "${delivery.activityId}" to "${delivery.actorId}" was not recorded.`,
         );
       }
-      return toDelivery(row);
+      return recorded;
     },
 
     listDeliveries(activityId) {
-      const rows = statements.listDeliveries.all(activityId) as Record<string, unknown>[];
-      return rows.map(toDelivery);
+      return allRows(statements.listDeliveries, toDelivery, activityId);
     },
 
     countDeliveriesByStatus(activityId) {
-      const rows = statements.countDeliveriesByStatus.all(activityId) as Record<string, unknown>[];
-      return countByStatus(rows, DELIVERY_STATUSES, deliveryStatus);
+      return countByStatus(
+        statements.countDeliveriesByStatus.all(activityId),
+        DELIVERY_STATUSES,
+        deliveryStatus,
+      );
     },
 
     lastDeliveryToInbox(inboxId) {
-      const row = statements.lastDeliveryToInbox.get(inboxId) as
-        Record<string, unknown> | undefined;
-      return row === undefined ? undefined : toDelivery(row);
+      return getRow(statements.lastDeliveryToInbox, toDelivery, inboxId);
     },
 
     lastDeliveryToObject(objectId) {
-      const row = statements.lastDeliveryToObject.get(objectId) as
-        Record<string, unknown> | undefined;
-      return row === undefined ? undefined : toDelivery(row);
+      return getRow(statements.lastDeliveryToObject, toDelivery, objectId);
     },
 
     listDeletedObjectIds() {
-      const rows = statements.listDeletedObjectIds.all() as { object_id: string }[];
-      return rows.map((row) => row.object_id);
+      return allRows(statements.listDeletedObjectIds, (row) => String(row['object_id']));
     },
 
     countFailedDeliveriesSince(since) {
-      return Number(statements.countFailedDeliveriesSince.get(since)?.['count'] ?? 0);
+      return readCount(statements.countFailedDeliveriesSince, since);
     },
   };
 }
 
-function toDelivery(row: Record<string, unknown>): Delivery {
+function toDelivery(row: Row): Delivery {
   return {
     activityId: String(row['activity_id']),
     activityType: String(row['activity_type']),

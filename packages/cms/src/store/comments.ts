@@ -3,8 +3,16 @@ import type { DatabaseSync } from 'node:sqlite';
 import { rsvpValue } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
 import type { ConversationWrite } from './conversation.ts';
-import { countByStatus, inTransaction, NO_LIMIT, nullableText, oneOf } from './rows.ts';
-import type { ListPageOptions } from './rows.ts';
+import {
+  allRows,
+  countByStatus,
+  getRow,
+  inTransaction,
+  NO_LIMIT,
+  nullableText,
+  oneOf,
+} from './rows.ts';
+import type { ListPageOptions, Row } from './rows.ts';
 
 /** Where a comment came from. */
 export const COMMENT_SOURCES = ['comment', 'webmention', 'activitypub'] as const;
@@ -359,7 +367,7 @@ export function openCommentStore(
   };
   return {
     listCommentsFor(slug) {
-      return (statements.listCommentsFor.all(slug) as Record<string, unknown>[]).map(toComment);
+      return allRows(statements.listCommentsFor, toComment, slug);
     },
 
     listComments(options = {}) {
@@ -368,44 +376,45 @@ export function openCommentStore(
       // approved comments across every post.
       const where = options.status === undefined ? '' : 'WHERE status = ?';
       const parameters = options.status === undefined ? [] : [options.status];
-      const rows = db
-        .prepare(
+      return allRows(
+        db.prepare(
           `SELECT * FROM comments ${where}
            ORDER BY submitted_at DESC, id DESC
            LIMIT ? OFFSET ?`,
-        )
-        .all(...parameters, options.limit ?? NO_LIMIT, options.offset ?? 0) as Record<
-        string,
-        unknown
-      >[];
-      return rows.map(toComment);
+        ),
+        toComment,
+        ...parameters,
+        options.limit ?? NO_LIMIT,
+        options.offset ?? 0,
+      );
     },
 
     getComment(id) {
-      const row = statements.commentById.get(id) as Record<string, unknown> | undefined;
-      return row === undefined ? undefined : toComment(row);
+      return getRow(statements.commentById, toComment, id);
     },
 
     listLatestCommentsExceptImportedFediverse(limit) {
-      return (statements.latestComments.all(limit) as Record<string, unknown>[]).map(toComment);
+      return allRows(statements.latestComments, toComment, limit);
     },
 
     countApprovedCommentsExceptImportedFediverseSince(since) {
-      const rows = statements.approvedCommentCounts.all(since) as Record<string, unknown>[];
-      return rows.map((row) => ({
-        slug: String(row['slug']),
-        source: row['source'] === 'webmention' ? 'webmention' : 'comment',
-        count: Number(row['count']),
-      }));
+      return allRows(
+        statements.approvedCommentCounts,
+        (row) => ({
+          slug: String(row['slug']),
+          source: row['source'] === 'webmention' ? 'webmention' : 'comment',
+          count: Number(row['count']),
+        }),
+        since,
+      );
     },
 
     listCommentsAt(url) {
-      return (statements.commentsAt.all(url) as Record<string, unknown>[]).map(toComment);
+      return allRows(statements.commentsAt, toComment, url);
     },
 
     countCommentsByStatus() {
-      const rows = statements.countCommentsByStatus.all() as Record<string, unknown>[];
-      return countByStatus(rows, COMMENT_STATUSES, commentStatus);
+      return countByStatus(statements.countCommentsByStatus.all(), COMMENT_STATUSES, commentStatus);
     },
 
     hasApprovedAuthor(name, email) {
@@ -415,20 +424,19 @@ export function openCommentStore(
     },
 
     putComment(comment) {
-      const before = statements.commentById.get(comment.id) as Record<string, unknown> | undefined;
+      const before = getRow(statements.commentById, (row) => row['status'], comment.id);
       statements.putComment.run(...commentColumns(comment));
       written({
         kind: 'comment',
         slug: comment.slug,
         id: comment.id,
-        approved: comment.status === 'approved' && before?.['status'] !== 'approved',
+        approved: comment.status === 'approved' && before !== 'approved',
       });
       return comment;
     },
 
     deleteComment(id) {
-      const row = statements.commentById.get(id) as Record<string, unknown> | undefined;
-      const slug = row === undefined ? undefined : String(row['slug']);
+      const slug = getRow(statements.commentById, (row) => String(row['slug']), id);
       const deleted = statements.deleteComment.run(id).changes > 0;
       if (slug !== undefined) written({ kind: 'comment', slug, id, approved: false });
       return deleted;
@@ -445,7 +453,7 @@ export function openCommentStore(
   };
 }
 
-function toComment(row: Record<string, unknown>): PostComment {
+function toComment(row: Row): PostComment {
   return {
     id: String(row['id']),
     slug: String(row['slug']),

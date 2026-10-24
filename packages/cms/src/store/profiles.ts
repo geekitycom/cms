@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-import { nullableText } from './rows.ts';
+import { allRows, getRow, nullableText } from './rows.ts';
+import type { Row } from './rows.ts';
 
 /**
  * How a remote actor presents itself: what a conversation shows of somebody
@@ -96,14 +97,11 @@ export function openProfileStore(db: DatabaseSync): ProfileStore {
     },
 
     listAvatarSources() {
-      return (statements.listAvatarSources.all() as Record<string, unknown>[]).map((row) =>
-        String(row['url']),
-      );
+      return allRows(statements.listAvatarSources, (row) => String(row['url']));
     },
 
     getActorProfile(actorId) {
-      const row = statements.actorProfileById.get(actorId) as Record<string, unknown> | undefined;
-      return row === undefined ? undefined : toActorProfile(row);
+      return getRow(statements.actorProfileById, toActorProfile, actorId);
     },
 
     putActorProfile(profile) {
@@ -118,14 +116,16 @@ export function openProfileStore(db: DatabaseSync): ProfileStore {
     },
 
     listActorsToProfile(fetchedBefore) {
-      return (statements.listActorsToProfile.all(fetchedBefore) as Record<string, unknown>[]).map(
+      return allRows(
+        statements.listActorsToProfile,
         (row) => String(row['actor_id']),
+        fetchedBefore,
       );
     },
   };
 }
 
-function toActorProfile(row: Record<string, unknown>): StoredActorProfile {
+function toActorProfile(row: Row): StoredActorProfile {
   return {
     actorId: String(row['actor_id']),
     handle: nullableText(row['handle']),
