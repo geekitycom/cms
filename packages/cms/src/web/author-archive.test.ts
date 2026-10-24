@@ -268,6 +268,31 @@ describe('the author archive (AC #3)', () => {
   });
 });
 
+describe('a peer that also accepts application/json (TASK-505)', () => {
+  const accept = 'application/activity+json,application/ld+json,application/json';
+
+  it('gets the actor at the author archive', async () => {
+    const cms = await site();
+
+    const response = await cms.app.request('/author/ada/', { headers: { accept } });
+    const actor = (await response.json()) as { type: string; publicKey?: { id: string } };
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /^application\/activity\+json/);
+    assert.equal(actor.type, 'Person');
+    assert.ok(actor.publicKey?.id, 'with the key a peer verifies signatures by');
+  });
+
+  it('gets the ActivityStreams object at a published post', async () => {
+    const cms = await site();
+
+    const response = await cms.app.request('/2026/09/by-login/', { headers: { accept } });
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /^application\/activity\+json/);
+  });
+});
+
 describe('the author archive as Markdown (TASK-289)', () => {
   it('lists their posts under their name, linked to each post’s Markdown', async () => {
     const cms = await site(CONTENT, { postsPerPage: 1 });

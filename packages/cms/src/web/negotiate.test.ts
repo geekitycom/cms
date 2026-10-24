@@ -239,6 +239,22 @@ describe('prefersActivityStreams', () => {
     assert.equal(prefersActivityStreams('application/*'), false);
   });
 
+  it('is true when a peer names an ActivityStreams type beside application/json at the same q', () => {
+    assert.equal(
+      prefersActivityStreams('application/activity+json,application/ld+json,application/json'),
+      true,
+    );
+    assert.equal(
+      prefersActivityStreams('application/activity+json, application/ld+json, application/json'),
+      true,
+    );
+    assert.equal(prefersActivityStreams('application/json, application/activity+json'), true);
+    assert.equal(
+      prefersActivityStreams('application/json, application/activity+json;q=0.9'),
+      false,
+    );
+  });
+
   it('is false when the ActivityStreams types are refused outright', () => {
     assert.equal(prefersActivityStreams('application/activity+json;q=0'), false);
   });

@@ -81,7 +81,8 @@ export function selectRepresentation(
   const ranges = parseAccept(accept);
   if (ranges.length === 0) return available[0];
 
-  let best: { representation: Representation; quality: number; specificity: number } | undefined;
+  let best:
+    { representation: Representation; quality: number; specificity: Specificity } | undefined;
 
   for (const representation of available) {
     const match = bestRange(ranges, MEDIA_TYPES[representation]);
@@ -119,7 +120,10 @@ export const ACTIVITY_STREAMS_MEDIA_TYPES: readonly string[] = [
  *
  * It is the same comparison {@link selectRepresentation} makes — highest q
  * wins, the more specific range wins a tie — with the ActivityStreams types on
- * one side and the document's own on the other. A tie goes to the document, so
+ * one side and the document's own on the other. A tie between exact types goes
+ * to the object: a peer that names `application/activity+json` and lists
+ * `application/json` beside it at the same q, as activitypub-bot does, is asking
+ * for the actor or post. Any other tie goes to the document, so
  * `Accept: application/*` still gets JSON and a browser's
  * `text/html,…,*\/*;q=0.8` still gets a page.
  */
@@ -138,9 +142,10 @@ export function prefersActivityStreams(accept: string | undefined): boolean {
   );
   if (alternative === undefined || alternative.quality <= 0) return true;
 
+  if (wanted.quality !== alternative.quality) return wanted.quality > alternative.quality;
   return (
-    wanted.quality > alternative.quality ||
-    (wanted.quality === alternative.quality && wanted.specificity > alternative.specificity)
+    wanted.specificity > alternative.specificity ||
+    (wanted.specificity === alternative.specificity && wanted.specificity === EXACT)
   );
 }
 
@@ -148,8 +153,8 @@ export function prefersActivityStreams(accept: string | undefined): boolean {
 function bestOf(
   ranges: readonly AcceptRange[],
   mediaTypes: readonly string[],
-): { quality: number; specificity: number } | undefined {
-  let best: { quality: number; specificity: number } | undefined;
+): { quality: number; specificity: Specificity } | undefined {
+  let best: { quality: number; specificity: Specificity } | undefined;
 
   for (const mediaType of mediaTypes) {
     const match = bestRange(ranges, mediaType);
@@ -576,12 +581,12 @@ export function parseAccept(header: string): AcceptRange[] {
 function bestRange(
   ranges: readonly AcceptRange[],
   mediaType: string,
-): { quality: number; specificity: number } | undefined {
+): { quality: number; specificity: Specificity } | undefined {
   const slash = mediaType.indexOf('/');
   const type = mediaType.slice(0, slash);
   const subtype = mediaType.slice(slash + 1);
 
-  let best: { quality: number; specificity: number } | undefined;
+  let best: { quality: number; specificity: Specificity } | undefined;
 
   for (const range of ranges) {
     const specificity = specificityOf(range, type, subtype);
@@ -595,15 +600,17 @@ function bestRange(
   return best;
 }
 
-/**
- * How specifically a range names a media type: 2 for an exact match, 1 for
- * `type/*`, 0 for `*\/*`, `undefined` for no match at all.
- */
-function specificityOf(range: AcceptRange, type: string, subtype: string): number | undefined {
-  if (range.type === '*' && range.subtype === '*') return 0;
+const ANY_TYPE = 0;
+const ANY_SUBTYPE = 1;
+const EXACT = 2;
+
+type Specificity = typeof ANY_TYPE | typeof ANY_SUBTYPE | typeof EXACT;
+
+function specificityOf(range: AcceptRange, type: string, subtype: string): Specificity | undefined {
+  if (range.type === '*' && range.subtype === '*') return ANY_TYPE;
   if (range.type !== type) return undefined;
-  if (range.subtype === '*') return 1;
-  return range.subtype === subtype ? 2 : undefined;
+  if (range.subtype === '*') return ANY_SUBTYPE;
+  return range.subtype === subtype ? EXACT : undefined;
 }
 
 /** The `q` parameter of a media range, clamped to the range the grammar allows. */
