@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.1](https://github.com/geekitycom/cms/compare/v0.42.0...v0.42.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **cms:** serve the actor when accept lists application/json beside activity+json ([891e74f](https://github.com/geekitycom/cms/commit/891e74f80bb26dda57ae6f4d5180ccddc478a07f))
+
 ## [0.42.0](https://github.com/geekitycom/cms/compare/v0.41.0...v0.42.0) (2026-10-23)
 
 

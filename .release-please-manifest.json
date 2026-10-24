@@ -1,9 +1,9 @@
 {
-  "packages/cms": "0.42.0",
+  "packages/cms": "0.42.1",
   "packages/plugin-wordpress": "0.10.0",
   "packages/plugin-llm": "0.4.1",
   "packages/plugin-post-summary": "0.6.1",
   "packages/plugin-tag-suggest": "0.5.1",
   "packages/plugin-umami": "0.5.0",
-  "packages/md2gemini": "0.1.0"
+  "packages/md2gemini": "0.1.1"
 }

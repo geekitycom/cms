@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/geekitycom/cms/compare/md2gemini-v0.1.0...md2gemini-v0.1.1) (2026-10-24)
+
+
+### Documentation
+
+* **md2gemini:** say the package is new and tested only in geekity cms ([8ed666e](https://github.com/geekitycom/cms/commit/8ed666e31872d081f9df5d4bb46071ed27b5f52f))
+
 ## 0.1.0 (2026-10-23)
 
 
