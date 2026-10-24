@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.2](https://github.com/geekitycom/cms/compare/v0.42.1...v0.42.2) (2026-10-24)
+
+
+### Bug Fixes
+
+* **cms:** require md2gemini 0.1.2 so nested bullets render as list items ([0d7444c](https://github.com/geekitycom/cms/commit/0d7444cb3880cab9e3cc684c50a9d473109e30c8))
+
 ## [0.42.1](https://github.com/geekitycom/cms/compare/v0.42.0...v0.42.1) (2026-10-24)
 
 
