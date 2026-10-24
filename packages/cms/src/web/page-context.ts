@@ -19,48 +19,17 @@ import { representationHref } from './negotiate.ts';
 import type { RenderDeps } from './render.ts';
 import { requestSite } from './render-scope.ts';
 
-/** What a post cites, as {@link PageContexts.citedBy} answers it. */
 export interface CitedContext {
   replyContext?: Record<string, unknown>;
   citations: (Citation & { context?: Record<string, unknown> })[];
 }
 
-/** The pieces of a page's context more than one kind of page puts on it. */
 export interface PageContexts {
-  /**
-   * What the pages a post cites say about themselves, as a theme reads them,
-   * when they were fetched. `replyContext` is what a reply answers,
-   * on the context only when it is known, so a theme draws the bare link from
-   * `inReplyTo` and fills it in from it. `citations` is what it reposts, likes
-   * or bookmarks, each with its `context` when that is known.
-   */
   citedBy(document: Document): CitedContext;
-  /**
-   * One entry of a listing: the document as a template sees it, and what it
-   * answers when it is a reply, so a feed cites a reply's target the way the
-   * reply's own page does.
-   */
   entryContext(document: Document, people: readonly User[], loading: ImageLoading): DocumentContext;
   newestPostsContext(page: Document): Record<string, unknown>;
   archiveOf(document: Document): ArchiveMonth[] | undefined;
-  /**
-   * The archive months on the context, or nothing at all for every other
-   * document.
-   *
-   * The front matter key decides, so the list is on the context of exactly the
-   * page that asked for it and a layout writes `{% if archiveMonths %}` rather
-   * than reading front matter for itself — the way `contactForm` works.
-   */
   archiveContext(document: Document): Record<string, unknown>;
-  /**
-   * The page whose own URL carries the listing, as the link a front page draws
-   * to it, or nothing at all when the site names none.
-   *
-   * Resolved here rather than by the route because the renderer already holds
-   * both halves — the setting and the published pages — and because the link
-   * is the front page's alone: everywhere else the posts page is an ordinary
-   * item of the site menu.
-   */
   postsPageContext(): Record<string, unknown>;
   capsuleContext(url: string): { capsuleUrl?: string };
 }
@@ -187,14 +156,6 @@ function citedContext(
   };
 }
 
-/**
- * One neighbour under the name a theme reads it by, or nothing at all when
- * there is no post on that side.
- *
- * The title and the URL and no more: a link is what it says and where it goes,
- * and handing a theme a second document context would be handing it a second
- * post to print by accident.
- */
 export function neighbourContext(
   key: 'previous' | 'next',
   document: Document | undefined,
@@ -204,10 +165,6 @@ export function neighbourContext(
   return { [key]: { title: postLabel(document, cited), url: document.permalink } };
 }
 
-/**
- * A stored reply context as a theme reads it: the published instant as a
- * `Date`, so the `date` filter prints it in the site's zone like any other.
- */
 export function replyContextFor(context: Omit<ReplyContext, 'picture'>): Record<string, unknown> {
   const published = context.published === undefined ? undefined : new Date(context.published);
   const { published: _published, ...rest } = context;

@@ -1,13 +1,3 @@
-/**
- * The supervisor's watch on the plugins folder. It polls the
- * folder's signature, waits for it to stand still, since a copy into the
- * folder changes it many times, and then asks for a reload when what the
- * folder holds differs from what the serving worker loaded.
- *
- * It remembers what the last failed reload tried to load, so a folder left
- * broken is not reloaded over and over; a change to it is tried again.
- */
-
 export interface PluginWatch {
   signature(): string;
   fingerprint(): string;
@@ -21,22 +11,16 @@ export interface PluginWatcherOptions {
   schedule(task: () => void, ms: number): { cancel(): void };
   now(): number;
   log(line: string): void;
-  /** Whether a worker serves with no reload under way, so one may begin. */
   isServing(): boolean;
-  /** Begin a reload to load `folder`. Called only while {@link isServing}. */
   reload(folder: string): void;
 }
 
 export interface PluginWatcher {
   start(): void;
   stop(): void;
-  /** What the folder holds now: what a reload beginning now loads. */
   fingerprint(): string | undefined;
-  /** A reload began that loads `folder`. */
   reloading(folder: string | undefined): void;
-  /** A worker serves what it loaded. */
   loaded(plugins: string): void;
-  /** The reload under way failed; its folder is left alone until it changes. */
   failed(): void;
 }
 
@@ -45,11 +29,8 @@ export function createPluginWatcher(options: PluginWatcherOptions): PluginWatche
   let loaded: string | undefined;
   let reloading: string | undefined;
   let failed: string | undefined;
-  /** The settled signature last checked against what is loaded, so a settled folder is read once. */
   let compared: string | undefined;
-  /** The signature last read, and when it first read so. */
   let seen: { signature: string | undefined; since: number } = { signature: undefined, since: 0 };
-  /** Whether the folder has been said to be changing since it last settled. */
   let changing = false;
   let polling: { cancel(): void } | undefined;
 
@@ -69,7 +50,6 @@ export function createPluginWatcher(options: PluginWatcherOptions): PluginWatche
     if (hasSettled(signature)) considerReload(signature);
   }
 
-  /** Whether the folder exists and has stood still, as `signature`, for the settle time. */
   function hasSettled(signature: string | undefined): signature is string {
     const now = options.now();
     if (signature !== seen.signature) {

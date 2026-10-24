@@ -6,14 +6,8 @@ import { isObjectIdOf, naturalObjectId, readObjectIds } from '../federation/obje
 import { replyFrom } from '../store/inbox-replies.ts';
 import type { ConversationContext, Reading } from './conversation-context.ts';
 
-/** How many notes deep a reply is followed back to the post it is about. */
 const MAXIMUM_NOTE_DEPTH = 32;
 
-/**
- * The document whose conversation a URL is in: the post a comment's page or
- * anchor is on, the post a webmention was sent to, the post a fediverse reply
- * answers however deep, or the document at the URL itself.
- */
 export function documentNamed(
   context: ConversationContext,
   url: string,
@@ -48,12 +42,6 @@ export function documentNamed(
   return context.store.getByStoredObjectId(named.href);
 }
 
-/**
- * The document one of this site's own URLs names: the one at the permalink it
- * spells, or the post whose file stores it as its id. A query string rules the
- * permalink out, as it does for {@link permalinkOfObjectId}, unless it is a
- * revision the post was federated under; one it was never given names nothing.
- */
 function ownDocumentNamed(context: ConversationContext, url: string): Document | undefined {
   const natural = naturalObjectId(url);
   if (!isObjectIdOf(readObjectIds(context.contentDir), natural, url)) return undefined;
@@ -62,11 +50,6 @@ function ownDocumentNamed(context: ConversationContext, url: string): Document |
   return found ?? context.store.getByStoredObjectId(natural);
 }
 
-/**
- * The document at the top of the conversation a reply post is in: what its
- * `in-reply-to` names, and what that one is in when it is a reply post too.
- * `undefined` for a reply post answering nothing on this site.
- */
 export function threadRootOf(
   context: Reading,
   document: Document,
@@ -79,19 +62,10 @@ export function threadRootOf(
   return threadRootOf(context, named, seen) ?? named;
 }
 
-/**
- * What a top-level answer names. The object id when the post has one, and the
- * permalink otherwise: a post that has never been delivered can still have
- * native comments, and they have to hang off something.
- */
 export function rootOf(context: Reading, document: Document): string {
   return activityStreamsId(document, context.baseUrl, context.store.now()) ?? document.permalink;
 }
 
-/**
- * The post an approved native comment is on, read from the comment's record
- * alone, without gathering the post's whole conversation.
- */
 export function commentedPost(
   context: Pick<ConversationContext, 'admin'> & { readonly store: DocumentLookup },
   key: string,
@@ -101,16 +75,8 @@ export function commentedPost(
   return context.store.getBySlug(stored.slug);
 }
 
-/**
- * The public post an ActivityStreams object id names, memoised.
- *
- * Almost every id is the post's permalink, so the permalink is
- * looked up first and the answer is checked against the document's own id — a
- * post that is no longer public has no id at all. Only when that fails is the
- * whole index read, once, to find the post whose file names this id: a post
- * migrated from WordPress keeps the `?p=813` its followers already hold, and
- * no permalink spells that.
- */
+// A post migrated from WordPress keeps the `?p=813` object id its followers
+// already hold, and no permalink spells that.
 export class PostsByObjectId {
   readonly #context: Reading;
   readonly #found = new Map<string, Document | undefined>();

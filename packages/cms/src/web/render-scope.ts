@@ -9,7 +9,6 @@ import type { SiteSettings } from '../site/settings.ts';
 
 const signedInReader = new AsyncLocalStorage<true>();
 
-/** Run `draw` as the request of a signed-in reader, so its pages say `signedIn`. */
 export function drawnForSignedInReader<T>(draw: () => T): T {
   return signedInReader.run(true, draw);
 }

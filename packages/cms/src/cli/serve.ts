@@ -9,19 +9,6 @@ import { SITE } from '../site/namespace.ts';
 import { messageOf } from '../util/errors.ts';
 import type { ParsedArgs } from './args.ts';
 
-/**
- * `geekity serve`: the default. Runs until it is signalled.
- *
- * This process is a supervisor: it owns the port and runs the CMS
- * in a `node:cluster` worker that runs this same command, so Reload on the
- * Plugins screen can boot a new worker beside the old one and a worker that
- * crashes is respawned, both without restarting the container.
- *
- * With `seedContent` on, a missing or empty content directory is given the
- * starter site before any worker opens it, so a new box boots into something
- * to show and the setup screen. It happens here rather than in `createCms` so
- * a site that builds its own server never has content written for it.
- */
 export async function serveCommand({ configPath }: ParsedArgs): Promise<number> {
   if (cluster.isWorker) return serveWorker(configPath);
 
@@ -41,11 +28,6 @@ export async function serveCommand({ configPath }: ParsedArgs): Promise<number> 
   return 0;
 }
 
-/**
- * One worker under the supervisor: the site's config and its plugins folder,
- * read afresh, so a reload sees what changed. Signals are the supervisor's to
- * act on; it tells this worker when to close.
- */
 async function serveWorker(configPath: string | undefined): Promise<number> {
   const { processChannel, superviseWorker } = await import('../supervisor/worker.ts');
   const { createCms } = await import('../index.ts');
@@ -53,11 +35,6 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => undefined);
 
   try {
-    // The access log is on here and off in `createCms`: a server that answers
-    // the internet should be able to say what it answered, while a CMS embedded
-    // in somebody else's app has no business writing to their stdout uninvited.
-    // Named as a config value rather than forced, so `GEEKITY_ACCESS_LOG` still
-    // wins and a site that wrote `accessLog: false` still gets silence.
     const config = await loadResolvedConfig(configPath, (site) => ({
       ...site,
       accessLog: site.accessLog ?? true,

@@ -48,10 +48,6 @@ Environment overrides:
   certificate and key instead of the generated pair)
 `;
 
-/**
- * The help, with the commands the site's plugins add. A config that will not
- * load costs the help its plugin section, not the help itself.
- */
 export async function usage(configPath: string | undefined): Promise<string> {
   let found: FoundCommand[];
   try {
@@ -108,13 +104,10 @@ function helpEntry(head: string, described: string[]): string[] {
   return [head, ...described];
 }
 
-/** Where the help's descriptions start, as the core commands' do. */
 const HELP_INDENT = ' '.repeat(19);
-/** Where a usage line carries on, as the core commands' do. */
 const USAGE_CONTINUATION = ' '.repeat(10);
 const HELP_WIDTH = 79;
 
-/** Text wrapped to the help's width, each line indented. */
 function wrap(text: string, indent: string): string[] {
   const lines: string[] = [];
   let line = '';

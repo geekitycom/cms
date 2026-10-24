@@ -28,26 +28,12 @@ import { rootOf } from './conversation-lookup.ts';
 import { byPublished } from './conversation-threads.ts';
 import { authorFeedHref } from './feed-source.ts';
 
-/** Everything said about one post, sorted into its groups and not yet threaded. */
 export interface Gathered extends Readonly<Record<Group, Interaction[]>> {
-  /** What a top-level answer names. */
   readonly root: string;
-  /** The ids of what an actor has taken back. */
   readonly withdrawn: ReadonlySet<string>;
-  /** The native comments a reader may not see, pending or spam, by id. */
   readonly held: ReadonlyMap<string, Interaction>;
 }
 
-/**
- * Everything said about one post from every source the site has: the
- * fediverse, the stored comments, and the reply posts answering it with what
- * was said under each of them.
- *
- * A post that has never been delivered has no ActivityStreams id and so can
- * have no fediverse replies — nothing out there has a name for it yet — but it
- * can still have native comments, which hang off its permalink instead. Only
- * an event takes RSVPs, so only an event's are folded apart into answers.
- */
 export function gather(
   context: Reading,
   document: Document,
@@ -94,10 +80,6 @@ function merged(root: string, parts: readonly Part[]): Gathered {
     for (const [id, entry] of part.held ?? []) held.set(id, entry);
     for (const id of part.withdrawn ?? []) withdrawn.add(id);
   }
-  // Sorted before threading rather than after, because a thread is built by
-  // walking this list: two sources' entries would otherwise interleave in the
-  // order the code happened to read them rather than in the order they were
-  // written.
   groups.written.sort(byPublished);
   return { root, ...groups, held, withdrawn };
 }
@@ -117,7 +99,6 @@ function fromStored(context: Reading, document: Document, stored: readonly PostC
   return { said, held };
 }
 
-/** An event's stored comments, with those carrying an RSVP moved to its answers. */
 function answersApart(part: Part): Part {
   return {
     ...part,
@@ -127,11 +108,6 @@ function answersApart(part: Part): Part {
   };
 }
 
-/**
- * The reply posts answering the post or anything said under it, each
- * bringing what was said under it: an answer to a reply post lands against
- * the reply post, and this is what stitches it into the thread it is in.
- */
 function fromReplyPosts(
   context: Reading,
   document: Document,
@@ -157,12 +133,6 @@ function fromReplyPosts(
   return { said, held, withdrawn };
 }
 
-/**
- * Every URL a reply post's `in-reply-to` could name something here by, and the
- * id each one names: the post by its permalink, every URL it used to live at
- * and every object id it has had, and every entry by its id, its url and, for
- * a comment written here, its page and its anchor.
- */
 function namesIn(
   context: Reading,
   document: Document,
@@ -190,7 +160,6 @@ function namesOf(reply: Interaction, permalink: string, baseUrl: string): string
   return names;
 }
 
-/** A reply post as the thread's own shape, answering `inReplyTo`. */
 function replyPostInteraction(
   context: Reading,
   post: Document,
@@ -211,7 +180,6 @@ function replyPostInteraction(
   };
 }
 
-/** Who a post or page on this site is by: its author, else the site's. */
 export function documentAuthor(context: Reading, post: Document): InteractionAuthor {
   const users = context.users();
   const { site } = context;
@@ -219,7 +187,6 @@ export function documentAuthor(context: Reading, post: Document): InteractionAut
   return bylineAuthor(author, site.title);
 }
 
-/** A byline as the thread names its author, `fallback` when it names nobody. */
 function bylineAuthor(author: AuthorContext | undefined, fallback: string): InteractionAuthor {
   return {
     name: author?.name ?? fallback,
@@ -232,14 +199,12 @@ function bylineAuthor(author: AuthorContext | undefined, fallback: string): Inte
   };
 }
 
-/** One stored comment as the thread's own shape. */
 function interactionOf(
   comment: PostComment,
   permalink: string,
   baseUrl: string,
   users: readonly User[],
 ): Interaction {
-  // A user the site no longer has is named as the comment was signed.
   const user = users.find((candidate) => candidate.username === comment.user);
   return {
     id: comment.id,
@@ -263,10 +228,6 @@ function interactionOf(
             username: null,
           }
         : bylineAuthor(profileContext(user), comment.author.name),
-    // Where it can be read. A comment written here has a page of its own;
-    // a webmention lives on the page it was sent from, and its
-    // `url` says so. A theme that prints `url` for a fediverse reply prints a
-    // working link for either, and so does a feed.
     url:
       comment.url ??
       (comment.source === 'comment'

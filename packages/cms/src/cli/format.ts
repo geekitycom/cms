@@ -9,7 +9,6 @@ export function table(rows: readonly (readonly string[])[]): string {
     .join('');
 }
 
-/** "1 follower", "2 followers". The plural is the singular plus s unless told. */
 export function count(howMany: number, singular: string, plural = `${singular}s`): string {
   return `${String(howMany)} ${howMany === 1 ? singular : plural}`;
 }

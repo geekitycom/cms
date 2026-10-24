@@ -6,25 +6,6 @@ import type { ParsedArgs } from './args.ts';
 import { databaseInUse } from './database-in-use.ts';
 import { count } from './format.ts';
 
-/**
- * `geekity rebuild`: throw the database away and read it back out of the files.
- *
- * Nothing in `data/geekity.db` is anything but a reading of `content/` and
- * `data/`, so this is a command with no undo and no loss: the
- * content index, the followers, the inbox log and the comments come back
- * exactly as they were, and what does not — sessions, the cached delivery
- * outcomes, the relay handshake — is what a site is told it may lose. It is the
- * way past a database this version refuses to open, which is the other reason
- * it exists.
- *
- * The rebuild is the boot: after the file is gone, `createCms` applies the same
- * migrations and runs the same rebuilds boot runs, and `sync()`
- * is the same scan `serve()` does. Nothing here knows how to build an index,
- * which is what keeps a rebuilt database identical to a booted one.
- *
- * Watching is forced off for the reason `sync` forces it off: a one-shot
- * command that sat in a watcher would never exit.
- */
 export async function rebuildCommand({ configPath }: ParsedArgs): Promise<number> {
   const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
   const file = databaseFile(config.dataDir);
@@ -71,7 +52,6 @@ export async function rebuildDatabase(config: ResolvedConfig): Promise<number> {
   }
 }
 
-/** How many comments the files hold, whatever a moderator has done with them. */
 function totalComments(admin: AdminStore): number {
   const counts = admin.countCommentsByStatus();
   return counts.pending + counts.approved + counts.spam;

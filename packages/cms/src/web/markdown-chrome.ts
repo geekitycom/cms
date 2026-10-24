@@ -43,7 +43,6 @@ export interface MarkdownChromePages {
   renderStatusMarkdown(page: StatusPageName, context: StatusMarkdownContext): ThemeText;
 }
 
-/** The theme's Markdown and gemtext around a page's body, and its status pages' text. */
 export function createMarkdownChrome(
   deps: RenderDeps,
   markdown: MarkdownEnvironment,

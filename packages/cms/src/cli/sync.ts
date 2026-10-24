@@ -1,12 +1,6 @@
 import { loadResolvedConfig } from '../config-loader.ts';
 import type { ParsedArgs } from './args.ts';
 
-/**
- * `geekity sync`: bring the index into line with the files once and stop.
- *
- * Watching is forced off whatever the config says, because a one-shot scan
- * that then sat in a watcher would never exit.
- */
 export async function syncCommand({ configPath }: ParsedArgs): Promise<number> {
   const { createCms } = await import('../index.ts');
   const cms = createCms(

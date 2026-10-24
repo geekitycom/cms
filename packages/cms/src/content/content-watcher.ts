@@ -9,38 +9,22 @@ import { watchTree } from './tree-watch.ts';
 import type { TreeWatcher } from './tree-watch.ts';
 import type { WatchDebounce } from './watch-debounce.ts';
 
-/** Name prefix of the directory the watcher makes to learn that it is listening. */
 const PROBE_PREFIX = '.geekity-watch-';
 
-/** How long one probe waits for its event before another is made. */
 const PROBE_INTERVAL_MS = 250;
 
-/** How long the watcher keeps probing before it reports that it hears nothing. */
 const PROBE_DEADLINE_MS = 5_000;
 
-/** Watches the content directory and reports each changed path once it has stopped changing. */
 export interface ContentWatcher {
-  /**
-   * Start watching, resolving once the watch hears changes or has given up
-   * waiting to. Does nothing when already watching.
-   */
   start(): Promise<void>;
-  /** Drop every path still waiting out its debounce and stop watching. */
   stop(): void;
-  /** How many paths are still waiting out their debounce. */
   waiting(): number;
 }
 
-/** How to build a {@link ContentWatcher}. */
 export interface CreateContentWatcherOptions {
   contentDir: string;
   logger: SyncLogger;
   debounce: WatchDebounce;
-  /**
-   * Called with a content-relative path once it has stopped changing, `''`
-   * when the watch could not say which path changed. The path may be a
-   * document, any other file, or a directory that was made, moved or removed.
-   */
   onSettledPath: (relativePath: string) => void;
 }
 
@@ -144,15 +128,6 @@ async function hearsChanges(
   return false;
 }
 
-/**
- * Whether the watch should skip a content-relative path: anything inside a
- * directory the walk would not descend into, and anything named as such a
- * directory. The watch's own probe is let through.
- *
- * The watch is told only a name, never whether it is a file, so a file that
- * is not a document is kept here and found to name no documents when its
- * event is handled.
- */
 function isIgnored(relativePath: string): boolean {
   const segments = relativePath.replace(/\\/g, '/').split('/');
   const name = segments.at(-1) as string;

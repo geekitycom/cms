@@ -12,12 +12,6 @@ import type { TextTemplates } from './theme-templates.ts';
 
 export interface MarkdownEnvironment {
   readonly environment: Environment;
-  /**
-   * One Markdown or gemtext template pair through the chosen theme: gemtext
-   * comes from the first of the theme's `.gmi.njk`, its `.md.njk`, the default
-   * theme's `.gmi.njk` and its `.md.njk`, and the result says
-   * which format the theme wrote.
-   */
   renderText(
     templates: TextTemplates,
     format: TextFormat,
@@ -25,10 +19,6 @@ export interface MarkdownEnvironment {
   ): ThemeText;
 }
 
-/**
- * The twin the Markdown partials render through: the same loader and filters
- * as the HTML environment, autoescaping off, and the Markdown filters.
- */
 export function createMarkdownEnvironment(
   deps: Pick<RenderDeps, 'config' | 'themes'>,
 ): MarkdownEnvironment {
@@ -75,13 +65,11 @@ function addMarkdownFilters(environment: Environment): void {
   }
 }
 
-/** Every line after the first indented by `width` spaces, blank lines left blank. */
 function nest(text: string, width: number): string {
   const indent = ' '.repeat(width);
   return text.replace(/\n(?=[^\n])/g, `\n${indent}`);
 }
 
-/** Markdown as a blockquote: every line after `> `, a blank line as `>`. */
 function quote(text: string): string {
   return text
     .trim()
@@ -90,7 +78,6 @@ function quote(text: string): string {
     .join('\n');
 }
 
-/** A filter's input as text: a string, number or boolean as written, anything else empty. */
 function filterText(value: unknown): string {
   return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
     ? String(value)

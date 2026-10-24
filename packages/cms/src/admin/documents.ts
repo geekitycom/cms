@@ -335,20 +335,14 @@ export function mountDocumentScreens(
   });
 }
 
-/** What {@link renderRestoredCopy} restores, and over which document. */
 interface RestoreCopyOptions {
   kind: DocumentScreens;
   render: AdminRender;
   document: Document;
   copy: AutosaveCopy;
-  /** The author has already seen the conflict and chose to keep their copy. */
   rebase: boolean;
 }
 
-/**
- * An autosaved copy put back into the editor, or, when the file changed after
- * the copy was taken, the two side by side so the author decides which wins.
- */
 async function renderRestoredCopy(
   c: Context<GeekityEnv>,
   options: RestoreCopyOptions,
@@ -508,8 +502,6 @@ async function saveFromForm(
   const form = submittedForm(kind, body, contentDir);
 
   const action = stringOrEmpty(body['action']);
-  // The editor's buttons are shortcuts past the checkbox: Save draft and
-  // Publish say what they do, and Update leaves the decision to the checkbox.
   const draft = action === 'save-draft' ? true : action === 'publish' ? false : form.draft;
 
   function refuse(refusal: Refusal): Promise<Response> {
@@ -968,12 +960,6 @@ interface RenderEditorOptions {
   status?: 200 | 400 | undefined;
 }
 
-/**
- * The editor screen.
- *
- * The model is built first and knows nothing of the response; the status and
- * the headers the screen needs are set here, in one place, before it renders.
- */
 async function renderEditor(
   c: Context<GeekityEnv>,
   options: RenderEditorOptions,
@@ -987,12 +973,6 @@ async function renderEditor(
   return options.render(c, ADMIN_TEMPLATES.documentEditor, model);
 }
 
-/**
- * The editor's buttons for the document's state: something unwritten or
- * still a draft offers Save draft and Publish, something published offers
- * Update, and anything that exists can be thrown away or, if it already has
- * been, restored.
- */
 function editorActions(document: Document | undefined, trashed: boolean): EditorAction[] {
   const actions: EditorAction[] =
     document === undefined || document.draft
@@ -1006,7 +986,6 @@ function editorActions(document: Document | undefined, trashed: boolean): Editor
   return actions;
 }
 
-/** What {@link resumeOffer} needs beyond the editor's own options. */
 interface ResumeOfferOptions {
   kind: DocumentScreens;
   document: Document | undefined;
@@ -1017,10 +996,6 @@ interface ResumeOfferOptions {
   timezone: string;
 }
 
-/**
- * The offer to pick up an autosaved copy, made only when the copy is newer
- * than the file it would replace.
- */
 async function resumeOffer(c: Context<GeekityEnv>, options: ResumeOfferOptions) {
   const { kind, document, copy, autosaveKey, postKind } = options;
   if (options.offer !== true || copy === undefined) return undefined;
@@ -1042,7 +1017,6 @@ async function resumeOffer(c: Context<GeekityEnv>, options: ResumeOfferOptions) 
   };
 }
 
-/** The editor template's model. It reads the request but never writes the response. */
 async function editorModel(
   c: Context<GeekityEnv>,
   options: RenderEditorOptions,
@@ -1114,7 +1088,6 @@ async function editorModel(
   };
 }
 
-/** The part of the editor model only posts have: kinds, media, links, reviews and syndication. */
 async function postEditorModel(
   c: Context<GeekityEnv>,
   form: EditorForm,
@@ -1169,7 +1142,6 @@ async function postEditorModel(
     ...(form.review.kind === '' || isReviewKind(form.review.kind)
       ? {}
       : { unrecognizedReviewKind: form.review.kind }),
-    // One checkbox per target the site declares.
     syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
       ...target,
       field: syndicateToField(target),

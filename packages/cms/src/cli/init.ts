@@ -3,7 +3,6 @@ import path from 'node:path';
 import { initSite } from '../init.ts';
 import type { ParsedArgs } from './args.ts';
 
-/** `geekity init <directory>`: scaffold a new site. */
 export async function initCommand({ args }: ParsedArgs): Promise<number> {
   const directory = args[0];
   if (directory === undefined) {

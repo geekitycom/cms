@@ -4,21 +4,6 @@ import { loadResolvedConfig } from '../config-loader.ts';
 import type { ParsedArgs } from './args.ts';
 import { readPassword } from './password.ts';
 
-/**
- * `geekity user add <username>`: create an admin without the setup screen.
- *
- * The other door into `data/users.json` is the first-run setup form, and this
- * one has to leave the same thing behind it, so both go through
- * {@link credentialProblem} rather than each carrying its own idea of a legal
- * username. The file is written under the config's `dataDir`, which is the
- * same one the server will read.
- *
- * The database is opened for one reason only: this is the one door that can
- * reach the users file before a server ever has, and a site upgrading from the
- * version that kept its accounts in SQLite would otherwise end up with a file
- * holding nobody but the user added here — which, the file winning, is what
- * the next boot would keep. So the same boot migration runs first.
- */
 export async function userCommand({
   args,
   configPath,
@@ -82,5 +67,4 @@ export async function userCommand({
   }
 }
 
-/** Where the success line points a new admin. Relative, because the host is the site's. */
 const LOGIN_URL = '/admin/login';

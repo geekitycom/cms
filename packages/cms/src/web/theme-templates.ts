@@ -1,6 +1,5 @@
 import { findThemeFile } from '../theme/themes.ts';
 
-/** Templates the default theme ships and the public routes ask for by name. */
 export const TEMPLATES = {
   home: 'layouts/home.njk',
   post: 'layouts/post.njk',
@@ -16,24 +15,8 @@ export const TEMPLATES = {
   maintenance: 'layouts/503.njk',
 } as const;
 
-/**
- * The two templates named for the Reading choice, which a theme may write and
- * which fall back to an ordinary layout when it has not.
- *
- * They are WordPress's own `front-page.php` and `home.php`, and they exist for
- * the same reason: a front page is often the one page of a site that looks
- * like nothing else, and saying so should not mean overriding the layout every
- * other page uses. The default theme ships `front-page.njk` and no
- * posts page layout, so a site that sets a posts page gets the listing layout
- * until it writes one.
- */
 export const OPTIONAL_TEMPLATES = {
-  /**
-   * The front page alone. The default theme ships one, so the
-   * fallback is only reached by a theme that replaced it with nothing.
-   */
   frontPage: 'layouts/front-page.njk',
-  /** The listing on the posts page. Falls back to {@link TEMPLATES.home}. */
   postsPage: 'layouts/posts-page.njk',
 } as const;
 
@@ -85,15 +68,6 @@ export function untilContext(until: Date | undefined): Record<string, string> {
   return until === undefined ? {} : { until: until.toISOString(), untilText: until.toUTCString() };
 }
 
-/**
- * `preferred` when a theme in the search path ships it, and `fallback`
- * otherwise.
- *
- * Asked per render rather than at boot, so adding `front-page.njk` to a theme
- * shows on the next request exactly as editing one does. It costs one `stat`
- * per theme directory, and only on the two pages that have an override point
- * at all.
- */
 export function themeTemplate(
   themeDirs: readonly string[],
   preferred: string,

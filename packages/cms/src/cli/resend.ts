@@ -2,17 +2,8 @@ import { loadResolvedConfig } from '../config-loader.ts';
 import type { ParsedArgs } from './args.ts';
 import { runJobHere } from './run-job.ts';
 
-/**
- * `geekity resend`: send announced posts to their followers again, as they now
- * read.
- *
- * Mastodon keeps the copy of a post it first fetched, so a property added
- * later — the quote policy is the one that made this a command —
- * reaches a post already out only through an `Update`. This is the resend
- * button on the federation screen, for every post at once, and it runs the
- * same resend job. Delivery runs with no queue, so each activity
- * has been posted before the process exits.
- */
+// Mastodon keeps the copy of a post it first fetched, so a property added
+// later reaches a post already out only through an `Update`.
 export async function resendCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const all = flags['all'] === true;
   if (all === args.length > 0) {

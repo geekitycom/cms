@@ -8,20 +8,10 @@ import { conversational, repliesFed, saidIn } from './conversation-threads.ts';
 import { repliesFeedPath } from './feed-source.ts';
 import type { FeedComment } from './feeds.ts';
 
-/** What a post's comments feed carries, at every depth and in no order. */
 export function spokenIn(conversation: Conversation): Placed[] {
   return saidIn(conversation).filter(conversational);
 }
 
-/**
- * Interactions as a comments feed carries them: newest first, at most `limit`,
- * and every link absolute.
- *
- * The one place an interaction becomes a feed item, so the post's feed and the
- * site's cannot disagree about what a comment's `guid` or `link` is. The HTML
- * is handed over as it stands and sanitised by the feed itself, at the last
- * moment before it becomes bytes this site publishes.
- */
 export function feedComments(
   said: readonly (Placed & {
     post?: Document | undefined;
@@ -69,7 +59,6 @@ export function feedComments(
   });
 }
 
-/** The newest `limit` of a mixed list, which is the order every feed shows. */
 export function newestFirst<T extends { published: Date }>(said: readonly T[], limit: number): T[] {
   return [...said]
     .sort((left, right) => right.published.getTime() - left.published.getTime())

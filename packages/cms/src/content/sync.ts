@@ -199,11 +199,12 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     return result;
   }
 
-  /**
-   * Reconcile what a watcher event names. A document is re-read; any other
-   * path may be a directory that was made, moved or removed, so every
-   * document under it, on disk or in the index, is.
-   */
+  function burstIsOver(): boolean {
+    const noPathDebouncing = watcher.waiting() === 0;
+    const onlyThisRunQueued = queue.pending() === 1;
+    return noPathDebouncing && onlyThisRunQueued;
+  }
+
   async function reconcileWatched(relativePath: string): Promise<void> {
     const paths = isDocumentPath(relativePath)
       ? [relativePath]
@@ -217,9 +218,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
         logger.warn(`Could not sync ${documentPath}: ${messageOf(error)}`);
       }
     }
-    // This run is the one left in the queue, and no path is waiting out
-    // its debounce: the burst is over.
-    if (settled.isUnsettled() && watcher.waiting() === 0 && queue.pending() === 1) {
+    if (settled.isUnsettled() && burstIsOver()) {
       await settled.settle();
     }
   }
@@ -254,13 +253,10 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
   };
 }
 
-/** The listeners {@link ContentSync.onSettled} keeps, and whether a change is waiting for them. */
 interface SettledListeners {
   add(listener: () => unknown): () => void;
-  /** Note that the index changed since the listeners last ran. */
   markUnsettled(): void;
   isUnsettled(): boolean;
-  /** Run every listener in turn, logging any that throws. */
   settle(): Promise<void>;
 }
 

@@ -18,7 +18,6 @@ export interface ListingPages {
   renderComment(thread: CommentThread): string;
 }
 
-/** The pages that list documents: listings, search results and a comment's own page. */
 export function createListingPages(
   deps: RenderDeps,
   render: ThemeRender,
@@ -27,12 +26,7 @@ export function createListingPages(
   const { config, users, citedPage } = deps;
 
   function renderListing(listing: Listing): string {
-    // One read of the users file for the whole page, however many posts are
-    // on it: every byline on a listing resolves against the same list.
     const people = users();
-    // The first image on the page is fetched at once: the posts page's own
-    // when its body has one, since it is printed above the list, else the
-    // first entry's.
     const bodyLeads = listing.document?.html.includes('<img') === true;
     const items: DocumentContext[] = listing.documents.map((document, index) =>
       contexts.entryContext(document, people, { lead: !bodyLeads && index === 0 }),
@@ -51,11 +45,6 @@ export function createListingPages(
       pagination: { ...listing.pagination, items },
       ...(listing.tag === undefined ? {} : { tag: listing.tag }),
       ...(listing.category === undefined ? {} : { category: listing.category }),
-      // On an author archive this is the person the archive is of, and it
-      // goes on last so it wins over the posts page's own `author`, which is
-      // the page's writer rather than whose archive this is. They are also
-      // whose page this is, so the identity a theme prints is theirs rather
-      // than the site's.
       ...(listing.author === undefined
         ? {}
         : { author: listing.author, siteAuthor: listing.author }),
@@ -72,8 +61,6 @@ export function createListingPages(
         undefined,
         citedPage,
       ),
-      // Escaped here and marked up here, so a theme prints it with `safe`
-      // and cannot get the order of the two wrong.
       snippet: snippetHtml(hit.snippet),
     }));
 
@@ -82,8 +69,6 @@ export function createListingPages(
       url: search.url,
       page: { url: search.url },
       ...contexts.capsuleContext(search.url),
-      // The words as the reader typed them, for the form to put back in the
-      // box and the heading to repeat. Autoescaped like any other string.
       query: search.query,
       posts: items,
       pagination: { ...search.pagination, items },
@@ -109,24 +94,12 @@ export function createListingPages(
   return { renderListing, renderSearch, renderComment };
 }
 
-/**
- * Which template one listing renders through: whatever it named, the posts
- * page's own template when it is one and the theme ships one, and the home
- * layout otherwise.
- */
 function listingTemplate({ themes }: Pick<RenderDeps, 'themes'>, listing: Listing): string {
   if (listing.template !== undefined) return listing.template;
   if (listing.document === undefined) return TEMPLATES.home;
   return themeTemplate(themes.current().dirs, OPTIONAL_TEMPLATES.postsPage, TEMPLATES.home);
 }
 
-/**
- * The posts page's own front matter and rendered body, under the listing's
- * title, URL and posts: a theme prints `{{ content | safe }}` above the list
- * and a site without a posts page has nothing there. The listing's own keys go
- * on after it, because this page of the listing is what is being served — page
- * two of it is not the page's own URL.
- */
 function postsPageDocument(
   { config, citedPage }: Pick<RenderDeps, 'config' | 'citedPage'>,
   page: Document | undefined,

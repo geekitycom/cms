@@ -14,7 +14,7 @@ import { stripMetadataCommand } from './strip-metadata.ts';
 import { syncCommand } from './sync.ts';
 import { userCommand } from './user.ts';
 
-export interface CommandEntry {
+interface CommandEntry {
   synopsis: readonly string[];
   sharedWithPlugins?: true;
   help: readonly (readonly [words: string, summary: readonly string[]])[];

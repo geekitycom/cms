@@ -8,10 +8,6 @@ import type { ParsedArgs } from './args.ts';
 import { count, table } from './format.ts';
 import { loadSitePlugins } from './site-plugins.ts';
 
-/**
- * It runs beside a serving site: no migration runs and no database is opened
- * but the queue, read-only, to count what waits in it.
- */
 export async function exportCommand({ configPath, flags }: ParsedArgs): Promise<number> {
   const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
   const settings = createSettings({ config });

@@ -1,35 +1,20 @@
-/** How one `--name` option is read off the command line. */
 export interface OptionSpec {
   readonly name: string;
-  /** How the option's value is read. Left out, the option is a switch: simply on or off. */
   readonly value?: ValueSpec | undefined;
 }
 
 export interface ValueSpec {
-  /** What the refusal says when the value is missing. Defaults to `--<name> needs a value.` */
   readonly missing?: string;
-  /**
-   * Whether the word after the option is taken even when it starts with a
-   * dash. Off, such a word is read as the next option and the value as missing.
-   */
   readonly dashed?: true;
-  /** Whether `--<name>=` with nothing after it is the empty string rather than a missing value. */
   readonly empty?: true;
 }
 
-/** One option as read: its name, its value or `true` for a switch, and how many words it took. */
 export interface ReadOption {
   readonly name: string;
   readonly value: string | true;
   readonly words: 1 | 2;
 }
 
-/**
- * Read the option at `argv[index]`, which starts with `--`, by its spec: as
- * `--name`, `--name=value` or `--name value`. An option no spec names is
- * refused here rather than left to be read as a file name by whatever command
- * was running.
- */
 export function readOption(
   argv: readonly string[],
   index: number,

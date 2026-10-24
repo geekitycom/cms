@@ -1,37 +1,25 @@
 import { createInterface } from 'node:readline';
 import { Writable } from 'node:stream';
 
-/** A terminal, as much of one as {@link readPassword} needs. */
 type PasswordInput = NodeJS.ReadableStream & {
   isTTY?: boolean | undefined;
   isRaw?: boolean | undefined;
   setRawMode?: (mode: boolean) => unknown;
 };
 
-/** Where {@link readPassword} reads from, writes to, and what it says. */
 export interface ReadPasswordOptions {
-  /** Stream to read the password from. Defaults to standard input. */
   input?: PasswordInput;
-  /** Stream the prompt goes to. Defaults to standard error, so `>` keeps it out of a file. */
   output?: NodeJS.WritableStream;
-  /** The prompt, shown only on a terminal. */
   prompt?: string;
 }
 
 /**
- * Ask for a password once, without putting it on the screen.
- *
- * Two things would otherwise echo it, and both are turned off: the terminal
- * driver, silenced by putting the input into raw mode, and readline, whose
- * output goes to a writable that keeps nothing. Readline happens to set raw
- * mode itself, but it is set here as well rather than relied on: the day that
- * changes, a password would be printed. Raw mode also means readline sees
+ * Two things would otherwise echo the password, and both are turned off: the
+ * terminal driver, silenced by raw mode, and readline, whose output goes to a
+ * writable that keeps nothing. Readline happens to set raw mode itself, but it
+ * is set here as well rather than relied on. Raw mode also means readline sees
  * Ctrl-C as a byte rather than a signal, so it is turned back into a
  * cancellation here.
- *
- * Off a terminal — a pipe, a heredoc, a CI job — nothing is printed and the
- * first line is the password, which is what makes
- * `printf '%s\n' "$PW" | geekity user add ada` work.
  */
 export async function readPassword(options: ReadPasswordOptions = {}): Promise<string> {
   const input = options.input ?? process.stdin;

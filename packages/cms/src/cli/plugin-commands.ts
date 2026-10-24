@@ -11,16 +11,11 @@ import { readOption } from './options.ts';
 import type { OptionSpec } from './options.ts';
 import { loadSitePlugins } from './site-plugins.ts';
 
-/** A command a plugin added, and the plugin it came from. */
 export interface FoundCommand {
   plugin: string;
   command: PluginCommand;
 }
 
-/**
- * Every command the site's available plugins add, from its config and its
- * plugins folder, longest words first.
- */
 export async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
   return (await loadSitePlugins(config, createSettings({ config }))).plugins
     .filter((entry) => entry.problem === undefined)
@@ -38,18 +33,6 @@ export async function pluginExtends(
   return found.some(({ command }) => command.words.every((word, index) => words[index] === word));
 }
 
-/**
- * Run a command a plugin added. It needs no enabling: a
- * migration command runs before the plugin it prepares for is turned on.
- *
- * The database is opened for the reason `user add` opens it: a command can
- * reach `data/users.json` before any server has, so a site upgrading from the
- * version that kept its accounts in SQLite is migrated first. The comments
- * are migrated as a boot would migrate them for the same reason: a command
- * writing comments before any server has would otherwise meet ids the site
- * refuses to store. Plugin settings still in `site.json` move to
- * `data/plugins/<name>/` first, so the command reads what a boot would.
- */
 export async function pluginCommand(argv: readonly string[]): Promise<number> {
   const configPath = configFlag(argv);
   const config = await loadResolvedConfig(configPath);
@@ -97,7 +80,6 @@ export async function pluginCommand(argv: readonly string[]): Promise<number> {
   }
 }
 
-/** A plugin command's arguments and options, refusing any option it does not take. */
 function parseCommandArgs(
   argv: readonly string[],
   command: PluginCommand,
