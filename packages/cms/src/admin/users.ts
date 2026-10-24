@@ -19,6 +19,7 @@ import {
   verifyUserPassword,
 } from '../site/users.ts';
 import type { ProfileLink, User } from '../site/users.ts';
+import type { FlashKind } from '../store/admin-store.ts';
 import { authorHref } from '../content/authors.ts';
 import { isLinkUrl, LINK_REL_RULE, LINK_URL_RULE, splitLinkRel } from '../site/navigation.ts';
 import {
@@ -34,7 +35,7 @@ import { stringOrEmpty } from '../util/forms.ts';
 import { ADMIN_THEMES, adminTheme } from '../site/admin-theme.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
-import { flash } from './flash.ts';
+import { flashAndRedirect } from './flash.ts';
 import { editUserPath, USERS_PATH } from '../site/admin-paths.ts';
 import { toldFollowers } from './settings-page.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -180,360 +181,394 @@ export interface MountUsersOptions {
 export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): void {
   const { render } = options;
 
-  app.get(USERS_PATH, (c) => render(c, ADMIN_TEMPLATES.usersList, screen(c)));
-
-  app.get(ADD_USER_PATH, (c) => render(c, ADMIN_TEMPLATES.usersNew, addScreen(c)));
-
-  app.post(ADD_USER_PATH, async (c) => {
-    const body = await c.req.parseBody();
-    const username = stringOrEmpty(body[USER_FIELDS.username]).trim();
-    const supplied = stringOrEmpty(body[USER_FIELDS.password]);
-    const email = stringOrEmpty(body[USER_FIELDS.email]).trim();
-    const generate = stringOrEmpty(body[USER_FIELDS.generate]) !== '';
-
-    const password = generate ? generatePassword() : supplied;
-    const problems = addUserProblems(username, password, generate, email);
-
-    if (Object.keys(problems).length === 0) {
-      try {
-        await createUser({
-          dataDir: c.var.config.dataDir,
-          username,
-          password,
-          email,
-          now: c.var.config.now(),
-        });
-      } catch (error) {
-        if (!(error instanceof DuplicateUsernameError)) throw error;
-        problems.username = error.message;
-      }
-    }
-
-    if (Object.keys(problems).length > 0) {
-      c.status(400);
-      // Back onto the form that was refused, with what was typed still in it.
-      return render(
-        c,
-        ADMIN_TEMPLATES.usersNew,
-        addScreen(c, { addForm: { username, email, generate }, addProblems: problems }),
-      );
-    }
-
-    // A generated password is shown once, here, and never stored in the clear.
-    // The flash lives on the session row, so it is not in the URL, in a cookie
-    // or in anybody's history.
-    flash(
-      c,
-      'notice',
-      generate
-        ? `Added ${username}. Their password is ${password} — copy it now, it is not shown again.`
-        : `Added ${username}.`,
-    );
-    return c.redirect(USERS_PATH, 303);
-  });
-
-  app.post(CHANGE_PASSWORD_PATH, async (c) => {
-    // The guard has already established that there is a live session with a
-    // user behind it, so both of these are present on every path that gets here.
-    const session = c.var.session;
-    const user =
-      session?.userId === null || session === undefined
-        ? undefined
-        : findUserById(c.var.config.dataDir, session.userId);
-    if (session === undefined || user === undefined) return c.redirect(USERS_PATH, 303);
-
-    const body = await c.req.parseBody();
-    const current = stringOrEmpty(body[USER_FIELDS.currentPassword]);
-    const next = stringOrEmpty(body[USER_FIELDS.newPassword]);
-    const confirmation = stringOrEmpty(body[USER_FIELDS.newPasswordConfirmation]);
-
-    const problems = changePasswordProblems({
-      correct: verifyUserPassword(c.var.config.dataDir, user.username, current) !== undefined,
-      next,
-      confirmation,
-    });
-
-    if (Object.keys(problems).length > 0) {
-      c.status(400);
-      // Back onto your own page, where the form is. Nothing that was typed is
-      // echoed back: every field on this form is a password, and a password
-      // does not belong in rendered HTML.
-      return render(
-        c,
-        ADMIN_TEMPLATES.usersEdit,
-        userScreen(c, user, { passwordProblems: problems }),
-      );
-    }
-
-    await setUserPassword({ dataDir: c.var.config.dataDir, userId: user.id, password: next });
-    // Every browser that was signed in as this user is signed out, because the
-    // usual reason to change a password is that somebody else may have it. The
-    // one doing the changing is spared, so the admin is not thrown out of the
-    // form they just submitted.
-    const ended = c.var.admin.deleteSessionsForUser(user.id, { except: session.id });
-
-    flash(
-      c,
-      'notice',
-      ended === 0
-        ? 'Your password was changed.'
-        : `Your password was changed, and ${signedOut(ended)} signed out.`,
-    );
-    return c.redirect(editUserPath(user.id), 303);
-  });
-
-  /**
-   * Put an email address on a user, or take one off.
-   *
-   * Anybody's, not only your own. There is one role, so every user already has
-   * every power there is — including deleting somebody and adding them back —
-   * and a screen where an admin could see a colleague's address but not
-   * correct a typo in it would be a rule with nothing behind it. It is also
-   * what makes a site usable: an admin who has just added a colleague can put
-   * their address in without waiting for them to sign in and do it.
-   *
-   * A flash and a redirect back to that person's screen rather than a 400 with
-   * the form redrawn, unlike the two forms above: nothing here is a secret, so
-   * there is no reason not to show the refusal beside the box it is about with
-   * what is stored back in it.
-   */
-  app.post(USER_EMAIL_PATH, async (c) => {
-    const named = await namedUser(c);
-    if (named instanceof Response) return named;
-    const { dataDir, body, target } = named;
-    const email = stringOrEmpty(body[USER_FIELDS.email]).trim();
-
-    const problem = emailProblem(email);
-    if (problem !== undefined) {
-      flash(c, 'error', problem);
-      return c.redirect(editUserPath(target.id), 303);
-    }
-
-    await setUserEmail({ dataDir, userId: target.id, email });
-    flash(
-      c,
-      'notice',
-      email === ''
-        ? `${target.username} has no email address any more.`
-        : `${target.username} will be emailed at ${email}.`,
-    );
-    return c.redirect(editUserPath(target.id), 303);
-  });
-
-  /**
-   * Write a user's public profile (TASK-67).
-   *
-   * Anybody's, for the reason the email field is anybody's: one role, and an
-   * admin who has just added a colleague should be able to put a name and a
-   * line about them on their archive without waiting for them to sign in. The
-   * whole profile at once, because that is what the panel is — six boxes and
-   * one Save — and a box somebody cleared is a field they no longer want.
-   *
-   * A flash and a redirect for everything but the Links box, because nothing
-   * else here can be wrong enough to refuse. A link line that is not a link is
-   * refused the way a menu line is (TASK-112): a 400 with the panel redrawn
-   * around what was typed, because a link nobody can follow is worse stored
-   * than reported, and because the line to fix has to still be there to fix.
-   */
-  app.post(USER_PROFILE_PATH, async (c) => {
-    const named = await namedUser(c);
-    if (named instanceof Response) return named;
-    const { dataDir, body, target } = named;
-
-    const typed = {
-      displayName: stringOrEmpty(body[USER_FIELDS.displayName]),
-      bio: stringOrEmpty(body[USER_FIELDS.bio]),
-      avatar: stringOrEmpty(body[USER_FIELDS.avatar]),
-      jobTitle: stringOrEmpty(body[USER_FIELDS.jobTitle]),
-      location: stringOrEmpty(body[USER_FIELDS.location]),
-      links: stringOrEmpty(body[USER_FIELDS.links]),
-    };
-
-    const problem = profileLinkLineProblem(typed.links);
-    if (problem !== undefined) {
-      c.status(400);
-      // Every box comes back holding exactly what was typed into it, the way
-      // the Navigation screen's does: a refused save that emptied the panel
-      // would cost somebody their bio to report a bad link.
-      return render(
-        c,
-        ADMIN_TEMPLATES.usersEdit,
-        userScreen(c, target, { profileProblems: { links: problem } }, typed),
-      );
-    }
-
-    const changed = await setUserProfile({
-      dataDir,
-      userId: target.id,
-      profile: { ...typed, links: parseProfileLinks(typed.links) },
-    });
-
-    // The profile is the actor's profile now (decision-14), so saving it is
-    // also an announcement: a follower's copy of somebody's name, bio and
-    // picture is only as fresh as the last `Update` they were sent. The user
-    // is read back rather than assumed, so the actor that goes out is built
-    // from the file exactly as a peer fetching it would be.
-    const saved = changed ? findUserById(dataDir, target.id) : undefined;
-    const told = saved === undefined ? undefined : await c.var.delivery.updateActor(saved);
-
-    flash(c, 'notice', `Saved ${target.username}’s profile.${toldFollowers(told)}`);
-    return c.redirect(editUserPath(target.id), 303);
-  });
-
-  /**
-   * Turn one notice on or off for one user.
-   *
-   * Anybody's, for the reason the email field is anybody's: one role, and an
-   * admin who has just given a colleague an address should be able to say what
-   * goes to it. An event nothing in this version knows is a no-op rather than an
-   * error, because the only way to submit one is a form this CMS did not
-   * render.
-   */
-  app.post(USER_NOTIFICATIONS_PATH, async (c) => {
-    const named = await namedUser(c);
-    if (named instanceof Response) return named;
-    const { dataDir, body, target } = named;
-
-    const name = stringOrEmpty(body[USER_FIELDS.event]);
-    const event = notificationEvent(name);
-    if (event === undefined) {
-      flash(c, 'error', 'That is not something this site can tell anybody about.');
-      return c.redirect(editUserPath(target.id), 303);
-    }
-
-    // An unticked checkbox submits no field at all, so its absence is the
-    // answer rather than a missing one.
-    const on = stringOrEmpty(body[USER_FIELDS.on]) !== '';
-    await setUserNotification({ dataDir, userId: target.id, event: name, on });
-
-    flash(
-      c,
-      'notice',
-      on
-        ? `${target.username} will be emailed about ${event.label.toLowerCase()}.`
-        : `${target.username} will not be emailed about ${event.label.toLowerCase()}.`,
-    );
-    return c.redirect(editUserPath(target.id), 303);
-  });
-
-  /**
-   * Say how often one notice reaches one user.
-   *
-   * Anybody's, for the reason the switch beside it is anybody's. A mode this
-   * version does not know, or an event that offers no choice, changes nothing
-   * and says so: the only way to submit either is a form this CMS did not
-   * render.
-   */
-  app.post(USER_NOTIFICATION_MODE_PATH, async (c) => {
-    const named = await namedUser(c);
-    if (named instanceof Response) return named;
-    const { dataDir, body, target } = named;
-
-    const name = stringOrEmpty(body[USER_FIELDS.event]);
-    const event = notificationEvent(name);
-    if (event === undefined || !event.batched) {
-      flash(c, 'error', 'That is not a notice this site can batch up.');
-      return c.redirect(editUserPath(target.id), 303);
-    }
-
-    const wanted = deliveryMode(stringOrEmpty(body[USER_FIELDS.mode]));
-    if (wanted === undefined) {
-      flash(c, 'error', 'That is not one of the choices.');
-      return c.redirect(editUserPath(target.id), 303);
-    }
-
-    await setUserNotificationMode({ dataDir, userId: target.id, event: name, mode: wanted });
-
-    flash(
-      c,
-      'notice',
-      wanted === DEFAULT_DELIVERY_MODE
-        ? `${target.username} will hear about ${event.label.toLowerCase()} as they arrive.`
-        : `${target.username} will get one ${wanted === 'daily' ? 'daily' : 'hourly'} digest of ` +
-            `${event.label.toLowerCase()}.`,
-    );
-    return c.redirect(editUserPath(target.id), 303);
-  });
-
-  app.post(USER_THEME_PATH, async (c) => {
-    const dataDir = c.var.config.dataDir;
-    const userId = c.var.session?.userId;
-    const user = userId == null ? undefined : findUserById(dataDir, userId);
-    if (user === undefined) return c.redirect(USERS_PATH, 303);
-
-    const body = await c.req.parseBody();
-    const wanted = stringOrEmpty(body[USER_FIELDS.adminTheme]);
-    const theme = adminTheme(wanted);
-    if (wanted !== '' && theme === undefined) {
-      flash(c, 'error', 'That is not one of the themes.');
-      return c.redirect(editUserPath(user.id), 303);
-    }
-
-    await setUserAdminTheme({ dataDir, userId: user.id, theme });
-    flash(
-      c,
-      'notice',
-      theme === undefined
-        ? "The admin follows your system's light or dark setting."
-        : `The admin is drawn in ${ADMIN_THEMES[theme].label} for you.`,
-    );
-    return c.redirect(editUserPath(user.id), 303);
-  });
-
-  app.post(DELETE_USER_PATH, async (c) => {
-    const dataDir = c.var.config.dataDir;
-    const body = await c.req.parseBody();
-    const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
-    const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
-
-    const refusal = deleteUserRefusal({
-      target,
-      signedInAs: c.var.session?.userId ?? null,
-      total: countUsers(dataDir),
-    });
-
-    if (refusal !== undefined) {
-      flash(c, 'error', refusal);
-      return c.redirect(USERS_PATH, 303);
-    }
-
-    await deleteUser({ dataDir, userId: (target as User).id, now: c.var.config.now() });
-    // Their sessions go with them. The foreign key that used to do this went
-    // with the users table (decision-9), so it is done here — and a session
-    // that outlives this one, in a database restored from a backup, is not a
-    // login either: the guard refuses one whose user the file does not hold.
-    c.var.admin.deleteSessionsForUser((target as User).id);
-    flash(c, 'notice', `Deleted ${(target as User).username}.`);
-    return c.redirect(USERS_PATH, 303);
-  });
-
-  /**
-   * One user's screen (TASK-97).
-   *
-   * Registered last, after every named path under `/admin/users/`, and matched
-   * only when the segment is digits — so Add new keeps its URL and a stray
-   * `/admin/users/anything` is a 404 rather than a screen about nobody.
-   */
-  app.get(`${USERS_PATH}/:id`, (c) => {
-    const id = pathId(c.req.param('id'));
-    const user = id === undefined ? undefined : findUserById(c.var.config.dataDir, id);
-    if (user === undefined) return c.notFound();
-    return render(c, ADMIN_TEMPLATES.usersEdit, userScreen(c, user));
-  });
+  app.get(USERS_PATH, (c) => showUsers(c, render));
+  app.get(ADD_USER_PATH, (c) => showAddUser(c, render));
+  app.post(ADD_USER_PATH, (c) => addUser(c, render));
+  app.post(CHANGE_PASSWORD_PATH, (c) => changePassword(c, render));
+  app.post(USER_EMAIL_PATH, saveEmail);
+  app.post(USER_PROFILE_PATH, (c) => saveProfile(c, render));
+  app.post(USER_NOTIFICATIONS_PATH, saveNotification);
+  app.post(USER_NOTIFICATION_MODE_PATH, saveNotificationMode);
+  app.post(USER_THEME_PATH, saveTheme);
+  app.post(DELETE_USER_PATH, removeUser);
+  // Registered last, after every named path under `/admin/users/`: see showUser.
+  app.get(`${USERS_PATH}/:id`, (c) => showUser(c, render));
 }
 
+function showUsers(c: Context<GeekityEnv>, render: AdminRender): Response {
+  return render(c, ADMIN_TEMPLATES.usersList, screen(c));
+}
+
+function showAddUser(c: Context<GeekityEnv>, render: AdminRender): Response {
+  return render(c, ADMIN_TEMPLATES.usersNew, addScreen(c));
+}
+
+async function addUser(c: Context<GeekityEnv>, render: AdminRender): Promise<Response> {
+  const body = await c.req.parseBody();
+  const username = stringOrEmpty(body[USER_FIELDS.username]).trim();
+  const supplied = stringOrEmpty(body[USER_FIELDS.password]);
+  const email = stringOrEmpty(body[USER_FIELDS.email]).trim();
+  const generate = stringOrEmpty(body[USER_FIELDS.generate]) !== '';
+
+  const password = generate ? generatePassword() : supplied;
+  const problems = addUserProblems(username, password, generate, email);
+
+  if (Object.keys(problems).length === 0) {
+    try {
+      await createUser({
+        dataDir: c.var.config.dataDir,
+        username,
+        password,
+        email,
+        now: c.var.config.now(),
+      });
+    } catch (error) {
+      if (!(error instanceof DuplicateUsernameError)) throw error;
+      problems.username = error.message;
+    }
+  }
+
+  if (Object.keys(problems).length > 0) {
+    c.status(400);
+    // Back onto the form that was refused, with what was typed still in it.
+    return render(
+      c,
+      ADMIN_TEMPLATES.usersNew,
+      addScreen(c, { addForm: { username, email, generate }, addProblems: problems }),
+    );
+  }
+
+  // A generated password is shown once, here, and never stored in the clear.
+  // The flash lives on the session row, so it is not in the URL, in a cookie
+  // or in anybody's history.
+  return flashAndRedirect(
+    c,
+    'notice',
+    generate
+      ? `Added ${username}. Their password is ${password} — copy it now, it is not shown again.`
+      : `Added ${username}.`,
+    USERS_PATH,
+  );
+}
+
+async function changePassword(c: Context<GeekityEnv>, render: AdminRender): Promise<Response> {
+  // The guard has already established that there is a live session with a
+  // user behind it, so both of these are present on every path that gets here.
+  const session = c.var.session;
+  const user = signedInUser(c);
+  if (session === undefined || user === undefined) return c.redirect(USERS_PATH, 303);
+
+  const body = await c.req.parseBody();
+  const current = stringOrEmpty(body[USER_FIELDS.currentPassword]);
+  const next = stringOrEmpty(body[USER_FIELDS.newPassword]);
+  const confirmation = stringOrEmpty(body[USER_FIELDS.newPasswordConfirmation]);
+
+  const problems = changePasswordProblems({
+    correct: verifyUserPassword(c.var.config.dataDir, user.username, current) !== undefined,
+    next,
+    confirmation,
+  });
+
+  if (Object.keys(problems).length > 0) {
+    c.status(400);
+    // Back onto your own page, where the form is. Nothing that was typed is
+    // echoed back: every field on this form is a password, and a password
+    // does not belong in rendered HTML.
+    return render(
+      c,
+      ADMIN_TEMPLATES.usersEdit,
+      userScreen(c, user, { passwordProblems: problems }),
+    );
+  }
+
+  await setUserPassword({ dataDir: c.var.config.dataDir, userId: user.id, password: next });
+  // Every browser that was signed in as this user is signed out, because the
+  // usual reason to change a password is that somebody else may have it. The
+  // one doing the changing is spared, so the admin is not thrown out of the
+  // form they just submitted.
+  const ended = c.var.admin.deleteSessionsForUser(user.id, { except: session.id });
+
+  return backToUser(
+    c,
+    'notice',
+    ended === 0
+      ? 'Your password was changed.'
+      : `Your password was changed, and ${signedOut(ended)} signed out.`,
+    user,
+  );
+}
+
+/**
+ * Put an email address on a user, or take one off.
+ *
+ * Anybody's, not only your own. There is one role, so every user already has
+ * every power there is — including deleting somebody and adding them back —
+ * and a screen where an admin could see a colleague's address but not
+ * correct a typo in it would be a rule with nothing behind it. It is also
+ * what makes a site usable: an admin who has just added a colleague can put
+ * their address in without waiting for them to sign in and do it.
+ *
+ * A flash and a redirect back to that person's screen rather than a 400 with
+ * the form redrawn, unlike the add and password forms: nothing here is a
+ * secret, so there is no reason not to show the refusal beside the box it is
+ * about with what is stored back in it.
+ */
+async function saveEmail(c: Context<GeekityEnv>): Promise<Response> {
+  const named = await namedUser(c);
+  if (named instanceof Response) return named;
+  const { dataDir, body, target } = named;
+  const email = stringOrEmpty(body[USER_FIELDS.email]).trim();
+
+  const problem = emailProblem(email);
+  if (problem !== undefined) return backToUser(c, 'error', problem, target);
+
+  await setUserEmail({ dataDir, userId: target.id, email });
+  return backToUser(
+    c,
+    'notice',
+    email === ''
+      ? `${target.username} has no email address any more.`
+      : `${target.username} will be emailed at ${email}.`,
+    target,
+  );
+}
+
+/**
+ * Write a user's public profile (TASK-67).
+ *
+ * Anybody's, for the reason the email field is anybody's: one role, and an
+ * admin who has just added a colleague should be able to put a name and a
+ * line about them on their archive without waiting for them to sign in. The
+ * whole profile at once, because that is what the panel is — six boxes and
+ * one Save — and a box somebody cleared is a field they no longer want.
+ *
+ * A flash and a redirect for everything but the Links box, because nothing
+ * else here can be wrong enough to refuse. A link line that is not a link is
+ * refused the way a menu line is (TASK-112): a 400 with the panel redrawn
+ * around what was typed, because a link nobody can follow is worse stored
+ * than reported, and because the line to fix has to still be there to fix.
+ */
+async function saveProfile(c: Context<GeekityEnv>, render: AdminRender): Promise<Response> {
+  const named = await namedUser(c);
+  if (named instanceof Response) return named;
+  const { dataDir, body, target } = named;
+  const typed = typedProfile(body);
+
+  const problem = profileLinkLineProblem(typed.links);
+  if (problem !== undefined) {
+    c.status(400);
+    // Every box comes back holding exactly what was typed into it, the way
+    // the Navigation screen's does: a refused save that emptied the panel
+    // would cost somebody their bio to report a bad link.
+    return render(
+      c,
+      ADMIN_TEMPLATES.usersEdit,
+      userScreen(c, target, { profileProblems: { links: problem } }, typed),
+    );
+  }
+
+  const changed = await setUserProfile({
+    dataDir,
+    userId: target.id,
+    profile: { ...typed, links: parseProfileLinks(typed.links) },
+  });
+
+  // The profile is the actor's profile now (decision-14), so saving it is
+  // also an announcement: a follower's copy of somebody's name, bio and
+  // picture is only as fresh as the last `Update` they were sent. The user
+  // is read back rather than assumed, so the actor that goes out is built
+  // from the file exactly as a peer fetching it would be.
+  const saved = changed ? findUserById(dataDir, target.id) : undefined;
+  const told = saved === undefined ? undefined : await c.var.delivery.updateActor(saved);
+
+  return backToUser(
+    c,
+    'notice',
+    `Saved ${target.username}’s profile.${toldFollowers(told)}`,
+    target,
+  );
+}
+
+/** The Profile panel's boxes, as typed. */
+function typedProfile(body: Readonly<Record<string, unknown>>) {
+  return {
+    displayName: stringOrEmpty(body[USER_FIELDS.displayName]),
+    bio: stringOrEmpty(body[USER_FIELDS.bio]),
+    avatar: stringOrEmpty(body[USER_FIELDS.avatar]),
+    jobTitle: stringOrEmpty(body[USER_FIELDS.jobTitle]),
+    location: stringOrEmpty(body[USER_FIELDS.location]),
+    links: stringOrEmpty(body[USER_FIELDS.links]),
+  };
+}
+
+/**
+ * Turn one notice on or off for one user.
+ *
+ * Anybody's, for the reason the email field is anybody's: one role, and an
+ * admin who has just given a colleague an address should be able to say what
+ * goes to it. An event nothing in this version knows is a no-op rather than an
+ * error, because the only way to submit one is a form this CMS did not
+ * render.
+ */
+async function saveNotification(c: Context<GeekityEnv>): Promise<Response> {
+  const named = await namedUser(c);
+  if (named instanceof Response) return named;
+  const { dataDir, body, target } = named;
+
+  const name = stringOrEmpty(body[USER_FIELDS.event]);
+  const event = notificationEvent(name);
+  if (event === undefined) {
+    return backToUser(
+      c,
+      'error',
+      'That is not something this site can tell anybody about.',
+      target,
+    );
+  }
+
+  // An unticked checkbox submits no field at all, so its absence is the
+  // answer rather than a missing one.
+  const on = stringOrEmpty(body[USER_FIELDS.on]) !== '';
+  await setUserNotification({ dataDir, userId: target.id, event: name, on });
+
+  return backToUser(
+    c,
+    'notice',
+    on
+      ? `${target.username} will be emailed about ${event.label.toLowerCase()}.`
+      : `${target.username} will not be emailed about ${event.label.toLowerCase()}.`,
+    target,
+  );
+}
+
+/**
+ * Say how often one notice reaches one user.
+ *
+ * Anybody's, for the reason the switch beside it is anybody's. A mode this
+ * version does not know, or an event that offers no choice, changes nothing
+ * and says so: the only way to submit either is a form this CMS did not
+ * render.
+ */
+async function saveNotificationMode(c: Context<GeekityEnv>): Promise<Response> {
+  const named = await namedUser(c);
+  if (named instanceof Response) return named;
+  const { dataDir, body, target } = named;
+
+  const name = stringOrEmpty(body[USER_FIELDS.event]);
+  const event = notificationEvent(name);
+  if (event === undefined || !event.batched) {
+    return backToUser(c, 'error', 'That is not a notice this site can batch up.', target);
+  }
+
+  const wanted = deliveryMode(stringOrEmpty(body[USER_FIELDS.mode]));
+  if (wanted === undefined)
+    return backToUser(c, 'error', 'That is not one of the choices.', target);
+
+  await setUserNotificationMode({ dataDir, userId: target.id, event: name, mode: wanted });
+
+  return backToUser(
+    c,
+    'notice',
+    wanted === DEFAULT_DELIVERY_MODE
+      ? `${target.username} will hear about ${event.label.toLowerCase()} as they arrive.`
+      : `${target.username} will get one ${wanted === 'daily' ? 'daily' : 'hourly'} digest of ` +
+          `${event.label.toLowerCase()}.`,
+    target,
+  );
+}
+
+async function saveTheme(c: Context<GeekityEnv>): Promise<Response> {
+  const user = signedInUser(c);
+  if (user === undefined) return c.redirect(USERS_PATH, 303);
+
+  const body = await c.req.parseBody();
+  const wanted = stringOrEmpty(body[USER_FIELDS.adminTheme]);
+  const theme = adminTheme(wanted);
+  if (wanted !== '' && theme === undefined) {
+    return backToUser(c, 'error', 'That is not one of the themes.', user);
+  }
+
+  await setUserAdminTheme({ dataDir: c.var.config.dataDir, userId: user.id, theme });
+  return backToUser(
+    c,
+    'notice',
+    theme === undefined
+      ? "The admin follows your system's light or dark setting."
+      : `The admin is drawn in ${ADMIN_THEMES[theme].label} for you.`,
+    user,
+  );
+}
+
+async function removeUser(c: Context<GeekityEnv>): Promise<Response> {
+  const dataDir = c.var.config.dataDir;
+  const target = userInForm(dataDir, await c.req.parseBody());
+
+  const refusal = deleteUserRefusal({
+    target,
+    signedInAs: c.var.session?.userId ?? null,
+    total: countUsers(dataDir),
+  });
+
+  if (refusal !== undefined || target === undefined) {
+    return flashAndRedirect(c, 'error', refusal ?? GONE_USER, USERS_PATH);
+  }
+
+  await deleteUser({ dataDir, userId: target.id, now: c.var.config.now() });
+  // Their sessions go with them. The foreign key that used to do this went
+  // with the users table (decision-9), so it is done here — and a session
+  // that outlives this one, in a database restored from a backup, is not a
+  // login either: the guard refuses one whose user the file does not hold.
+  c.var.admin.deleteSessionsForUser(target.id);
+  return flashAndRedirect(c, 'notice', `Deleted ${target.username}.`, USERS_PATH);
+}
+
+/**
+ * One user's screen (TASK-97).
+ *
+ * Registered last, after every named path under `/admin/users/`, and matched
+ * only when the segment is digits — so Add new keeps its URL and a stray
+ * `/admin/users/anything` is a 404 rather than a screen about nobody.
+ */
+function showUser(c: Context<GeekityEnv>, render: AdminRender) {
+  const id = pathId(c.req.param('id') ?? '');
+  const user = id === undefined ? undefined : findUserById(c.var.config.dataDir, id);
+  if (user === undefined) return c.notFound();
+  return render(c, ADMIN_TEMPLATES.usersEdit, userScreen(c, user));
+}
+
+/** Flash a message and land back on that user's own screen, where every save about them ends. */
+function backToUser(
+  c: Context<GeekityEnv>,
+  kind: FlashKind,
+  message: string,
+  user: User,
+): Response {
+  return flashAndRedirect(c, kind, message, editUserPath(user.id));
+}
+
+/** The user a form names in its `user_id` field, or `undefined` when there is no such user. */
+function userInForm(dataDir: string, body: Readonly<Record<string, unknown>>): User | undefined {
+  const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
+  return Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
+}
+
+/** The user behind the session, or `undefined` when there is no session or no such user. */
+function signedInUser(c: Context<GeekityEnv>): User | undefined {
+  const userId = c.var.session?.userId;
+  return userId == null ? undefined : findUserById(c.var.config.dataDir, userId);
+}
+
+/**
+ * The form's body and the user it names, or a redirect to the list saying that
+ * user is gone.
+ */
 async function namedUser(
   c: Context<GeekityEnv>,
 ): Promise<{ dataDir: string; body: Readonly<Record<string, unknown>>; target: User } | Response> {
   const dataDir = c.var.config.dataDir;
   const body = await c.req.parseBody();
-  const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
-  const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
-
-  if (target === undefined) {
-    flash(c, 'error', GONE_USER);
-    return c.redirect(USERS_PATH, 303);
-  }
+  const target = userInForm(dataDir, body);
+  if (target === undefined) return flashAndRedirect(c, 'error', GONE_USER, USERS_PATH);
   return { dataDir, body, target };
 }
 

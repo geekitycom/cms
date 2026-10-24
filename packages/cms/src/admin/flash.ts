@@ -21,6 +21,23 @@ export function flash(c: Context<GeekityEnv>, kind: FlashKind, message: string):
 }
 
 /**
+ * Queue a message and send the visitor on to the page that will show it.
+ *
+ * The usual end of a handler that saved or refused something: a 303 so the
+ * browser follows with a GET, and a reload of the page it lands on does not
+ * submit the form again.
+ */
+export function flashAndRedirect(
+  c: Context<GeekityEnv>,
+  kind: FlashKind,
+  message: string,
+  location: string,
+): Response {
+  flash(c, kind, message);
+  return c.redirect(location, 303);
+}
+
+/**
  * Every message queued for this visitor, removed as it is read.
  *
  * Called once while a page is being rendered, which is what makes a flash
