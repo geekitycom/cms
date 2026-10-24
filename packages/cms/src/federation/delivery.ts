@@ -420,8 +420,6 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     const keys = await senderKeyPairs(context, sender);
 
     for (const target of targets) {
-      // Written before the send, so a queue worker that settles the delivery
-      // before the call returns has a row to settle.
       if (!synchronous) record(target, 'queued', null);
       let status: DeliveryStatus = 'sent';
       let error: string | null = null;

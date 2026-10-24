@@ -863,7 +863,7 @@ describe('the relays panel', () => {
       slug: null,
       actorId: RELAY_INBOX,
       inboxId: RELAY_INBOX,
-      status: 'queued',
+      status: 'retrying',
       error: 'Failed to send activity (500 Internal Server Error)',
     });
 

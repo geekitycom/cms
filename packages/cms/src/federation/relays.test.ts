@@ -58,7 +58,6 @@ const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const sent: Sent[] = [];
 
-/** What the relay's inbox answers a POST with. */
 let relayInboxStatus = 202;
 let relayKeys: CryptoKeyPair;
 let relayActorDocument: unknown;
@@ -144,7 +143,6 @@ async function site(
     relays?: readonly string[];
     dataDir?: string;
     now?: () => Date;
-    /** Deliver through the queue in `data/queue.sqlite`, as a site that names none does. */
     queued?: boolean;
   } = {},
 ): Promise<Site> {

@@ -192,8 +192,6 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
         error,
       });
     };
-    // Written before the send, so a queue worker that settles the delivery
-    // before the call returns has a row to settle.
     if (!synchronous) record('queued', null);
     try {
       await context.sendActivity(

@@ -21,7 +21,6 @@ function outbox(attempt = 0): Record<string, unknown> {
   return { type: 'outbox', activityId: ACTIVITY, inbox: INBOX, attempt };
 }
 
-/** An inner queue that hands each message to the listener only when the test says so. */
 function innerQueue(): {
   queue: CountingQueue;
   enqueued: unknown[];
@@ -90,7 +89,7 @@ describe('observeOutbox', () => {
     ]);
   });
 
-  it('settles a failed attempt Fedify queued a retry for as queued, with the error', async () => {
+  it('settles a failed attempt Fedify queued a retry for as retrying, with the error', async () => {
     const { outbox: observer, inner, outcomes } = observed();
     void observer.queue.listen(async (message) => {
       observer.onOutboxError(new Error('503 Service Unavailable'));
@@ -98,7 +97,7 @@ describe('observeOutbox', () => {
     });
     await inner.deliver(outbox());
     assert.deepEqual(outcomes, [
-      { activityId: ACTIVITY, inbox: INBOX, status: 'queued', error: '503 Service Unavailable' },
+      { activityId: ACTIVITY, inbox: INBOX, status: 'retrying', error: '503 Service Unavailable' },
     ]);
     assert.equal(inner.enqueued.length, 1, 'the retry still reached the inner queue');
   });
@@ -110,7 +109,7 @@ describe('observeOutbox', () => {
       await observer.queue.enqueueMany?.([{ ...(message as object), attempt: 1 }]);
     });
     await inner.deliver(outbox());
-    assert.equal(outcomes[0]?.status, 'queued');
+    assert.equal(outcomes[0]?.status, 'retrying');
   });
 
   it('settles a failed attempt Fedify gave up on as failed, with the error', async () => {
@@ -145,14 +144,14 @@ describe('observeOutbox', () => {
     ]);
   });
 
-  it('settles a handler that throws as queued, for the queue to retry, and rethrows', async () => {
+  it('settles a handler that throws as retrying, for the queue to retry, and rethrows', async () => {
     const { outbox: observer, inner, outcomes } = observed();
     void observer.queue.listen(() => {
       throw new Error('backend will retry');
     });
     await assert.rejects(inner.deliver(outbox()), /backend will retry/);
     assert.deepEqual(outcomes, [
-      { activityId: ACTIVITY, inbox: INBOX, status: 'queued', error: 'backend will retry' },
+      { activityId: ACTIVITY, inbox: INBOX, status: 'retrying', error: 'backend will retry' },
     ]);
   });
 
@@ -204,7 +203,6 @@ describe('observeOutbox through Fedify', () => {
     restoreFetch();
   });
 
-  /** Send one activity to one inbox that answers with these statuses, and wait for the first outcome. */
   async function deliverTo(
     pathname: string,
     statuses: number[],
@@ -256,9 +254,9 @@ describe('observeOutbox through Fedify', () => {
     });
   });
 
-  it('reports a refused attempt Fedify will retry as queued, with the status code', async () => {
+  it('reports a refused attempt Fedify will retry as retrying, with the status code', async () => {
     const outcome = await deliverTo('/busy', [500]);
-    assert.equal(outcome.status, 'queued');
+    assert.equal(outcome.status, 'retrying');
     assert.match(outcome.error ?? '', /\b500\b/);
   });
 

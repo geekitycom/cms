@@ -6,16 +6,16 @@ import { allRows, countByStatus, getRow, nullableText, oneOf, readCount } from '
 import type { Row } from './rows.ts';
 
 /** How one delivery of one activity to one follower ended. */
-export const DELIVERY_STATUSES = ['sent', 'queued', 'failed'] as const;
+export const DELIVERY_STATUSES = ['sent', 'queued', 'retrying', 'failed'] as const;
 
 /**
  * One of {@link DELIVERY_STATUSES}.
  *
  * `sent` is a POST the follower's server accepted. `queued` is one handed to
- * Fedify's outbox queue and not yet settled; with an error beside it, an
- * attempt failed and the queue will try again. `failed` is a delivery Fedify
- * gave up on, or one that threw before it reached the queue, with the reason
- * in the row.
+ * Fedify's outbox queue and not yet settled. `retrying` is one whose last
+ * attempt failed, with that error, and which the queue will try again.
+ * `failed` is a delivery Fedify gave up on, or one that threw before it
+ * reached the queue, with the reason in the row.
  */
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
@@ -61,7 +61,6 @@ export interface Delivery {
   readonly attemptedAt: string;
 }
 
-/** How one attempt to deliver one activity to one inbox settled in the outbox queue. */
 export interface DeliveryOutcome {
   readonly activityId: string;
   readonly inbox: string;
@@ -81,10 +80,6 @@ export interface DeliveryStore {
    * with each follower", which a resend moves rather than adds to.
    */
   recordDelivery(delivery: NewDelivery): Delivery;
-  /**
-   * Write how the queue settled one activity's delivery to one inbox onto every
-   * row behind that inbox, which for a shared inbox is every follower on it.
-   */
   settleDeliveries(outcome: DeliveryOutcome): void;
   /** Every follower's outcome for one activity, in follower order. */
   listDeliveries(activityId: string): Delivery[];

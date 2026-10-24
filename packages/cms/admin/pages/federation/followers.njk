@@ -111,7 +111,7 @@
               <td class="whitespace-nowrap">{{ relay.updatedAt | date('html') }}</td>
               <td>
                 {% if relay.lastDelivery %}
-                  {{ relay.lastDelivery.activityType }} {{ 'retrying' if relay.lastDelivery.status == 'queued' and relay.lastDelivery.error else relay.lastDelivery.status }}
+                  {{ relay.lastDelivery.activityType }} {{ relay.lastDelivery.status }}
                   <span class="whitespace-nowrap text-sm">{{ relay.lastDelivery.attemptedAt | date('html') }}</span>
                   {% if relay.lastDelivery.error %}
                     <p class="text-sm">{{ relay.lastDelivery.error }}</p>
@@ -253,7 +253,7 @@
               {% if row.lastActivity %}
                 <td>{{ row.lastActivity.activityType }} <span class="whitespace-nowrap text-sm">{{ row.lastActivity.attemptedAt | date('html') }}</span></td>
                 <td>{{ row.lastActivity.counts.sent }}</td>
-                <td>{{ row.lastActivity.counts.queued }}</td>
+                <td>{{ row.lastActivity.counts.queued }}{% if row.lastActivity.counts.retrying %}, {{ row.lastActivity.counts.retrying }} retrying{% endif %}</td>
                 <td class="whitespace-nowrap">{% if row.lastActivity.counts.failed %}{{ status('failed', row.lastActivity.counts.failed + ' failed') }}{% else %}0{% endif %}</td>
               {% else %}
                 <td>Nothing recorded.</td>

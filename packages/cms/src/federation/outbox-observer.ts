@@ -4,10 +4,8 @@ import type { DeliveryOutcome } from '../store/deliveries.ts';
 import { messageOf } from '../util/errors.ts';
 import type { SettlingQueue } from './queue.ts';
 
-/** The queue Fedify is given, and the error hook to give Fedify beside it. */
 export interface ObservedOutbox {
   readonly queue: SettlingQueue;
-  /** Fedify's `onOutboxError`: notes why the delivery in hand failed. */
   readonly onOutboxError: (error: unknown) => void;
 }
 
@@ -39,10 +37,7 @@ export function observeOutbox(
 ): ObservedOutbox {
   const frames = new AsyncLocalStorage<Frame>();
 
-  // The delivery has already happened by now: a failure to write it down must
-  // not reach the queue, which would take it for a failed handler and send the
-  // activity again.
-  function report(outcome: DeliveryOutcome): void {
+  function settleWithoutFailingMessage(outcome: DeliveryOutcome): void {
     try {
       settle(outcome);
     } catch (thrown) {
@@ -90,10 +85,14 @@ export function observeOutbox(
           try {
             await frames.run(frame, () => handler(message));
           } catch (thrown) {
-            report({ ...where(frame), status: 'queued', error: frame.error ?? messageOf(thrown) });
+            settleWithoutFailingMessage({
+              ...where(frame),
+              status: 'retrying',
+              error: frame.error ?? messageOf(thrown),
+            });
             throw thrown;
           }
-          report(outcomeOf(frame));
+          settleWithoutFailingMessage(outcomeOf(frame));
         }, options);
       },
     },
@@ -111,7 +110,8 @@ function where(frame: Frame): Pick<DeliveryOutcome, 'activityId' | 'inbox'> {
 
 function outcomeOf(frame: Frame): DeliveryOutcome {
   const error = frame.error ?? null;
-  if (frame.retried) return { ...where(frame), status: 'queued', error };
+  if (frame.retried)
+    return { ...where(frame), status: error === null ? 'queued' : 'retrying', error };
   return { ...where(frame), status: error === null ? 'sent' : 'failed', error };
 }
 

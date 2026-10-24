@@ -925,7 +925,7 @@ describe('how a queued delivery settles in the delivery log', () => {
     assert.equal(delivered('Create').length, 1);
   });
 
-  it('records a refused attempt the queue will retry as queued, with the reason', async () => {
+  it('records a refused attempt the queue will retry as retrying, with the reason', async () => {
     rejectingEveryPost = true;
     const { cms } = await site({ queued: true });
     await cms.serve();
@@ -933,7 +933,7 @@ describe('how a queued delivery settles in the delivery log', () => {
     await publishNewPost(agent);
 
     const settled = await settledAt(cms, REMOTE_SHARED_INBOX, (one) => one.error !== null);
-    assert.equal(settled.status, 'queued');
+    assert.equal(settled.status, 'retrying');
     assert.match(settled.error ?? '', /503/);
   });
 
@@ -1814,6 +1814,7 @@ describe('the delivery log', () => {
     assert.deepEqual(cms.admin.countDeliveriesByStatus(activity.activityId), {
       sent: 2,
       queued: 0,
+      retrying: 0,
       failed: 0,
     });
     assert.equal(delivered('Create').length, 1, 'one shared inbox took one POST');

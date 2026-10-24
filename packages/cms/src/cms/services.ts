@@ -278,9 +278,6 @@ export function createServices({
 
   const federationKv = resolved.federation.kv ?? new MemoryKvStore();
   const settlingQueue = createFederationQueue(resolved.federation.queue, site);
-  // Fedify reports how a queued delivery ended only from inside the worker, so
-  // the delivery log is settled from there rather than from the call that
-  // queued it.
   const outbox =
     settlingQueue === undefined
       ? undefined
