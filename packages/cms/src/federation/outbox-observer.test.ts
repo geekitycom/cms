@@ -71,6 +71,16 @@ function observed(): {
 }
 
 describe('observeOutbox', () => {
+  it('keeps a failure to record the outcome from reaching the queue', async () => {
+    const inner = innerQueue();
+    const observer = observeOutbox(inner.queue, () => {
+      throw new Error('database is locked');
+    });
+    void observer.queue.listen(() => undefined);
+    await inner.deliver(outbox());
+    assert.deepEqual(inner.enqueued, []);
+  });
+
   it('settles an outbox message whose handler raised no error as sent', async () => {
     const { outbox: observer, inner, outcomes } = observed();
     void observer.queue.listen(() => undefined);

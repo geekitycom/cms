@@ -39,6 +39,19 @@ export function observeOutbox(
 ): ObservedOutbox {
   const frames = new AsyncLocalStorage<Frame>();
 
+  // The delivery has already happened by now: a failure to write it down must
+  // not reach the queue, which would take it for a failed handler and send the
+  // activity again.
+  function report(outcome: DeliveryOutcome): void {
+    try {
+      settle(outcome);
+    } catch (thrown) {
+      console.warn(
+        `Could not record how ${outcome.activityId} to ${outcome.inbox} went: ${messageOf(thrown)}`,
+      );
+    }
+  }
+
   function noteRetry(message: unknown): void {
     const frame = frames.getStore();
     if (frame === undefined || !isOutbox(message)) return;
@@ -77,10 +90,10 @@ export function observeOutbox(
           try {
             await frames.run(frame, () => handler(message));
           } catch (thrown) {
-            settle({ ...where(frame), status: 'queued', error: frame.error ?? messageOf(thrown) });
+            report({ ...where(frame), status: 'queued', error: frame.error ?? messageOf(thrown) });
             throw thrown;
           }
-          settle(outcomeOf(frame));
+          report(outcomeOf(frame));
         }, options);
       },
     },
