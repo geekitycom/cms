@@ -37,6 +37,7 @@ import type {
   RelayService,
   SiteFederation,
 } from '../federation/index.ts';
+import { observeOutbox } from '../federation/outbox-observer.ts';
 import { createFederationQueue } from '../federation/queue.ts';
 import { createInboxRefusals } from '../federation/refusals.ts';
 import type { InboxRefusals } from '../federation/refusals.ts';
@@ -276,7 +277,17 @@ export function createServices({
   });
 
   const federationKv = resolved.federation.kv ?? new MemoryKvStore();
-  const federationQueue = createFederationQueue(resolved.federation.queue, site);
+  const settlingQueue = createFederationQueue(resolved.federation.queue, site);
+  // Fedify reports how a queued delivery ended only from inside the worker, so
+  // the delivery log is settled from there rather than from the call that
+  // queued it.
+  const outbox =
+    settlingQueue === undefined
+      ? undefined
+      : observeOutbox(settlingQueue, (outcome) => {
+          admin.settleDeliveries(outcome);
+        });
+  const federationQueue = outbox?.queue;
   // On the system clock rather than the site's: Fedify checks a signature's
   // date against the real time, and the log has to agree with it about which
   // dates were out of range.
@@ -292,8 +303,18 @@ export function createServices({
     queue: federationQueue ?? null,
     kv: federationKv,
     refusals: inboxRefusals,
-    federationOptions: { manuallyStartQueue: true },
+    federationOptions: {
+      manuallyStartQueue: true,
+      ...(outbox === undefined ? {} : { onOutboxError: outbox.onOutboxError }),
+    },
   });
+  if (outbox !== undefined) {
+    // A delivery held while its host's circuit was open can be dropped before
+    // any attempt, and this is the only place Fedify says so.
+    federation.setOutboxPermanentFailureHandler((_, { error }) => {
+      outbox.onOutboxError(error);
+    });
+  }
 
   // The names and faces of the actors who are not followers,
   // fetched in the background when one is heard from and on a sweep.

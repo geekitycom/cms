@@ -12,9 +12,10 @@ export const DELIVERY_STATUSES = ['sent', 'queued', 'failed'] as const;
  * One of {@link DELIVERY_STATUSES}.
  *
  * `sent` is a POST the follower's server accepted. `queued` is one handed to
- * Fedify's outbox queue, which is as much as a site running with a queue can
- * know from the call: the queue retries out of band and does not report back.
- * `failed` is a delivery that threw, with the reason in the row.
+ * Fedify's outbox queue and not yet settled; with an error beside it, an
+ * attempt failed and the queue will try again. `failed` is a delivery Fedify
+ * gave up on, or one that threw before it reached the queue, with the reason
+ * in the row.
  */
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
@@ -60,6 +61,14 @@ export interface Delivery {
   readonly attemptedAt: string;
 }
 
+/** How one attempt to deliver one activity to one inbox settled in the outbox queue. */
+export interface DeliveryOutcome {
+  readonly activityId: string;
+  readonly inbox: string;
+  readonly status: DeliveryStatus;
+  readonly error: string | null;
+}
+
 /** A {@link Delivery} before the store has timed it. */
 export type NewDelivery = Omit<Delivery, 'attemptedAt'> & {
   attemptedAt?: string | undefined;
@@ -72,6 +81,11 @@ export interface DeliveryStore {
    * with each follower", which a resend moves rather than adds to.
    */
   recordDelivery(delivery: NewDelivery): Delivery;
+  /**
+   * Write how the queue settled one activity's delivery to one inbox onto every
+   * row behind that inbox, which for a shared inbox is every follower on it.
+   */
+  settleDeliveries(outcome: DeliveryOutcome): void;
   /** Every follower's outcome for one activity, in follower order. */
   listDeliveries(activityId: string): Delivery[];
   /** How many followers this activity stands at each status with. */
@@ -119,6 +133,10 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
         attempted_at = excluded.attempted_at
       RETURNING *
     `),
+    settleDeliveries: db.prepare(`
+      UPDATE ap_deliveries SET status = ?, error = ?, attempted_at = ?
+      WHERE activity_id = ? AND inbox_id = ?
+    `),
     listDeliveries: db.prepare(`
       SELECT * FROM ap_deliveries WHERE activity_id = ? ORDER BY actor_id
     `),
@@ -163,6 +181,16 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
         );
       }
       return recorded;
+    },
+
+    settleDeliveries(outcome) {
+      statements.settleDeliveries.run(
+        outcome.status,
+        outcome.error,
+        clock().toISOString(),
+        outcome.activityId,
+        outcome.inbox,
+      );
     },
 
     listDeliveries(activityId) {

@@ -50,7 +50,7 @@ export type {
 } from './comments.ts';
 export type { ConversationWrite } from './conversation.ts';
 export { DELIVERY_STATUSES } from './deliveries.ts';
-export type { Delivery, DeliveryStatus, NewDelivery } from './deliveries.ts';
+export type { Delivery, DeliveryOutcome, DeliveryStatus, NewDelivery } from './deliveries.ts';
 export type { Follower, NewFollower } from './followers.ts';
 export type {
   InboxActivity,
