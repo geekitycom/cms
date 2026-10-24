@@ -147,19 +147,23 @@ describe('blockquotes', () => {
 });
 
 describe('lists', () => {
-  it('flatten nesting with indentation', () => {
+  it('flatten nested bullets to list lines at the start of the line', () => {
     assert.equal(
       convert('- one\n  - two\n    - three\n- four'),
-      lines('* one', '  * two', '    * three', '* four'),
+      lines('* one', '* two', '* three', '* four'),
     );
-  });
-
-  it('take their indentation from the indent option', () => {
-    assert.equal(convert('- one\n  - two', { indent: '\t' }), lines('* one', '\t* two'));
   });
 
   it('number ordered items as text', () => {
     assert.equal(convert('3. c\n4. d\n   1. inner'), lines('3. c', '4. d', '  1. inner'));
+  });
+
+  it('take ordered indentation from the indent option', () => {
+    assert.equal(convert('1. one\n   1. two', { indent: '\t' }), lines('1. one', '\t1. two'));
+  });
+
+  it('keep a bullet nested in an ordered item a list line', () => {
+    assert.equal(convert('1. one\n   - two'), lines('1. one', '* two'));
   });
 
   it('indent a second paragraph of an item', () => {

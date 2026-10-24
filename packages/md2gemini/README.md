@@ -47,7 +47,7 @@ footnotes and bare URLs turned on.
 | `imageTag`         | `'[IMG]'`     | Written after an image's alt text on its `=>` line. An empty string leaves it out.     |
 | `codeTag`          | `''`          | Alt text for a code block that names no language.                                      |
 | `tableTag`         | `'table'`     | Alt text for a table's preformatted block. An empty string leaves it out.              |
-| `indent`           | two spaces    | Written once for each level of a nested list item.                                     |
+| `indent`           | two spaces    | Written once per level before a nested ordered item and an item's later paragraphs.    |
 | `checklist`        | `true`        | Draws GFM `[ ]` and `[x]` list items as `☐` and `☑`. When false they stay as written.  |
 
 ## Link modes
@@ -122,8 +122,10 @@ as `[Written by Ada](/author/ada/)` reads `=> /author/ada/ Written by Ada`.
 - Images become `=> url alt [IMG]` lines. An image inside a paragraph breaks
   it. A linked image gives two lines, the image and then the link.
 - Blockquotes become `>` lines.
-- Nested lists are flattened, each level indented by `indent`. Ordered items
-  keep their numbers as text, because gemtext has no numbered list.
+- Nested lists are flattened. Every bullet item, at any depth, becomes a `* `
+  line at the start of the line, because gemtext reads an indented `*` as
+  text. Ordered items keep their numbers as text, because gemtext has no
+  numbered list, and nested ones are indented by `indent`.
 - Footnote references are written `[^1]`, and the notes are gathered at the
   end as `[^1]: text`.
 - A thematic break becomes `---`.
