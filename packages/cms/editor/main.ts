@@ -14,11 +14,14 @@
  * has a `lib` and a `tsconfig` of its own, and esbuild bundles it. See
  * `scripts/build-editor.js`.
  */
+import { indentLess, indentMore } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { keymap, type Command } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { basicSetup, EditorView } from 'codemirror';
 
+import { type Direction, listIndent } from '../src/admin/list-indent.ts';
 import { ownParagraph } from '../src/admin/own-paragraph.ts';
 import type { Autosave } from '../src/admin/autosave-client.ts';
 import { videoOf } from '../src/content/video.ts';
@@ -78,6 +81,9 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
       // script's own tag, so nothing else on the page has to carry it.
       EditorView.cspNonce.of(cspNonce()),
       basicSetup,
+      // CodeMirror leaves Tab to the browser so the editor is never a trap;
+      // Escape then Tab still moves focus on.
+      keymap.of([{ key: 'Tab', run: indentList('in'), shift: indentList('out') }]),
       markdown(),
       markdownHighlighting(),
       EditorView.lineWrapping,
@@ -411,6 +417,31 @@ function tab(label: string, panel: HTMLElement): HTMLButtonElement {
   panel.setAttribute('role', 'tabpanel');
   panel.setAttribute('aria-labelledby', button.id);
   return button;
+}
+
+function indentList(direction: Direction): Command {
+  return (view) => {
+    const { state } = view;
+    const range = state.selection.main;
+    const first = state.doc.lineAt(range.from);
+    let last = state.doc.lineAt(range.to);
+    if (!range.empty && range.to === last.from && last.number > first.number) {
+      last = state.doc.line(last.number - 1);
+    }
+
+    const lines = state.doc.toString().split('\n');
+    const shifts = listIndent(lines, first.number - 1, last.number - 1, direction);
+    if (shifts === undefined) return (direction === 'in' ? indentMore : indentLess)(view);
+
+    const changes = shifts.map(({ line, shift }) => {
+      const from = state.doc.line(line + 1).from;
+      return shift > 0
+        ? { from, insert: ' '.repeat(shift) }
+        : { from, to: from - shift, insert: '' };
+    });
+    view.dispatch({ changes, userEvent: direction === 'in' ? 'input.indent' : 'delete.dedent' });
+    return true;
+  };
 }
 
 /** Marks highlighted Markdown with the `.cm-md-*` classes admin/src/admin.css colours. */
