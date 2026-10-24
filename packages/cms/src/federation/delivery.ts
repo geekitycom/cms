@@ -420,7 +420,8 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     const keys = await senderKeyPairs(context, sender);
 
     for (const target of targets) {
-      let status: DeliveryStatus = synchronous ? 'sent' : 'queued';
+      if (!synchronous) record(target, 'queued', null);
+      let status: DeliveryStatus = 'sent';
       let error: string | null = null;
 
       try {
@@ -439,12 +440,19 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         logger.warn(`Could not deliver ${about.activityId} to ${target.inboxId}: ${error}`);
       }
 
-      for (const row of deliveryRows(about, target, { status, error })) {
-        deliveries.push(admin.recordDelivery(row));
-      }
+      if (synchronous || status === 'failed') record(target, status, error);
     }
 
     return report;
+
+    function record(target: DeliveryTarget, status: DeliveryStatus, error: string | null): void {
+      for (const row of deliveryRows(about, target, { status, error })) {
+        const recorded = admin.recordDelivery(row);
+        const at = deliveries.findIndex((one) => one.actorId === recorded.actorId);
+        if (at === -1) deliveries.push(recorded);
+        else deliveries[at] = recorded;
+      }
+    }
   }
 
   /**

@@ -1005,6 +1005,7 @@ describe('the delivery outcome cache', () => {
     assert.deepEqual(admin.countDeliveriesByStatus(ACTIVITY_ID), {
       sent: 0,
       queued: 0,
+      retrying: 0,
       failed: 0,
     });
   });
@@ -1068,6 +1069,7 @@ describe('the delivery outcome cache', () => {
     assert.deepEqual(admin.countDeliveriesByStatus(ACTIVITY_ID), {
       sent: 1,
       queued: 0,
+      retrying: 0,
       failed: 1,
     });
   });
@@ -1081,6 +1083,7 @@ describe('the delivery outcome cache', () => {
     assert.deepEqual(admin.countDeliveriesByStatus(ACTIVITY_ID), {
       sent: 1,
       queued: 0,
+      retrying: 0,
       failed: 0,
     });
     assert.equal(admin.listDeliveries(ACTIVITY_ID)[0]?.error, null);

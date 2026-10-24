@@ -318,8 +318,19 @@ inbox used, the status, the error, and the time. That cache may be empty.
 A status is one of:
 
 - `sent`: the inbox accepted it.
-- `queued`: it was handed to Fedify's queue, which retries out of band.
-- `failed`
+- `queued`: it is in Fedify's queue and has not settled.
+- `retrying`: its last attempt failed, and the queue will try again. The error
+  says why the attempt failed, including the status code the inbox answered
+  with.
+- `failed`: Fedify gave up, with the error. Fedify gives up on an inbox that
+  answers `404` or `410`, and on any other failure once its retry policy runs
+  out. A send that throws before it reaches the queue is also `failed`.
+
+The site writes a `queued` row before it hands an activity to the queue. The
+queue worker then writes the outcome of each attempt to that row. A site that
+runs with `federation.queue: null` sends while the request runs, so it writes
+`sent` or `failed` once the send returns. A delivery that dev mode holds before
+it is queued is not recorded.
 
 One capability is not supported: tombstoning a post whose file is deleted, as
 opposed to trashed. With no file, there is nothing to build the `Tombstone`
@@ -471,7 +482,12 @@ inbox in the fan-out. It receives, as well as the author's followers:
 - the actor `Update` that a profile change sends
 
 The delivery log records each relay outcome against the relay's actor id and
-inbox, as it does for a follower. Resend therefore reaches relays too.
+inbox, as it does for a follower. Resend therefore reaches relays too. The
+`Follow` and the `Undo` are recorded the same way, against the relay inbox, so
+a `Follow` that could not be delivered shows its error beside the waiting
+relay. A relay that refuses the `Follow` answers with a `Reject`, which sets
+the relay's reason instead. Until the relay answers, the inbox stands in for
+the actor id.
 
 ```ts
 cms.admin.listRelays(); // inbox, actor, state, reason, follow id, times
@@ -683,7 +699,8 @@ subscription, with:
 - its state: waiting, accepted, or rejected
 - when the state last changed
 - the reason, if the relay refused
-- the last activity delivered there, and its outcome
+- the last activity delivered there, and its outcome, with the error when the
+  last attempt failed
 
 A subscription that is still waiting has a Retry button. Retry sends the
 `Follow` again under a new id.

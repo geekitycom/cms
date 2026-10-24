@@ -15,6 +15,7 @@ import type { Browser } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import type { Delivery as RecordedDelivery } from '../store/admin-store.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { listUsers } from '../site/users.ts';
@@ -112,6 +113,7 @@ let restoreFetch: () => void;
 let slowPage: Promise<void> = Promise.resolve();
 let inboxes: Promise<void> = Promise.resolve();
 let rejectingEveryPost = false;
+let refusalStatus = 503;
 const refused: string[] = [];
 let postsBegun = 0;
 
@@ -154,6 +156,7 @@ before(async () => {
 // land in the next test's deliveries.
 afterEach(async () => {
   rejectingEveryPost = false;
+  refusalStatus = 503;
   inboxes = Promise.resolve();
   for (const instance of started.splice(0)) await instance.close();
 });
@@ -211,7 +214,7 @@ function routeRemoteHost(): () => void {
       if (rejectingEveryPost) {
         refused.push(request.url);
         for (const arrived of arrivals) arrived();
-        return new Response('Try again later.', { status: 503 });
+        return new Response('Try again later.', { status: refusalStatus });
       }
       deliveries.push({
         url: request.url,
@@ -890,6 +893,61 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
     assert.equal(held.type === 'held' && held.kind, 'activitypub');
     assert.match(held.type === 'held' ? held.what : '', /^Create /);
     assert.equal(queuedMessages(queued.dataDir).length, 0, 'a held delivery is dropped, not kept');
+  });
+});
+
+describe('how a queued delivery settles in the delivery log', () => {
+  function settledAt(
+    cms: Cms,
+    inbox: string,
+    settled: (delivery: RecordedDelivery) => boolean,
+  ): Promise<RecordedDelivery> {
+    return nextEvent(`the delivery to ${inbox} settling`, (done) => {
+      const timer = setInterval(() => {
+        const last = cms.admin.lastDeliveryToInbox(inbox);
+        if (last !== undefined && settled(last)) done(last);
+      }, 10);
+      return () => {
+        clearInterval(timer);
+      };
+    });
+  }
+
+  it('records a delivery the inbox accepted as sent', async () => {
+    const { cms } = await site({ queued: true });
+    await cms.serve();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+
+    const settled = await settledAt(cms, REMOTE_SHARED_INBOX, (one) => one.status !== 'queued');
+    assert.equal(settled.status, 'sent');
+    assert.equal(settled.error, null);
+    assert.equal(delivered('Create').length, 1);
+  });
+
+  it('records a refused attempt the queue will retry as retrying, with the reason', async () => {
+    rejectingEveryPost = true;
+    const { cms } = await site({ queued: true });
+    await cms.serve();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+
+    const settled = await settledAt(cms, REMOTE_SHARED_INBOX, (one) => one.error !== null);
+    assert.equal(settled.status, 'retrying');
+    assert.match(settled.error ?? '', /503/);
+  });
+
+  it('records a delivery the inbox refused for good as failed, with the reason', async () => {
+    rejectingEveryPost = true;
+    refusalStatus = 410;
+    const { cms } = await site({ queued: true });
+    await cms.serve();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+
+    const settled = await settledAt(cms, REMOTE_SHARED_INBOX, (one) => one.status !== 'queued');
+    assert.equal(settled.status, 'failed');
+    assert.match(settled.error ?? '', /410/);
   });
 });
 
@@ -1756,6 +1814,7 @@ describe('the delivery log', () => {
     assert.deepEqual(cms.admin.countDeliveriesByStatus(activity.activityId), {
       sent: 2,
       queued: 0,
+      retrying: 0,
       failed: 0,
     });
     assert.equal(delivered('Create').length, 1, 'one shared inbox took one POST');

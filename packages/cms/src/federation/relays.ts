@@ -4,7 +4,7 @@ import type { Context } from '@fedify/fedify';
 import { Accept, Follow, PUBLIC_COLLECTION, Reject, Undo } from '@fedify/vocab';
 import type { Recipient } from '@fedify/vocab';
 
-import type { AdminStore, Relay } from '../store/admin-store.ts';
+import type { AdminStore, DeliveryStatus, Relay } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import type { ConversationSite } from '../comments/conversation.ts';
@@ -121,6 +121,7 @@ export function acceptedRelays(admin: AdminStore): Relay[] {
 export function createRelayService(options: CreateRelayServiceOptions): RelayService {
   const { federation, admin, store, config, settings } = options;
   const logger = options.logger ?? console;
+  const synchronous = config.federation.queue === null;
 
   // A relay that is told to unfollow before it has been told to follow keeps
   // the subscription.
@@ -168,26 +169,47 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     relay: Relay,
     activity: Follow | Undo,
   ): Promise<'held' | 'sent'> {
+    const activityType = activity instanceof Follow ? 'Follow' : 'Undo';
+    const activityId = activity.id?.href ?? '';
     if (
       await holdOutbound(settings, config, {
         kind: 'activitypub',
-        what: `${activity instanceof Follow ? 'Follow' : 'Undo'} ${activity.id?.href ?? ''}`,
+        what: `${activityType} ${activityId}`,
         to: [relay.inboxId],
       })
     ) {
       return 'held';
     }
-    await context.sendActivity(
-      await senderKeyPairs(context, user),
-      relayRecipient(relay),
-      activity,
-      {
-        // A relay has one inbox and no shared one, and its activities are about
-        // the subscription rather than about any post, so they are ordered
-        // against each other rather than against a post's Create.
-        orderingKey: relay.inboxId,
-      },
-    );
+    const record = (status: DeliveryStatus, error: string | null): void => {
+      admin.recordDelivery({
+        activityId,
+        activityType,
+        objectId: activity.objectId?.href ?? '',
+        slug: null,
+        actorId: relay.actorId ?? relay.inboxId,
+        inboxId: relay.inboxId,
+        status,
+        error,
+      });
+    };
+    if (!synchronous) record('queued', null);
+    try {
+      await context.sendActivity(
+        await senderKeyPairs(context, user),
+        relayRecipient(relay),
+        activity,
+        {
+          // A relay has one inbox and no shared one, and its activities are about
+          // the subscription rather than about any post, so they are ordered
+          // against each other rather than against a post's Create.
+          orderingKey: relay.inboxId,
+        },
+      );
+    } catch (thrown) {
+      record('failed', messageOf(thrown));
+      throw thrown;
+    }
+    if (synchronous) record('sent', null);
     return 'sent';
   }
 
