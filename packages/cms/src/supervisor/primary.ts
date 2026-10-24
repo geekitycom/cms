@@ -12,14 +12,19 @@
  * This module is the state machine alone. The workers, the clock, the folder
  * and the process are handed in, so the order of a reload is tested without
  * starting a process; {@link superviseCluster} binds it to `node:cluster`.
+ * The plugins folder watch and the requests waiting on a reload keep their
+ * own state, in `plugin-watcher.ts` and `reload-queue.ts`.
  */
 
 import cluster from 'node:cluster';
 
 import { pluginFolderSignature, pluginsFingerprint, scanPluginFolders } from '../plugins/folder.ts';
 import { listenForControl } from './control.ts';
+import { createPluginWatcher } from './plugin-watcher.ts';
+import type { PluginWatch } from './plugin-watcher.ts';
 import { isWorkerMessage } from './protocol.ts';
 import type { SupervisorMessage, WorkerMessage } from './protocol.ts';
+import { createReloadQueue } from './reload-queue.ts';
 import type { ReloadOutcome } from './supervision.ts';
 
 /** A running worker, as the supervisor reaches it. */
@@ -31,11 +36,6 @@ export interface WorkerHandle {
 
 export interface Cancel {
   cancel(): void;
-}
-
-export interface PluginWatch {
-  signature(): string;
-  fingerprint(): string;
 }
 
 export interface SupervisorOptions {
@@ -55,9 +55,6 @@ export interface Supervisor {
   /** SIGTERM or SIGINT: shut every worker down, then exit. */
   stop(): void;
 }
-
-export const PLUGIN_POLL_MS = 1_000;
-export const PLUGIN_SETTLE_MS = 5_000;
 
 /** The first respawn waits this long, doubling with each crash after it. */
 const RESPAWN_BASE_MS = 500;
@@ -103,17 +100,17 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
   let state: State = { phase: 'stopping' };
   let everServed = false;
   let crashes = 0;
-
-  let loaded: string | undefined;
-  let reloading: string | undefined;
-  let failed: string | undefined;
-  let waiting: ((outcome: ReloadOutcome) => void)[] = [];
-  let queued: ((outcome: ReloadOutcome) => void)[] = [];
-  let seen: { signature: string | undefined; since: number } = { signature: undefined, since: 0 };
-  let compared: string | undefined;
-  let changing = false;
-  let polling: Cancel | undefined;
-  const watch = options.watch === 'off' ? undefined : options.watch;
+  const reloads = createReloadQueue();
+  const plugins = createPluginWatcher({
+    watch: options.watch === 'off' ? undefined : options.watch,
+    schedule: (task, ms) => options.schedule(task, ms),
+    now: () => options.now(),
+    log: (line) => options.log(line),
+    isServing: () => state.phase === 'serving',
+    reload(folder) {
+      if (state.phase === 'serving') beginReload(state.worker, folder);
+    },
+  });
 
   function fork(): WorkerHandle {
     const worker = options.fork();
@@ -133,24 +130,18 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     };
   }
 
-  function beginReload(worker: WorkerHandle, folder = fingerprint()): void {
+  function beginReload(worker: WorkerHandle, folder = plugins.fingerprint()): void {
     options.log('Reloading: the running server is draining.');
     worker.send({ type: 'drain' });
     state = { phase: 'draining', old: worker };
-    reloading = folder;
-    waiting = [...waiting, ...queued];
-    queued = [];
+    plugins.reloading(folder);
+    reloads.begin();
   }
 
-  function settle(outcome: ReloadOutcome): void {
-    for (const done of waiting) done(outcome);
-    waiting = [];
-  }
-
-  function serve(worker: WorkerHandle, plugins: string | undefined): void {
+  function serve(worker: WorkerHandle, loaded: string | undefined): void {
     state = { phase: 'serving', worker, since: options.now() };
-    if (plugins !== undefined) loaded = plugins;
-    if (queued.length > 0) beginReload(worker);
+    if (loaded !== undefined) plugins.loaded(loaded);
+    if (reloads.hasAsked()) beginReload(worker);
   }
 
   function keepOld(old: WorkerHandle, next: WorkerHandle, error: string): void {
@@ -162,52 +153,9 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     }
     options.log(`Reload failed, so the running server carries on: ${error}`);
     old.send({ type: 'resume', error });
-    failed = reloading;
-    compared = undefined;
-    settle({ ok: false, error });
+    plugins.failed();
+    reloads.answer({ ok: false, error });
     serve(old, undefined);
-  }
-
-  function fingerprint(): string | undefined {
-    return watch === undefined ? undefined : attempt(() => watch.fingerprint());
-  }
-
-  function poll(watch: PluginWatch): void {
-    polling = options.schedule(() => {
-      look(watch);
-      poll(watch);
-    }, PLUGIN_POLL_MS);
-  }
-
-  function look(watch: PluginWatch): void {
-    const signature = attempt(() => watch.signature());
-    const now = options.now();
-    if (signature !== seen.signature) {
-      if (!changing) {
-        changing = true;
-        options.log(
-          `The plugins folder is changing; it loads once it has stood still for ${String(PLUGIN_SETTLE_MS / 1000)} s.`,
-        );
-      }
-      seen = { signature, since: now };
-      return;
-    }
-    if (signature === undefined) return;
-    if (now - seen.since < PLUGIN_SETTLE_MS) return;
-    changing = false;
-    if (state.phase !== 'serving' || signature === compared) return;
-    const folder = fingerprint();
-    if (folder === undefined) return;
-    compared = signature;
-    if (folder === loaded) return;
-    if (folder === failed) {
-      options.log(
-        'The plugins folder is as it was when its reload failed, so it is left alone until it changes.',
-      );
-      return;
-    }
-    options.log('The plugins folder changed and has settled.');
-    beginReload(state.worker, folder);
   }
 
   function bootError(worker: WorkerHandle, code: number | null): string {
@@ -225,10 +173,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
         );
       }
       state = { phase: 'booting', worker: fork() };
-      if (watch !== undefined) {
-        seen = { signature: attempt(() => watch.signature()), since: options.now() };
-        poll(watch);
-      }
+      plugins.start();
     },
 
     message(worker, message) {
@@ -236,13 +181,13 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
         case 'ready':
           if (state.phase === 'booting' && state.worker === worker) {
             everServed = true;
-            settle({ ok: true });
+            reloads.answer({ ok: true });
             serve(worker, message.pluginsFingerprint);
           } else if (state.phase === 'replacing' && state.next === worker) {
             state.deadline.cancel();
             state.old.send({ type: 'retire' });
             options.log('Reloaded: the new server is serving and the old one is retiring.');
-            settle({ ok: true });
+            reloads.answer({ ok: true });
             serve(worker, message.pluginsFingerprint);
           }
           return;
@@ -303,7 +248,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
         case 'draining':
           if (state.old !== worker) return;
           respawnLater('The server exited while it drained');
-          settle({ ok: false, error: 'The server exited while it drained.' });
+          reloads.answer({ ok: false, error: 'The server exited while it drained.' });
           return;
 
         case 'replacing':
@@ -321,7 +266,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
           } else if (state.old === worker) {
             const failure = state.error;
             respawnLater('The server exited while a failed reload was undone');
-            settle({ ok: false, error: failure });
+            reloads.answer({ ok: false, error: failure });
           }
           return;
 
@@ -334,20 +279,17 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
       if (state.phase === 'stopping') {
         return Promise.resolve({ ok: false, error: 'The server is shutting down.' });
       }
-      return new Promise<ReloadOutcome>((resolve) => {
-        queued.push(resolve);
-        if (state.phase === 'serving') beginReload(state.worker);
-      });
+      const outcome = reloads.ask();
+      if (state.phase === 'serving') beginReload(state.worker);
+      return outcome;
     },
 
     stop() {
       if (state.phase === 'waiting') state.timer.cancel();
       if (state.phase === 'replacing') state.deadline.cancel();
-      polling?.cancel();
+      plugins.stop();
       state = { phase: 'stopping' };
-      waiting = [...waiting, ...queued];
-      queued = [];
-      settle({ ok: false, error: 'The server is shutting down.' });
+      reloads.answerAll({ ok: false, error: 'The server is shutting down.' });
       if (live.size === 0) {
         options.exit(0);
         return;
@@ -358,14 +300,6 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
       }, SHUTDOWN_MS);
     },
   };
-}
-
-function attempt<T>(read: () => T): T | undefined {
-  try {
-    return read();
-  } catch {
-    return undefined;
-  }
 }
 
 /**
