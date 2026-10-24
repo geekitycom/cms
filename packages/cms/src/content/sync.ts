@@ -1,44 +1,14 @@
-import { randomUUID } from 'node:crypto';
-import { mkdir, readdir, readFile, rmdir } from 'node:fs/promises';
-import path from 'node:path';
-
 import { messageOf } from '../util/errors.ts';
-import { exists, isNotFound } from '../util/files.ts';
 import { createSerialQueue } from '../util/queue.ts';
-import type { Document, DocumentType } from './document.ts';
-import { handleDirectory } from './handles.ts';
-import {
-  ORIGINAL_FRONT_MATTER_KEY,
-  ORIGINAL_NAME_FRONT_MATTER_KEY,
-  originalOf,
-} from './original.ts';
-import { parseDocument } from './parser.ts';
-import { replyTarget } from './post-type.ts';
-import { DuplicatePermalinkError, TRASH_DIRECTORY } from './store.ts';
-import type { CatalogReader, DocumentLookup, IndexClock, IndexWriter } from './store.ts';
+import { isDocumentPath } from './content-tree.ts';
+import { createContentWatcher } from './content-watcher.ts';
+import type { Document } from './document.ts';
+import { changedIndex, createReconciler } from './reconcile.ts';
+import { documentsUnder, scanContent } from './scan.ts';
 import { isServed } from './served.ts';
-import { watchTree } from './tree-watch.ts';
-import type { TreeWatcher } from './tree-watch.ts';
+import type { CatalogReader, DocumentLookup, IndexClock, IndexWriter } from './store.ts';
 import { defaultWatchDebounce } from './watch-debounce.ts';
 import type { WatchDebounce } from './watch-debounce.ts';
-
-/** File extensions the sync treats as documents. */
-const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
-
-/** Name prefix of the directory the watcher makes to learn that it is listening. */
-const PROBE_PREFIX = '.geekity-watch-';
-
-/** How long one probe waits for its event before another is made. */
-const PROBE_INTERVAL_MS = 250;
-
-/** How long the watcher keeps probing before it reports that it hears nothing. */
-const PROBE_DEADLINE_MS = 5_000;
-
-/** Directories that hold documents. Everything else in `content/` is not indexed. */
-const DOCUMENT_DIRECTORIES: ReadonlyMap<string, DocumentType> = new Map([
-  ['posts', 'post'],
-  ['pages', 'page'],
-]);
 
 /** What happened to one document. */
 export type DocumentChangeType = 'created' | 'updated' | 'deleted';
@@ -205,303 +175,62 @@ export interface ContentSync {
  */
 export function createContentSync(options: CreateContentSyncOptions): ContentSync {
   const { store, contentDir } = options;
-  const handles = handleDirectory(contentDir);
   const logger = options.logger ?? console;
   const events = createEmitter(logger);
-
-  /**
-   * Write a document, giving way to a file that has already gone.
-   *
-   * Renaming a live file briefly leaves two rows claiming one permalink, and
-   * the watcher may well see the new name before the old one disappears. When
-   * the conflicting row's file is no longer on disk the row is stale, so it is
-   * dropped (and reported) and the write retried. A conflict between two files that both exist is a
-   * content mistake and is left to the caller to report.
-   */
-  async function index(document: Document, origin: ChangeOrigin): Promise<void> {
-    try {
-      store.upsert(document);
-      return;
-    } catch (error) {
-      if (!(error instanceof DuplicatePermalinkError)) throw error;
-      const conflicting = error.conflictingPath;
-      if (conflicting === undefined) throw error;
-      if (await exists(path.join(contentDir, conflicting))) throw error;
-
-      const stale = store.getByPath(conflicting);
-      store.remove(conflicting);
-      if (stale !== undefined) {
-        await emitChange(events, store.now(), {
-          type: 'deleted',
-          path: conflicting,
-          previous: stale,
-          next: undefined,
-          origin,
-        });
-      }
-      store.upsert(document);
-    }
-  }
-
-  async function reconcile(relativePath: string, origin: ChangeOrigin): Promise<boolean> {
-    const previous = store.getByPath(relativePath);
-    const source = await readSource(path.join(contentDir, relativePath));
-
-    if (source === undefined) {
-      if (previous === undefined) return false;
-      store.remove(relativePath);
-      await emitChange(events, store.now(), {
-        type: 'deleted',
-        path: relativePath,
-        previous,
-        next: undefined,
-        origin,
-      });
-      return true;
-    }
-
-    let document: Document;
-    try {
-      document = parseDocument(source, { path: relativePath, handles });
-    } catch (error) {
-      logger.warn(`Skipping ${relativePath}: ${messageOf(error)}`);
-      throw new SkippedFile();
-    }
-
-    // The hash covers the canonical file text, so a rewrite that changes
-    // nothing — an admin save, a touch, the watcher event that follows an
-    // admin write — costs no index write and emits no event.
-    if (previous !== undefined && previous.hash === document.hash) return false;
-
-    // Indexed all the same, as an unknown activitypub.type is: the post is
-    // still a post, only not a reply, and the author is told why.
-    if (document.inReplyTo !== undefined && replyTarget(document) === undefined) {
-      logger.warn(
-        `${relativePath} names in-reply-to "${document.inReplyTo}", which is not an http or https URL, so it is not a reply.`,
-      );
-    }
-    if (originalOf(document.extra) === undefined) {
-      const original = document.extra[ORIGINAL_FRONT_MATTER_KEY];
-      if (original !== undefined) {
-        logger.warn(
-          `${relativePath} names ${ORIGINAL_FRONT_MATTER_KEY} ${JSON.stringify(original)}, which is not an absolute http or https URL, so the page stays its own canonical URL.`,
-        );
-      }
-      const name = document.extra[ORIGINAL_NAME_FRONT_MATTER_KEY];
-      if (name !== undefined) {
-        logger.warn(
-          `${relativePath} names ${ORIGINAL_NAME_FRONT_MATTER_KEY} ${JSON.stringify(name)} with no absolute http or https ${ORIGINAL_FRONT_MATTER_KEY}, so it names nothing.`,
-        );
-      }
-    }
-
-    try {
-      await index(document, origin);
-    } catch (error) {
-      logger.warn(`Could not index ${relativePath}: ${messageOf(error)}`);
-      throw new SkippedFile();
-    }
-
-    await emitChange(events, store.now(), {
-      type: previous === undefined ? 'created' : 'updated',
-      path: relativePath,
-      previous,
-      next: document,
-      origin,
-    });
-    return true;
-  }
-
-  async function scan(): Promise<SyncResult> {
-    const result: SyncResult = {
-      scanned: 0,
-      created: 0,
-      updated: 0,
-      removed: 0,
-      unchanged: 0,
-      failed: 0,
-    };
-
-    const onDisk = await walk(contentDir, logger);
-    const seen = new Set(onDisk);
-
-    // Rows whose file has gone go first, so a document that was renamed —
-    // moving into or out of `_trash/` is a rename — does not collide with its
-    // own old row over the permalink they share.
-    for (const indexed of store.listPaths()) {
-      if (seen.has(indexed)) continue;
-      try {
-        if (await reconcile(indexed, 'scan')) result.removed += 1;
-      } catch (error) {
-        if (!(error instanceof SkippedFile)) throw error;
-        result.failed += 1;
-      }
-    }
-
-    for (const relativePath of onDisk) {
-      result.scanned += 1;
-      const existed = store.getByPath(relativePath) !== undefined;
-      try {
-        const wrote = await reconcile(relativePath, 'scan');
-        if (!wrote) result.unchanged += 1;
-        else if (existed) result.updated += 1;
-        else result.created += 1;
-      } catch (error) {
-        if (!(error instanceof SkippedFile)) throw error;
-        result.failed += 1;
-      }
-    }
-
-    return result;
-  }
+  const emit = (change: DocumentChange): Promise<void> => emitChange(events, store.now(), change);
+  const reconciler = createReconciler({ store, contentDir, logger, emit });
+  const tree = { store, contentDir, logger };
 
   // Watcher events are debounced per path and then handled one at a time, on
   // the same queue as a full scan, so a burst of writes to one file costs a
   // single re-parse and no two reconciles of one path ever interleave.
-  const pending = new Map<string, () => void>();
-  const debounce = options.debounce ?? defaultWatchDebounce;
   const queue = createSerialQueue();
-  let watcher: TreeWatcher | undefined;
-
-  const settledListeners = new Set<() => unknown>();
-  let unsettled = false;
-
-  async function settle(): Promise<void> {
-    unsettled = false;
-    for (const listener of [...settledListeners]) {
-      try {
-        await listener();
-      } catch (error) {
-        logger.warn(`A settled listener threw: ${messageOf(error)}`);
-      }
-    }
-  }
+  const settled = createSettledListeners(logger);
+  const watcher = createContentWatcher({
+    contentDir,
+    logger,
+    debounce: options.debounce ?? defaultWatchDebounce,
+    onSettledPath: (relativePath) => void queue.run(() => reconcileWatched(relativePath)),
+  });
 
   async function scanAndSettle(): Promise<SyncResult> {
-    const result = await scan();
-    await settle();
+    const result = await scanContent({ reconciler, ...tree });
+    await settled.settle();
     return result;
   }
 
   /**
-   * Reconcile what an event names, once it has stopped changing. A document
-   * is re-read; any other path may be a directory that was made, moved or
-   * removed, so every document under it, on disk or in the index, is.
+   * Reconcile what a watcher event names. A document is re-read; any other
+   * path may be a directory that was made, moved or removed, so every
+   * document under it, on disk or in the index, is.
    */
-  function handle(relativePath: string): void {
-    pending.get(relativePath)?.();
-    pending.set(
-      relativePath,
-      debounce(relativePath, () => {
-        pending.delete(relativePath);
-        void queue.run(async () => {
-          const paths = isDocumentPath(relativePath)
-            ? [relativePath]
-            : await documentsUnder(relativePath);
-          for (const documentPath of paths) {
-            try {
-              if (await reconcile(documentPath, 'watch')) unsettled = true;
-            } catch (error) {
-              if (error instanceof SkippedFile) continue;
-              logger.warn(`Could not sync ${documentPath}: ${messageOf(error)}`);
-            }
-          }
-          // This run is the one left in the queue, and no path is waiting out
-          // its debounce: the burst is over.
-          if (unsettled && pending.size === 0 && queue.pending() === 1) await settle();
-        });
-      }),
-    );
-  }
-
-  /** Documents under a content-relative path: indexed ones that are gone first, then what is on disk. */
-  async function documentsUnder(from: string): Promise<string[]> {
-    const onDisk = await walk(contentDir, logger, from);
-    const present = new Set(onDisk);
-    const gone = store
-      .listPaths()
-      .filter(
-        (indexed) => (from === '' || indexed.startsWith(`${from}/`)) && !present.has(indexed),
-      );
-    return [...gone, ...onDisk];
-  }
-
-  async function startWatching(): Promise<void> {
-    if (watcher !== undefined) return;
-    await mkdir(contentDir, { recursive: true });
-
-    const started = watchTree(contentDir, { ignore: isIgnored });
-    watcher = started;
-
-    started.on('change', (_type: string, relativePath: string | null) => {
-      if (relativePath === null) {
-        handle('');
-        return;
-      }
-      if (!path.basename(relativePath).startsWith(PROBE_PREFIX)) handle(relativePath);
-    });
-    started.on('error', (error: unknown) => {
-      logger.warn(`Content watcher error: ${messageOf(error)}`);
-    });
-
-    await started.ready;
-    if (!(await hearsChanges(started))) {
-      logger.warn(
-        `The content watcher reported nothing for ${PROBE_DEADLINE_MS / 1000}s, so a file changed while the site runs may not show until it restarts.`,
-      );
-    }
-  }
-
-  /**
-   * Whether the watch reports changes yet, learned by making one: macOS
-   * starts reporting a moment after the watch returns, and a change made
-   * before then is never reported, so the boot scan waits for this.
-   */
-  async function hearsChanges(started: TreeWatcher): Promise<boolean> {
-    const deadline = Date.now() + PROBE_DEADLINE_MS;
-    while (Date.now() < deadline) {
-      const probe = `${PROBE_PREFIX}${randomUUID()}`;
-      const heard = new Promise<boolean>((resolve) => {
-        const timer = setTimeout(() => {
-          started.off('change', listener);
-          resolve(false);
-        }, PROBE_INTERVAL_MS);
-        function listener(_type: string, filename: string | null): void {
-          if (filename === null || path.basename(filename) !== probe) return;
-          clearTimeout(timer);
-          started.off('change', listener);
-          resolve(true);
-        }
-        started.on('change', listener);
-      });
-      const probePath = path.join(contentDir, probe);
+  async function reconcileWatched(relativePath: string): Promise<void> {
+    const paths = isDocumentPath(relativePath)
+      ? [relativePath]
+      : await documentsUnder(tree, relativePath);
+    for (const documentPath of paths) {
       try {
-        await mkdir(probePath);
+        if (changedIndex(await reconciler.reconcile(documentPath, 'watch'))) {
+          settled.markUnsettled();
+        }
       } catch (error) {
-        logger.warn(
-          `The content directory cannot be written, so whether the watcher reports changes was not checked: ${messageOf(error)}`,
-        );
-        return true;
+        logger.warn(`Could not sync ${documentPath}: ${messageOf(error)}`);
       }
-      const wasHeard = await heard;
-      await rmdir(probePath);
-      if (wasHeard) return true;
     }
-    return false;
+    // This run is the one left in the queue, and no path is waiting out
+    // its debounce: the burst is over.
+    if (settled.isUnsettled() && watcher.waiting() === 0 && queue.pending() === 1) {
+      await settled.settle();
+    }
   }
 
   return {
     events,
 
-    announce(change) {
-      return emitChange(events, store.now(), change);
-    },
+    announce: emit,
 
     onSettled(listener) {
-      settledListeners.add(listener);
-      return () => {
-        settledListeners.delete(listener);
-      };
+      return settled.add(listener);
     },
 
     sync() {
@@ -512,17 +241,12 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     // written at any moment of the boot is either found by the scan or
     // reported by the watch.
     async start() {
-      if (options.watch !== false) await startWatching();
+      if (options.watch !== false) await watcher.start();
       return await queue.run(scanAndSettle);
     },
 
     async stop() {
-      for (const cancel of pending.values()) cancel();
-      pending.clear();
-
-      watcher?.close();
-      watcher = undefined;
-
+      watcher.stop();
       // Anything already past its debounce is allowed to finish, so stopping
       // never leaves a half-applied write behind.
       await queue.settled();
@@ -530,26 +254,47 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
   };
 }
 
-/**
- * Whether the watch should skip a content-relative path: anything inside a
- * directory the walk would not descend into, and anything named as such a
- * directory. The watch's own probe is let through.
- *
- * The watch is told only a name, never whether it is a file, so a file that
- * is not a document is kept here and found to name no documents when its
- * event is handled.
- */
-function isIgnored(relativePath: string): boolean {
-  const segments = relativePath.replace(/\\/g, '/').split('/');
-  const name = segments.at(-1) as string;
-  if (segments.slice(0, -1).some((segment) => !isWalkableDirectory(segment))) return true;
-  if (segments.length === 1 && name.startsWith(PROBE_PREFIX)) return false;
-  return !isWalkableDirectory(name);
+/** The listeners {@link ContentSync.onSettled} keeps, and whether a change is waiting for them. */
+interface SettledListeners {
+  add(listener: () => unknown): () => void;
+  /** Note that the index changed since the listeners last ran. */
+  markUnsettled(): void;
+  isUnsettled(): boolean;
+  /** Run every listener in turn, logging any that throws. */
+  settle(): Promise<void>;
 }
 
-/** Thrown inside a reconcile that logged and gave up on one file. */
-class SkippedFile extends Error {
-  override readonly name = 'SkippedFile';
+function createSettledListeners(logger: SyncLogger): SettledListeners {
+  const listeners = new Set<() => unknown>();
+  let unsettled = false;
+
+  return {
+    add(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+
+    markUnsettled() {
+      unsettled = true;
+    },
+
+    isUnsettled() {
+      return unsettled;
+    },
+
+    async settle() {
+      unsettled = false;
+      for (const listener of [...listeners]) {
+        try {
+          await listener();
+        } catch (error) {
+          logger.warn(`A settled listener threw: ${messageOf(error)}`);
+        }
+      }
+    },
+  };
 }
 
 /**
@@ -571,72 +316,6 @@ async function emitChange(events: Emitter, now: Date, change: DocumentChange): P
 
 function isPublic(document: Document | undefined, now: Date): boolean {
   return document !== undefined && isServed(document, now);
-}
-
-/** The file's text, or `undefined` when it is not there any more. */
-async function readSource(file: string): Promise<string | undefined> {
-  try {
-    return await readFile(file, 'utf8');
-  } catch (error) {
-    if (isNotFound(error)) return undefined;
-    throw error;
-  }
-}
-
-/**
- * Every document file under the content directory, or under `from` inside it,
- * content-relative and sorted. A directory that cannot be read is reported and
- * skipped rather than failing the whole walk.
- */
-async function walk(contentDir: string, logger: SyncLogger, from = ''): Promise<string[]> {
-  const found: string[] = [];
-
-  async function visit(directory: string, prefix: string): Promise<void> {
-    let entries;
-    try {
-      entries = await readdir(directory, { withFileTypes: true });
-    } catch (error) {
-      if (!isNotFound(error)) logger.warn(`Could not read ${directory}: ${messageOf(error)}`);
-      return;
-    }
-
-    for (const entry of entries) {
-      const relativePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
-      if (entry.isDirectory()) {
-        if (!isWalkableDirectory(entry.name)) continue;
-        await visit(path.join(directory, entry.name), relativePath);
-        continue;
-      }
-      if (!entry.isFile()) continue;
-      if (isDocumentPath(relativePath)) found.push(relativePath);
-    }
-  }
-
-  await visit(path.join(contentDir, from), from);
-  return found.sort();
-}
-
-/**
- * Whether the walk descends into a directory. Eleventy ignores directories
- * whose name starts with an underscore and so does the CMS, with one
- * exception: the trash still holds documents, which stay indexed so the admin
- * can restore them.
- */
-function isWalkableDirectory(name: string): boolean {
-  if (name === TRASH_DIRECTORY) return true;
-  if (name.startsWith('_') || name.startsWith('.')) return false;
-  return name !== 'node_modules';
-}
-
-/**
- * Whether a content-relative path is a document: a Markdown file under a
- * `posts/` or `pages/` directory. Uploads, directory data files and anything
- * the CMS does not model are skipped without a word.
- */
-function isDocumentPath(relativePath: string): boolean {
-  if (!MARKDOWN_EXTENSIONS.has(path.extname(relativePath).toLowerCase())) return false;
-  const segments = relativePath.split('/').slice(0, -1);
-  return segments.some((segment) => DOCUMENT_DIRECTORIES.has(segment));
 }
 
 /** The minimum event emitter this needs, typed to {@link ContentEventMap}. */
