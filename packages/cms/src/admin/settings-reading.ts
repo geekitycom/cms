@@ -4,8 +4,8 @@
  * WordPress's Reading page is what the homepage displays and how many posts a
  * listing holds; this one adds the notify server, which is how a subscriber
  * hears that a feed moved on without waiting for their next poll. The site
- * menu was here too until TASK-108 gave the menus a screen of their own: which
- * menus there are to edit comes from the active theme, which is not something
+ * menus have a screen of their own rather than living here: which menus there
+ * are to edit comes from the active theme, which is not something
  * a page of fields can be.
  */
 

@@ -70,7 +70,7 @@ export interface FederationContextData {
   /** Config after defaults and environment overrides. */
   readonly config: ResolvedConfig;
   readonly settings: SettingsRegistry;
-  /** Where the inbox asks for the profile of an actor it has just heard from (TASK-184). */
+  /** Where the inbox asks for the profile of an actor it has just heard from. */
   readonly actorProfiles: Pick<ActorProfileService, 'capture'>;
   /** The site's settings, as whoever made this context read them. */
   readonly site: SiteSettings;
@@ -105,9 +105,9 @@ export interface CreateSiteFederationOptions extends FederationOverrides {
  * Build the site's `Federation` object: one actor per user, their keys, their
  * collections, WebFinger's neighbours and NodeInfo.
  *
- * A post's object is not here — it is its permalink (decision-13), served by
+ * A post's object is not here — it is its permalink, served by
  * the middleware in `web/federation-routes.ts`, which also owns `/.well-known/webfinger`
- * (doc-8) because Fedify's own cannot publish the aliases decision-14 wants.
+ * because Fedify's own cannot publish the aliases every user's actor needs.
  */
 export function createSiteFederation(options: CreateSiteFederationOptions): SiteFederation {
   const federation = createFederation<FederationContextData>({
@@ -149,7 +149,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
         : await loadActorKeyPairs(context.data.config.dataDir, identifier),
     );
 
-  // No object dispatcher for posts. decision-13 makes a post's id its
+  // No object dispatcher for posts. A post's id is its
   // permalink, which Fedify never minted and cannot route: the permalink
   // middleware in `web/federation-routes.ts` answers an ActivityStreams request there, and
   // `isFederatedDocument` is the one rule it and the outbox both read, so they
@@ -175,7 +175,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
     },
   );
 
-  /** Every stored `author` string that reads as this user (TASK-67). */
+  /** Every stored `author` string that reads as this user. */
   function namesOf(context: { data: FederationContextData }, user: User): string[] {
     return authorNames(listUsers(context.data.config.dataDir), user);
   }
@@ -224,7 +224,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
         ? null
         : lastFollowersCursor(context.data.admin.countFollowers(user.username));
     });
-  // Always empty: doc-4 says a blog's author follows nobody through this CMS,
+  // Always empty: a blog's author follows nobody through this CMS,
   // and the one thing the site does follow — a relay (FEP-ae0c) — is a
   // subscription rather than a relationship anybody reads this collection to
   // learn about.
@@ -257,14 +257,13 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
   // The inbox, personal and shared. Fedify has already verified the signature
   // by the time a listener runs — an unsigned or badly signed delivery never
   // reaches one — so a handler may trust that the activity's actor really sent
-  // it. An activity of a type not listed here is answered 202 and dropped,
-  // which is what doc-4 asks for everything past these.
+  // it. An activity of a type not listed here is answered 202 and dropped.
   const inbox = federation
     .setInboxListeners(INBOX_PATH, SHARED_INBOX_PATH)
     // `per-origin` rather than Fedify's default `per-inbox`, which folds the
     // recipient identifier into the key: one `Follow` delivered to a personal
     // and a shared inbox, or to a plugin's second federation over the same KV
-    // store, would otherwise be handled twice (doc-8).
+    // store, would otherwise be handled twice.
     .withIdempotency('per-origin')
     .onUnverifiedActivity(async (context, activity, reason) => {
       const json = (await activity.toJsonLd()) as JsonLdDocument;

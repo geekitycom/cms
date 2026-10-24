@@ -4,10 +4,9 @@ import path from 'node:path';
 import { messageOf } from '../util/errors.ts';
 
 /**
- * The site's own redirects, relative to the content directory (TASK-128).
+ * The site's own redirects, relative to the content directory.
  * Content rather than data, like `site.json`: a site's old URLs are part of the
- * site, and belong in the same git history as the posts they lead to
- * (decision-9).
+ * site, and belong in the same git history as the posts they lead to.
  */
 export const REDIRECTS_FILE = '_data/redirects.json';
 

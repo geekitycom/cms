@@ -104,7 +104,7 @@ export function commentedPost(
 /**
  * The public post an ActivityStreams object id names, memoised.
  *
- * Almost every id is the post's permalink (decision-13), so the permalink is
+ * Almost every id is the post's permalink, so the permalink is
  * looked up first and the answer is checked against the document's own id — a
  * post that is no longer public has no id at all. Only when that fails is the
  * whole index read, once, to find the post whose file names this id: a post

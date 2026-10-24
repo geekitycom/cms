@@ -71,7 +71,7 @@ export interface TokenStore {
    * Spend a one-click link's token, and say whether it had anything left.
    *
    * `true` the first time and `false` for ever after, which is what makes a
-   * link in an email single use (TASK-55). Only the token's SHA-256 is kept,
+   * link in an email single use. Only the token's SHA-256 is kept,
    * as a password reset's is, so a copy of this file is not a list of the
    * links a site has sent. `expiresAt` is the moment the token's own signature
    * stops meaning anything, and is only there so the row can be swept.

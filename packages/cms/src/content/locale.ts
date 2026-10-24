@@ -1,7 +1,7 @@
 import { LANG_FRONT_MATTER_KEY } from './language.ts';
 
 /**
- * The locale a site's dates and counts are written in (TASK-153).
+ * The locale a site's dates and counts are written in.
  *
  * One tag per render, resolved from the site data by `siteLocale` and handed
  * to every formatter, so a page never mixes two conventions.

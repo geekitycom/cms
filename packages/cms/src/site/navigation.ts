@@ -2,7 +2,7 @@ import type { SiteData } from '../theme/site-data.ts';
 
 /**
  * The menu a theme renders when nothing says which one it means: the menu that
- * was the whole of `navigation` before menus had names (TASK-107).
+ * was the whole of `navigation` before menus had names.
  */
 export const DEFAULT_MENU_NAME = 'primary';
 
@@ -10,7 +10,7 @@ export const DEFAULT_MENU_NAME = 'primary';
  * What one `rel` value may be spelled with: letters and dashes, which is what
  * every HTML link type is spelled with.
  *
- * Deliberately not a list of the values this CMS knows about (TASK-114). The
+ * Deliberately not a list of the values this CMS knows about. The
  * trailing part of a link line is whatever `rel` values the person typed —
  * `me`, `nofollow`, `author`, `noopener`, one somebody's own reader looks for
  * — and all of them reach the rendered attribute. A closed list would mean
@@ -81,7 +81,7 @@ export interface LinkLine {
  * same line, and `Odd | /odd/?a=1|2` keeps its bar because `2` is not one.
  *
  * The one place a link line is split, for the reason the URL rule is worded
- * once (TASK-114): the menu box on the Navigation screen and the Links box on
+ * once: the menu box on the Navigation screen and the Links box on
  * a profile take the same line, so somebody who learns one box has learned the
  * other.
  */
@@ -124,7 +124,7 @@ export const MENU_NAME_MAX_LENGTH = 32;
 /**
  * What is wrong with a proposed menu name, or `undefined` when nothing is.
  *
- * The rule governs a name somebody types on the Navigation screen (TASK-108).
+ * The rule governs a name somebody types on the Navigation screen.
  * A name a `theme.json` declares is a menu name by declaration and is shown as
  * the theme spells it: the theme decides where its own menus go, and a screen
  * that hid a declared area because it disliked the spelling would leave
@@ -197,7 +197,7 @@ export interface NavigationMenuOptions {
  * One named menu for one request: the items the site stores under that name,
  * with the one the request is on marked.
  *
- * The setting is the only source of a menu (TASK-106). A page cannot put
+ * The setting is the only source of a menu. A page cannot put
  * itself in one, so there is one screen to edit a menu on, one order — the
  * order the lines were typed in — and no way for one link to appear twice. A
  * page that should be linked is linked by typing a line for it, including the
@@ -226,7 +226,7 @@ export interface NavigationMenusOptions {
  *
  * Every stored menu is here, not only the ones the theme in use declares an
  * area for. The declaration in `theme.json` is what the Navigation screen
- * reads to say where a menu can go (TASK-108); it is not a filter on the
+ * reads to say where a menu can go; it is not a filter on the
  * render, because a theme that renders a menu it forgot to declare should look
  * wrong on the screen that lists areas rather than silently render nothing.
  * A menu no template loops over is simply rendered nowhere, and kept.
@@ -314,8 +314,8 @@ export function menusOf(value: unknown): NavigationMenus {
  * not a string is an item with none rather than an item dropped.
  *
  * `me: true` is still read, as `rel: "me"`. It is how every marked item was
- * spelled before the trailing part of a line was a list of rel values
- * (TASK-107, TASK-114), and a site that had set the only flag there was must
+ * spelled before the trailing part of a line was a list of rel values,
+ * and a site that had set the only flag there was must
  * not lose it on upgrade; the Navigation screen writes `rel` the next time
  * that menu is saved. Only the literal `true` counts, the way it always did.
  */
@@ -421,7 +421,7 @@ export function menuItemLineProblem(value: string): string | undefined {
  * in: the menu on the Navigation screen and the Links on a user's profile.
  *
  * One sentence fragment rather than two, so the rule {@link isLinkUrl} applies
- * is worded the same wherever somebody is told about it (TASK-112). Somebody
+ * is worded the same wherever somebody is told about it. Somebody
  * who learns one box should not be taught the wrong thing about the other.
  */
 export const LINK_URL_RULE =
@@ -439,7 +439,7 @@ export const LINK_URL_RULE =
  * `https://shll.me/@a | me`: it reads the space and the bar as path
  * characters and percent-encodes them, so a check that only asked the parser
  * took a label, a URL and a trailing word as one URL and stored it — which is
- * how a reader of shll.me ended up at `/author/a%20%7C%20me/` (TASK-112). A
+ * how a reader of shll.me ended up at `/author/a%20%7C%20me/`. A
  * URL somebody types has no spaces in it; a space means they typed two things.
  *
  * Deliberately a test rather than a normaliser: a link keeps the URL as it was

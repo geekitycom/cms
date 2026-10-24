@@ -18,8 +18,8 @@ export const USERS_PATH = `${ADMIN_PREFIX}/users`;
 /**
  * Where one user is edited.
  *
- * The split documents.ts already makes between a listing and `basePath/:slug`
- * (TASK-97): the table says who there is, and one screen per person holds
+ * The split documents.ts already makes between a listing and `basePath/:slug`:
+ * the table says who there is, and one screen per person holds
  * every field that person has, each with a label beside it. A row of
  * unlabelled boxes in a table cell could not.
  */

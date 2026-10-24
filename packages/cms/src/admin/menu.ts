@@ -96,7 +96,7 @@ export class UnknownAdminScreenError extends Error {
 }
 
 /**
- * The sections of the admin, in the order doc-5 lists them.
+ * The sections of the admin, in menu order.
  *
  * Adding a screen to the menu is one entry in one of these `children` lists
  * and the same `child` name on whatever the screen passes to `render`.
@@ -110,7 +110,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     // they are about: a tag with no post on it is nothing.
     { child: 'categories', label: 'Categories', url: CATEGORY_KIND.basePath },
     { child: 'tags', label: 'Tags', url: TAG_KIND.basePath },
-    // Where a post can be sent, for the same reason: only a post is (TASK-218).
+    // Where a post can be sent, for the same reason: only a post is.
     { child: SYNDICATION_TARGETS_CHILD, label: 'Syndication', url: SYNDICATION_TARGETS_PATH },
   ]),
   section('pages', 'Pages', [
@@ -137,7 +137,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     { child: 'new', label: 'Add new', url: ADD_USER_PATH },
     { child: CONNECTED_APPS_CHILD, label: 'Connected apps', url: CONNECTED_APPS_PATH },
     // Beside the apps, because it is where to look when one will not connect
-    // or post (TASK-221).
+    // or post.
     { child: APP_ACTIVITY_CHILD, label: 'App activity', url: APP_ACTIVITY_PATH },
     { child: WRITING_GOALS_CHILD, label: 'Writing goals', url: WRITING_GOALS_PATH },
   ]),
@@ -155,7 +155,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   // WordPress's own pages, in its own order. General is first because the
   // heading lands on the first child and General is `/admin/settings` itself.
   // Federation's settings are not here: they are a child of the Federation
-  // section, because that is what they are about (TASK-109).
+  // section, because that is what they are about.
   section('settings', 'Settings', [
     { child: 'general', label: 'General', url: settingsPagePath('general') },
     { child: 'reading', label: 'Reading', url: settingsPagePath('reading') },

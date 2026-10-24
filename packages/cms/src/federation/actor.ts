@@ -19,20 +19,20 @@ import { profileContext } from '../site/authors.ts';
 import { attributionDomainOf, handleHref } from './paths.ts';
 
 /**
- * A user as the fediverse sees them (decision-14).
+ * A user as the fediverse sees them.
  *
  * Everything a peer reads about a person is built here, off one rule: an
  * actor's id is decided once, in {@link actorId}, and every other id — the
  * key, the multikey, the aliases, the `actor` of every activity — hangs off
  * that same value rather than being spelled again. That is what lets a user
  * published elsewhere be served under the id their followers already hold
- * (decision-14) without a second spelling of anything.
+ * without a second spelling of anything.
  */
 
 /**
  * One user by their username, or `undefined` when nobody has it.
  *
- * The username is the Fedify identifier (decision-14), so this is what every
+ * The username is the Fedify identifier, so this is what every
  * dispatcher and every inbox handler starts with: an identifier nobody answers
  * to is `null` back to Fedify, which is a 404, rather than an empty collection.
  */
@@ -68,15 +68,15 @@ export function avatarUrl(avatar: string, baseUrl: string): string | undefined {
  *
  * The author URL, which is what Fedify derives from the dispatcher path —
  * unless the user's record carries the id they were published under somewhere
- * else, in which case that is who they are (decision-14). A stored id is
+ * else, in which case that is who they are. A stored id is
  * identity rather than cache: a follower's server keys the account by it, and
  * answering under a different one would read as a different person rather than
  * as the same person moved.
  *
  * This is the only place that choice is made, and every id built from it — the
  * key id, the multikeys, the `actor` of every activity, the sender key pairs,
- * the WebFinger `self` — follows from here without spelling the rule again
- * (doc-8). What does *not* follow is `url`: the archive is still where a
+ * the WebFinger `self` — follows from here without spelling the rule again.
+ * What does *not* follow is `url`: the archive is still where a
  * person is sent, and the actor's collections are still its dispatcher path's
  * children, because those are cache and a peer refetches them.
  */
@@ -140,7 +140,7 @@ export function mainKeyId(id: URL): URL {
  * `{actor}#multikey-{n}`: one entry of `assertionMethod`.
  *
  * Fedify numbers its own multikeys in `ACTOR_KEY_ALGORITHMS` order, so RSA is
- * 0 and Ed25519 is 1 (doc-8), and the numbering is kept because a peer that
+ * 0 and Ed25519 is 1, and the numbering is kept because a peer that
  * cached the document holds these ids.
  */
 export function multikeyId(id: URL, index: number): URL {
@@ -168,7 +168,7 @@ export interface UserActorOptions {
 }
 
 /**
- * One user's ActivityPub actor, as decision-14 describes it.
+ * One user's ActivityPub actor, at their author URL.
  *
  * A `Person`, always: a user is a person, and the site is no longer an actor
  * at all, so there is nothing left for the old `actorType` setting to choose
@@ -180,7 +180,7 @@ export interface UserActorOptions {
  * `cryptographicKey` and `multikey` carry ids Fedify derived from the
  * dispatcher path. Under a stored actor id those would name keys the document
  * does not publish, and a peer that cannot dereference the key id in a
- * signature rejects the signature (doc-8).
+ * signature rejects the signature.
  */
 export async function userActor(
   context: RequestContext<unknown> | Context<unknown>,
@@ -274,7 +274,7 @@ const PREFIXED_ATTRIBUTION_DOMAINS = 'toot:attributionDomains';
 type ToJsonLdOptions = Parameters<Person['toJsonLd']>[0];
 
 /**
- * A `Person` that lists the domains Mastodon may credit it from (TASK-210).
+ * A `Person` that lists the domains Mastodon may credit it from.
  *
  * Fedify's `Person` has no `attributionDomains`, and drops what it does not
  * know when it builds the document, so the property is added to what it

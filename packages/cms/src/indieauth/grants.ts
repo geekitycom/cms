@@ -47,8 +47,8 @@ export const CONSENT_LIFETIME_MS = 30 * 60 * 1000;
  * The authorization server's short-lived state: codes and the consent screens
  * they come from.
  *
- * Held in memory rather than in `data/`. Decision-9 asks files for state a
- * restart must not lose, and these live for minutes: a restart costs whoever
+ * Held in memory rather than in `data/`. Files hold the state a restart must
+ * not lose, and these live for minutes: a restart costs whoever
  * was mid-sign-in one more try, which is less than writing every sign-in to
  * disk and sweeping it after.
  */

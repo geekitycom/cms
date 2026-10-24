@@ -102,7 +102,7 @@ export function selectRepresentation(
 
 /**
  * The media types that ask for the ActivityStreams document rather than for
- * one of the representations this layer serves (doc-3).
+ * one of the representations this layer serves.
  *
  * The `ld+json` spelling is listed without its
  * `profile="https://www.w3.org/ns/activitystreams"` parameter, because that is
@@ -308,11 +308,11 @@ export interface RepresentationResponseOptions {
   href: string;
   /** Which representations this resource offers, for the `Link` alternates. */
   available: readonly Representation[];
-  /** Ask search engines not to index even the HTML: an unlisted document's (TASK-227). */
+  /** Ask search engines not to index even the HTML: an unlisted document's. */
   noindex?: boolean | undefined;
   /**
    * Whole `Link` header values to advertise alongside the alternates — the
-   * webmention endpoint is the one that uses it (TASK-51).
+   * webmention endpoint is the one that uses it.
    *
    * Spelled by the caller rather than built here, because they are not
    * representations of this resource and nothing about them is this module's
@@ -321,7 +321,7 @@ export interface RepresentationResponseOptions {
   links?: readonly string[] | undefined;
   /**
    * Whether this response was drawn for one named reader rather than for
-   * everybody (TASK-103).
+   * everybody.
    *
    * A post page is the same for every reader, which is what lets a CDN or a
    * reverse proxy — the Docker deployment documents one — hold it and hand it
@@ -363,7 +363,7 @@ export function representationResponse(options: RepresentationResponseOptions): 
   // The Markdown and the JSON say what the HTML says, for programs rather
   // than readers. A search engine that indexed them would list the same page
   // two or three times, and the copies would compete with the one a reader
-  // should land on (TASK-148).
+  // should land on.
   if (options.representation !== 'html' || options.noindex === true) {
     headers.set('x-robots-tag', 'noindex');
   }
@@ -445,7 +445,7 @@ export function notAcceptableResponse(
 
 /**
  * A `Link` header advertising the representations other than the current one,
- * as doc-3 specifies.
+ * as the content negotiation design specifies.
  */
 export function alternateLinks(
   href: string,

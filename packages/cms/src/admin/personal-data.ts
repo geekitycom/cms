@@ -1,5 +1,5 @@
 /**
- * Tools > Personal data: erasing one person's data when they ask (TASK-135).
+ * Tools > Personal data: erasing one person's data when they ask.
  *
  * WordPress keeps the same job under the same menu. Somebody types the email
  * the person commented or wrote in under, is shown what the site holds for it,

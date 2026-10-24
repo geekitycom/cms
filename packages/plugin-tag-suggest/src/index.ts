@@ -1,5 +1,5 @@
 /**
- * `@geekity/plugin-tag-suggest` (decision-33): Suggest tags beside the
+ * `@geekity/plugin-tag-suggest`: Suggest tags beside the
  * editor's Tags field. A press asks the language model `@geekity/plugin-llm`
  * connects to for hashtags in two groups: the ones this post is about, and
  * the ones from a seed list of hashtags people follow that fit it, for reach.

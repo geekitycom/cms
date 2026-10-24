@@ -38,7 +38,7 @@ export const SCOPE_LABELS: Readonly<Record<Scope, string>> = {
 };
 
 /**
- * The authorization endpoint (TASK-158, TASK-159).
+ * The authorization endpoint.
  *
  * A GET is the person arriving from a client, and is handed, query and all,
  * to the consent screen. The screen is under `/admin` so that the admin's

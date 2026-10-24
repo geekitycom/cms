@@ -1,5 +1,5 @@
 /**
- * The llm service's one call (decision-33): messages in, a {@link Completion}
+ * The llm service's one call: messages in, a {@link Completion}
  * out. With a schema it asks for `json_schema` output and checks the reply
  * against the schema itself, whatever the provider claims, so a consumer never
  * parses a model's output.

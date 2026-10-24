@@ -30,13 +30,13 @@ import { SITE } from '../site/namespace.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 
 /**
- * The fediverse replies nobody delivered (TASK-321).
+ * The fediverse replies nobody delivered.
  *
  * Somebody answering a fediverse reply on one of this site's posts addresses
  * the person they answer, not the site, so their reply never reaches the
  * inbox. The server the reply they answered lives on lists it in that note's
  * `replies` collection, so the site reads those collections and logs what it
- * finds as the `Create` it was never sent, marked as fetched (decision-50).
+ * finds as the `Create` it was never sent, marked as fetched.
  * From there it is a reply like any other: threaded, counted, given a
  * `/replies/` key and a feed, and taken back by its author's `Delete`.
  *

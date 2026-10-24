@@ -2,7 +2,7 @@ import { isWebUrl } from './enclosure.ts';
 import { toUtcInstant } from './time.ts';
 
 /**
- * An event post (TASK-200, decision-32): a post whose front matter says when
+ * An event post: a post whose front matter says when
  * it starts, under the mf2 names an h-event uses. Its title is the event's
  * name and its body the description.
  *
@@ -13,11 +13,11 @@ import { toUtcInstant } from './time.ts';
  * location: Chicago Public Library, 400 S State St
  * ```
  *
- * `start` and `end` are UTC instants (decision-11); one written with no
+ * `start` and `end` are UTC instants; one written with no
  * offset is read as UTC. A `location` that is a web address is where to join
  * an online event, and any other words are the place. An event's location is
  * where the event is, public by nature, so it is the one location that lives
- * in front matter (decision-29 keeps the author's own out of it).
+ * in front matter (the author's own location stays out of it).
  */
 export const EVENT_KEYS = { start: 'start', end: 'end', location: 'location' } as const;
 

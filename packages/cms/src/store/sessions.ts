@@ -55,7 +55,7 @@ export interface CreateSessionInput {
   now?: Date | undefined;
 }
 
-/** How long a session id is, in bytes. 32 is the 256 bits doc-5 asks for. */
+/** How long a session id is, in bytes: 32 bytes is 256 bits. */
 export const SESSION_ID_BYTES = 32;
 
 export interface SessionStore {

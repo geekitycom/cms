@@ -32,7 +32,7 @@ const brotli = promisify(brotliCompress);
 const gzipAsync = promisify(gzip);
 
 /**
- * Compress text responses on the way out (TASK-139).
+ * Compress text responses on the way out.
  *
  * Mounted outside every other middleware, so it sees the body the client is
  * about to get. It adds `Vary: Accept-Encoding` to every text response,

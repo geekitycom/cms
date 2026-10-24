@@ -54,7 +54,7 @@ export const FEDERATION_PATH = `${ADMIN_PREFIX}/federation`;
  * Where Federation's own settings live: Federation > Settings.
  *
  * The relays used to be a child of Settings, which meant two menu entries
- * called Federation, neither saying the other existed (TASK-109). It is here
+ * called Federation, neither saying the other existed. It is here
  * instead, beside the followers it is about; the constant is here rather than
  * beside the page so the section's URL is written once.
  */
@@ -111,7 +111,7 @@ export interface MountFederationScreenOptions {
  * belong on it is a question for the content index — the posts carrying an
  * `activitypub.published`, which is the same thing as the posts a follower
  * holds a copy of — and how each of them last landed is a question for the outcome
- * cache. That order matters: the cache is disposable (decision-9), so a site
+ * cache. That order matters: the cache is disposable, so a site
  * that has just deleted its database sees every federated post listed with
  * nothing yet recorded against it, rather than an empty panel.
  */
@@ -220,8 +220,8 @@ export function mountFederationScreen(
 
   /**
    * Queue a resend of one post: as it now reads, to every follower and every
-   * accepted relay, with its webmentions (TASK-51). The job builds the
-   * activity from the file when it runs (decision-9), so a post edited between
+   * accepted relay, with its webmentions. The job builds the
+   * activity from the file when it runs, so a post edited between
    * the page load and the run goes out as it is then.
    */
   app.post(RESEND_PATH, async (c) => {
@@ -288,14 +288,14 @@ export interface DeliveryRow {
   } | null;
   /**
    * How the post's outgoing webmentions stand: how many linked pages were
-   * told, how many advertise no endpoint, and how many refused (TASK-51).
+   * told, how many advertise no endpoint, and how many refused.
    *
    * All zero for a post that links nowhere outside the site, and for one whose
    * links have never been sent — which, like the delivery counts, is what a
    * deleted database looks like rather than a fact about the post.
    */
   readonly webmentions: Record<WebmentionSendStatus, number>;
-  /** How each syndication target the post selects stands (TASK-155), in declaration order. */
+  /** How each syndication target the post selects stands, in declaration order. */
   readonly syndication: readonly SyndicationRow[];
 }
 
@@ -404,7 +404,7 @@ export interface ActorSummary {
 }
 
 /**
- * One user's actor as the screen shows it (decision-14).
+ * One user's actor as the screen shows it.
  *
  * The handle's host and the actor's id both come from the base URL's origin
  * rather than from the whole of it, because that is where the federation
@@ -412,7 +412,7 @@ export interface ActorSummary {
  * The id is built from {@link ACTOR_PATH} rather than from `authorHref` for
  * the same reason — it is the path Fedify dispatches the actor at, and the
  * screen should say what a peer would get. Which is also why a user with a
- * stored actor id (TASK-69) is shown under that: it is the id their followers
+ * stored actor id is shown under that: it is the id their followers
  * hold, and a screen naming the other one would be describing a document
  * nobody fetches.
  */
@@ -451,7 +451,7 @@ export function actorSummary(
  * The inbox types the screen shows, and the word each of them reads as.
  *
  * The follow traffic is deliberately not here. `Follow`, `Undo` and `Delete`
- * are already in the log because doc-4 records everything the inbox was told,
+ * are already in the log because it records everything the inbox was told,
  * but their effect is the follower list a few centimetres up the page: showing
  * them again would bury the three things that have nowhere else to appear.
  */
@@ -490,7 +490,7 @@ export interface InboxRow {
 }
 
 /**
- * Whether the inbox was sent a reply or the site read it (TASK-321).
+ * Whether the inbox was sent a reply or the site read it.
  *
  * A fetched reply was read from the `replies` collection of the note it
  * answers, and the backfill keeps only items whose `inReplyTo` names that
@@ -522,8 +522,8 @@ export interface InboxRowsContext {
  * The inbox log as the screen's "recent activity" list, newest first.
  *
  * Only {@link INBOX_INTERACTIONS} survive, and only as much of each row as the
- * screen shows: doc-4 stores the whole JSON-LD because it could not know what
- * a later phase would want, and this is that phase deciding.
+ * screen shows: the log stores the whole JSON-LD because it could not know
+ * what a later screen would want, and this is that screen deciding.
  */
 export function inboxRows(
   activities: readonly InboxActivity[],
@@ -599,7 +599,7 @@ function replyObject(
 /**
  * Resolve one of the site's own ActivityStreams ids to the post behind it.
  *
- * A post's id is its permalink (decision-13), so this is a lookup by URL
+ * A post's id is its permalink, so this is a lookup by URL
  * against the content index: an id from anywhere else — a like of somebody
  * else's post that reached the shared inbox, a reply to a reply — is `null`
  * rather than a guess, and so is one whose path the index has never heard of,

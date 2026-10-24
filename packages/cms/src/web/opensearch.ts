@@ -8,7 +8,7 @@ import type { ConditionalHeaders } from './negotiate.ts';
 import { SEARCH_PATH } from './search.ts';
 
 /**
- * The OpenSearch description (TASK-204): what a browser reads to offer the
+ * The OpenSearch description: what a browser reads to offer the
  * site's own search from its address bar.
  *
  * A fixed route at the root for the reason the manifest is one, so no

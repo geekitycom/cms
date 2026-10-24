@@ -8,7 +8,7 @@ import { messageOf } from './util/errors.ts';
 /**
  * The one SQLite file a site has, and the rules for opening it.
  *
- * Everything in it is derived (decision-9): the content index is a reading of
+ * Everything in it is derived: the content index is a reading of
  * `content/`, the followers and the inbox indexes are a reading of
  * `content/_data/federation/`, and what is left — sessions, delivery outcomes,
  * the relay handshake, the scheduler's watermark — is a cache a site may lose.

@@ -60,8 +60,8 @@ export interface CreateMailTemplatesOptions {
   /**
    * Which theme the messages are read from, asked per message.
    *
-   * A source rather than a directory because mail is part of the theme
-   * (decision-15): a site that changes theme changes the words its password
+   * A source rather than a directory because mail is part of the theme:
+   * a site that changes theme changes the words its password
    * resets and moderation notices are written in, and the message after the
    * change should be the new theme's rather than the next boot's.
    */
@@ -98,7 +98,7 @@ export interface MailTemplates {
    *
    * A plain text body is not HTML. Escaping it turns the `&` between two query
    * parameters into `&amp;` — which is what a one-click moderation link is
-   * made of (TASK-55) — and an apostrophe in somebody's name into `&#39;`. A
+   * made of — and an apostrophe in somebody's name into `&#39;`. A
    * site adding a filter that both halves should have adds it to both.
    */
   readonly plainEnvironment: Environment;

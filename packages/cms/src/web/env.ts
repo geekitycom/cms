@@ -55,7 +55,7 @@ export type RequestIndex = IndexClock &
 export interface GeekityEnv {
   Variables: {
     /**
-     * Whether the site is in maintenance mode (TASK-130), and until when: the
+     * Whether the site is in maintenance mode, and until when: the
      * gate in front of the public site and `/healthz` read the same answer.
      */
     maintenance: MaintenanceSwitch;
@@ -84,20 +84,20 @@ export interface GeekityEnv {
     conversation: ConversationReader;
     /**
      * The remote avatars a conversation shows, fetched and served from this
-     * site so a reader's browser never asks the server they live on (TASK-134).
+     * site so a reader's browser never asks the server they live on.
      */
     avatars: AvatarService;
     fonts: FontStore;
     /**
      * The profiles of the actors who are not followers, which the inbox asks
-     * for when one of them is heard from (TASK-184).
+     * for when one of them is heard from.
      */
     actorProfiles: ActorProfileService;
     /**
      * Report a write this request made to the content directory.
      *
      * The admin corrects the index as soon as the bytes land rather than
-     * waiting for the watcher (doc-1), which means the watcher's later re-read
+     * waiting for the watcher, which means the watcher's later re-read
      * of that file finds a matching hash and emits nothing. A handler that
      * writes therefore has to say so, or no subscriber — a site's
      * `onPublish` hook, the federation's delivery — ever hears about an admin
@@ -109,7 +109,7 @@ export interface GeekityEnv {
      * index: the scan `serve()` runs before it listens, on demand.
      *
      * Here so that Tools > Content index can rebuild the index in place
-     * (TASK-95) by calling the very scan boot calls, rather than by growing a
+     * by calling the very scan boot calls, rather than by growing a
      * second thing that knows how to read a content directory. Nothing else in
      * a request has any business asking for one: the watcher keeps the index
      * in step, and an admin write corrects it as it lands.
@@ -137,14 +137,14 @@ export interface GeekityEnv {
     webmentions: WebmentionService;
     /**
      * The contexts of the pages posts cite, so a save can name an untitled
-     * new post after the page it cites (TASK-250).
+     * new post after the page it cites.
      */
     replyContexts: ReplyContextService;
-    /** Resolves the fediverse handles a save names before it is written (TASK-194). */
+    /** Resolves the fediverse handles a save names before it is written. */
     learnHandles: HandleLearner;
     siteRecords: SiteRecords;
     /**
-     * The site's outgoing email (TASK-53), so a handler can send one: the
+     * The site's outgoing email, so a handler can send one: the
      * settings screen's Send test email button, and the password resets,
      * moderation notices and contact messages that come after it.
      *
@@ -153,7 +153,7 @@ export interface GeekityEnv {
      */
     mail: MailService;
     /**
-     * Who to tell about a comment (TASK-55): the moderators when one is
+     * Who to tell about a comment: the moderators when one is
      * waiting, and the commenter upthread when a reply to them is approved.
      *
      * On the context because three different handlers set a comment moving —
@@ -164,8 +164,8 @@ export interface GeekityEnv {
      */
     notifications: CommentNotifier;
     /**
-     * The redirects the site declares in `content/_data/redirects.json`
-     * (TASK-128), read from the file as it is at this request.
+     * The redirects the site declares in `content/_data/redirects.json`,
+     * read from the file as it is at this request.
      */
     redirects: RedirectSource;
     /**
@@ -184,25 +184,25 @@ export interface GeekityEnv {
      * One more source the admin's `form-action` allows on this response, or
      * `undefined` for none. The IndieAuth consent screen names the client's
      * redirect origin here, because a browser holds the redirect after a form
-     * post to the page's `form-action` as well (TASK-158).
+     * post to the page's `form-action` as well.
      */
     cspFormAction: string | undefined;
     /**
      * Whether another site may frame this response. Only the embed view
-     * (TASK-208) says so, having sent a `frame-ancestors` of its own; the
+     * says so, having sent a `frame-ancestors` of its own; the
      * baseline then leaves `X-Frame-Options` off it, whatever the site's
      * `securityHeaders` say, because that header cannot name every origin.
      */
     frameable: boolean | undefined;
     /**
      * The authorization server's codes and the consent screens waiting on an
-     * answer (TASK-158), shared by the consent screen that issues a code and
+     * answer, shared by the consent screen that issues a code and
      * the endpoints that redeem one.
      */
     indieauth: IndieAuthState;
-    /** Every installed plugin and its dependency graph (decision-33). */
+    /** Every installed plugin and its dependency graph. */
     plugins: PluginRegistry;
-    /** The supervisor `geekity serve` runs this CMS under, or `undefined` (TASK-288). */
+    /** The supervisor `geekity serve` runs this CMS under, or `undefined`. */
     supervision: Supervision | undefined;
     /**
      * The plugins running for this request: enabled in `site.json`, available,
@@ -213,13 +213,13 @@ export interface GeekityEnv {
     pageTags: DrawnPageTags;
     /**
      * What an IndieAuth or Micropub handler adds to the activity log's entry
-     * for this request (TASK-221), beyond what its response shows.
+     * for this request, beyond what its response shows.
      * `undefined` until a handler says something.
      */
     activityNote: ActivityNote | undefined;
     /**
-     * Who the public site's session names, set once at the public site's door
-     * (TASK-183): the page drawn for them carries the admin bar and is theirs
+     * Who the public site's session names, set once at the public site's door:
+     * the page drawn for them carries the admin bar and is theirs
      * alone. `undefined` for an anonymous reader and inside `/admin`.
      */
     signedIn: SignedInAccount | undefined;

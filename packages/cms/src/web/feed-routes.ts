@@ -115,7 +115,7 @@ export function comments(c: Context<GeekityEnv>, document: Document | undefined)
 }
 
 /**
- * The feed of one item's direct replies (TASK-324): a post's or page's, or a
+ * The feed of one item's direct replies: a post's or page's, or a
  * reply's, so a reader can walk a thread one level at a time through
  * `source:comments`. An item nobody answered has an empty feed; a segment
  * naming nothing a reader can see 404s.
@@ -148,9 +148,9 @@ export function repliesFeed(c: Context<GeekityEnv>, segment: string): Response {
 }
 
 /**
- * One native comment on a page of its own (TASK-318), answering as its post
+ * One native comment on a page of its own, answering as its post
  * would: 410 once the post is deleted, and 404 while it is not served. It is
- * never listed anywhere, so it is noindex. Its Markdown (TASK-477) is at
+ * never listed anywhere, so it is noindex. Its Markdown is at
  * `/comment/{key}/index.md` and by `Accept`.
  */
 export function commentPage(

@@ -5,8 +5,7 @@ import type { ImageConfig } from '../images/paths.ts';
 
 /**
  * The picture a link to a page is shown with when somebody posts it: the
- * `og:image` and the Twitter card's image, and everything said about it
- * (TASK-146).
+ * `og:image` and the Twitter card's image, and everything said about it.
  */
 export interface ShareImage {
   /** Where it is, as the front matter or the site setting wrote it. */
@@ -39,7 +38,7 @@ export interface ShareImageFallback {
  * the media library says about the upload.
  *
  * The size is read off the variant sidecar, never off the file, so a render
- * never opens an image (decision-10). A picture with no sidecar has no size
+ * never opens an image. A picture with no sidecar has no size
  * and gets the small card until one has been derived.
  */
 export function shareImage(input: {

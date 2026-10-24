@@ -22,7 +22,7 @@ export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
  * How one attempt to deliver one activity to one recipient ended, and what the
  * activity was.
  *
- * The whole of what SQLite keeps about anything the site has sent (decision-9).
+ * The whole of what SQLite keeps about anything the site has sent.
  * No payload goes with it: an activity is rebuilt from the post's file at the
  * moment somebody asks for it to go again, so storing the bytes that went out
  * last time would only be a second, staler answer to the same question. What

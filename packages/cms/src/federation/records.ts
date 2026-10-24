@@ -18,8 +18,8 @@ import { recordFollowerChange } from './follower-history.ts';
 /**
  * The two things an ActivityPub site cannot regenerate, as files it publishes.
  *
- * decision-9 makes the filesystem the source of truth for everything durable,
- * and for federation that is the followers and the log of what the inbox was
+ * The filesystem is the source of truth for everything durable, and for
+ * federation that is the followers and the log of what the inbox was
  * told. Both live under `content/_data/federation/`, which puts them in git
  * beside the posts, hands them to an Eleventy build of the same directory as
  * `federation.followers` and `federation.inbox`, and leaves SQLite holding
@@ -52,9 +52,9 @@ export const INBOX_DIRECTORY = `${FEDERATION_DATA_DIRECTORY}/inbox`;
  * The directory one user's federation files live in, relative to the content
  * directory: `_data/federation/{username}`.
  *
- * decision-14 makes every user an actor, and an actor's followers are its own
- * — an actor that was followed and forgotten simply stops hearing from the
- * site — so the one file doc-4 had becomes one per user. The name is the
+ * Every user is an actor, and an actor's followers are its own — an actor that
+ * was followed and forgotten simply stops hearing from the site — so there is
+ * one followers file per user rather than one for the site. The name is the
  * username verbatim, because it is also the name in the actor's id and in the
  * key files, and a directory nobody can match to a person would be worse than
  * one with an unusual name in it.
@@ -81,7 +81,7 @@ export function followersFile(contentDir: string, username: string): string {
  * Every user the content directory holds federation files for, sorted.
  *
  * Read from the directory rather than from `data/users.json`, because
- * decision-9 makes the files the truth: a rebuilt database has to put back
+ * the files are the truth: a rebuilt database has to put back
  * exactly what is on disk, including the followers of a user whose account was
  * removed — deleting the account is not the same act as unfollowing everybody
  * on their behalf, and only one of the two can be taken back.
@@ -143,7 +143,7 @@ export interface FederationRecords {
  * yet has. Anything else that is not a list of deliverable followers throws,
  * naming the file: this is read at boot to build the index, and a damaged file
  * read as "no followers" would quietly unfollow everybody — the one thing
- * doc-4 says an ActivityPub site can never take back.
+ * an ActivityPub site can never take back.
  */
 export function readFollowers(contentDir: string, username: string): Follower[] {
   const file = followersFile(contentDir, username);
@@ -258,15 +258,15 @@ export interface InboxLine {
    * The user it was addressed to, or `null` for one delivered to the shared
    * inbox without naming an actor of this site.
    *
-   * decision-14 makes every user an actor, so "what the inbox was told" is no
+   * Every user is an actor, so "what the inbox was told" is no
    * longer one question: a `Follow` is a follow *of somebody*, and a reply is
    * a reply to somebody's post. The log stays one chronological record, as it
    * is a record of what this server was told, and each line says whose it was.
    */
   readonly recipient: string | null;
   /**
-   * Whether the site read it off a remote server rather than was told it
-   * (TASK-321): a reply found in another reply's `replies` collection, which
+   * Whether the site read it off a remote server rather than was told it:
+   * a reply found in another reply's `replies` collection, which
    * nobody delivered. Absent from the file for everything delivered.
    */
   readonly fetched: boolean;
@@ -293,9 +293,9 @@ export function readInboxLog(contentDir: string): InboxLine[] {
  * Record one inbound activity: append it to the month's log and index it.
  *
  * `json` is the activity as compacted JSON-LD, which is what the handler has
- * and what doc-4 says to keep whole — nothing is picked out of it here beyond
- * the columns the index pages and counts by, because what a later phase will
- * want out of an activity is not knowable from here.
+ * and what the federation design keeps whole — nothing is picked out of it here
+ * beyond the columns the index pages and counts by, because what a later phase
+ * will want out of an activity is not knowable from here.
  *
  * An activity with no actor is dropped and nothing is written: Fedify has
  * already refused anything whose signature does not match its actor, so one
@@ -346,7 +346,7 @@ export async function appendInboxActivity(
 
 /**
  * Take logged activities out of the log and the index: what a fetched reply
- * the remote server no longer lists comes to (TASK-321). Each line goes from
+ * the remote server no longer lists comes to. Each line goes from
  * the month file its row says it arrived in, under that file's lock.
  */
 export async function removeInboxActivities(
@@ -418,7 +418,7 @@ export interface FederationIndexReport {
 /**
  * Rebuild the followers and inbox indexes from the files.
  *
- * This is what makes `data/geekity.db` disposable for federation (decision-9):
+ * This is what makes `data/geekity.db` disposable for federation:
  * the two tables hold nothing but what these files say, so every boot throws
  * away what they hold and reads them again. That is also what makes editing
  * `followers.json` by hand and restarting a supported thing to do, and why a
@@ -450,16 +450,16 @@ export function rebuildFederationIndexes(records: FederationRecords): Federation
 /**
  * Write an older site's inbox rows out as files, once.
  *
- * Before decision-9 the table was the source rather than an index of one, so a
- * site upgrading has rows that no file carries. The rule is the simple one the
- * other decision-9 migrations use, and it is simple here because the log did
- * not exist as a file at all before: a log that is already there wins outright
- * and is not touched, and rows are written out only where there is none. The
- * lines it writes name no recipient, because the site they came from had one
- * actor and it is gone (decision-14).
+ * Before the files became the source of truth the table was the source rather
+ * than an index of one, so a site upgrading has rows that no file carries. The
+ * rule is the simple one the other file migrations use, and it is simple here
+ * because the log did not exist as a file at all before: a log that is already
+ * there wins outright and is not touched, and rows are written out only where
+ * there is none. The lines it writes name no recipient, because the site they
+ * came from had one actor and it is gone.
  *
- * The site actor's followers are **not** migrated. decision-14 replaces one
- * site actor with one actor per user, and there is no honest answer to which
+ * The site actor's followers are **not** migrated. The one site actor was
+ * replaced with one actor per user, and there is no honest answer to which
  * user inherited the followers of an account that no longer exists: a follow
  * is an agreement with somebody, and handing it to whoever happens to have the
  * lowest user id would be answering it for them. A site that federated as the
@@ -616,8 +616,8 @@ function inboxJsonl(lines: readonly InboxLine[]): string {
         `${JSON.stringify({
           receivedAt: line.receivedAt,
           // Absent rather than null for a shared-inbox delivery that named
-          // nobody, so a log written before decision-14 and one written after
-          // it read the same.
+          // nobody, so a log written when the site had one actor and one
+          // written since read the same.
           ...(line.recipient === null ? {} : { recipient: line.recipient }),
           ...(line.fetched ? { fetched: true } : {}),
           ...JSON.parse(line.json),

@@ -1,5 +1,5 @@
 /**
- * Who is waiting on a reload (TASK-288). One reload runs at a time, so a
+ * Who is waiting on a reload. One reload runs at a time, so a
  * reload asked for while one is under way waits for the next: it is taken up
  * when that next reload begins, and answered when that one ends.
  */

@@ -144,7 +144,7 @@ export function parseChanges(
 /**
  * The editor form an update leaves the post with: the form the editor would
  * load, with only the fields the changed properties own taken from the create
- * mapping (decision-27), so whatever Micropub cannot see stays as it is. A
+ * mapping, so whatever Micropub cannot see stays as it is. A
  * change to a property the site does not understand changes what it keeps of
  * the post, and an update that names none leaves that alone.
  */

@@ -10,8 +10,8 @@
 
 /**
  * Dave Winer's `source` namespace, which RSS 2.0 feeds here declare so an item
- * can carry the Markdown it was written from. TASK-38's `source:cloud` is the
- * same namespace.
+ * can carry the Markdown it was written from. The rssCloud `source:cloud`
+ * element is in the same namespace.
  */
 export const SOURCE_NAMESPACE = 'https://source.scripting.com/';
 
@@ -112,10 +112,10 @@ export function optionalElement(name: string, text: string | undefined, depth = 
   return text === undefined ? [] : [element(name, text, depth)];
 }
 
-/** The Podcasting 2.0 namespace: alternate versions, transcripts and the channel's medium (TASK-213). */
+/** The Podcasting 2.0 namespace: alternate versions, transcripts and the channel's medium. */
 export const PODCAST_NAMESPACE = 'https://podcastindex.org/namespace/1.0';
 
-/** Apple's iTunes namespace, of which a feed prints only `itunes:duration` (TASK-213). */
+/** Apple's iTunes namespace, of which a feed prints only `itunes:duration`. */
 export const ITUNES_NAMESPACE = 'http://www.itunes.com/dtds/podcast-1.0.dtd';
 
 /** The Creative Commons RSS module, whose `license` element names an item's or a channel's license. */

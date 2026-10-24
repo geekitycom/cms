@@ -17,13 +17,13 @@ export interface DocumentKind {
   /** Whether a document of this kind is filed under categories. */
   categorised: boolean;
   /**
-   * Whether the editor offers the `eleventyExcludeFromCollections` flag. doc-2
-   * mirrors it for pages that should not list; a post is in the archive by
-   * definition and has no use for it.
+   * Whether the editor offers the `eleventyExcludeFromCollections` flag. The
+   * content format mirrors it for pages that should not list; a post is in the
+   * archive by definition and has no use for it.
    */
   excludable: boolean;
   /**
-   * Whether the editor offers the contact form (TASK-56). Pages only: a form
+   * Whether the editor offers the contact form. Pages only: a form
    * for writing to the site belongs on a standing page rather than under one
    * post out of a thousand.
    *
@@ -39,11 +39,11 @@ export interface DocumentKind {
   replies: boolean;
   /**
    * Whether the editor records where it was written, which is kept beside it
-   * in `data/locations.json` rather than in its file (decision-29).
+   * in `data/locations.json` rather than in its file.
    */
   located: boolean;
   /**
-   * Whether it is a fediverse object whose id is its permalink (decision-13),
+   * Whether it is a fediverse object whose id is its permalink,
    * so a moved one keeps its old URL as its id rather than as its feed guid.
    */
   federated: boolean;

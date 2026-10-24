@@ -1,6 +1,6 @@
 /**
  * Appearance > Themes: what the site is wearing, what else is on disk, and the
- * one button that changes it (decision-15).
+ * one button that changes it.
  *
  * The theme is a setting in `content/_data/site.json` like every other, and it
  * is deliberately on no settings page. A settings page is a form of fields
@@ -8,8 +8,8 @@
  * do to a row is press it.
  *
  * The listing is a walk of the themes directory on every request, for the
- * reason the media screen walks `content/uploads/`: the directory is the truth
- * (decision-9). A theme copied in over ssh or pulled down by git is on the
+ * reason the media screen walks `content/uploads/`: the directory is the truth.
+ * A theme copied in over ssh or pulled down by git is on the
  * screen the next time it is asked for, with no restart and nothing to index.
  */
 
@@ -70,7 +70,7 @@ export interface ThemeCard {
 /**
  * The cards for one site, packaged theme first.
  *
- * First because it is the floor every other theme is laid over (decision-15):
+ * First because it is the floor every other theme is laid over:
  * a site theme ships what it changes and inherits the rest, so the packaged
  * one is not a peer in the list but the thing underneath all of them. The
  * site's own follow in directory order, which is the order they are named in.
@@ -126,7 +126,7 @@ export interface MountAppearanceOptions {
  * Activating is one write of `content/_data/site.json` and nothing else. There
  * is no cache to bust and nothing to tell: the `ThemeSource` asks the file
  * what the site has chosen on the next render, so the next request out of the
- * public site is already wearing it (decision-15).
+ * public site is already wearing it.
  */
 export function mountAppearanceScreen(
   app: Hono<GeekityEnv>,

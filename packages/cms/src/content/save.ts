@@ -24,7 +24,7 @@ export interface ContentFilePathInput {
 /**
  * Where a document's file goes, relative to the content directory.
  *
- * doc-2: a post filename carries its date so the directory sorts on disk, a
+ * A post filename carries its date so the directory sorts on disk, a
  * page filename does not. Neither is ever parsed for a URL — the front matter's
  * `permalink` is what decides that — so renaming a file changes nothing but
  * the sort order.
@@ -54,7 +54,7 @@ export interface FreeSlugOptions extends ContentFilePathInput {
 /**
  * The given slug, or the first numbered variant of it that neither the content
  * directory nor the index has already claimed. A trashed document's URL is free
- * to take (TASK-195).
+ * to take.
  *
  * Both are checked because they can disagree for a moment: a file the watcher
  * has not picked up yet is on disk and not in the index, and a file that was
@@ -96,7 +96,7 @@ export interface SaveDocumentOptions {
 }
 
 /**
- * The admin's write path, per doc-1: serialize, write the file atomically, then
+ * The admin's write path: serialize, write the file atomically, then
  * update the index directly rather than waiting for the watcher.
  *
  * The watcher event that follows the rename is a no-op, because the hash
@@ -125,7 +125,7 @@ export async function saveDocument(options: SaveDocumentOptions): Promise<Docume
 /**
  * The document with every date it carries turned into a UTC instant.
  *
- * decision-11: a date the CMS writes ends in `Z`, whatever the file it came
+ * A date the CMS writes ends in `Z`, whatever the file it came
  * from spelled. That is done here, once, rather than in each of the three
  * callers — the editor, a taxonomy rewrite and the federation's stamp — so
  * every write converts and none of them has to remember to. It is done before

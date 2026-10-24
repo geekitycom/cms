@@ -78,7 +78,7 @@ export function createThemeEnvironment(deps: RenderDeps): ThemeEnvironment {
  * What a page's head links: the site's icons, its fonts, the theme's colours
  * and the index for language models.
  *
- * The icons are computed here rather than in the layout (TASK-81, TASK-147)
+ * The icons are computed here rather than in the layout
  * because only this side knows where a derived file is served and whether the
  * site can derive one at all: a theme that was handed the icon's path would
  * have to build the URL itself and would link 404s on a site with image
@@ -94,7 +94,7 @@ function headContext(
     icons,
     ...(fonts.length === 0 ? {} : { fonts: pageFontsContext(fonts) }),
     theme: { ...chosen.colors, ...siteColors(site, chosen.schemes) },
-    // Where the index for language models is (TASK-149), while the site
+    // Where the index for language models is, while the site
     // serves one, so a theme asks `{% if llmsTxt %}`.
     ...(site['llmsTxt'] === false ? {} : { llmsTxt: LLMS_TXT_PATH }),
   };
@@ -113,11 +113,11 @@ function headContext(
  *
  * Every menu the site stores is here, keyed by name, not only the ones the
  * theme declares an area for: a name nothing loops over is rendered nowhere
- * and kept (TASK-107), and the declaration in `theme.json` is for the screen
+ * and kept, and the declaration in `theme.json` is for the screen
  * that edits menus rather than a filter on the render.
  *
  * Who the page is by, for the bio, the `rel="me"` links and the structured
- * data (decision-16), is the site's own author only when the page is about
+ * data, is the site's own author only when the page is about
  * nobody in particular: a document's byline and an author archive's person are
  * put on the context by the callers, and win by going on last.
  */
@@ -127,24 +127,24 @@ function chromeContext(
   icons: readonly SiteIcon[],
   siteOwner: AuthorContext | undefined,
 ): Record<string, unknown> {
-  // The icon a header prints before the title, when the site asks for one
-  // (TASK-486): the SVG itself if it is one, which is sharp at any size.
+  // The icon a header prints before the title, when the site asks for one:
+  // the SVG itself if it is one, which is sharp at any size.
   const headerIcon = site['headerIcon'] === true ? svgElseTouchIconHref(icons) : undefined;
   const owner = context['siteAuthor'] === undefined ? siteOwner : undefined;
   return {
     menus: navigationMenus({ site, url: currentUrl(context) }),
     ...(headerIcon === undefined ? {} : { headerIcon }),
     ...(owner === undefined ? {} : { siteAuthor: owner }),
-    // Who the homepage speaks for, on a site whose author is a user (TASK-180,
-    // TASK-192): the bio on the homepage and the `rel="me"` claims between
-    // it and their archive. Every page carries it, because the archive is
-    // where the claim back is printed. A site with several authors has none.
+    // Who the homepage speaks for, on a site whose author is a user: the bio on
+    // the homepage and the `rel="me"` claims between it and their archive.
+    // Every page carries it, because the archive is where the claim back is
+    // printed. A site with several authors has none.
     ...(siteOwner === undefined ? {} : { soloAuthor: siteOwner }),
   };
 }
 
 /**
- * The picture a shared link shows (TASK-146), here for the reason the icons
+ * The picture a shared link shows, here for the reason the icons
  * are: its alt text and its size are in files only this side reads.
  */
 function shareImageContext(
@@ -157,7 +157,7 @@ function shareImageContext(
     (value): value is string => typeof value === 'string' && value !== '',
   );
   const by = (context['siteAuthor'] ?? siteOwner) as AuthorContext | undefined;
-  // A photo post is shown by its first photo (TASK-166).
+  // A photo post is shown by its first photo.
   const [photo] = (context['photos'] ?? []) as readonly PhotoContext[];
   const image = shareImage({
     config,

@@ -42,7 +42,7 @@ export const PINNED_CLAUSE = `COALESCE(json_extract(extra, '$.${PINNED_FRONT_MAT
  * The clause that picks out a document some follower holds a copy of: one
  * whose `activitypub` block records when it was announced.
  *
- * `published` rather than `id`, because after decision-13 a post's id is its
+ * `published` rather than `id`, because a post's id is its
  * permalink and is never written into the file: the announcement date is the
  * only mark a delivery leaves, and it is the one thing that says a follower
  * was ever told. The block is stored as JSON rather than shredded into

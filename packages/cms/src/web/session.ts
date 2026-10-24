@@ -8,7 +8,7 @@ import type { GeekityEnv } from './env.ts';
 
 /**
  * Name of the cookie holding the session id over plain http, and the name it
- * had everywhere before TASK-132. Under https the cookie is
+ * had everywhere before the `__Host-` cookie. Under https the cookie is
  * {@link SECURE_SESSION_COOKIE}; {@link sessionCookieName} picks.
  */
 export const SESSION_COOKIE = 'geekity_session';
@@ -27,10 +27,10 @@ export const SECURE_SESSION_COOKIE = `__Host-${SESSION_COOKIE}`;
  * Whether the session cookie gets `Secure`, which is decided by the site's
  * base URL rather than being hard-coded.
  *
- * doc-5 says the cookie is always `Secure`. It is not, quite: a `Secure`
- * cookie is dropped on a plain-HTTP origin, so a site being developed on
- * `http://localhost:3000` could never hold a login. `Secure` therefore goes on
- * whenever the site says it is served over https, which covers every
+ * The admin design says the cookie is always `Secure`. It is not, quite: a
+ * `Secure` cookie is dropped on a plain-HTTP origin, so a site being developed
+ * on `http://localhost:3000` could never hold a login. `Secure` therefore goes
+ * on whenever the site says it is served over https, which covers every
  * deployment, and comes off for local http, which is the only case it would
  * have broken.
  */
@@ -45,8 +45,8 @@ export function usesSecureCookies(config: Pick<ResolvedConfig, 'baseUrl'>): bool
 /**
  * Where the session cookie is scoped.
  *
- * It was `/admin`, which kept it off every public request. TASK-103 needs the
- * public site to know who is reading it — the comment form under a post is
+ * It was `/admin`, which kept it off every public request. But the public
+ * site needs to know who is reading it — the comment form under a post is
  * drawn for the person signed in rather than for a stranger — and a cookie
  * scoped to `/admin` is one a browser never sends to a permalink, so the
  * feature could only ever have worked in a test. `SameSite=Lax` still keeps it
@@ -100,7 +100,7 @@ export function sessionIdFrom(c: Context<GeekityEnv>): string | undefined {
 
 /**
  * Retire a session cookie set under the old name before the site moved to
- * `__Host-` (TASK-132), and answer whether it was somebody's login.
+ * `__Host-`, and answer whether it was somebody's login.
  *
  * The old cookie is never taken as a session under https: accepting it would
  * let a sibling subdomain plant a session again, which is the one thing the

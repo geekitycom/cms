@@ -1,6 +1,6 @@
 /**
  * A short log of what apps sent to the IndieAuth and Micropub endpoints, and
- * what they were answered (TASK-221), so a site owner can see why a client
+ * what they were answered, so a site owner can see why a client
  * failed to sign in or to post without reading the client's source.
  *
  * One entry per request to the authorization endpoint (the request as it

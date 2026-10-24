@@ -39,8 +39,8 @@ export type DocumentChangeHook = (change: DocumentChange) => unknown;
 export type AccessLogWriter = (line: string) => void;
 
 /**
- * The federation stores and guards a site may swap, which decision-5 promised
- * would be configuration rather than a redesign.
+ * The federation stores and guards a site may swap, as configuration rather
+ * than a redesign.
  *
  * Everything here has a default that is right for a single-process personal
  * blog; a site only names one when it has outgrown that, and a test names one
@@ -49,12 +49,12 @@ export type AccessLogWriter = (line: string) => void;
 export interface FederationOverrides {
   /**
    * Fedify's cache and idempotence store. Defaults to an in-memory one, per
-   * decision-5: nothing that has to survive a restart lives in it.
+   * Nothing that has to survive a restart lives in it.
    */
   kv?: KvStore | undefined;
   /**
    * The delivery and inbox queue. Defaults to a `SqliteMessageQueue` in
-   * `data/queue.sqlite` (decision-57), which keeps what waits across a restart.
+   * `data/queue.sqlite`, which keeps what waits across a restart.
    *
    * `null` means no queue at all: an inbound activity is handled, and an
    * outbound one delivered, before the request that carried it is answered.
@@ -73,7 +73,7 @@ export interface FederationOverrides {
 }
 
 /**
- * The admin job queue's two swap points (decision-54), and the jobs a site
+ * The admin job queue's two swap points, and the jobs a site
  * adds to the CMS's own.
  */
 export interface JobOverrides {
@@ -90,7 +90,7 @@ export interface JobOverrides {
 }
 
 /**
- * The mail pieces a site may swap (TASK-53).
+ * The mail pieces a site may swap.
  *
  * Everything here has a default that is right for a personal blog: the
  * provider comes from the settings screen and `data/mail.json`, a refused
@@ -121,7 +121,7 @@ export interface MailOverrides {
 }
 
 /**
- * The IndexNow pieces a site may swap (TASK-151).
+ * The IndexNow pieces a site may swap.
  *
  * Whether IndexNow is on is a setting; these are how it sends. A test names
  * `fetch` so that nothing it publishes reaches a search engine, and `batchMs`
@@ -155,7 +155,7 @@ export interface GeekityConfig {
   dataDir?: string;
   /**
    * Where this site's themes are, one directory per theme, each with a
-   * `theme.json` (decision-15). Default `<cwd>/themes`. Overridden by
+   * `theme.json`. Default `<cwd>/themes`. Overridden by
    * `GEEKITY_THEMES_DIR`. It need not exist: a site using the packaged theme
    * has no themes of its own.
    *
@@ -207,7 +207,7 @@ export interface GeekityConfig {
    * Overridden by `GEEKITY_IMAGE_OPTIMIZATION`.
    *
    * Turning it off changes nothing on disk under `content/uploads/` — the
-   * original was always the only source of truth (decision-10) — and nothing
+   * original was always the only source of truth — and nothing
    * about the feeds. The pages go back to the plain `<img>` the Markdown
    * asked for, and no encoding happens on upload.
    */
@@ -307,7 +307,7 @@ export interface GeekityConfig {
   seedContent?: boolean;
   /**
    * Keep the site in maintenance mode for the life of the process: public
-   * pages, feeds and inbox deliveries answer 503 (TASK-130). Default `false`.
+   * pages, feeds and inbox deliveries answer 503. Default `false`.
    * Overridden by `GEEKITY_MAINTENANCE`.
    *
    * The boot-time switch, for a site that must come up already down. The
@@ -318,7 +318,7 @@ export interface GeekityConfig {
    */
   maintenance?: boolean;
   /**
-   * Start the site in dev mode (TASK-295, decision-35): nothing it does is sent
+   * Start the site in dev mode: nothing it does is sent
    * to followers, relays, linked sites, feed hubs, search engines or inboxes,
    * and each held side effect is recorded in `data/dev-mode.jsonl`. Default
    * `false`. Overridden by `GEEKITY_DEV_MODE`.
@@ -348,7 +348,7 @@ export interface GeekityConfig {
    * `X-Frame-Options` whatever this says, so nothing here can loosen them.
    * The post editor sends this `Permissions-Policy` with `geolocation=()`
    * changed to `geolocation=(self)`, for its Use my location button.
-   * The embed view at `/_geekity/embed` (TASK-208) keeps its own
+   * The embed view at `/_geekity/embed` keeps its own
    * `Content-Security-Policy`, whose `frame-ancestors *` lets any site frame
    * it, and never carries `X-Frame-Options`, even one configured here, so
    * nothing here can tighten it either.
@@ -370,7 +370,7 @@ export interface GeekityConfig {
   onPublish?: DocumentChangeHook;
   /**
    * A third-party opinion on native comments: Akismet, or anything else that
-   * answers the same three questions (TASK-50).
+   * answers the same three questions.
    *
    * The whole of the CMS's knowledge of such a service. It is asked about
    * every comment that gets past the honeypot, the form's age and the rate
@@ -379,26 +379,26 @@ export interface GeekityConfig {
    * that is down never stops a site taking comments. The moderation screen
    * tells it when a human disagrees.
    *
-   * Naming one here wins outright over the Akismet checker the package ships
-   * (TASK-52): `createCms` builds that only when this is not set, so a site
+   * Naming one here wins outright over the Akismet checker the package ships:
+   * `createCms` builds that only when this is not set, so a site
    * that wrote a checker gets the checker it wrote whether or not there is a
    * key in `data/akismet.json`.
    */
   commentChecker?: CommentChecker;
   /**
-   * How the site sends email (TASK-53). Every field has a default; see
+   * How the site sends email. Every field has a default; see
    * {@link MailOverrides}.
    */
   mail?: MailOverrides;
   /**
-   * How the site submits URLs to IndexNow (TASK-151). Every field has a
+   * How the site submits URLs to IndexNow. Every field has a
    * default; see {@link IndexNowOverrides}.
    */
   indexNow?: IndexNowOverrides;
   /**
    * What the CMS reads the time from.
    *
-   * A post's date decides whether it is public yet (TASK-44), so the index and
+   * A post's date decides whether it is public yet, so the index and
    * the scheduler both need a clock, and it is one clock so they cannot
    * disagree. Defaults to {@link systemClock}. A site has no reason to name
    * one; a test that wants to be somewhere else in time does.
@@ -422,21 +422,21 @@ export interface GeekityConfig {
    */
   jobs?: JobOverrides;
   /**
-   * How a host name is resolved before the CMS fetches a page a reply answers
-   * (TASK-123), so a name that resolves to this network is refused. Defaults
+   * How a host name is resolved before the CMS fetches a page a reply answers,
+   * so a name that resolves to this network is refused. Defaults
    * to the system resolver. A test names one so that nothing it does reaches
    * a real DNS server.
    */
   hostLookup?: HostLookup;
   /**
-   * The plugins installed on this site (decision-33). Each is registered at
+   * The plugins installed on this site. Each is registered at
    * boot and runs only while the `plugins` key of `content/_data/site.json`
    * enables it, so installing one here changes nothing until it is enabled.
    */
   plugins?: readonly Plugin[];
   /**
    * A folder of plugins, one folder each with a bundled `index.js` whose
-   * default export is the plugin (decision-33): `<name>/` or
+   * default export is the plugin: `<name>/` or
    * `@scope/<name>/`. `geekity serve` loads them at boot beside
    * {@link GeekityConfig.plugins}, and Reload on the Plugins screen loads a
    * changed folder without a restart. Overridden by `GEEKITY_PLUGINS_DIR`.
@@ -452,7 +452,7 @@ export interface GeekityConfig {
   /**
    * Whether `geekity serve` reloads by itself once
    * {@link GeekityConfig.pluginsDir} has changed and then stood still for
-   * five seconds (TASK-309). On by default. Off leaves Reload on the Plugins
+   * five seconds. On by default. Off leaves Reload on the Plugins
    * screen and the reload `geekity plugin` and the admin ask for. Overridden
    * by `GEEKITY_PLUGIN_WATCH`.
    */
@@ -528,7 +528,7 @@ export interface ResolvedConfig {
    * The comment checker, when the site named one.
    *
    * `undefined` as this leaves {@link resolveConfig}. The boot's config, a new
-   * one, has the Akismet checker (TASK-52) here when the site named none, so
+   * one, has the Akismet checker here when the site named none, so
    * by the time a request reads it off the context there is one — and with no key in
    * `data/akismet.json` that one sends nothing anywhere.
    */
@@ -592,8 +592,8 @@ export const DEFAULT_UPLOAD_TYPES: readonly string[] = KNOWN_UPLOAD_TYPES;
 /**
  * The widths an image is offered at by default.
  *
- * These are 11ty/image's own defaults, and deliberately so: decision-10 makes
- * that plugin the reference for the markup and the width set, so a site that
+ * These are 11ty/image's own defaults, and deliberately so: that plugin is the
+ * reference for the markup and the width set, so a site that
  * builds the same `content/` with Eleventy and runs the plugin over the same
  * originals gets an equivalent `srcset` rather than a different one.
  */
@@ -615,7 +615,7 @@ export const DEFAULT_LOGIN_ATTEMPTS = 5;
 export const DEFAULT_LOGIN_LOCKOUT = 15 * 60;
 
 /**
- * The security headers a site gets without asking (TASK-131).
+ * The security headers a site gets without asking.
  *
  * Each one restricts nothing a theme loads. `frame-ancestors` is the only
  * directive in the policy, so it says who may frame a page and nothing about

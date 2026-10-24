@@ -152,7 +152,7 @@ export function editorPath(kind: DocumentScreens, slug: string): string {
  * The URL of the editor for this document.
  *
  * A trashed document also names its file, because a live document may have
- * taken its slug along with its URL (TASK-195).
+ * taken its slug along with its URL.
  */
 export function documentEditorPath(
   kind: DocumentScreens,
@@ -169,7 +169,7 @@ export function newEditorPath(kind: DocumentScreens): string {
 }
 
 /**
- * The views of a listing doc-5 asks for, plus the one scheduling adds.
+ * The views of a listing the admin offers, plus the one scheduling adds.
  *
  * `published` means published *and* out: a post whose date has not arrived is
  * under `scheduled` and nowhere else, because a listing that showed it as
@@ -508,7 +508,7 @@ async function saveFromForm(
   const form = submittedForm(kind, body, contentDir);
 
   const action = stringOrEmpty(body['action']);
-  // The buttons doc-5 names are shortcuts past the checkbox: Save draft and
+  // The editor's buttons are shortcuts past the checkbox: Save draft and
   // Publish say what they do, and Update leaves the decision to the checkbox.
   const draft = action === 'save-draft' ? true : action === 'publish' ? false : form.draft;
 
@@ -601,8 +601,8 @@ export interface AuthorChoice {
  * the form submits back what the file says and changing the attribution stays
  * a thing somebody chose to do.
  *
- * A new document starts on the signed-in user, which is what doc-5 says the
- * editor does and what {@link blankForm} deliberately leaves to a request.
+ * A new document starts on the signed-in user, which is what the editor does
+ * and what {@link blankForm} deliberately leaves to a request.
  */
 export function authorChoices(c: Context<GeekityEnv>, current: string): AuthorChoice[] {
   const users = listUsers(c.var.config.dataDir);
@@ -988,7 +988,7 @@ async function renderEditor(
 }
 
 /**
- * The buttons doc-5 names for the document's state: something unwritten or
+ * The editor's buttons for the document's state: something unwritten or
  * still a draft offers Save draft and Publish, something published offers
  * Update, and anything that exists can be thrown away or, if it already has
  * been, restored.
@@ -1104,7 +1104,7 @@ async function editorModel(
     }),
     viewUrl: document !== undefined && isServed(document, now) ? document.permalink : undefined,
     // Named beside the date field, because a wall clock with no zone on it is
-    // exactly the ambiguity decision-11 exists to remove.
+    // exactly the ambiguity storing dates as UTC instants exists to remove.
     ...(kind.dated ? { dateZone: zoneLabel(form.date, timezone, now) } : {}),
     ...(scheduledAt === undefined ? {} : { scheduledFor: formatInTimezone(scheduledAt, timezone) }),
     ...(options.refusal === undefined
@@ -1169,7 +1169,7 @@ async function postEditorModel(
     ...(form.review.kind === '' || isReviewKind(form.review.kind)
       ? {}
       : { unrecognizedReviewKind: form.review.kind }),
-    // TASK-155: one checkbox per target the site declares.
+    // One checkbox per target the site declares.
     syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
       ...target,
       field: syndicateToField(target),

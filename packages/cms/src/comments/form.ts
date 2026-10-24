@@ -25,7 +25,7 @@ export interface CommentFormContext {
   /** What is in the fields: empty on a fresh form, what was typed on a refused one. */
   values: Record<'name' | 'email' | 'url' | 'body' | 'inReplyTo' | 'notify' | 'listed', string>;
   /**
-   * Whether to offer "tell me about replies" at all (TASK-55).
+   * Whether to offer "tell me about replies" at all.
    *
    * False on a site that sends no mail, where the box would be a promise
    * nothing could keep. A theme asks `{% if commentForm.notifiable %}`.
@@ -40,7 +40,7 @@ export interface CommentFormContext {
   /** The longest a comment may be, for the textarea's `maxlength`. */
   bodyLength: number;
   /**
-   * Who the site knows is filling this in, when a session says so (TASK-103).
+   * Who the site knows is filling this in, when a session says so.
    *
    * Absent for a stranger, so a theme asks `{% if commentForm.signedInAs %}`
    * and draws the short form — the comment box and a sentence naming the
@@ -68,7 +68,7 @@ export interface CommentFormContext {
  * no template is ever handed, and `csrfToken` is that session's own.
  */
 export interface CommentViewer {
-  /** Their login, which a reply post of theirs names as its author (TASK-300). */
+  /** Their login, which a reply post of theirs names as its author. */
   username: string;
   /** What the comment goes under: their display name, else their username. */
   name: string;

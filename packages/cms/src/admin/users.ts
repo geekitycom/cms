@@ -63,8 +63,8 @@ function pathId(segment: string): number | undefined {
 }
 
 /**
- * Users > Connected apps: the apps holding a token for whoever is signed in
- * (TASK-162). Mounted by `admin/connected-apps.ts`; named here so the
+ * Users > Connected apps: the apps holding a token for whoever is signed in.
+ * Mounted by `admin/connected-apps.ts`; named here so the
  * menu can link it without importing the IndieAuth side.
  */
 export const CONNECTED_APPS_PATH = `${USERS_PATH}/apps`;
@@ -74,7 +74,7 @@ export const CONNECTED_APPS_CHILD = 'apps';
 
 /**
  * Users > App activity: what apps sent to the IndieAuth and Micropub
- * endpoints, and what they were answered (TASK-221). Mounted by
+ * endpoints, and what they were answered. Mounted by
  * `admin/app-activity.ts`; named here for the same reason as Connected apps.
  */
 export const APP_ACTIVITY_PATH = `${USERS_PATH}/activity`;
@@ -96,7 +96,7 @@ export const USER_EMAIL_PATH = `${USERS_PATH}/email`;
  *
  * A path of its own rather than a second half of the email form, because the
  * two are about different audiences: an email address is private to the site
- * and a profile is the public face decision-14 puts at the author URL. One
+ * and a profile is the public face the site puts at the author URL. One
  * form that saved both would mean an admin correcting a colleague's address
  * also republishing their bio.
  */
@@ -142,13 +142,13 @@ export const USER_FIELDS = {
   on: 'on',
   /** How often that notice should arrive, for an event that offers a choice. */
   mode: 'mode',
-  /** The name to print instead of the login (TASK-67). */
+  /** The name to print instead of the login. */
   displayName: 'display_name',
   /** A few sentences about this person. */
   bio: 'bio',
   /** Their picture, as a path or a URL. */
   avatar: 'avatar',
-  /** What they do, printed beside the name in a bio (TASK-79). */
+  /** What they do, printed beside the name in a bio. */
   jobTitle: 'job_title',
   /** Where they are, as they write it. */
   location: 'location',
@@ -168,7 +168,7 @@ export interface MountUsersOptions {
  * Register the users screens: the list, the add form, and one screen per user
  * where everything about that person is edited.
  *
- * The same split documents.ts makes (TASK-97). The table says who there is;
+ * The same split documents.ts makes. The table says who there is;
  * a person's own screen holds their email address, their public profile, what
  * they are emailed about, and — where the account can go — the delete. Every
  * save lands back on that screen, so it shows its own result.
@@ -334,7 +334,7 @@ async function saveEmail(c: Context<GeekityEnv>): Promise<Response> {
 }
 
 /**
- * Write a user's public profile (TASK-67).
+ * Write a user's public profile.
  *
  * Anybody's, for the reason the email field is anybody's: one role, and an
  * admin who has just added a colleague should be able to put a name and a
@@ -344,7 +344,7 @@ async function saveEmail(c: Context<GeekityEnv>): Promise<Response> {
  *
  * A flash and a redirect for everything but the Links box, because nothing
  * else here can be wrong enough to refuse. A link line that is not a link is
- * refused the way a menu line is (TASK-112): a 400 with the panel redrawn
+ * refused the way a menu line is: a 400 with the panel redrawn
  * around what was typed, because a link nobody can follow is worse stored
  * than reported, and because the line to fix has to still be there to fix.
  */
@@ -373,7 +373,7 @@ async function saveProfile(c: Context<GeekityEnv>, render: AdminRender): Promise
     profile: { ...typed, links: parseProfileLinks(typed.links) },
   });
 
-  // The profile is the actor's profile now (decision-14), so saving it is
+  // The profile is the actor's profile now, so saving it is
   // also an announcement: a follower's copy of somebody's name, bio and
   // picture is only as fresh as the last `Update` they were sent. The user
   // is read back rather than assumed, so the actor that goes out is built
@@ -515,7 +515,7 @@ async function removeUser(c: Context<GeekityEnv>): Promise<Response> {
 
   await deleteUser({ dataDir, userId: target.id, now: c.var.config.now() });
   // Their sessions go with them. The foreign key that used to do this went
-  // with the users table (decision-9), so it is done here — and a session
+  // with the users table, so it is done here — and a session
   // that outlives this one, in a database restored from a backup, is not a
   // login either: the guard refuses one whose user the file does not hold.
   c.var.admin.deleteSessionsForUser(target.id);
@@ -523,7 +523,7 @@ async function removeUser(c: Context<GeekityEnv>): Promise<Response> {
 }
 
 /**
- * One user's screen (TASK-97).
+ * One user's screen.
  *
  * Registered last, after every named path under `/admin/users/`, and matched
  * only when the segment is digits — so Add new keeps its URL and a stray
@@ -577,7 +577,7 @@ const GONE_USER = 'That user is already gone.';
 /**
  * Take a user out of the file. Returns `false` when there was nothing to take.
  *
- * Their IndieAuth tokens go with them (TASK-160): a token is a file in
+ * Their IndieAuth tokens go with them: a token is a file in
  * `data/` too, so it is revoked here, where every caller deletes a user.
  *
  * Their sessions are not ended here: sessions are in the database, and the
@@ -725,7 +725,7 @@ function addScreen(
 }
 
 /**
- * Everything one user's screen renders (TASK-97).
+ * Everything one user's screen renders.
  *
  * The same forms the table used to hold, one per panel and each with its
  * fields labelled: the account, the public profile, what this person is
@@ -740,7 +740,7 @@ function userScreen(
    * What was typed into the Profile panel, where a save of it was refused: the
    * boxes are drawn holding this instead of what is stored, so the line to fix
    * is still on the screen and nothing else somebody wrote has been thrown
-   * away (TASK-112).
+   * away.
    */
   typedProfile?: Record<string, string>,
 ): Record<string, unknown> {
@@ -784,7 +784,7 @@ function userScreen(
  * Everything the users screens render: the listing, and the fields the add
  * form is drawn from.
  *
- * Nothing about editing a user is here any more (TASK-97). A row says who
+ * Nothing about editing a user is here any more. A row says who
  * somebody is and links to their screen; the only form in the table is the
  * delete, which is an action rather than a field.
  */
@@ -838,15 +838,15 @@ export function parseProfileLinks(value: string): ProfileLink[] {
  * What is wrong with a typed list of profile links, or `undefined` when
  * nothing is.
  *
- * The check the box never had (TASK-112). A URL goes through
+ * The check the box never had. A URL goes through
  * {@link isLinkUrl}, the rule the Navigation screen's menu box already used,
  * so `Elsewhere | not a url` is refused in both places and for the same
  * reason. One message naming the first bad line, for the reason the menu box's
  * message names one: a box is fixed a line at a time, and the line to fix is
  * the useful half of the sentence.
  *
- * The same line as a menu item's, down to the `rel` values it may end in
- * (TASK-114): somebody who learns one box has learned the other, and a
+ * The same line as a menu item's, down to the `rel` values it may end in:
+ * somebody who learns one box has learned the other, and a
  * trailing `| me` — the line that started all this — is a link rather than a
  * mistake. A profile link is published `rel="me"` either way, so typing it is
  * a no-op; typing `| me nofollow author` is three values on the rendered
@@ -885,7 +885,7 @@ function profileLinkLines(value: string): string[] {
  * one spelling for the line the box reads back and the line it checks, so the
  * two can never disagree about which half is the URL. The tail comes off
  * through {@link splitLinkRel}, the same call the menu box makes, which is
- * what makes the two boxes one line format (TASK-114).
+ * what makes the two boxes one line format.
  */
 function profileLinkFields(line: string): ProfileLink {
   const { text, rel } = splitLinkRel(line);
@@ -923,9 +923,8 @@ function row(
     email: user.email ?? '',
     // Where the row goes, and where every save about this person lands.
     editUrl: editUserPath(user.id),
-    // The public half of this person (TASK-67): what the archive at
-    // `archiveUrl` is headed with, and — after TASK-68 — what their actor
-    // carries.
+    // The public half of this person: what the archive at
+    // `archiveUrl` is headed with, and what their actor carries.
     profile: {
       displayName: user.profile?.displayName ?? '',
       bio: user.profile?.bio ?? '',
@@ -935,7 +934,7 @@ function row(
       links: formatProfileLinks(user.profile?.links),
     },
     archiveUrl: authorHref(user.username),
-    // The id this person was published under before they were here (TASK-69).
+    // The id this person was published under before they were here.
     // Shown on their screen rather than edited: it is identity, not a
     // preference — the import writes it, or somebody editing
     // `data/users.json` does — and a box that let it be changed would be a box
@@ -943,7 +942,7 @@ function row(
     // everybody, and then the screen says nothing about it at all.
     storedActorId: user.actorId ?? '',
     // One switch per registered event, so the screen loops rather than naming
-    // the notices it happens to know about (TASK-55).
+    // the notices it happens to know about.
     notifications: notificationSwitches(user),
     createdAt: user.createdAt,
     you,

@@ -15,7 +15,7 @@ export interface MarkdownEnvironment {
   /**
    * One Markdown or gemtext template pair through the chosen theme: gemtext
    * comes from the first of the theme's `.gmi.njk`, its `.md.njk`, the default
-   * theme's `.gmi.njk` and its `.md.njk` (decision-60), and the result says
+   * theme's `.gmi.njk` and its `.md.njk`, and the result says
    * which format the theme wrote.
    */
   renderText(

@@ -27,8 +27,8 @@ export const USERNAME_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
  *
  * Two rules, because a username is two things. It is what somebody types into
  * the login form, which is what {@link USERNAME_PATTERN} is about: nothing
- * that would later need escaping in a URL, a shell or a template. And since
- * decision-14 it is also a URL — the author archive at `/author/{username}/`,
+ * that would later need escaping in a URL, a shell or a template. And it is
+ * also a URL — the author archive at `/author/{username}/`,
  * which is the same URL their actor lives at — so it has to be a segment a
  * resolver will actually walk into. The pattern already refuses everything
  * that would need percent-encoding; what it cannot see is that `.` and `..`
@@ -55,7 +55,7 @@ export function passwordProblem(password: string): string | undefined {
 /**
  * What is wrong with a user's email address, or `undefined` when nothing is.
  *
- * The empty string is acceptable: an email is optional on a user (TASK-54),
+ * The empty string is acceptable: an email is optional on a user,
  * and clearing the box is how somebody says they do not want one. What is
  * checked is the same shape the settings screen checks its From address
  * against — an `@` with something either side of it and a dot in the domain —

@@ -18,7 +18,7 @@ export interface ParseDocumentOptions {
   path: string;
   /** Overrides the type the path implies. Needed for files under `_trash/`. */
   type?: DocumentType | undefined;
-  /** The resolved fediverse handles, so a mention renders as a link (TASK-194). */
+  /** The resolved fediverse handles, so a mention renders as a link. */
   handles?: HandleDirectory | undefined;
 }
 

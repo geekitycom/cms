@@ -265,8 +265,8 @@ function originOf(
 }
 
 /**
- * The key the site would give the same comment arriving here itself
- * (decision-51), so a resend or a redelivery is the comment it already holds.
+ * The key the site would give the same comment arriving here itself,
+ * so a resend or a redelivery is the comment it already holds.
  * A form comment, which arrived nowhere else, has the key of its WordPress
  * URL.
  */

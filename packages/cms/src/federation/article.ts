@@ -71,9 +71,9 @@ import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } f
  * The user a post is announced by: the one its `author` names, and the site's
  * first account for one that names nobody.
  *
- * decision-14 attributes a post to a person rather than to the site, and
+ * A post is attributed to a person rather than to the site, and
  * `userForAuthor` is the one rule that decides which — a username exactly, a
- * display name only when exactly one person answers to it (TASK-67). The
+ * display name only when exactly one person answers to it. The
  * fallback matters because an `author` is free text in a file: a post that
  * names a person who has since been deleted, or names nobody at all, is still
  * a post this site has to be able to announce, and the first account is the
@@ -116,7 +116,7 @@ function attribution(
  * Who a post, its `Create` and its `Update` are addressed to. A public post is
  * to Public with its author's followers in `cc`; an unlisted one swaps the
  * two, which is how Mastodon marks a post anybody may fetch but that stays off
- * public timelines (TASK-227).
+ * public timelines.
  */
 function addressing(
   document: Document,
@@ -136,7 +136,7 @@ function addressing(
 
 /**
  * A `Mention` of the author a reply answers and of each account the post names
- * by handle (TASK-194), which is what makes Mastodon notify them.
+ * by handle, which is what makes Mastodon notify them.
  */
 function mentions(
   replyTo: CitedObject | undefined,
@@ -198,13 +198,13 @@ type PostObjectType = keyof typeof OBJECT_TYPES;
 /**
  * The object type each discovered post type federates as: the rows of Post
  * Type Discovery's own AS2 mapping (section 6) that this site has post types
- * for. A reply is a `Note` even with a title of its own (decision-18), and so
- * is a photo post, whose photos are its attachments (TASK-166).
+ * for. A reply is a `Note` even with a title of its own, and so
+ * is a photo post, whose photos are its attachments.
  */
 const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = {
   event: 'Event',
   // A like or a repost of a fediverse object goes as a `Like` or an
-  // `Announce` instead (decision-28); this is the object its permalink serves.
+  // `Announce` instead; this is the object its permalink serves.
   rsvp: 'Note',
   repost: 'Note',
   like: 'Note',
@@ -241,11 +241,11 @@ function postObjectType(document: Document): PostObjectType {
 }
 
 /**
- * One post as the `Note`, `Article` or `Event` doc-4 describes, whichever
+ * One post as the `Note`, `Article` or `Event` it federates as, whichever
  * {@link postObjectType} says it is.
  *
- * Its `id` and its `url` are the same URL — the permalink — because
- * decision-13 gives a post one name for both audiences: a browser asking for
+ * Its `id` and its `url` are the same URL — the permalink — because a post
+ * has one name for both audiences: a browser asking for
  * HTML gets the page, a peer asking for ActivityStreams gets this. The
  * exception is a post whose file already names an `activitypub.id`, which
  * keeps it; see {@link articleObjectId}.
@@ -261,8 +261,8 @@ function postObjectType(document: Document): PostObjectType {
  * `source` carries the Markdown the file holds, so a peer that wants to quote
  * or re-render the post has the text rather than only the rendering of it.
  *
- * `attributedTo` is the actor of the user the post's `author` names
- * (decision-14), and `cc` is that user's followers: a post belongs to a person
+ * `attributedTo` is the actor of the user the post's `author` names,
+ * and `cc` is that user's followers: a post belongs to a person
  * on this site, not to the site.
  */
 export function postObject(
@@ -273,11 +273,11 @@ export function postObject(
   const { baseUrl } = context.data.config;
   const { actor, followers } = attribution(context, document);
   // The archives an activity points at are wherever the site currently serves
-  // them, which is a setting rather than a constant (TASK-36).
+  // them, which is a setting rather than a constant.
   const settings = context.data.site;
   const bases = taxonomyBasesFromSettings(settings);
   // The language a client filters and translates the post by: its own, else
-  // the site's (TASK-154).
+  // the site's.
   const language =
     documentLanguage(document) ?? canonicalLocale(settings.language) ?? DEFAULT_LOCALE;
 
@@ -302,7 +302,7 @@ export function postObject(
     ...addressing(document, followers, replyTo, mentioned),
     // FEP-044f: a post with no policy is one Mastodon lets nobody quote. Every
     // post that federates names Public, so anybody may quote it, and
-    // the inbox approves each QuoteRequest on the same rule (TASK-125).
+    // the inbox approves each QuoteRequest on the same rule.
     interactionPolicy: QUOTABLE_BY_ANYONE,
     attachments: [
       ...recordingAttachment(document, baseUrl, context.data.cited),
@@ -397,7 +397,7 @@ function place(shared: SharedLocation | undefined): Place | null {
 
 /**
  * The post's recording, as the `Audio` or `Video` Mastodon plays in the
- * timeline (TASK-213), or nothing for a post without one.
+ * timeline, or nothing for a post without one.
  *
  * It goes before the images on purpose. Mastodon shows a status's media by
  * the type of its first attachment, a player for audio or video and a gallery
@@ -423,7 +423,7 @@ function recordingAttachment(
 }
 
 /**
- * Each of the post's photos (TASK-166), as an `Image` whose `name` is its alt
+ * Each of the post's photos, as an `Image` whose `name` is its alt
  * text, the media library's when the post gives none.
  *
  * They go after the recording and before the body's images, because they are
@@ -470,7 +470,7 @@ function itemAttachment(
 
 /**
  * Each image the post shows from the site's own uploads, as an `Image` whose
- * `name` is its alt text (TASK-141).
+ * `name` is its alt text.
  *
  * Mastodon strips `<img>` out of `content` and shows attachments instead, so
  * this is how a post's pictures reach a timeline, and `name` is where it reads
@@ -518,7 +518,7 @@ const QUOTABLE_BY_ANYONE = new InteractionPolicy({
 
 /**
  * What an RSVP answers and what a like, a repost or a bookmark cites, as a
- * line linking each page (decision-28, decision-31): the words a peer shows,
+ * line linking each page: the words a peer shows,
  * since a `Note` has no field for it. The anchor stays plain: Mastodon
  * builds no link card from one with a `u-url` or `h-card` class or a
  * `rel=tag`.
@@ -602,7 +602,7 @@ export function postCreateActivity(
  * hash, so two edits are two activities and the same edit delivered twice is
  * one; see {@link updateActivityId}.
  *
- * `revision` overrides that. A resend (decision-9) is asking for a revision
+ * `revision` overrides that. A resend is asking for a revision
  * the followers have already been offered to be offered again, and an activity
  * id a peer has seen is one it is entitled to drop, so a resend passes the
  * moment instead of the hash. Everything else about the activity is the same,
@@ -634,10 +634,10 @@ export function postUpdateActivity(
 /**
  * The `Delete` that withdraws a post: a `Tombstone` where its object was.
  *
- * doc-4 sends this when a post becomes a draft, is trashed or is deleted, and
- * all three look the same from outside — the object is gone and the copy every
- * follower holds should go with it. The `Tombstone` keeps the object's id and
- * says what it used to be, which is what lets a peer that never held the
+ * The site sends this when a post becomes a draft, is trashed or is deleted,
+ * and all three look the same from outside — the object is gone and the copy
+ * every follower holds should go with it. The `Tombstone` keeps the object's id
+ * and says what it used to be, which is what lets a peer that never held the
  * object recognise what it is being told about.
  *
  * The document is the one as it was before it went, because after a delete
@@ -661,7 +661,7 @@ export function postDeleteActivity(
 
 /**
  * The `Tombstone` where a post's object was: what a `Delete` carries, and what
- * a peer that fetches a deleted post's id is answered with (TASK-195). Nothing
+ * a peer that fetches a deleted post's id is answered with. Nothing
  * records when a post was trashed, so a fetched one carries no `deleted`.
  */
 export function postTombstone(
@@ -678,7 +678,7 @@ export function postTombstone(
 
 /**
  * The `Add` that pins a post, or the `Remove` that unpins it: the post's id
- * moved in or out of its author's featured collection (TASK-207).
+ * moved in or out of its author's featured collection.
  *
  * Mastodon acts on one only when the `target` is exactly the `featured` URL
  * the actor publishes, and fetches the object by its id when it does not hold
@@ -715,7 +715,7 @@ export type PinChange = 'pin' | 'unpin';
 
 /**
  * A post's ActivityStreams object id, off the Fedify context: its permalink,
- * or the id its file already names (decision-13), or the id it was federated
+ * or the id its file already names, or the id it was federated
  * under after a `Delete` of that one.
  *
  * A thin wrapper over {@link postObjectId} so everything in this module reads

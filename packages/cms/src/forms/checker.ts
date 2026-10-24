@@ -10,9 +10,9 @@ import type { PostComment } from '../store/admin-store.ts';
 export type SubmissionType =
   /** Somebody filled in the comment form under a post. */
   | 'comment'
-  /** Another site's page said it links here (TASK-51). */
+  /** Another site's page said it links here. */
   | 'webmention'
-  /** Somebody filled in the contact form on a page (TASK-56). */
+  /** Somebody filled in the contact form on a page. */
   | 'contact-form';
 
 /** Everything a checker is told about a comment on its way in. */

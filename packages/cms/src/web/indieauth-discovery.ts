@@ -11,30 +11,30 @@ export const INDIEAUTH_METADATA_PATH = '/_geekity/indieauth/metadata';
 /** RFC 8414's well-known location for the same document. */
 export const OAUTH_METADATA_WELL_KNOWN_PATH = '/.well-known/oauth-authorization-server';
 
-/** Where a client sends the person to approve a sign-in (TASK-158). */
+/** Where a client sends the person to approve a sign-in. */
 export const AUTHORIZATION_PATH = '/_geekity/indieauth/auth';
 
-/** Where a client redeems a code for an access token (TASK-160). */
+/** Where a client redeems a code for an access token. */
 export const TOKEN_PATH = '/_geekity/indieauth/token';
 
-/** Where a resource server asks what a token is good for (TASK-161). */
+/** Where a resource server asks what a token is good for. */
 export const INTROSPECTION_PATH = '/_geekity/indieauth/introspect';
 
-/** Where a client hands a token back to end it (TASK-161). */
+/** Where a client hands a token back to end it. */
 export const REVOCATION_PATH = '/_geekity/indieauth/revoke';
 
-/** Where a client asks for the profile a token was approved to see (TASK-161). */
+/** Where a client asks for the profile a token was approved to see. */
 export const USERINFO_PATH = '/_geekity/indieauth/userinfo';
 
-/** Where a Micropub client creates posts and asks what the site supports (TASK-163). */
+/** Where a Micropub client creates posts and asks what the site supports. */
 export const MICROPUB_PATH = '/_geekity/micropub';
 
-/** Where a Micropub client uploads a file before it names it in a post (TASK-165). */
+/** Where a Micropub client uploads a file before it names it in a post. */
 export const MICROPUB_MEDIA_PATH = '/_geekity/micropub/media';
 
 /**
  * RFC 9728's well-known location for the protected resource metadata, which
- * an MCP client reads to learn where to sign in (TASK-161).
+ * an MCP client reads to learn where to sign in.
  */
 export const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource';
 
@@ -53,7 +53,7 @@ export interface AuthorizationServerMetadata {
   authorization_response_iss_parameter_supported: boolean;
   /**
    * That a client may use the URL of a JSON client metadata document as its
-   * client_id, which the MCP authorization spec asks for (TASK-158).
+   * client_id, which the MCP authorization spec asks for.
    */
   client_id_metadata_document_supported: boolean;
 }
@@ -121,7 +121,7 @@ export function mountIndieAuthDiscovery(app: Hono<GeekityEnv>): void {
 
 /**
  * Whether a path is an identity URL a person may type into a sign-in form:
- * the root, and every author archive's first page (decision-23).
+ * the root, and every author archive's first page.
  *
  * The root is advertised on a multi-author site too, where it names nobody: a
  * person who types it still reaches this server, signs in as whoever they log
@@ -133,9 +133,9 @@ function isIdentityPath(pathname: string): boolean {
 }
 
 /**
- * Point every identity URL at the metadata (TASK-157), at the authorization
- * and token endpoints for clients that predate the metadata (TASK-220), and at
- * the Micropub endpoint (TASK-163), each with a `Link` header and a `<link>`
+ * Point every identity URL at the metadata, at the authorization
+ * and token endpoints for clients that predate the metadata, and at
+ * the Micropub endpoint, each with a `Link` header and a `<link>`
  * before `</head>`.
  *
  * Added to the response rather than left to the layouts so that every theme

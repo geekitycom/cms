@@ -1,12 +1,12 @@
 /**
- * `@geekity/cms/plugin`: the whole of what a plugin may import from core
- * (decision-33). Types, the host API version, {@link definePlugin}, which is
+ * `@geekity/cms/plugin`: the whole of what a plugin may import from core.
+ * Types, the host API version, {@link definePlugin}, which is
  * an identity function, the key rule a plugin writing comments names them
  * by, and the helpers core writes content with. A bundled plugin inlines what
  * it uses of these.
  *
- * Removing or reshaping anything here is a breaking change to `@geekity/cms`
- * (decision-6), and bumps {@link HOST_API_VERSION}.
+ * Removing or reshaping anything here is a breaking change to `@geekity/cms`,
+ * and bumps {@link HOST_API_VERSION}.
  */
 
 import type { webcrypto } from 'node:crypto';
@@ -37,7 +37,7 @@ export const HOST_API_VERSION = 3;
 export type { KvStore };
 
 /**
- * The key rule (decision-51), so a plugin that writes comments keys each one
+ * The key rule, so a plugin that writes comments keys each one
  * as the site would key the same comment arriving here: a fediverse reply or
  * reaction by {@link repliesKey} of its note or activity id, a webmention by
  * {@link webmentionKey} of its source and the post's permalink.

@@ -16,7 +16,7 @@ import type { ConversationReader, ConversationSite } from './conversation.ts';
 import type { CommentNotices } from './intake.ts';
 
 /**
- * The reply notice for a reply post (TASK-326): a commenter who asked to hear
+ * The reply notice for a reply post: a commenter who asked to hear
  * about replies hears about a reply post answering them, once, whichever door
  * it came in by: the thread, the moderation screen, the editor, Micropub or a
  * file. It listens to the index, as federation and webmentions do, so no door
@@ -28,7 +28,7 @@ import type { CommentNotices } from './intake.ts';
  * trashed and restored, or drafted and published again, is not news twice.
  *
  * A reply post answering a comment still waiting for a moderator is news when
- * the comment is approved instead (TASK-333), so it listens to the comment
+ * the comment is approved instead, so it listens to the comment
  * index too, and both go through the one record.
  */
 

@@ -1,5 +1,5 @@
 /**
- * What a like, a repost or a bookmark cites (TASK-169): the URL under the mf2
+ * What a like, a repost or a bookmark cites: the URL under the mf2
  * property of the same name, one to a post.
  *
  * ```yaml

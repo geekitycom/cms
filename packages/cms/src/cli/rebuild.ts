@@ -10,7 +10,7 @@ import { count } from './format.ts';
  * `geekity rebuild`: throw the database away and read it back out of the files.
  *
  * Nothing in `data/geekity.db` is anything but a reading of `content/` and
- * `data/` (decision-9), so this is a command with no undo and no loss: the
+ * `data/`, so this is a command with no undo and no loss: the
  * content index, the followers, the inbox log and the comments come back
  * exactly as they were, and what does not — sessions, the cached delivery
  * outcomes, the relay handshake — is what a site is told it may lose. It is the

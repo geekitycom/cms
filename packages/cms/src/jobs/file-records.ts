@@ -10,7 +10,7 @@ export const KEPT_PER_NAME = 5;
 const TERMINAL: ReadonlySet<JobStateName> = new Set(['finished', 'failed', 'interrupted']);
 
 /**
- * The first record store (decision-54): every job in one JSON file, oldest
+ * The first record store: every job in one JSON file, oldest
  * first. A change reads the file, changes it and renames a new copy over it,
  * holding the in-process lock on the path and a lock file beside it, so a CLI
  * process and the server never both win one compare-and-set. A read takes no

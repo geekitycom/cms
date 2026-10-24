@@ -17,12 +17,12 @@ import type { ImageConfig } from './paths.ts';
 /**
  * Image variants: the derived copies of an upload, and the record of them.
  *
- * The original under `content/uploads/` is the only source of truth
- * (decision-10). Everything this module writes lives under
- * `<dataDir>/images/<the upload's path>/`, is rebuildable from that original,
- * and may be deleted at any moment — which is also decision-9's rule for
- * `data/`. Nothing here is ever read by the feeds or by a remote instance;
- * only the site's own HTML knows these files exist.
+ * The original under `content/uploads/` is the only source of truth. Everything
+ * this module writes lives under `<dataDir>/images/<the upload's path>/`, is
+ * rebuildable from that original, and may be deleted at any moment — which is
+ * also the rule for anything derived under `data/`. Nothing here is ever read
+ * by the feeds or by a remote instance; only the site's own HTML knows these
+ * files exist.
  *
  * Where the files live is `paths.ts`, and the site's icons are `icons.ts`:
  * both kinds of derived file share the directory and the URL prefix.
@@ -50,7 +50,7 @@ export interface ImageVariant {
  * itself.
  *
  * This is the sidecar's shape. It exists so that rendering a page never opens
- * an image: decision-10 requires the dimensions to be recorded when the
+ * an image: the dimensions are recorded when the
  * variants are generated and read back, never probed per request.
  */
 export interface ImageRecord {
@@ -418,7 +418,7 @@ export async function removeImageVariants(config: ImageConfig, source: string): 
  * `relative` is what follows {@link VARIANT_ASSET_PREFIX}, so
  * `2026/09/photo.jpg/640.webp`. A request for a file that was swept away
  * rebuilds the whole set for that source and then serves it, which is what
- * makes the derived directory disposable in the way decision-9 requires. A
+ * makes the derived directory disposable, as everything derived must be. A
  * request for a width or a format the site does not offer is a 404 and encodes
  * nothing, so nobody can make the server work by asking for sizes.
  */

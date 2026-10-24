@@ -1,6 +1,6 @@
 /**
  * The front-matter key that names the language a post or a page is written
- * in, when it is not the site's (TASK-154). The name HTML gives the attribute,
+ * in, when it is not the site's. The name HTML gives the attribute,
  * so an Eleventy build reads the same key as page data.
  */
 export const LANG_FRONT_MATTER_KEY = 'lang';

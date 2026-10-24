@@ -6,8 +6,8 @@ import type { FieldError } from './form-error.ts';
 import { toUtcInstant, wallClockIn } from './time.ts';
 
 /**
- * The editor's event fields (TASK-200): when it starts and ends, as wall-clock
- * time in the site's zone the way the Date field is (decision-11), and where.
+ * The editor's event fields: when it starts and ends, as wall-clock
+ * time in the site's zone the way the Date field is, and where.
  */
 export interface EventForm {
   start: string;

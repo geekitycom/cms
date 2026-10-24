@@ -67,11 +67,11 @@ export interface SourceEntry {
   readonly published: string | null;
   /** Where it lives: its own `u-url`, else the URL it was fetched from. */
   readonly url: string;
-  /** A reply's `p-rsvp`, when it is one of the four values (TASK-198). */
+  /** A reply's `p-rsvp`, when it is one of the four values. */
   readonly rsvp?: RsvpValue;
-  /** Everything its `in-reply-to` names, a nested `h-cite` by its `url` (TASK-319). */
+  /** Everything its `in-reply-to` names, a nested `h-cite` by its `url`. */
   readonly inReplyTo: readonly string[];
-  /** The replies its page shows inside it, which a salmention carries (TASK-320). */
+  /** The replies its page shows inside it, which a salmention carries. */
   readonly replies: readonly NestedReply[];
 }
 
@@ -242,7 +242,7 @@ export interface CitedEntry {
     | undefined;
   /** When it says it was published, as an ISO 8601 instant, or `null`. */
   readonly published: string | null;
-  /** Its `u-url` and `u-uid`, which a silo copy points at its original with (TASK-197). */
+  /** Its `u-url` and `u-uid`, which a silo copy points at its original with. */
   readonly urls: readonly string[];
   /** Its `u-syndication`: the copies of it elsewhere. */
   readonly syndication: readonly string[];
@@ -286,7 +286,7 @@ export function citedEntry(root: HtmlElement, pageUrl: string): CitedEntry | und
   };
 }
 
-/** The first `h-event` on a page, as the parts an RSVP's citation of it shows (TASK-198). */
+/** The first `h-event` on a page, as the parts an RSVP's citation of it shows. */
 export interface CitedEvent {
   /** Its `p-name`, or empty. */
   readonly name: string;

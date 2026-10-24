@@ -1,5 +1,5 @@
 /**
- * `@geekity/plugin-llm` (decision-33): the site's connection to a language
+ * `@geekity/plugin-llm`: the site's connection to a language
  * model, through the OpenAI chat-completions API. Its settings are the base
  * URL, OpenRouter's by default, the API key and the default model. It provides
  * the llm service other plugins reach with `host.use('@geekity/plugin-llm')`,

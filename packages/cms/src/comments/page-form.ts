@@ -36,7 +36,7 @@ export function commentNoticeFor(query: string | undefined): string | undefined 
  * Checked against the index rather than trusted, so a made-up id — or one from
  * another page — cannot put a stranger's name on somebody's reply form, and so
  * a comment waiting for a moderator cannot be discovered by guessing. With the
- * post's `thread`, which is handed over for somebody signed in (TASK-300), any
+ * post's `thread`, which is handed over for somebody signed in, any
  * entry a reader can see is answerable: a webmention, a fediverse reply or a
  * reply post as well as a comment.
  */

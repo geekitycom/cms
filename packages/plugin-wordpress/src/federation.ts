@@ -20,14 +20,14 @@ import type { WordPressRecords } from './records.ts';
 
 /**
  * The WordPress ActivityPub plugin's paths, served while this plugin is
- * enabled (TASK-70, TASK-282).
+ * enabled.
  *
  * A follower's server delivers to the inbox URL it cached from the actor
  * document, and replaces it only when it next refetches the actor. A site that
  * moved here from the plugin therefore goes on being delivered to at
  * `/wp-json/activitypub/1.0/actors/2/inbox` and `/wp-json/activitypub/1.0/inbox`
- * for as long as those caches last, and decision-14 calls that **cache rather
- * than identity**: the site carries the plugin's layout until the caches have
+ * for as long as those caches last, and that is **cache rather than
+ * identity**: the site carries the plugin's layout until the caches have
  * moved on, and then the plugin is disabled.
  *
  * Everything a peer reads back is the canonical identity. The actor served at
@@ -36,7 +36,7 @@ import type { WordPressRecords } from './records.ts';
  *
  * A Fedify federation of the plugin's own is how a second inbox path gets
  * signature verification at all: one federation has exactly one pair of inbox
- * listeners (doc-8). It shares the site federation's KV store and is set to
+ * listeners. It shares the site federation's KV store and is set to
  * `per-origin` idempotence, as the canonical inbox is, so one `Follow`
  * redelivered to `andrew`'s inbox and to `2`'s is handled once.
  *

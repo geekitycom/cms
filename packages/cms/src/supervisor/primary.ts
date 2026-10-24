@@ -1,5 +1,5 @@
 /**
- * `geekity serve`'s supervisor (TASK-288, decision-33): the primary process
+ * `geekity serve`'s supervisor: the primary process
  * that owns the port and runs the CMS in one worker, replacing it on a reload
  * and respawning it when it crashes.
  *

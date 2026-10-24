@@ -11,7 +11,7 @@ import { systemClock } from '../util/clock.ts';
  * matter, a date that has not arrived yet, and a `visibility` the site does
  * not recognize. All four stay indexed so the admin can find them; none is
  * ever listed or fed, and only the first is never shown to anybody: the other
- * three are the author's to read at the permalink while signed in (TASK-235).
+ * three are the author's to read at the permalink while signed in.
  */
 export type HiddenReason =
   | { readonly kind: 'trashed' }
@@ -47,9 +47,9 @@ export function isServed(document: Document, now: Date = systemClock()): boolean
 
 /**
  * Whether a document was deleted from the public site: it is in the trash, and
- * would be served if it were not (TASK-195).
+ * would be served if it were not.
  *
- * The trash file is the record of the deletion (decision-9), so a restore and
+ * The trash file is the record of the deletion, so a restore and
  * a new document at the URL both end it with no second record to clear. A
  * trashed draft was never public, so its URL stays a 404 rather than telling
  * anybody something used to be there.
@@ -59,7 +59,7 @@ export function isGone(document: Document, now: Date): boolean {
 }
 
 /**
- * Whether the site lists a document: served, and not unlisted (TASK-227).
+ * Whether the site lists a document: served, and not unlisted.
  *
  * What every list the site publishes asks — the listings, the feeds, the
  * sitemap, search, `llms.txt`, IndexNow — about a document in hand. The
@@ -72,7 +72,7 @@ export function isListed(document: Document, now: Date = systemClock()): boolean
 /**
  * Whether a document is one of the objects this site federates.
  *
- * doc-4 federates published posts and nothing else: pages are standing
+ * The site federates published posts and nothing else: pages are standing
  * content with no place in a timeline, and a draft, a trashed post or one
  * whose date has not arrived is not public at all. This is the one rule, so
  * the object dispatcher, the outbox and the permalink all agree about what

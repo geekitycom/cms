@@ -2,11 +2,11 @@ import type { Document } from './document.ts';
 
 /**
  * What the full-text index is fed and how a reader's words become a query
- * against it (TASK-22).
+ * against it.
  *
  * The index itself is an FTS5 table in the content store, written and dropped
- * alongside the document rows, so it is derived exactly as they are
- * (decision-9). This module is the part that needs no database: the text a
+ * alongside the document rows, so it is derived exactly as they are.
+ * This module is the part that needs no database: the text a
  * document is indexed by, and the translation from what somebody typed into a
  * search box into an FTS5 `MATCH` expression that cannot be a syntax error.
  */

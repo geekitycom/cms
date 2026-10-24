@@ -13,9 +13,9 @@ import { taxonomyRedirectsOf } from '../content/taxonomy.ts';
 import type { TaxonomyRedirect } from '../content/taxonomy.ts';
 
 /**
- * One row of the settings table TASK-14 wrote, for the one boot that reads it.
+ * One row of the old settings table, for the one boot that reads it.
  *
- * Settings live in `content/_data/site.json` now (decision-9), so this shape
+ * Settings live in `content/_data/site.json` now, so this shape
  * exists only so `migrateSettingsToFile` can write the rows out before the
  * table goes. `updatedAt` is what tells a row written by the settings screen
  * from a `site.json` a person edited afterwards.
@@ -30,9 +30,9 @@ export interface LegacySetting {
 }
 
 /**
- * One row of the actor key table TASK-16 wrote, for the one boot that reads it.
+ * One row of the old actor key table, for the one boot that reads it.
  *
- * Key pairs live in `data/keys` as JWK files now (decision-9), so this shape
+ * Key pairs live in `data/keys` as JWK files now, so this shape
  * exists only so `migrateActorKeysToFiles` can write the rows out before the
  * table goes. The public half the table also held is not here: it is derived
  * from the private one, and reading it would only invite the two to disagree.
@@ -52,9 +52,9 @@ export interface LegacyActorKey {
 }
 
 /**
- * One row of the users table TASK-9 wrote, for the one boot that reads it.
+ * One row of the old users table, for the one boot that reads it.
  *
- * Accounts live in `data/users.json` now (decision-9), so this shape exists
+ * Accounts live in `data/users.json` now, so this shape exists
  * only so `migrateUsersToFile` can write the rows out before the table goes.
  * The id comes with them: a session in the same database names its user by it,
  * and a migration that renumbered everybody would sign the whole site out.
@@ -141,14 +141,15 @@ function hasTable(db: DatabaseSync, name: string): boolean {
  * Turn an older site's settings rows into `content/_data/site.json`, once, and
  * drop the table.
  *
- * TASK-14 made SQLite the source and the file its mirror; decision-9 reversed
- * that, and a site upgrading across the two has rows nothing would ever read
- * again. So the first boot of this version writes them out. Which side wins
- * when both have something to say is decided the way it is decided everywhere
- * else: the file wins when it was written after the last save, because that is
- * a hand edit or a restored checkout, and the rows win otherwise. Either way
- * the actor handle and type come from the rows, because `site.json` never
- * carried them and losing them would rename the site's actor.
+ * Settings were once kept in SQLite with the file as its mirror; now the file
+ * is the source and the database is disposable, and a site upgrading across the
+ * two has rows nothing would ever read again. So the first boot of this version
+ * writes them out. Which side wins when both have something to say is decided
+ * the way it is decided everywhere else: the file wins when it was written
+ * after the last save, because that is a hand edit or a restored checkout, and
+ * the rows win otherwise. Either way the actor handle and type come from the
+ * rows, because `site.json` never carried them and losing them would rename the
+ * site's actor.
  *
  * Synchronous because `createCms` is: it runs before the server is listening
  * and before anything else has touched the file.
@@ -178,14 +179,14 @@ export function migrateSettingsToFile(db: DatabaseSync, contentDir: string): voi
  * Turn an older site's `actor_keys` rows into files under `data/keys`, once,
  * and drop the table.
  *
- * The rows this writes out are the site actor's, which no version after
- * TASK-68 has: decision-14 replaced it with one actor per user, and a user's
+ * The rows this writes out are the site actor's, which no current version
+ * has: the site now has one actor per user instead, and a user's
  * keys are named after their username rather than after the sentinel `actor`.
  * The files are still written rather than dropped on the floor, because a
  * private key is the one thing this CMS never deletes for somebody — an
  * operator who wants the old identity back has it on disk to move.
  *
- * This is the migration decision-9 calls the one that must not fail. Settings
+ * This is the one migration that must not fail. Settings
  * a site could type again and followers a site could ask for again; an actor's
  * private key is the site's identity, and losing it means every follower's
  * cached public key stops verifying its posts for good. So the rows are
@@ -224,8 +225,8 @@ export function migrateActorKeysToFiles(db: DatabaseSync, dataDir: string): void
  * Turn an older site's users rows into `data/users.json`, once, and drop the
  * table.
  *
- * TASK-9 put the accounts in SQLite; decision-9 made the database disposable,
- * and a site upgrading across the two has rows nothing would ever read again.
+ * Accounts were once kept in SQLite; now the database is disposable, and a
+ * site upgrading across the two has rows nothing would ever read again.
  * So the first boot of this version writes them out — ids and hashes exactly
  * as they stand, because a session names its user by id and a hash is not
  * something to re-encode on the way past.

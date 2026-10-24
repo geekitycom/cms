@@ -284,7 +284,7 @@ const SYNDICATE_TO_FIELD: PostField = {
       .filter((target) => body[syndicateToField(target)] !== undefined)
       .map((target) => target.id),
   }),
-  // The checkboxes speak for the targets the site declares (TASK-155). An id
+  // The checkboxes speak for the targets the site declares. An id
   // the file lists that names no declared target has no checkbox, so it is
   // kept as written rather than lost to a save.
   write: (extra, form, { declared }) => {
@@ -330,7 +330,7 @@ const PINNED_FIELD: PostField = {
   submitted: (body) => ({ pinned: body[PINNED_FRONT_MATTER_KEY] !== undefined }),
   // The moment a post was pinned is what orders the featured collection, so a
   // pin the file already carries keeps its moment through every later save,
-  // and unpinning takes the key out rather than writing `false` (TASK-207).
+  // and unpinning takes the key out rather than writing `false`.
   write: (extra, form, { document, now }) => {
     if (!form.pinned) delete extra[PINNED_FRONT_MATTER_KEY];
     else if (document === undefined || pinnedAt(document) === undefined) {

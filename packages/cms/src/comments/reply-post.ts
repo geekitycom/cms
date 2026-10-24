@@ -11,8 +11,8 @@ import { commentKeys, commentProblems } from './submission.ts';
 import type { CommentForm, CommentRefusal, CommentThrottle } from './submission.ts';
 
 /**
- * What a signed-in user's reply becomes (TASK-300, decision-47), from the
- * thread or the moderation screen (TASK-326): a reply post, written through
+ * What a signed-in user's reply becomes, from the
+ * thread or the moderation screen: a reply post, written through
  * the same path as the editor and Micropub, so it federates, sends its
  * webmentions, fetches its reply context and tells the commenter it answers
  * the way any reply post does. The thread shows it inline because its

@@ -1,7 +1,7 @@
 /**
  * Navigation: every menu this site holds, and what renders it.
  *
- * A menu is a named thing the site stores and the theme asks for (TASK-107),
+ * A menu is a named thing the site stores and the theme asks for,
  * and this is where somebody manages them. It is a top-level section after
  * Pages rather than a settings page, on purpose: a menu is content a site
  * arranges, the way its pages are, rather than a switch that changes how the
@@ -108,7 +108,7 @@ export interface NavigationScreen {
  *
  * The first theme on the render's own search path that declares any areas,
  * which for a site on the packaged theme is the packaged theme itself. That is
- * the same rule Nunjucks resolves a template by (decision-15): a site theme is
+ * the same rule Nunjucks resolves a template by: a site theme is
  * laid over the packaged one a file at a time and need only carry what it
  * changes, so a theme that declares no areas has not overridden the
  * declaration — and its inherited `layouts/base.njk` really is still rendering
@@ -199,7 +199,7 @@ export interface MountNavigationOptions {
  * a box further up the page, and a delete must not depend on every box on the
  * screen parsing. Each writes `content/_data/site.json` through the same
  * atomic update every settings save uses, applied to the file as re-read
- * inside the write (decision-9), so two people editing two menus at once both
+ * inside the write, so two people editing two menus at once both
  * land.
  */
 export function mountNavigationScreen(

@@ -12,7 +12,7 @@ import type { ParsedArgs } from './args.ts';
 /**
  * `geekity serve`: the default. Runs until it is signalled.
  *
- * This process is a supervisor (TASK-288): it owns the port and runs the CMS
+ * This process is a supervisor: it owns the port and runs the CMS
  * in a `node:cluster` worker that runs this same command, so Reload on the
  * Plugins screen can boot a new worker beside the old one and a worker that
  * crashes is respawned, both without restarting the container.

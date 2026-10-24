@@ -1,5 +1,5 @@
 /**
- * Editor actions (decision-33, TASK-285): a running plugin's buttons beside
+ * Editor actions: a running plugin's buttons beside
  * the title, description and tags fields of the post and page editor, and the
  * endpoint each posts the draft to.
  *

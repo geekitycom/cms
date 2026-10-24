@@ -2,12 +2,12 @@ import type { Document } from './document.ts';
 import { toUtcInstant } from './time.ts';
 
 /**
- * The front matter key that pins a post to the top of its author's profile
- * (TASK-207): `pinned: <ISO instant>`, written when the author pinned it.
+ * The front matter key that pins a post to the top of its author's profile:
+ * `pinned: <ISO instant>`, written when the author pinned it.
  *
  * An instant rather than `true`, so the order the fediverse shows pins in
  * (most recently pinned first, as Mastodon does) lives in the file with the
- * pin itself (decision-9) instead of in an index that a rebuild would lose.
+ * pin itself instead of in an index that a rebuild would lose.
  */
 export const PINNED_FRONT_MATTER_KEY = 'pinned';
 

@@ -85,13 +85,13 @@ export async function handleFollow(context: SiteInboxContext, follow: Follow): P
  *
  * `parseUri` is what decides whether the object is one of this site's actors:
  * comparing strings would have to know how Fedify spells an actor's URL, and
- * this asks Fedify instead. The identifier it answers with is the username
- * (decision-14), and a username nobody has is not a follow of anybody.
+ * this asks Fedify instead. The identifier it answers with is the username,
+ * and a username nobody has is not a follow of anybody.
  *
  * A stored actor id is the other way in, and the commoner one for a migrated
  * site: it is the `id` the actor document publishes, so it is what a peer that
  * just read the document names, and Fedify's router cannot parse it because it
- * is not a path Fedify dispatches (doc-8). Matched on the whole URL, as it is
+ * is not a path Fedify dispatches. Matched on the whole URL, as it is
  * everywhere else.
  */
 function followedUser(context: SiteInboxContext, follow: Follow): User | undefined {
@@ -277,9 +277,9 @@ export async function handleQuoteRequest(
  * Handle an `Accept`: a relay agreeing to the subscription the site asked
  * for, or somebody going to an event.
  *
- * The site follows nothing but relays (doc-4 keeps its `following` collection
- * empty), so an `Accept` addressed to it is an answer to one of the `Follow`
- * activities TASK-40 sends — or a stray, which {@link acceptRelay} recognises
+ * The site follows nothing but relays (its `following` collection stays empty),
+ * so an `Accept` addressed to it is an answer to one of the `Follow` activities
+ * a relay subscription sends — or a stray, which {@link acceptRelay} recognises
  * as one and leaves alone.
  */
 export async function handleAccept(context: SiteInboxContext, accept: Accept): Promise<void> {
@@ -311,7 +311,7 @@ function answersPost(context: SiteInboxContext, activity: Accept | Reject): bool
  * Nothing about the activity is interpreted here: the conversation reads it
  * back out of the log, which is why the row keeps the whole JSON-LD rather
  * than a few columns of it. The profile is what a conversation names the
- * sender by when they are not a follower (TASK-184), and it is fetched in the
+ * sender by when they are not a follower, and it is fetched in the
  * background, so the inbox answers without waiting for it.
  */
 export async function handleLoggedActivity(
@@ -335,7 +335,7 @@ export async function handleLoggedActivity(
  * The recipient defaults to the inbox the delivery arrived at —
  * `context.recipient` is the username for a personal inbox and `null` for the
  * shared one — and a caller that has worked out the addressee for itself, as
- * `handleFollow` has, names it instead (decision-14).
+ * `handleFollow` has, names it instead.
  */
 export async function logActivity(
   context: SiteInboxContext,
@@ -423,7 +423,7 @@ export const INBOX_LISTENERS: readonly InboxListener[] = [
 
 /**
  * Handle an activity another inbox has already verified, as the site's own
- * inbox would: what a plugin's federation hands over (decision-33).
+ * inbox would: what a plugin's federation hands over.
  *
  * The activity arrives as JSON-LD and is parsed here with this core's
  * vocabulary, because the plugin's copy of Fedify is not this one and a type

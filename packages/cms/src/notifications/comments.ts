@@ -20,7 +20,7 @@ import {
 /**
  * The two messages a comment sets off, and the rules about who gets them.
  *
- * Both go through the mail service and nothing else (TASK-53), so a site with
+ * Both go through the mail service and nothing else, so a site with
  * no provider sends nothing and every path through here still works. Neither
  * is awaited by the request that caused it: a comment is stored, a page is
  * redirected to, and the message goes out behind that.
@@ -146,7 +146,7 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
     // Everybody who wants the notice as it happens. A user on an hourly or
     // daily digest is deliberately not written to here: the whole of what
     // choosing a window means is that this moment is not one of the moments
-    // they hear about (TASK-60), and `createCommentDigest` writes to them
+    // they hear about, and `createCommentDigest` writes to them
     // instead, from the queue as it stands when their window comes up.
     const recipients = notificationRecipients(
       listUsers(config.dataDir),

@@ -26,7 +26,7 @@ const WALL_CLOCK = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2})(:\d{2})?(\.\d+)?)?$
  * A value that already carries an offset — `2026-06-02T07:30:00-05:00`, or a
  * `Z` — names an instant on its own and keeps it, so the zone is not consulted
  * and converting is loss-free. A value that carries none is a wall clock, and
- * `timezone` is what says which one: per decision-11 that is the site's zone,
+ * `timezone` is what says which one: that is the site's zone,
  * not the server's, so the same file means the same moment wherever it is
  * saved.
  *

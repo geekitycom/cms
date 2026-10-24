@@ -1,11 +1,11 @@
 /**
- * `@geekity/plugin-wordpress` (decision-33): what a site that moved from the
+ * `@geekity/plugin-wordpress`: what a site that moved from the
  * WordPress ActivityPub plugin needs until its followers' servers have caught
  * up. Its old inbox and collection paths, the record of when each was last
  * asked for, and `geekity import wordpress-actor`.
  *
  * Stored actor and object ids, WebFinger aliases, the feed and archive layout
- * and oEmbed are the site's own and stay in `@geekity/cms` (decision-14).
+ * and oEmbed are the site's own and stay in `@geekity/cms`.
  */
 
 import { definePlugin } from '@geekity/cms/plugin';

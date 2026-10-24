@@ -6,7 +6,7 @@ import { hasOptedOut, removeCommentOptOut } from '../notifications/optouts.ts';
 import { withRedacted } from './retention.ts';
 
 /**
- * Erasing one person's personal data when they ask (TASK-135).
+ * Erasing one person's personal data when they ask.
  *
  * A person is found by the email they gave, because that is the one thing
  * they can prove is theirs: a name is anybody's to type. Their comments stay

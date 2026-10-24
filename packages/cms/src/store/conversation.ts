@@ -2,7 +2,7 @@
  * What {@link ConversationEvents.onConversationWrite} hears: a comment on the post of
  * that slug, or an activity naming these objects as what it is about or what
  * it answers. `approved` says this write is the one that approved the comment,
- * so it is on the page now and was not before (TASK-333).
+ * so it is on the page now and was not before.
  */
 export type ConversationWrite =
   | {
@@ -16,7 +16,7 @@ export type ConversationWrite =
 export interface ConversationEvents {
   /**
    * Hear about every comment written or forgotten and every activity logged,
-   * as it happens (TASK-320). A rebuild of either index is not news and says
+   * as it happens. A rebuild of either index is not news and says
    * nothing. Returns the function that stops listening.
    */
   onConversationWrite(listener: (written: ConversationWrite) => void): () => void;

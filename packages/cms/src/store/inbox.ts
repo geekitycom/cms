@@ -17,7 +17,7 @@ const IS_REPLY = `activity_type = '${REPLY_ACTIVITY_TYPE}' AND in_reply_to IS NO
 
 /**
  * One activity that arrived in the inbox and was recorded rather than acted
- * on: doc-4's `Like`, `Announce` and `Create(Note)` reply, and the follow
+ * on: a `Like`, an `Announce` or a `Create(Note)` reply, and the follow
  * traffic alongside them.
  *
  * The raw JSON-LD is kept whole because a later phase surfaces likes, boosts
@@ -39,7 +39,7 @@ export interface InboxActivity {
    * Which of this site's users it was addressed to, or `null` for one
    * delivered to the shared inbox without naming one.
    *
-   * decision-14 makes every user an actor, so the log records whose inbox was
+   * Every user is an actor, so the log records whose inbox was
    * told as well as what it was told. Derived from the log line rather than
    * from the activity, because the addressee is a fact about the delivery.
    */
@@ -58,7 +58,7 @@ export interface InboxActivity {
   readonly receivedAt: string;
   /**
    * Whether the site read it rather than was told it: a reply found in a
-   * fediverse reply's `replies` collection (TASK-321), logged as the `Create`
+   * fediverse reply's `replies` collection, logged as the `Create`
    * nobody delivered. Only these are the site's to remove when the remote
    * server stops listing them.
    */
@@ -87,7 +87,7 @@ export type NewInboxActivity = Omit<
    * Who it was addressed to, when the delivery said. Optional and `null` by
    * default: an activity that reached the shared inbox without naming one of
    * this site's actors is addressed to nobody in particular, and so is every
-   * line of a log written before decision-14.
+   * line of a log written when the site had one actor.
    */
   recipient?: string | null | undefined;
 };
@@ -183,7 +183,7 @@ export interface InboxStore {
    */
   listActivitiesAbout(objectIds: readonly string[]): InboxActivity[];
 
-  /** The logged replies whose note's id has this `/replies/` key (TASK-327). */
+  /** The logged replies whose note's id has this `/replies/` key. */
   listRepliesByKey(key: string): InboxActivity[];
 
   listInteractionsSince(since: string): InboxInteraction[];

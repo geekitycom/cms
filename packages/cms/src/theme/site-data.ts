@@ -91,7 +91,7 @@ export interface SiteData {
   /**
    * The theme the site renders through: the name of one directory under the
    * configured themes directory. Absent — the ordinary state — is the theme
-   * the package ships (decision-15).
+   * the package ships.
    */
   theme?: string | undefined;
   /**
@@ -123,7 +123,7 @@ export interface SiteDataSource {
 /**
  * A source over one site's data.
  *
- * `content/_data/site.json` is the only source of it (decision-9): the
+ * `content/_data/site.json` is the only source of it: the
  * settings screen writes that file and nothing else remembers what it said, so
  * a save and a hand edit reach the theme by exactly the same route.
  *
@@ -214,7 +214,7 @@ export function themeName(site: SiteData): string {
  * The zone this site's dates are read in, from the site data, or UTC when it
  * names none.
  *
- * The same lens the `date` filter applies (decision-11), for the things the
+ * The same lens the `date` filter applies, for the things the
  * CMS rather than a template has to put a date through: which month of an
  * archive a post belongs to is the same calendar question as which day the
  * line under it says, and the two must not be answered by different clocks.

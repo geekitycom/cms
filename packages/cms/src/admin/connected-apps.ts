@@ -1,5 +1,5 @@
 /**
- * Users > Connected apps (TASK-162): the apps that hold a token for whoever is
+ * Users > Connected apps: the apps that hold a token for whoever is
  * signed in, and the button that cuts one off.
  *
  * Only ever your own connections, because a token acts as the person who

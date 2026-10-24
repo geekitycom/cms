@@ -10,15 +10,15 @@ import type { ListPageOptions, Row } from './rows.ts';
  *
  * The followers are irreplaceable — an actor that followed and was forgotten
  * never hears from the site again and has no way of noticing — so
- * `content/_data/federation/followers.json` is where they are kept
- * (decision-9), and this row is the index of that file, emptied and read back
+ * `content/_data/federation/followers.json` is where they are kept,
+ * and this row is the index of that file, emptied and read back
  * on every boot. The display columns are a copy of what the actor said about
  * itself when it followed, so the admin can list its followers without
  * dereferencing every one of them.
  */
 export interface Follower {
   /**
-   * Which user is followed (decision-14).
+   * Which user is followed.
    *
    * Every user is an actor with followers of their own, so a follower is only
    * ever a follower *of somebody*: the column is what makes one person's
@@ -87,8 +87,8 @@ export interface FollowerStore {
   /**
    * Make the followers index say exactly this, in one transaction.
    *
-   * What a rebuild from every `content/_data/federation/{username}/followers.json` calls
-   * (decision-9): the file is the source, so a row it does not carry is a row
+   * What a rebuild from every `content/_data/federation/{username}/followers.json` calls:
+   * the file is the source, so a row it does not carry is a row
    * that should not be delivered to, and replacing the lot is the only way to
    * say that. Nothing outside a rebuild should reach for it.
    */

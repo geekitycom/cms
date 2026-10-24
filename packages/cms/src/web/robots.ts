@@ -15,7 +15,7 @@ import { SITEMAP_PATH } from './sitemap.ts';
 
 /**
  * The robots file: what the site tells crawlers, and the two lines it tells
- * them whatever its settings say (TASK-148).
+ * them whatever its settings say.
  *
  * The file is a list of groups, each one or more `User-agent` lines and the
  * rules under them, and RFC 9309 gives a crawler exactly one group: the one

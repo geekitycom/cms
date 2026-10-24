@@ -196,7 +196,7 @@ function repliesTo(context: Reading, key: string): RepliesOf | undefined {
   if (!isKey(key)) return undefined;
 
   // Each source's index is asked in turn, so a key naming nothing costs three
-  // lookups and no more (TASK-327).
+  // lookups and no more.
   const [document] = context.store.listByRepliesKey(key);
   if (document !== undefined) {
     if (repliesKey(feedGuid(document, context.baseUrl)) === key) {

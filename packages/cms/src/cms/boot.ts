@@ -58,7 +58,7 @@ export function boot(
 
   // A site upgrading from the version that kept its settings in SQLite has
   // rows nothing would read again: they become content/_data/site.json here,
-  // once, and the table goes (decision-9). A site that has already been
+  // once, and the table goes. A site that has already been
   // through it does nothing but check.
   migrateSettingsToFile(adminDb, configured.contentDir);
 
@@ -96,8 +96,8 @@ export function boot(
   // content/_data/federation/inbox/{yyyy}-{mm}.jsonl. Unlike the three above,
   // no table is dropped: `ap_inbox` and `followers` stay as indexes of the
   // files, which is why the rebuild is next and runs on every boot rather than
-  // once. The site actor's followers are not migrated: decision-14 replaced it
-  // with one actor per user, and nobody inherits a follow made with somebody
+  // once. The site actor's followers are not migrated: it was replaced with
+  // one actor per user, and nobody inherits a follow made with somebody
   // who no longer exists.
   const federation = { admin, contentDir: resolved.contentDir, dataDir: resolved.dataDir };
   migrateFederationToFiles(federation);
@@ -110,7 +110,7 @@ export function boot(
   backfillDeleted(resolved.contentDir, admin.listDeletedObjectIds());
 
   // And the comments, which are files under content/_data/comments/ with
-  // their authors' emails under data/comments/ (TASK-50, TASK-182). A comment
+  // their authors' emails under data/comments/. A comment
   // file that still holds an email, from before they moved or from a hand
   // edit, has it moved first; then the index is rebuilt, on every boot for the
   // same reason the federation one is.
@@ -137,7 +137,7 @@ export function boot(
 function withCommentChecker(resolved: ResolvedConfig, settings: SettingsRegistry): ResolvedConfig {
   return Object.freeze({
     ...resolved,
-    // Akismet, when the site has not named a checker of its own (TASK-52). A
+    // Akismet, when the site has not named a checker of its own. A
     // config that names one wins outright, because a site that has written a
     // checker meant it; this is the one the settings screen turns on with a key
     // rather than a deployment.

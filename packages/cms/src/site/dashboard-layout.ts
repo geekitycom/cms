@@ -1,5 +1,5 @@
 /**
- * How one user has arranged the dashboard's widget cards (TASK-469, TASK-479).
+ * How one user has arranged the dashboard's widget cards.
  *
  * Cards are named by key, `owner:id`, where the owner is `core` or a plugin's
  * package name. The dashboard is two columns, each a stack of cards. The

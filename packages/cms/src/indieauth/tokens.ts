@@ -7,10 +7,9 @@ import type { Scope } from './request.ts';
 import { INDIEAUTH_TOKENS, dataPath } from '../files/data-files.ts';
 
 /**
- * The access tokens the token endpoint has issued: `data/indieauth-tokens.json`
- * (TASK-160, decision-24).
+ * The access tokens the token endpoint has issued: `data/indieauth-tokens.json`.
  *
- * A token is irreducible state under decision-9: a client holding one cannot
+ * A token is irreducible state: a client holding one cannot
  * be handed it again, so losing it signs the person out of every app. So it
  * lives in a file in `data/`, written 0600 like `users.json`, and holds a
  * SHA-256 hash of each token rather than the token. A token is 32 random
@@ -33,8 +32,7 @@ export const REFRESH_TOKEN_LIFETIME_MS = 60 * 24 * 60 * 60 * 1000;
 /**
  * How stale a connection's last use may be. A token's use is written only
  * when the stored one is older than this, so a client calling the API all
- * day rewrites the file once an hour rather than once a request (TASK-162,
- * decision-24).
+ * day rewrites the file once an hour rather than once a request.
  */
 export const LAST_USE_RESOLUTION_MS = 60 * 60 * 1000;
 

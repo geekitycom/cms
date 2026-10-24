@@ -167,7 +167,7 @@ const imageSource: AttributeRule = (value) => postUrl(value, POST_IMAGE_SCHEMES)
 
 /**
  * The elements a post written by a Micropub client may carry, and what each
- * attribute may hold (TASK-258). It is wider than a comment's: a post has
+ * attribute may hold. It is wider than a comment's: a post has
  * headings, images, tables, figures and details. Nothing on it styles, scripts
  * or embeds another document.
  */

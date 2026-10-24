@@ -96,11 +96,11 @@ export function mountDashboard(app: Hono<GeekityEnv>, options: { render: AdminRe
       federationUrl: FEDERATION_PATH,
       // The other number that is not about the content directory: with no
       // email in this milestone, the dashboard is how a moderator finds out
-      // that somebody is waiting (TASK-50).
+      // that somebody is waiting.
       pendingComments: pendingComments(c.var.admin),
       commentsUrl: COMMENTS_PATH,
       // And what the contact form has left waiting, which is the same kind of
-      // number for the same reason (TASK-56).
+      // number for the same reason.
       unreadMessages: unreadMessages(c.var.config.dataDir),
       messagesUrl: MESSAGES_PATH,
       alerts: [...loaded.values()].filter((widget) => widget.placement === 'alerts').map(drawn),

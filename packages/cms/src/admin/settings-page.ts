@@ -3,7 +3,7 @@
  *
  * The settings used to be one form with twelve headings. They are seven pages
  * now — General, Reading, Permalinks, Discussion, Email and Privacy under Settings, and
- * Federation under its own section (TASK-109) — and this is what they have in
+ * Federation under its own section — and this is what they have in
  * common: a description of the page, and the one pair of routes that turns it
  * into a screen you can read and a form you can save. A page module describes
  * itself and writes its own template; nothing about how a page is wired lives
@@ -51,7 +51,7 @@ export interface SettingsPage {
    * The section it is under, when it is not Settings.
    *
    * Six of the seven are Settings' own children. Federation's is a child of
-   * the Federation section instead (TASK-109): what a settings page is has
+   * the Federation section instead: what a settings page is has
    * nothing to do with where the menu files it, so the page says where it is
    * and the rest of this module carries on as before.
    */

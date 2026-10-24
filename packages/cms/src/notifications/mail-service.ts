@@ -27,8 +27,8 @@ import type { MailTemplates } from './mail-templates.ts';
 /**
  * The one door out of this CMS for email.
  *
- * Every feature that emails — a password reset (TASK-54), a moderation notice
- * (TASK-55), a contact form (TASK-56) — calls {@link MailService.send} and
+ * Every feature that emails — a password reset, a moderation notice,
+ * a contact form — calls {@link MailService.send} and
  * nothing else. What carries the message, whether the site is configured to
  * send at all, how many times a refusal is worth trying again and where the
  * attempts are written down are all decided here, once.
@@ -41,7 +41,7 @@ import type { MailTemplates } from './mail-templates.ts';
  * - **Nothing is decided at boot.** The settings and the `mail` namespace are read
  *   per send, so a key pasted into the settings screen sends the next message
  *   and a provider switched there takes effect at once, neither needing a
- *   restart — the same way every other setting behaves under decision-9.
+ *   restart — the same way every other setting behaves.
  * - **Sending is off the request.** Messages go on one queue, one at a time,
  *   and a refusal is tried again after a growing wait. A caller that wants the
  *   answer — the Send test email button — awaits the promise; a caller that
@@ -100,7 +100,7 @@ export interface MailResult {
   readonly ok: boolean;
   /** Whether it was never sent because the site sends no mail. */
   readonly skipped: boolean;
-  /** Whether dev mode held it (decision-35), recorded rather than sent. */
+  /** Whether dev mode held it, recorded rather than sent. */
   readonly held: boolean;
   /** Which provider carried it, or `none`. */
   readonly provider: MailProviderName;

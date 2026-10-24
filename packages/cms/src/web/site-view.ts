@@ -29,8 +29,8 @@ export interface FrontPages {
  *
  * The names are resolved once, where the users file is read, rather than
  * inside each query: `content/authors.ts` decides which stored spellings read as
- * this person (a username, and the display name a file written before
- * decision-14 carries), and the index only ever matches strings.
+ * this person (a username, and the display name a file written before every
+ * user became an actor carries), and the index only ever matches strings.
  */
 export interface AuthorListing {
   /** Whose archive it is. */

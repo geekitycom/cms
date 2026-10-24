@@ -29,8 +29,8 @@ import { notFound } from './status-pages.ts';
  * is mounted first: the public site claims every unmatched path in its
  * not-found handler, so anything registered after it never sees a request.
  *
- * A post's object is not one of Fedify's paths at all. decision-13 makes a
- * post's ActivityStreams id its permalink, so {@link activityStreamsDocument}
+ * A post's object is not one of Fedify's paths at all. A post's
+ * ActivityStreams id is its permalink, so {@link activityStreamsDocument}
  * is what serves the `Article`: one URL, answering a browser with the page and
  * a peer with the object. The same handler answers at the `activitypub.id` a
  * migrated post's file names, and sends a browser from there to the permalink.
@@ -48,7 +48,7 @@ export function mountFederation(
   // the middleware that would otherwise answer it. Fedify hard-codes the
   // `self` link to the dispatcher path and computes `aliases` from the
   // resource, neither of which can be added to, so an actor served under the
-  // id it had elsewhere could never be discovered by it (doc-8). Owning the
+  // id it had elsewhere could never be discovered by it. Owning the
   // route is a dozen lines and gives complete control of `subject`, `aliases`
   // and `links`.
   app.get(WEBFINGER_PATH, (c) => {
@@ -100,7 +100,7 @@ export function mountFederation(
     // handle to `/author/<whatever was typed>/`, so a profile link with a
     // menu item's flag on the end of it — `https://shll.me/@a | me` — landed a
     // reader on `/author/a%20%7C%20me/` instead of saying there is no such
-    // person (TASK-112). Spelled exactly, the way WebFinger matches: `Ada` and
+    // person. Spelled exactly, the way WebFinger matches: `Ada` and
     // `ada` are two accounts on a screen that can tell them apart, and only
     // one of them exists.
     const user = listUsers(c.var.config.dataDir).find((account) => account.username === handle);
@@ -120,11 +120,11 @@ export function mountFederation(
   }) as MiddlewareHandler<GeekityEnv>;
 
   // The one path where Fedify and the public site both have a claim: a user's
-  // author archive is their actor id (decision-14), and Fedify answers a bare
-  // `Accept: application/json` as an ActivityStreams request while doc-3 gives
-  // that spelling the listing's own JSON. The CMS's rule decides, so a peer
-  // asking for `activity+json` or `ld+json` gets the actor and everything else
-  // — a browser, a reader, a feed tool — reaches the archive it asked for.
+  // author archive is their actor id, and Fedify answers a bare `Accept:
+  // application/json` as an ActivityStreams request while content negotiation
+  // gives that spelling the listing's own JSON. The CMS's rule decides, so a
+  // peer asking for `activity+json` or `ld+json` gets the actor and everything
+  // else — a browser, a reader, a feed tool — reaches the archive it asked for.
   // Every other Fedify path is left exactly as it was.
   const federationGate: MiddlewareHandler<GeekityEnv> = async (c, next) => {
     const isArchive = parseAuthorPath(requestPath(c)) !== undefined;
@@ -159,14 +159,14 @@ export interface MountFederationOptions {
  * under somewhere else: the `Person` for a peer, a redirect to the author
  * archive for a browser, and `undefined` for everything else.
  *
- * The twin of {@link activityStreamsDocument}, and for the same reason
- * (decision-14): a stored actor id is identity. A follower's server keys the
+ * The twin of {@link activityStreamsDocument}, and for the same reason:
+ * a stored actor id is identity. A follower's server keys the
  * account by the URL it first saw, so that URL has to keep answering with this
  * person's actor for as long as the account exists, or every follow out there
  * points at nothing.
  *
  * Fedify cannot serve it — its router matches paths, and a stored id is
- * commonly a query string on the site root (doc-8) — so it is served here,
+ * commonly a query string on the site root — so it is served here,
  * ahead of the public site, exactly as a post's stored `activitypub.id` is.
  */
 async function activityStreamsActor(
@@ -191,7 +191,8 @@ async function activityStreamsActor(
  * Built the way {@link storedObjectAt} builds a post's candidate — the
  * request's path and query on the site's base URL, rather than `request.url`,
  * which behind a proxy is the internal address — and matched on the whole URL,
- * query string and all, which is what decision-14 asks for.
+ * query string and all, because a stored WordPress actor id may be a
+ * query-string URL that has to keep answering exactly as it was issued.
  *
  * A user whose stored id happens to be their author URL is not one of these:
  * the actor dispatcher has already answered for that URL, and answering again
@@ -212,14 +213,14 @@ function storedActorAt(c: Context<GeekityEnv>): User | undefined {
  * peer, a redirect to the permalink for a browser at a stored id, and
  * `undefined` for everything else.
  *
- * Two URLs can name a post. Its permalink always does — that is the whole of
- * decision-13, and a peer that dereferences a link somebody shared lands on
+ * Two URLs can name a post. Its permalink always does — a post's object id is
+ * its permalink, and a peer that dereferences a link somebody shared lands on
  * the object rather than on a page it cannot read. The other is the
- * `activitypub.id` a migrated post's file carries: the name its followers,
- * its replies and, unless it sets a `guid`, its RSS subscribers already hold,
- * which has to keep answering or every copy out there points at nothing. A
- * browser that follows one of those old links is sent on to the permalink,
- * because that is the URL a person should end up at.
+ * `activitypub.id` a migrated post's file carries: the name its followers, its
+ * replies and, unless it sets a `guid`, its RSS subscribers already hold, which
+ * has to keep answering or every copy out there points at nothing. A browser
+ * that follows one of those old links is sent on to the permalink, because that
+ * is the URL a person should end up at.
  *
  * Anything else — a browser at a permalink, a `.md` or `.json` request, a
  * page, a listing — gets `undefined` and falls through to the public site
@@ -253,7 +254,7 @@ async function activityStreamsDocument(
     return wantsObject ? notFound(c) : undefined;
   }
   if (wantsObject) return await article(c, federation, stored);
-  // A renamed post's old URL is its stored id (decision-20). Once a new
+  // A renamed post's old URL is its stored id. Once a new
   // document takes that URL over, a browser there is reading the new one; the
   // id keeps answering peers, who hold it as a name rather than a page.
   if (publicDocumentAt(c.var.store, requestPath(c)) !== undefined) return undefined;

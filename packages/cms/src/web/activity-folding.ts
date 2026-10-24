@@ -224,7 +224,7 @@ export function fromQuotes(
  * never approved should not be displayed), so the approvals are walked and the
  * log is asked for each one's note, rather than the other way about. The note
  * has to be the approved one, by the approved actor, quoting this post: an
- * approval of one quote vouches for nothing else. Both are files (decision-9),
+ * approval of one quote vouches for nothing else. Both are files,
  * so a rebuilt index shows exactly what the live one did.
  */
 export function quotesOf(
@@ -358,14 +358,14 @@ function withdrawnBy(activities: readonly InboxActivity[]): Set<string> {
  *
  * A follower is named from the profile it published when it followed, and
  * anybody else from the profile the site fetched when they were first heard
- * from (TASK-184). Both are read from the database: nothing is fetched while a
+ * from. Both are read from the database: nothing is fetched while a
  * page is drawn. Only an actor neither knows is named by a guess from their
  * URL, which is their server when the URL ends in a number.
  */
 export function authorNaming(admin: AdminStore): (actorId: string) => InteractionAuthor {
   const known = new Map<string, InteractionAuthor>();
   // Read once, on the first unknown actor, rather than per actor: the
-  // followers are one row per (user, actor) now (decision-14), so the same
+  // followers are one row per (user, actor) now, so the same
   // stranger may be on the list several times and any of those rows names them
   // the same way — the columns read here are the actor's own name and picture.
   let followers: Map<string, ActorProfile> | undefined;

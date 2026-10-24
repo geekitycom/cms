@@ -60,7 +60,7 @@ export interface DocumentContext {
   postType: PostType;
   /**
    * Whether the post shows its title: one the author gave that its text does
-   * not open with, including on a post with no text at all (TASK-256). A theme
+   * not open with, including on a post with no text at all. A theme
    * heads such a post with its title and draws any other by its content,
    * whatever its type: a reply or a like can be either.
    */
@@ -68,13 +68,13 @@ export interface DocumentContext {
   /** The URL a reply answers, present only on a reply. */
   inReplyTo?: string | undefined;
   /**
-   * What an RSVP says (TASK-198): its `rsvp` value, the words for it, and
+   * What an RSVP says: its `rsvp` value, the words for it, and
    * `line`, the `p-rsvp` as the HTML its content opens with. Present only on
    * a post whose front matter names one of the four values.
    */
   rsvp?: { value: RsvpValue; label: string; line: string } | undefined;
   /**
-   * When and where an event is (TASK-200): `start` and, when it has one,
+   * When and where an event is: `start` and, when it has one,
    * `end`, as instants a theme formats in the site's zone, and `location`,
    * either `{ kind: 'place', name }` or `{ kind: 'virtual', url }`. Present
    * only on a post whose front matter has a readable `start`.
@@ -84,14 +84,14 @@ export interface DocumentContext {
     | { item: ReviewedItem; kindLabel: string; rating?: Rating; best: number; html: string }
     | undefined;
   /**
-   * What the post reposts, likes or bookmarks (TASK-169): each valid
+   * What the post reposts, likes or bookmarks: each valid
    * `repost-of`, `like-of` and `bookmark-of`, as its property and its URL, in
    * that order. Empty for a post that cites nothing.
    */
   citations: Citation[];
   /**
    * The language the document is written in, as a canonical BCP 47 tag, when
-   * its front matter names one (TASK-154). A theme marks the article with it
+   * its front matter names one. A theme marks the article with it
    * where it is not the site's `language`. A value that is no tag is
    * `undefined` here, so a typo in one file never reaches an attribute.
    */
@@ -115,7 +115,7 @@ export interface DocumentContext {
    *
    * The very string the feeds publish as a summary, from the same function, so
    * a feed item and the entry a listing prints for the same post cannot say
-   * two different things (decision-16). Always present, empty included, so a
+   * two different things. Always present, empty included, so a
    * theme prints it without asking whether it is there.
    */
   summary: string;
@@ -126,7 +126,7 @@ export interface DocumentContext {
   /** `post` or `page`. */
   type: string;
   /**
-   * The post's recording (TASK-213), read once by `enclosureOf` over the raw
+   * The post's recording, read once by `enclosureOf` over the raw
    * front matter, with what a player needs decided: whether it is played by a
    * `<video>` or an `<audio>`, and whether its transcript is timed captions.
    * Absent when the front matter describes none worth playing, so a theme
@@ -134,21 +134,21 @@ export interface DocumentContext {
    */
   enclosure?: EnclosureContext | undefined;
   /**
-   * The post's photos (TASK-166), in the order its `photo` front matter lists
+   * The post's photos, in the order its `photo` front matter lists
    * them, over the raw value. Empty when it has none.
    */
   photos: PhotoContext[];
   /**
-   * The post's copies elsewhere, each printed as `u-syndication` (TASK-155):
+   * The post's copies elsewhere, each printed as `u-syndication`:
    * the URLs its `syndication` front matter lists by hand, and on a post's own
    * page the copies its syndication targets answered with. Over the raw front
    * matter value, so a theme always reads this shape. Empty when there are none.
    */
   syndication: SyndicationLink[];
   /**
-   * Where the post was first published, when that is elsewhere (TASK-293):
+   * Where the post was first published, when that is elsewhere:
    * its `canonical_href` when that is an absolute http or https URL, and what a
-   * link to it says: its `canonical_name` (TASK-316), else its host. A theme
+   * link to it says: its `canonical_name`, else its host. A theme
    * makes it the page's canonical URL and links to it.
    */
   original?: SyndicationLink | undefined;
@@ -212,12 +212,12 @@ export interface EnclosureContext extends Omit<Enclosure, 'transcript'> {
 export interface PhotoContext {
   /** As the front matter wrote it: an upload's site-relative URL, or a web address. */
   url: string;
-  /** Its alt text: the post's own, else the media library's (TASK-141). Empty when nobody said. */
+  /** Its alt text: the post's own, else the media library's. Empty when nobody said. */
   alt: string;
   /**
    * `<img class="u-photo" src alt>`, the microformats2 photo of the h-entry,
    * as a responsive `<picture>` when the upload's variants exist, the same
-   * rewrite `content` gets (decision-10).
+   * rewrite `content` gets.
    */
   html: string;
 }
@@ -240,7 +240,7 @@ export interface NeighbourContext {
 
 /**
  * One of the site's own posts or pages that links to the document, as a theme
- * lists it under "Linked from" (TASK-322): a link, and the date beside it.
+ * lists it under "Linked from": a link, and the date beside it.
  * A link rather than a document context, for the reason a neighbour is one.
  */
 export interface BacklinkContext {
@@ -269,18 +269,18 @@ export function backlinkContext(document: Document, cited?: CitedPageReader): Ba
  * the page data.
  *
  * `images` is the site's image config, and giving it is what turns an uploaded
- * picture in `content` into a `<picture>` with a `srcset` (decision-10). It is
+ * picture in `content` into a `<picture>` with a `srcset`. It is
  * an argument rather than something `renderMarkdown` does, because only the
  * theme's HTML may have it: the feeds, the JSON and Markdown representations
  * and the ActivityStreams `content` all read `document.html` directly and must
  * keep the plain `<img>` of the original.
  *
- * `author` is the profile behind the front matter's `author` (TASK-67), and it
- * is an argument for the reason `images` is: only something holding the site's
- * users can resolve a name to a person. Given one, the context's `author` is
- * that object rather than the raw string — `author.name` to print and
- * `author.url` to link — so a theme writes one thing whether the file names a
- * login, a display name from before decision-14, or somebody who has no
+ * `author` is the profile behind the front matter's `author`, and it is an
+ * argument for the reason `images` is: only something holding the site's users
+ * can resolve a name to a person. Given one, the context's `author` is that
+ * object rather than the raw string — `author.name` to print and `author.url`
+ * to link — so a theme writes one thing whether the file names a login, a
+ * display name from before every user was an actor, or somebody who has no
  * account here at all. Without one the file's own string is left where it was,
  * which is what a test over a single template renders.
  *

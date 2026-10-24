@@ -1,6 +1,6 @@
 /**
  * A post's recording: one main audio or video file, the other versions of it,
- * and its transcript (TASK-213).
+ * and its transcript.
  *
  * The front matter spells it the way RSS does, so a person reading the file
  * and a person reading the feed see the same names:

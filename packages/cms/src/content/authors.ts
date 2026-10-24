@@ -10,8 +10,8 @@ export interface AuthorUser {
  * The user a document's `author` names, or `undefined` when it names nobody.
  *
  * Two rules, in this order, and the order is the whole of it. A username is
- * what doc-2 says the key holds, and it is matched exactly, as a login is. A
- * display name is what files written before decision-14 hold — the demo's own
+ * what the key holds, and it is matched exactly, as a login is. A display name
+ * is what files written before every user became an actor hold — the demo's own
  * posts say `Andrew Shell` — and one that exactly one user answers to reads as
  * that user, so an existing site's posts get their bylines and their archives
  * without anybody rewriting a file. Exactly one: two people called the same
@@ -62,7 +62,7 @@ export function authorNames(users: readonly AuthorUser[], user: AuthorUser): str
 /** The first URL segment every author archive, feed and actor lives under. */
 export const AUTHOR_BASE = 'author';
 
-/** Where the shared inbox goes (decision-14), and so the second reserved path. */
+/** Where the shared inbox goes, and so the second reserved path. */
 export const INBOX_BASE = 'inbox';
 
 /** One author archive, and which page of it. */
@@ -93,7 +93,7 @@ export function authorHref(username: string, index = 0): string {
  * parses; the bare `/author/ada` is handled by the canonical redirect, like
  * every other missing trailing slash on the site — which is also where a
  * browser that followed an actor id without its slash lands, because Fedify
- * 404s that form and falls through (doc-8).
+ * 404s that form and falls through.
  *
  * `page/1/` parses to the first page, which lives at the archive root, so the
  * caller can collapse it the way `/page/1/` collapses onto `/`.
@@ -116,10 +116,10 @@ export function parseAuthorPath(pathname: string): AuthorRequest | undefined {
 }
 
 /**
- * `{username}@{host}`: the account WebFinger answers for (decision-14).
+ * `{username}@{host}`: the account WebFinger answers for.
  *
  * WebFinger's `acct:` subject, the handle the admin shows and the
- * `fediverse:creator` a page names (TASK-202) are each this with a prefix, so
+ * `fediverse:creator` a page names are each this with a prefix, so
  * a page cannot credit an account the site does not answer for.
  */
 export function accountOf(username: string, baseUrl: string): string {

@@ -29,16 +29,16 @@ export interface CitedContext {
 export interface PageContexts {
   /**
    * What the pages a post cites say about themselves, as a theme reads them,
-   * when they were fetched. `replyContext` is what a reply answers (TASK-123),
+   * when they were fetched. `replyContext` is what a reply answers,
    * on the context only when it is known, so a theme draws the bare link from
    * `inReplyTo` and fills it in from it. `citations` is what it reposts, likes
-   * or bookmarks, each with its `context` when that is known (TASK-244).
+   * or bookmarks, each with its `context` when that is known.
    */
   citedBy(document: Document): CitedContext;
   /**
    * One entry of a listing: the document as a template sees it, and what it
    * answers when it is a reply, so a feed cites a reply's target the way the
-   * reply's own page does (doc-9).
+   * reply's own page does.
    */
   entryContext(document: Document, people: readonly User[], loading: ImageLoading): DocumentContext;
   newestPostsContext(page: Document): Record<string, unknown>;

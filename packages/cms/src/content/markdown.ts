@@ -49,7 +49,7 @@ export function markdownTokens(body: string): Token[] {
 /**
  * Where an `html_inline` token begins in its inline token's `content`, which
  * markdown-it records for no inline token. A Micropub client's Markdown has
- * its raw HTML cleaned in place (TASK-258), and this is how the tag is found
+ * its raw HTML cleaned in place, and this is how the tag is found
  * without mistaking the same characters in a code span for it.
  */
 export function htmlInlineOffset(token: Token): number | undefined {

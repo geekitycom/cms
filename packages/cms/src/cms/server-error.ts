@@ -49,7 +49,7 @@ const JSON_BODY = `${JSON.stringify(
 let adminEnvironment: Environment | undefined;
 
 /**
- * What a request whose handler threw is answered with (TASK-129).
+ * What a request whose handler threw is answered with.
  *
  * The error goes to the operator's log with the request that caused it, and
  * the reader gets a 500 that says so in the admin's layout, the theme's, or

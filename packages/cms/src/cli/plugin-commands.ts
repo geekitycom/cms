@@ -39,7 +39,7 @@ export async function pluginExtends(
 }
 
 /**
- * Run a command a plugin added (decision-33). It needs no enabling: a
+ * Run a command a plugin added. It needs no enabling: a
  * migration command runs before the plugin it prepares for is turned on.
  *
  * The database is opened for the reason `user add` opens it: a command can

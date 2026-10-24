@@ -119,7 +119,7 @@ export async function storeUpload(
   // Derived immediately rather than on first sight in a page, so the encoding
   // is paid for by whoever uploaded the file and not by whoever reads the
   // post. A format with nothing to derive — a GIF, a PDF, a text file — comes
-  // straight back (decision-10), and a failure is reported and swallowed: a
+  // straight back, and a failure is reported and swallowed: a
   // stored file with no variants is a site that serves the original, which is
   // what it did before this feature existed.
   try {
@@ -268,7 +268,7 @@ export interface UploadMarkdownOptions {
  */
 export function uploadMarkdown(options: UploadMarkdownOptions): string {
   if (!options.image) return `[${escapeLabel(options.label)}](${options.url})`;
-  // A file name is not a description (TASK-141): an image with no alt text in
+  // A file name is not a description: an image with no alt text in
   // the library is embedded with none, and publishing it says so.
   const alt = options.alt?.kind === 'described' ? escapeLabel(options.alt.text) : '';
   return `![${alt}](${options.url})`;

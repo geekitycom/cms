@@ -16,7 +16,7 @@ import { createSerialQueue } from '../util/queue.ts';
 import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
 
 /**
- * Remote avatars, served from this site (TASK-134).
+ * Remote avatars, served from this site.
  *
  * A face in a facepile is somebody else's picture on somebody else's server.
  * Hotlinked, every reader who opens a post sends that server their address
@@ -30,7 +30,7 @@ import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
  * else is a 404 that fetches nothing, so this is not an open proxy, and there
  * is no table or secret to lose.
  *
- * The files under `<dataDir>/avatars/` are a disposable cache (decision-9):
+ * The files under `<dataDir>/avatars/` are a disposable cache:
  * every one of them is named by the hash of a URL the index holds and can be
  * fetched again. A sweep on a timer fetches the ones that are missing or old
  * and removes the ones nobody shows any more, so a page is almost never the

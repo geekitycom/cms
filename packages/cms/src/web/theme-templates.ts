@@ -23,13 +23,13 @@ export const TEMPLATES = {
  * They are WordPress's own `front-page.php` and `home.php`, and they exist for
  * the same reason: a front page is often the one page of a site that looks
  * like nothing else, and saying so should not mean overriding the layout every
- * other page uses. The default theme ships `front-page.njk` (TASK-85) and no
+ * other page uses. The default theme ships `front-page.njk` and no
  * posts page layout, so a site that sets a posts page gets the listing layout
  * until it writes one.
  */
 export const OPTIONAL_TEMPLATES = {
   /**
-   * The front page alone. The default theme ships one (TASK-85), so the
+   * The front page alone. The default theme ships one, so the
    * fallback is only reached by a theme that replaced it with nothing.
    */
   frontPage: 'layouts/front-page.njk',

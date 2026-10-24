@@ -6,7 +6,7 @@ import { createSerialQueue } from '../util/queue.ts';
 import type { SerialQueue } from '../util/queue.ts';
 
 /**
- * Writing a file the way decision-9 needs it written.
+ * Writing a file the way a source of truth needs it written.
  *
  * Files are the source of truth for everything durable, and SQLite is a cache
  * that may be deleted — which means the transactions that used to cover a
@@ -59,7 +59,7 @@ export type ProduceFileContents = (
 
 /**
  * A write refused because its directory is read-only for now: a worker that
- * is handing over to a new one under `geekity serve` (TASK-288) writes
+ * is handing over to a new one under `geekity serve` writes
  * nothing more, so the new worker's boot migrations run alone.
  */
 export class WritesRefusedError extends Error {

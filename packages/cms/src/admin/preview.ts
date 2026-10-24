@@ -48,7 +48,7 @@ export function mountPreview(app: Hono<GeekityEnv>): void {
         // With the site's image config, so a preview shows the `<picture>` the
         // published page would show rather than the plain image behind it, and
         // with the author resolved, so the byline reads the way the published
-        // page's would (TASK-67).
+        // page's would.
         {
           ...documentContext(
             document,
@@ -74,7 +74,7 @@ function previewDocument(
 
   const timezone = c.var.siteAtRequestStart.timezone;
   const title = stringOrEmpty(body['title']).trim();
-  // The editor's field is wall-clock time in the site's zone (decision-11), so
+  // The editor's field is wall-clock time in the site's zone, so
   // the preview reads it the way the save will and shows the date the saved
   // post would show rather than one the server's own zone invented.
   const date =

@@ -26,9 +26,9 @@ import { isKey } from '../content/guids.ts';
 /**
  * Native comments as the files that hold them.
  *
- * decision-9 makes the filesystem the source of truth for everything durable,
- * and a comment somebody typed into this site is exactly that: nothing else
- * holds it, and no other server can be asked for it again. So it lives under
+ * The filesystem is the source of truth for everything durable, and a comment
+ * somebody typed into this site is exactly that: nothing else holds it, and no
+ * other server can be asked for it again. So it lives under
  * `content/_data/comments/`, one JSON file per post, which puts it in git
  * beside the posts, hands it to an Eleventy build of the same directory, and
  * leaves SQLite holding nothing but an index — one rebuilt from these files on
@@ -50,10 +50,10 @@ import { isKey } from '../content/guids.ts';
  * means anything beside it live in `data/comments/{slug}.json` instead (mode
  * `0600`), keyed by comment id. A record read here has both merged back in, and
  * a record written here is split again, so nothing outside this module and the
- * boot migrations knows there are two files (TASK-182).
+ * boot migrations knows there are two files.
  *
  * The entry shape is deliberately wider than a form submission. A webmention
- * (TASK-51) is somebody else's post pointing at this one: it has a `url` and no
+ * is somebody else's post pointing at this one: it has a `url` and no
  * email, it may be a like rather than a reply, and it belongs in the same file
  * and the same thread. So every entry says its `source` and its `kind`, and
  * nothing here assumes a person filled in a form.
@@ -314,8 +314,9 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     inReplyTo: nonEmptyStringOrNull(value['inReplyTo']),
     url: nonEmptyStringOrNull(value['url']),
     // An entry that does not say means one that never asked: a comment file
-    // written before TASK-55 shipped, or edited by hand, has nobody waiting on
-    // it, and defaulting the other way would email people who never opted in.
+    // written before reply notices existed, or edited by hand, has nobody
+    // waiting on it, and defaulting the other way would email people who never
+    // opted in.
     notify: value['notify'] === true,
     ...redactedIn(value['redacted']),
     ...rsvpField(rsvpValue(value['rsvp'])),
@@ -429,7 +430,7 @@ export async function renameComments(
  * Move a stored comment: approve it, mark it spam, put it back, or rewrite
  * what it says.
  *
- * The rewrite is what a webmention needs (TASK-51): a page that links here and
+ * The rewrite is what a webmention needs: a page that links here and
  * is then edited sends its webmention again, and what this site shows should
  * be what that page says now rather than what it said last month. Its id, the
  * post it is on and the source it came from never move, which is what makes it
@@ -447,7 +448,7 @@ export async function updateComment(
   > & {
     /** What the comment now says it is going to, or `null` when it no longer says. */
     readonly rsvp?: RsvpValue | null;
-    /** The page now carrying it, or `null` once it is sent on its own (TASK-320). */
+    /** The page now carrying it, or `null` once it is sent on its own. */
     readonly via?: string | null;
   },
 ): Promise<PostComment | undefined> {
@@ -510,7 +511,7 @@ export async function deleteComment(records: CommentRecords, id: string): Promis
  * file holds it and answers with the entry it should become, or `undefined`
  * to leave it alone.
  *
- * What the retention sweep and an erasure on request are built on (TASK-135).
+ * What the retention sweep and an erasure on request are built on.
  * The read, the change and the write happen inside the file's lock, so a
  * comment arriving or a moderator approving one in the same moment is never
  * written over, and the file is only written when something changed, so a
@@ -618,7 +619,7 @@ export interface CommentIndexReport {
 /**
  * Rebuild the comment index from the files.
  *
- * This is what makes `data/geekity.db` disposable for comments (decision-9):
+ * This is what makes `data/geekity.db` disposable for comments:
  * the table holds nothing but what these files say, so every boot throws away
  * what it holds and reads them again. Editing a comment file by hand and
  * restarting is therefore a supported thing to do, and a database deleted at

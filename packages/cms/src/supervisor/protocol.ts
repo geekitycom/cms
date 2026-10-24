@@ -1,6 +1,6 @@
 /**
  * The messages between `geekity serve`'s supervisor and the worker that runs
- * the CMS (TASK-288). A reload is: the serving worker asks (`reload`); the
+ * the CMS. A reload is: the serving worker asks (`reload`); the
  * supervisor tells it to `drain`; it answers `drained` once it writes
  * nothing more; a new worker boots and says `ready`; the old one is told to
  * `retire`. A new worker that does not boot says `boot-failed`, and the old

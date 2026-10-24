@@ -12,7 +12,7 @@ import type { WordPressRecords } from './records.ts';
  * `geekity import wordpress-actor <username>`: the cutover, for one person.
  *
  * Everything the WordPress ActivityPub plugin holds that the site cannot mint
- * for itself arrives here (decision-14): the RSA pair its followers have
+ * for itself arrives here: the RSA pair its followers have
  * cached, the actor id they key the account by, the number its paths are
  * built from, and the followers themselves. It is a command rather than a
  * screen because a stored actor id is identity for the life of the account,

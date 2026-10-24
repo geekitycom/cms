@@ -34,7 +34,7 @@ export interface CreateTemplateEnvironmentOptions {
   noCache?: boolean | undefined;
   /**
    * Whether `{{ }}` escapes for HTML. On everywhere a page is rendered, and
-   * off for the plain text half of an email (TASK-55): a text body and a
+   * off for the plain text half of an email: a text body and a
    * subject line are not HTML, so escaping there turns an ampersand in a URL
    * into `&amp;` and an apostrophe in a name into `&#39;`.
    */
@@ -115,17 +115,17 @@ export type DateFormat =
  * The filter set, which is part of the semver contract because site templates
  * are written against it.
  *
- * Per decision-11 a date in a file is a UTC instant and the site's `timezone`
- * setting is the lens it is read through, so every format but `iso` is
- * rendered in the site's zone and `iso` stays the instant; the words are the
- * site's locale (TASK-153), unless a template passes a locale of its own
- * after the zone, as the default theme does for a date inside an article
- * written in another language (TASK-189). Both come from the `site` global of the render in
- * hand — Nunjucks calls a filter with the template context as `this`, so
- * nothing has to be threaded through every template — which is what lets a
- * setting change what every page shows without a file changing. An Eleventy
- * build of the same content applies the same lens and locale with Intl, both
- * read from `site.json` (`docs/eleventy.config.example.js`).
+ * A date in a file is a UTC instant and the site's `timezone` setting is the
+ * lens it is read through, so every format but `iso` is rendered in the site's
+ * zone and `iso` stays the instant; the words are the site's locale, unless a
+ * template passes a locale of its own after the zone, as the default theme does
+ * for a date inside an article written in another language. Both come from the
+ * `site` global of the render in hand — Nunjucks calls a filter with the
+ * template context as `this`, so nothing has to be threaded through every
+ * template — which is what lets a setting change what every page shows without
+ * a file changing. An Eleventy build of the same content applies the same lens
+ * and locale with Intl, both read from `site.json`
+ * (`docs/eleventy.config.example.js`).
  */
 function addFilters(
   environment: Environment,
@@ -155,7 +155,7 @@ function addFilters(
   );
 
   // `{{ count | plural({ one: "# reply", other: "# replies" }) }}`: the form
-  // for the count's plural category in the site's locale (TASK-153). A theme
+  // for the count's plural category in the site's locale. A theme
   // whose strings are in one language names it, so their grammar is that
   // language's whatever the site's locale.
   environment.addFilter(
@@ -193,8 +193,8 @@ function addFilters(
   );
 
   // `{{ siteAuthor.username | fediverseHandle }}`: a user's own account on
-  // this site, `@ada@example.com`, exactly as WebFinger answers for it
-  // (TASK-202), so a theme never spells the host.
+  // this site, `@ada@example.com`, exactly as WebFinger answers for it,
+  // so a theme never spells the host.
   environment.addFilter('fediverseHandle', (value: unknown) =>
     typeof value === 'string' && value !== '' ? `@${accountOf(value, baseUrl)}` : '',
   );
@@ -245,10 +245,10 @@ const formatters = new Map<string, Intl.DateTimeFormat>();
  * September UTC was still on, and a French site say `1 octobre`.
  *
  * `datetime` is the day and the time of day with the zone named, "10 October
- * 2026 at 09:00 GMT-5", which is how an event says when it starts (TASK-200).
+ * 2026 at 09:00 GMT-5", which is how an event says when it starts.
  *
  * `month` is the month that calendar day falls in, "September 2026", which is
- * what heads a group of an archive page (TASK-85). It is a format rather than
+ * what heads a group of an archive page. It is a format rather than
  * something the archive works out for itself so that a theme can head a group
  * of its own the same way.
  *

@@ -1,10 +1,10 @@
 /**
- * The plugins folder (decision-33): one folder per plugin, `<name>/` or
+ * The plugins folder: one folder per plugin, `<name>/` or
  * `@scope/<name>/`, each with a bundled `index.js` whose default export is
  * the plugin, and the `plugin.json` manifest the bundle build writes beside
  * it. `geekity serve` imports them at boot. The Plugins screen
  * compares the folder with what the running worker loaded and offers Reload
- * when they differ (TASK-288).
+ * when they differ.
  */
 
 import { createHash } from 'node:crypto';

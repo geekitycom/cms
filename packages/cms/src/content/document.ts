@@ -43,7 +43,7 @@ export interface Document {
    * matter key (the name Jekyll's plugin gave the same list). Each one answers
    * with a permanent redirect to {@link Document.permalink} while nothing else
    * lives there. Written by the editor when a published document moves, so the
-   * record survives the index (decision-9). Absent when there are none.
+   * record survives the index. Absent when there are none.
    */
   redirectFrom?: string[] | undefined;
   /** Display title. */

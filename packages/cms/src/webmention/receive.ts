@@ -34,11 +34,11 @@ import type { HostLookup } from '../util/public-address.ts';
  * connection open while a stranger's server is fetched — is a way of being
  * held open by a stranger's server.
  *
- * What lands is a comment like any other (doc-6), and it lands the same way:
+ * What lands is a comment like any other, and it lands the same way:
  * this module reads what the source says and hands `intakeComment` a proposed
  * comment, so the file, the index, the {@link CommentChecker} seam, the
  * verdict-to-status rule and the notice are the very ones a form submission
- * gets. That is how TASK-52 sends it to Akismet as a `webmention` without this
+ * gets. That is how it reaches Akismet as a `webmention` without this
  * module knowing Akismet exists, and how a moderator's decision on a mention
  * survives the page that sent it being edited and re-sent.
  *
@@ -92,9 +92,9 @@ export interface CheckWebmentionOptions {
   readonly baseUrl: string;
   /** The public document one of this site's paths names, or `undefined`. */
   readonly documentAt: (pathname: string) => Document | undefined;
-  /** The public post a URL elsewhere is one of the syndicated copies of (TASK-197). */
+  /** The public post a URL elsewhere is one of the syndicated copies of. */
   readonly syndicatedAt?: ((url: string) => Document | undefined) | undefined;
-  /** What says which post a comment's own page (TASK-318) is on. */
+  /** What says which post a comment's own page is on. */
   readonly conversation: Pick<ConversationReader, 'comment'>;
   readonly site: ConversationSite;
 }
@@ -135,7 +135,7 @@ export function checkWebmentionRequest(
   }
 
   // A comment's page is a page here, and what is said to it is said on the
-  // post it is under (TASK-319).
+  // post it is under.
   const key = commentKeyAt(to.pathname);
   const pathname =
     key === undefined
@@ -157,12 +157,12 @@ export interface VerifyWebmentionOptions {
   readonly dataDir: string;
   /** The site's public origin. */
   readonly baseUrl: string;
-  /** What says which reply on the post a source answers (TASK-319). */
+  /** What says which reply on the post a source answers. */
   readonly conversation: Pick<ConversationReader, 'replyNamed'>;
   readonly site: ConversationSite;
   /** The checker, when the site named one. */
   readonly checker?: CommentChecker | undefined;
-  /** Who to tell when one lands in the queue, handed to the intake (TASK-55). */
+  /** Who to tell when one lands in the queue, handed to the intake. */
   readonly notices?: CommentNotices | undefined;
   /** The clock. */
   readonly now: Date;
@@ -178,7 +178,7 @@ export type WebmentionOutcome =
    *
    * `created` says which. A page that sends its webmention again every time it
    * is edited would otherwise put the moderators through a notification each
-   * time (TASK-55), for an entry that has been in the queue all along.
+   * time, for an entry that has been in the queue all along.
    */
   | { readonly kind: 'stored'; readonly comment: PostComment; readonly created: boolean }
   /** Nothing is stored from the source any more, and what it left is gone. */
@@ -304,7 +304,7 @@ export async function verifyWebmention(
 
 /**
  * Bring the replies a source carries in its h-entry into the thread under it
- * (a salmention, TASK-320), and take away the ones it carried before and
+ * (a salmention), and take away the ones it carried before and
  * carries no longer.
  *
  * Each is a webmention of its own as far as the thread and the moderator are

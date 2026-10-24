@@ -33,12 +33,12 @@ import type { Limits, Source } from './reply-context/source.ts';
 export type { FediverseLookup, FediversePost } from './reply-context/fediverse.ts';
 
 /**
- * Reply context: what a reply shows of the post it answers (TASK-123).
+ * Reply context: what a reply shows of the post it answers.
  *
  * The post is on somebody else's site, so this is the one place the CMS reads
  * a stranger's page on an author's behalf. It happens when a reply is saved or
- * synced, never while a page is served, and what it finds is kept in a file
- * (decision-19). Everything here fails soft: a target that cannot be read is a
+ * synced, never while a page is served, and what it finds is kept in a file.
+ * Everything here fails soft: a target that cannot be read is a
  * reply with a bare link, never a save that fails.
  */
 
@@ -63,14 +63,14 @@ export interface ReplyContext {
   readonly url: string;
   /**
    * The original `url` is a copy of, when the copy names it and it lists the
-   * copy back as its `u-syndication` (TASK-197). Every other field then
+   * copy back as its `u-syndication`. Every other field then
    * describes the original.
    */
   readonly original?: string;
   /** Its title, when it has one of its own; a note's name is its text. */
   readonly name?: string;
   /**
-   * Set when it is a comment on this site (TASK-326): one somebody else left
+   * Set when it is a comment on this site: one somebody else left
    * through the form, a webmention or the fediverse, which a citation calls "a
    * comment" rather than "a post".
    */
@@ -84,14 +84,14 @@ export interface ReplyContext {
   /** The site it is on, its `og:site_name`, kept only when it names no author. */
   readonly site?: string;
   /**
-   * When an event starts (TASK-198): an ISO 8601 instant when the page gives
+   * When an event starts: an ISO 8601 instant when the page gives
    * a zone, else the date, or the date and time, as the page wrote them, which
    * no reader's zone may move.
    */
   readonly start?: string;
   /** Where an event takes place, as the page names it. */
   readonly location?: string;
-  /** Its picture, copied into the site's uploads (TASK-252). */
+  /** Its picture, copied into the site's uploads. */
   readonly picture?: CitedPicture;
 }
 
@@ -101,7 +101,7 @@ export interface CitedAuthor {
   readonly url?: string;
   /** Their fediverse handle, `user@host`, when the post is a fediverse object. */
   readonly handle?: string;
-  /** Their avatar, copied into the site's uploads like a picture (TASK-199). */
+  /** Their avatar, copied into the site's uploads like a picture. */
   readonly photo?: CitedImage;
 }
 
@@ -135,7 +135,7 @@ export interface FetchReplyContextOptions {
  * it links. Each source fills only what the ones before it left empty:
  * `h-entry`, ActivityPub, oEmbed, JSON-LD, then the page's own metadata. A
  * silo copy of a post on another site is described by that original instead,
- * when the original lists the copy as its own (TASK-197).
+ * when the original lists the copy as its own.
  *
  * Only http and https, only public hosts (every redirect hop is checked, and a
  * name is refused when any address it resolves to is private), one timeout
@@ -332,7 +332,7 @@ export function readReplyContext(
 }
 
 /**
- * The context of something this site already holds (TASK-300, TASK-326): a
+ * The context of something this site already holds: a
  * comment, a webmention, a fediverse reply or a reply post in one of its
  * threads, or one of its own posts or pages. Read from the index rather than
  * fetched, so a reply to a comment shows the comment rather than the whole

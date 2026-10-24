@@ -22,7 +22,7 @@ export interface CommentEmailMigrationReport {
 }
 
 /**
- * Move every email still in a comment file into `data/` (TASK-182).
+ * Move every email still in a comment file into `data/`.
  *
  * A site that kept comments before the emails moved has them in
  * `content/_data/comments/`, and a comment file somebody edits by hand may
@@ -92,8 +92,8 @@ export interface CommentKeyMigrationReport {
 }
 
 /**
- * Give every stored comment whose id is not a key the key of that id
- * (decision-51): the first 16 hex digits of its SHA-256, so every boot works
+ * Give every stored comment whose id is not a key the key of that id:
+ * the first 16 hex digits of its SHA-256, so every boot works
  * out the same one. A UUID a form comment or a webmention was given before
  * keys, and a URL an import wrote, both become keys this way.
  *

@@ -19,7 +19,7 @@ export type DocumentChangeType = 'created' | 'updated' | 'deleted';
  * `scan` is a full walk of the content directory, the boot scan included;
  * `watch` is a file that changed under the running watcher; `admin` is a write
  * the CMS made itself and announced, because the admin corrects the index as
- * soon as the bytes land (doc-1) and the watcher's later re-read of that file
+ * soon as the bytes land and the watcher's later re-read of that file
  * is a hash no-op that would otherwise emit nothing at all.
  *
  * `schedule` is the odd one out: nothing was written at all, and the file is
@@ -137,7 +137,7 @@ export interface ContentSync {
    * finish with it.
    *
    * The admin writes a file and corrects the index in the same request rather
-   * than waiting for the watcher (doc-1), which means the watcher's re-read
+   * than waiting for the watcher, which means the watcher's re-read
    * finds a hash that already matches and emits nothing. Without this, no
    * subscriber would ever hear about an admin save. The promise settles once
    * every listener has, so a caller that has to know the change was seen — the
@@ -167,7 +167,7 @@ export interface ContentSync {
 /**
  * Build the sync for one content directory.
  *
- * Files are the source of truth (decision-1). A scan parses every document
+ * Files are the source of truth. A scan parses every document
  * under `content/`, writes the ones whose hash differs from the indexed row,
  * and drops rows whose file has gone. Nothing else in the directory is
  * touched: uploads, directory data files and every underscore-prefixed

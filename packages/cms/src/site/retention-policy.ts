@@ -1,5 +1,5 @@
 /**
- * How long this site keeps the personal data its readers hand it (TASK-135).
+ * How long this site keeps the personal data its readers hand it.
  *
  * Three periods, each in whole days counted from the moment the data arrived,
  * and `0` for keeping it for as long as the site stands. They are settings in

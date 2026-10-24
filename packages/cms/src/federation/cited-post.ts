@@ -9,7 +9,7 @@ import { profileFrom } from './profiles.ts';
 import { siteLoaders } from './site-loaders.ts';
 
 /**
- * The site's {@link FediverseLookup} (TASK-199): the fediverse post a cited
+ * The site's {@link FediverseLookup}: the fediverse post a cited
  * page links as its ActivityPub alternate, read as the site with
  * {@link siteLoaders}, with the author it is attributed to.
  *

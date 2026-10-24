@@ -14,12 +14,12 @@ export interface ConversationContext {
   readonly store: DocumentLookup & ArchiveReader & ReplyReader & IndexClock;
   /**
    * Where the quote approvals are: a quote of a post is shown only while the
-   * post's author vouches for it (FEP-044f, TASK-171).
+   * post's author vouches for it (FEP-044f).
    */
   readonly contentDir: string;
   /** The site's public origin, for the post's object id. */
   readonly baseUrl: string;
-  /** Who may sign in, for naming the author of a reply post (TASK-300). */
+  /** Who may sign in, for naming the author of a reply post. */
   readonly users: () => readonly User[];
 }
 

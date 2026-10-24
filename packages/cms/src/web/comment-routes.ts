@@ -129,14 +129,14 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       checker: config.commentChecker,
       // Who hears about what lands is the intake's to decide, and neither
       // message is awaited: the reader is redirected now and they go out
-      // behind them (TASK-55).
+      // behind them.
       notices: c.var.notifications,
       address: clientAddress(c, config),
       userAgent: c.req.header('user-agent'),
       referrer: c.req.header('referer'),
       throttle: throttle(config),
       // Whether the box on the form meant anything, read per submission so a
-      // credential saved a moment ago is honoured now (TASK-55).
+      // credential saved a moment ago is honoured now.
       notifiable: c.var.mailConfigured,
       now,
     });

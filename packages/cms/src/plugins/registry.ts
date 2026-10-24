@@ -1,5 +1,5 @@
 /**
- * The plugin registry (decision-33): every installed plugin, registered once
+ * The plugin registry: every installed plugin, registered once
  * at boot, and what the dependency graph says about each.
  *
  * Installed and enabled are separate. Installed is fixed for the life of the

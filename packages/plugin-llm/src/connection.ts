@@ -1,7 +1,7 @@
 import { isRecord, withoutTrailingSlash } from '@geekity/cms/plugin';
 /**
- * One call to a provider that speaks the OpenAI chat-completions API
- * (decision-33), made with Node's built-in `fetch`, and what came of it as a
+ * One call to a provider that speaks the OpenAI chat-completions API,
+ * made with Node's built-in `fetch`, and what came of it as a
  * typed outcome. OpenRouter, OpenAI and Ollama differ only in the base URL.
  */
 

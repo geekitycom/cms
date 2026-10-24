@@ -65,12 +65,12 @@ export interface Cms {
    * the followers and inbox indexes, the delivery outcomes, the relay
    * handshake and the scheduler's watermark. In the same file as the index.
    *
-   * All of it is derived or disposable (decision-9); the accounts and the
+   * All of it is derived or disposable; the accounts and the
    * actor's keys, which are not, are files under `dataDir`.
    */
   readonly admin: AdminStore;
   /**
-   * Every runtime setting (decision-53): maintenance and dev mode so far, each
+   * Every runtime setting: maintenance and dev mode so far, each
    * read through the environment, the config, its file under `dataDir` and its
    * default, and written by the admin and `geekity settings`.
    */
@@ -102,7 +102,7 @@ export interface Cms {
    */
   readonly delivery: DeliveryService;
   /**
-   * The admin job queue (decision-54): long actions queued by the admin or
+   * The admin job queue: long actions queued by the admin or
    * the CLI and run out of the request, with their status in
    * `data/jobs.json`. Started by {@link Cms.serve}; a CLI command that is not
    * serving queues a job and runs it here with `jobs.run(id)`.
@@ -123,8 +123,8 @@ export interface Cms {
    */
   readonly webmentions: WebmentionService;
   /**
-   * What a post shows of the page it answers, reposts, likes or bookmarks
-   * (TASK-123, TASK-244): fetched when the post is saved or synced, kept in
+   * What a post shows of the page it answers, reposts, likes or bookmarks:
+   * fetched when the post is saved or synced, kept in
    * `content/_data/replyContexts.json`, and read from there when a page is
    * drawn. Already subscribed to the index; a site or a test reaches for it to
    * wait for the fetches in flight.
@@ -132,31 +132,31 @@ export interface Cms {
   readonly replyContexts: ReplyContextService;
   /**
    * The remote avatars a conversation shows, cached under `data/avatars/` and
-   * served from `/_geekity/avatars/` (TASK-134). Swept on a timer once the site
+   * served from `/_geekity/avatars/`. Swept on a timer once the site
    * serves; a site or a test reaches for it to sweep now or to wait.
    */
   readonly avatars: AvatarService;
   /**
    * The Google Fonts the site hosts, fetched into `data/fonts/` and served
-   * from `/_geekity/fonts/` (decision-61).
+   * from `/_geekity/fonts/`.
    */
   readonly fonts: FontStore;
   /**
    * The profiles of the fediverse actors who are not followers, cached in the
-   * database and fetched in the background (TASK-184). Swept on a timer once
+   * database and fetched in the background. Swept on a timer once
    * the site serves; a site or a test reaches for it to sweep now or to wait.
    */
   readonly actorProfiles: ActorProfileService;
   /**
    * The fediverse replies nobody delivered, read off the `replies`
-   * collections of the fediverse replies in recent threads (TASK-321). Swept
+   * collections of the fediverse replies in recent threads. Swept
    * on a timer once the site serves; a site or a test reaches for it to sweep
    * now or to wait.
    */
   readonly replyBackfill: ReplyBackfill;
   /**
    * The sweep that removes commenter emails, address hashes and contact
-   * messages once they outlive the periods in the site's settings (TASK-135).
+   * messages once they outlive the periods in the site's settings.
    * Runs on a timer once the site serves; a site or a test reaches for it to
    * sweep now or to wait.
    */
@@ -173,13 +173,13 @@ export interface Cms {
   readonly notifier: FeedNotifier;
   /**
    * What tells the IndexNow search engines which URLs a publish, an edit or a
-   * deletion moved (TASK-151), while the site has IndexNow on. Already
+   * deletion moved, while the site has IndexNow on. Already
    * subscribed to the index; a site or a test reaches for it to send what it
    * has gathered now and wait for it.
    */
   readonly indexNow: IndexNowNotifier;
   /**
-   * The site's outgoing email (TASK-53): what the settings screen's Send test
+   * The site's outgoing email: what the settings screen's Send test
    * email button uses, and what the password resets, moderation notices and
    * contact messages built on it will.
    *
@@ -189,7 +189,7 @@ export interface Cms {
    */
   readonly mail: MailService;
   /**
-   * Who is told about comments (TASK-55): the moderators when one is waiting,
+   * Who is told about comments: the moderators when one is waiting,
    * and a commenter when a reply to them is approved.
    *
    * Here so a site's own code can send the same notice for a comment it
@@ -198,7 +198,7 @@ export interface Cms {
    */
   readonly notifications: CommentNotifier;
   /**
-   * The batched half of the same notice (TASK-60): what writes to a user who
+   * The batched half of the same notice: what writes to a user who
    * chose an hourly or a daily digest instead of a message per comment.
    *
    * It is started by {@link Cms.serve} and stopped by {@link Cms.close}; a
@@ -263,13 +263,13 @@ export interface Cms {
   /**
    * Scan the content directory, start watching it unless
    * {@link ResolvedConfig.watch} is off, and start listening: HTTP, and
-   * Gemini while `site.gemini` is on and its certificate is usable (TASK-484),
+   * Gemini while `site.gemini` is on and its certificate is usable,
    * started and stopped with the setting from then on. Resolves with the
    * ports actually bound, which matters when one is 0.
    */
   serve(): Promise<{ port: number; geminiPort: number | undefined }>;
   /**
-   * Hand over to a new server (TASK-288): refuse every request but GET and
+   * Hand over to a new server: refuse every request but GET and
    * HEAD with a 503, let the writes already in flight finish, stop the
    * timers, the watcher and the plugins, send what the queues hold, and then
    * write nothing more to the database, `dataDir` or `contentDir`. What
@@ -289,7 +289,7 @@ export interface Cms {
   close(): Promise<void>;
 }
 
-/** What `geekity serve` hands the CMS it runs, beyond the site's config (TASK-288). */
+/** What `geekity serve` hands the CMS it runs, beyond the site's config. */
 export interface ServeContext {
   /** Plugins imported from the plugins folder, registered beside the config's. */
   readonly folderPlugins?: readonly InstalledPlugin[];
@@ -456,7 +456,7 @@ export function createCms(
       }
 
       // A syndication target the site declares badly is ignored everywhere,
-      // and said so once here rather than on every page (TASK-155).
+      // and said so once here rather than on every page.
       for (const problem of syndicationTargetProblems(resolved.contentDir)) console.warn(problem);
 
       const port = await new Promise<number>((resolve) => {

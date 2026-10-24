@@ -229,7 +229,7 @@ async function mintIndexNowKey({ next, by, settings }: SettingChange<boolean>): 
 const SITE_JSON = path.join('_data', 'site.json');
 
 /**
- * The site's settings: `content/_data/site.json` (decision-9, decision-53).
+ * The site's settings: `content/_data/site.json`.
  *
  * Each key keeps the spelling the file has always used through `fileKey` or
  * `fileKeys`, so themes, Eleventy builds and hand edits read the file as

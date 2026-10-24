@@ -12,8 +12,7 @@ import type { FederationContextData } from './federation.ts';
 import { siteLoaders } from './site-loaders.ts';
 
 /**
- * The names and faces of the fediverse actors who are not followers
- * (TASK-184).
+ * The names and faces of the fediverse actors who are not followers.
  *
  * A follower is named from the profile it published when it followed. Anybody
  * else who liked, boosted, answered or quoted a post used to be named by a
@@ -27,7 +26,7 @@ import { siteLoaders } from './site-loaders.ts';
  * the sweep fetches every inbox actor with no profile or a stale one, which is
  * the backfill of a log written before this existed, the refresh of profiles
  * that have changed, and the rebuild after the database has been deleted
- * (decision-9) all at once.
+ * all at once.
  */
 
 /** How old a stored profile gets before the sweep fetches it again. */

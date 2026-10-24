@@ -31,7 +31,7 @@ export type WebmentionSendStatus = (typeof WEBMENTION_SEND_STATUSES)[number];
  * How one attempt to tell one page that a post links to it ended.
  *
  * The whole of what SQLite keeps about the webmentions a site has sent, and a
- * cache like every other outcome here (decision-9): the links are in the
+ * cache like every other outcome here: the links are in the
  * post's file, so a database thrown away costs the record of how yesterday's
  * notification went and nothing else. One row per (post, target), because the
  * question it answers is "where does this post stand with that page" and a
@@ -74,7 +74,7 @@ export interface WebmentionStore {
   listSentWebmentionSources(): Pick<SentWebmention, 'slug' | 'source'>[];
   /**
    * File what one post sent from one source under another post, as a post
-   * whose slug changed is (TASK-332). Where both hold an outcome for one
+   * whose slug changed is. Where both hold an outcome for one
    * target, the later attempt is the one kept.
    */
   moveSentWebmentions(from: Pick<SentWebmention, 'slug' | 'source'>, to: string): void;

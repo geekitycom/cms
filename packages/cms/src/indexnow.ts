@@ -35,7 +35,7 @@ export interface CreateIndexNowNotifierOptions {
 }
 
 /**
- * Tells the IndexNow engines which URLs changed (TASK-151).
+ * Tells the IndexNow engines which URLs changed.
  *
  * Changes are gathered for a few seconds and sent as one request, on a queue
  * of their own, and a failure is retried and then logged rather than thrown:

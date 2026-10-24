@@ -25,7 +25,7 @@ import type { ReplyContext } from '../webmention/reply-context.ts';
 /**
  * The three syndication formats the public site serves.
  *
- * Feeds are fixed routes rather than representations (doc-3): a feed reader
+ * Feeds are fixed routes rather than representations: a feed reader
  * sends whatever `Accept` header its HTTP library happened to default to, so
  * the URL has to say which format it wants.
  *
@@ -100,7 +100,7 @@ export function commentsFeedPath(permalink?: string): string {
   return feedPathUnder(permalink ?? COMMENTS_ROOT, 'rss');
 }
 
-/** What the path of every replies feed starts with (TASK-324). */
+/** What the path of every replies feed starts with. */
 export const REPLIES_ROOT = '/replies/';
 
 /** The URL of the feed of one item's direct replies, by its key. */
@@ -346,7 +346,7 @@ export interface FeedSource {
    */
   altTexts?: AltTextLibrary | undefined;
   /**
-   * What is stored about the pages the posts cite (decision-19). Part of the
+   * What is stored about the pages the posts cite. Part of the
    * validator, like the counts: a context fetched after a save changes the
    * feed though no post moved.
    */
@@ -397,7 +397,7 @@ export interface FeedComment {
   post?: { title: string; permalink: string } | undefined;
   /**
    * Who wrote the reply it answers, on an item of the site-wide feed that
-   * answers one rather than the post (TASK-318).
+   * answers one rather than the post.
    */
   replyingTo?: string | undefined;
 }
@@ -408,7 +408,7 @@ export type FeedIdentity = Pick<FeedSource, 'site' | 'feedHref' | 'baseUrl'>;
 /**
  * The URL of one format of one user's feed.
  *
- * WordPress's layout, which decision-14 keeps: the feeds are children of the
+ * WordPress's layout, which the site keeps: the feeds are children of the
  * archive, so `/author/ada/feed/` is RSS 2.0 and the other two hang beside it.
  */
 export function authorFeedHref(username: string, format: FeedFormat): string {

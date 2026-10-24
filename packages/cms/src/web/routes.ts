@@ -88,25 +88,25 @@ export function mountPublicSite(
   app.get(`${VARIANT_ASSET_PREFIX}*`, imageVariant);
   app.get(`${UPLOAD_ASSET_PREFIX}*`, upload);
 
-  // Where the comment form under a post posts to (TASK-50). A POST at a fixed
+  // Where the comment form under a post posts to. A POST at a fixed
   // path of the CMS's own, so no permalink can ever shadow it and the route
   // table does not grow with the site.
   mountComments(app);
 
-  // And where a contact form's message is sent (TASK-56): the same prefix
+  // And where a contact form's message is sent: the same prefix
   // again, so the page a form is on can be permalinked anywhere.
   mountContact(app);
 
-  // And where a webmention is sent (TASK-51), for the same reason and under
+  // And where a webmention is sent, for the same reason and under
   // the same prefix.
   mountWebmentions(app);
   mountPingbacks(app);
 
-  // And where the one-click links in a notification land (TASK-55): the same
+  // And where the one-click links in a notification land: the same
   // prefix again, and no session behind either of them.
   mountNotificationLinks(app);
 
-  // And where the avatars a conversation shows are served from (TASK-134):
+  // And where the avatars a conversation shows are served from:
   // the same prefix again, so a reader's browser fetches every face from here.
   mountAvatars(app);
 
@@ -122,8 +122,8 @@ export function mountPublicSite(
       home === undefined
         ? listing(c, { subject: SITE_POSTS, pageNumber: 0 })
         : negotiateDocument(c, home, selectFromAccept(c, DOCUMENT_REPRESENTATIONS));
-    // The home page is where a tool that found the site looks for its index
-    // (TASK-149): a header, so it is found without parsing the page.
+    // The home page is where a tool that found the site looks for its index:
+    // a header, so it is found without parsing the page.
     if (c.var.siteAtRequestStart.llms_txt) {
       response.headers.append('link', LLMS_TXT_LINK);
     }
@@ -131,7 +131,7 @@ export function mountPublicSite(
   });
 
   // The site's own feeds are routes rather than representations, so a reader's
-  // careless `Accept` header cannot land it on the HTML (doc-3), and so a
+  // careless `Accept` header cannot land it on the HTML, and so a
   // document permalinked at `/feed/` cannot take the subscribers' URL. Their
   // paths are fixed — only the taxonomy feeds hang off a configurable base —
   // so the route table can hold them.
@@ -142,7 +142,7 @@ export function mountPublicSite(
   // The site-wide comments feed, for the same reason and at WordPress's URL.
   app.get(commentsFeedHref(undefined), (c) => comments(c, undefined));
 
-  // A native comment's own page (TASK-318), at a fixed path so a permalink
+  // A native comment's own page, at a fixed path so a permalink
   // cannot take it.
   app.get(`${COMMENT_PAGE_PREFIX}:id/`, (c) => commentPage(c, c.req.param('id')));
   app.get(`${COMMENT_PAGE_PREFIX}:id/index.md`, (c) =>
@@ -152,7 +152,7 @@ export function mountPublicSite(
     commentPage(c, c.req.param('id'), 'gemini'),
   );
 
-  // The feed of one item's direct replies (TASK-324), fixed for the same reason.
+  // The feed of one item's direct replies, fixed for the same reason.
   app.get(`${REPLIES_ROOT}:segment/`, (c) => repliesFeed(c, c.req.param('segment')));
 
   // The sitemap, its children and the robots file: fixed paths at the root of
@@ -169,7 +169,7 @@ export function mountPublicSite(
     ),
   );
 
-  // The web app manifest and the root favicon (TASK-147), fixed paths at the
+  // The web app manifest and the root favicon, fixed paths at the
   // root for the same reason: a browser asks for `/favicon.ico` whatever the
   // head links, and no permalink may take either URL.
   app.get(MANIFEST_PATH, (c) => {
@@ -185,7 +185,7 @@ export function mountPublicSite(
   });
   app.get(FAVICON_PATH, favicon);
 
-  // The OpenSearch description (TASK-204), a fixed path at the root for the
+  // The OpenSearch description, a fixed path at the root for the
   // same reason, read off the site data per request so a new title or icon
   // shows on the next one.
   app.get(OPENSEARCH_PATH, (c) =>
@@ -195,19 +195,19 @@ export function mountPublicSite(
     ),
   );
 
-  // The oEmbed provider (TASK-205), under the CMS's own prefix like the
+  // The oEmbed provider, under the CMS's own prefix like the
   // comment endpoint, so no permalink can take it.
   app.get(OEMBED_PATH, oEmbed);
 
-  // The embed view the oEmbed html frames (TASK-208), beside it under the
+  // The embed view the oEmbed html frames, beside it under the
   // same prefix: the one response another site may put in a frame.
   app.get(EMBED_PATH, embedView);
 
-  // The index for language models (TASK-149), a fixed path at the root for
+  // The index for language models, a fixed path at the root for
   // the same reason.
   app.get(LLMS_TXT_PATH, llmsTxt);
 
-  // The IndexNow key file (TASK-151), at the root because that is where an
+  // The IndexNow key file, at the root because that is where an
   // engine checks for it. Any other `.txt` path is not this route's: it falls
   // through to whatever document or 404 would have answered it.
   app.get('/:file{[A-Za-z0-9-]{8,128}\\.txt}', async (c, next) => {
@@ -229,13 +229,13 @@ export function mountPublicSite(
   // The archives and the home listing's pages are deliberately not routes. A
   // route table is fixed when the app is built, and the bases and the posts
   // page are settings, so a listing is resolved per request in the not-found
-  // handler, from what the site holds at that moment (TASK-36).
+  // handler, from what the site holds at that moment.
   app.notFound(resolveRequest);
 }
 
 /**
  * A declared redirect whose source names a query, WordPress's `/?p=123` above
- * all (TASK-128). It is answered before any route because `/` is one the
+ * all. It is answered before any route because `/` is one the
  * not-found handler never sees, and it shadows nothing: no document is
  * addressed by a query.
  */
@@ -305,7 +305,7 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   const slashed = slashedHref(view, pathname, c.var.renderer.pageSize());
   if (slashed !== undefined) return c.redirect(`${slashed}${search}`, 301);
 
-  // And a URL the site itself says has moved (TASK-128), after every live
+  // And a URL the site itself says has moved, after every live
   // lookup and after the slash that would lead to one, so a declared source
   // never shadows a live document.
   const redirect = findPathRedirect(c.var.redirects.current(), pathname);

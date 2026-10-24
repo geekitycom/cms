@@ -20,7 +20,7 @@ import { USERS, dataPath } from '../files/data-files.ts';
 /**
  * Who may sign in: `data/users.json`, and everything that reads or writes it.
  *
- * decision-9 puts every piece of irreducible state in a file, and a login is
+ * Every piece of irreducible state lives in a file, and a login is
  * as irreducible as state gets — an account cannot be derived from anything,
  * and a site that lost its users would fall back into first-run setup with the
  * door open to whoever reached it first. So the file is the truth and the
@@ -51,17 +51,16 @@ export interface User {
   /**
    * Where the site can reach this person, or `undefined` when nobody has said.
    *
-   * Optional on purpose (TASK-54): a login is a username and a password, and a
-   * site that never sends email has no use for this. What it buys is a
-   * password that can be recovered without a shell, and, once TASK-55 lands,
-   * somewhere to send the notices an admin would otherwise have to go looking
-   * for. Not unique, and not a second login name: it is only ever matched
-   * against by the forgot-password form, which answers the same either way.
+   * Optional on purpose: a login is a username and a password, and a site that
+   * never sends email has no use for this. What it buys is a password that can
+   * be recovered without a shell, and somewhere to send the notices an admin
+   * would otherwise have to go looking for. Not unique, and not a second login
+   * name: it is only ever matched against by the forgot-password form, which
+   * answers the same either way.
    */
   readonly email?: string | undefined;
   /**
-   * Which notices this user has turned off, when they have turned any off
-   * (TASK-55).
+   * Which notices this user has turned off, when they have turned any off.
    *
    * Absent for almost everybody, because it holds only what somebody actually
    * changed: an event nothing says anything about is at the default
@@ -72,7 +71,7 @@ export interface User {
   readonly notifications?: Readonly<Record<string, boolean>> | undefined;
   /**
    * How often each notice arrives, for the events that offer a choice and the
-   * users who have made one (TASK-60).
+   * users who have made one.
    *
    * A second map beside {@link User.notifications} rather than a widening of
    * it, because the two answer different questions — whether, and how often —
@@ -84,21 +83,21 @@ export interface User {
   readonly notificationModes?: Readonly<Record<string, string>> | undefined;
   /**
    * The built-in DaisyUI theme this user draws the admin in, when they have
-   * picked one (decision-30). Absent means they follow the system, and the
+   * picked one. Absent means they follow the system, and the
    * default is never written down.
    */
   readonly adminTheme?: AdminTheme | undefined;
   /**
    * How this user arranged the dashboard's widget cards, when they have
-   * changed anything (TASK-469). Absent means the default arrangement.
+   * changed anything. Absent means the default arrangement.
    */
   readonly dashboardLayout?: DashboardLayout | undefined;
   readonly writingGoals?: WritingGoals | undefined;
   /**
    * What the public site says about this person, when somebody has filled any
-   * of it in (TASK-67).
+   * of it in.
    *
-   * decision-14 makes a user an actor at their author URL, so the URL has to
+   * A user is an actor at their author URL, so the URL has to
    * be a page before it can be an actor, and a page needs something to say.
    * Absent for a user nobody has written a profile for, on the rule the two
    * maps above follow: the file holds what somebody actually filled in, and a
@@ -107,9 +106,9 @@ export interface User {
   readonly profile?: UserProfile | undefined;
   /**
    * The ActivityStreams id this person was published under somewhere else,
-   * when they were (TASK-69).
+   * when they were.
    *
-   * decision-14 calls this identity rather than cache: a follower's server
+   * This is identity rather than cache: a follower's server
    * keys the account by it for as long as the follow lasts, and a document
    * served under it with a different `id` reads as a different person, not as
    * a moved one. So a site arriving from another server keeps the
@@ -118,7 +117,7 @@ export interface User {
    *
    * The CMS never mints one — a user born here is an actor at their author URL
    * and has no second name to keep — and no screen writes one: it arrives with
-   * the import (TASK-71) or is typed into the file by hand. The whole URL is
+   * the import or is typed into the file by hand. The whole URL is
    * stored, query string and all, because that is what has to be matched.
    */
   readonly actorId?: string | undefined;
@@ -130,7 +129,7 @@ export interface User {
  * One thing a profile points at: somewhere else this person is.
  *
  * A label and a URL rather than a bare URL, because the label is what a theme
- * prints and what an ActivityPub `attachment` calls the property (TASK-68).
+ * prints and what an ActivityPub `attachment` calls the property.
  */
 export interface ProfileLink {
   /** What the link says. */
@@ -139,7 +138,7 @@ export interface ProfileLink {
   readonly href: string;
   /**
    * The `rel` values typed after the URL, as one string, or absent when none
-   * were (TASK-114).
+   * were.
    *
    * What was typed and only that. `rel="me"` is added to every profile link
    * when it is published, which is what the box is for, so a link that says
@@ -166,7 +165,7 @@ export interface UserProfile {
   readonly avatar?: string | undefined;
   /**
    * What they do, when they said: the line a theme prints under the name in a
-   * bio, and the `jobTitle` of the JSON-LD `Person` it emits (decision-16).
+   * bio, and the `jobTitle` of the JSON-LD `Person` it emits.
    */
   readonly jobTitle?: string | undefined;
   /** Where they are, as they wrote it: "Madison, Wisconsin", "Somewhere wet". */
@@ -227,7 +226,7 @@ export function listUsers(dataDir: string): User[] {
  * The site's first account: the lowest id, which is the one the first run
  * made.
  *
- * decision-14 leaves the site with no actor of its own, and two things still
+ * The site has no actor of its own, only its users, and two things still
  * have to be somebody's: a relay subscription, which is an instance-wide
  * agreement rather than one person's, and a post whose `author` names nobody
  * this site knows. Both fall to the first account, because a site's first
@@ -425,7 +424,7 @@ export function cleanProfile(profile: UserProfile): UserProfile | undefined {
   const links = (profile.links ?? [])
     .map((link) => {
       // The rel values go through the same normaliser a menu item's do, so a
-      // hand-edited file and a saved box store one spelling (TASK-114).
+      // hand-edited file and a saved box store one spelling.
       const rel = relText([link.rel ?? '']);
       return { label: link.label.trim(), href: link.href.trim(), ...(rel === '' ? {} : { rel }) };
     })
@@ -551,10 +550,10 @@ export class ConflictingActorIdError extends Error {
 }
 
 /**
- * Write the actor id a user was published under elsewhere (TASK-69).
+ * Write the actor id a user was published under elsewhere.
  *
- * The only writer of the field, and it is not a screen: doc-4 makes a stored
- * actor id identity for the life of the account, and identity is not
+ * The only writer of the field, and it is not a screen: a stored actor id is
+ * identity for the life of the account, and identity is not
  * something a form should be able to retype. A plugin's import command is
  * what calls this.
  *

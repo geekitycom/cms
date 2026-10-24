@@ -106,7 +106,7 @@ export interface Listing {
   document?: Document | undefined;
 }
 
-/** One page of search results, ready to render (TASK-22). */
+/** One page of search results, ready to render. */
 export interface SearchPage {
   /** What the reader searched for, as the page read it. Empty before a search. */
   query: string;
@@ -164,7 +164,7 @@ export interface Renderer {
    * redirect after a submission gets its thank-you onto the post.
    *
    * `viewer` is who the request's session says is reading, when it says
-   * anybody (TASK-103). The only thing it changes is the comment form, which
+   * anybody. The only thing it changes is the comment form, which
    * is drawn for them rather than for a stranger; a caller with no request —
    * a feed, a preview, an email — passes nothing and gets the page everybody
    * else gets.
@@ -193,18 +193,18 @@ export interface Renderer {
    */
   renderSearch(search: SearchPage): string;
   /**
-   * A native comment's own page (TASK-318) through the comment layout: the
+   * A native comment's own page through the comment layout: the
    * comment, the thread above it from its post down, and its replies.
    */
   renderComment(thread: CommentThread): string;
   /** The 404 page, for a path that resolved to nothing. */
   renderNotFound(url: string): string;
-  /** The 410 page, for the URL of a document that was deleted (TASK-195). */
+  /** The 410 page, for the URL of a document that was deleted. */
   renderGone(url: string): string;
   /** The 500 page, for a request whose handler threw. */
   renderServerError(url: string): string;
   /**
-   * The maintenance page (TASK-130), for a request turned away while the site
+   * The maintenance page, for a request turned away while the site
    * is down on purpose. `until` is when the operator expects it back.
    */
   renderMaintenance(url: string, until: Date | undefined): string;
@@ -224,8 +224,8 @@ export interface Renderer {
    * `nest`, `markdownUrl` and `geminiUrl` filters.
    *
    * Gemtext comes from the first of the chosen theme's `.gmi.njk`, its
-   * `.md.njk`, the default theme's `.gmi.njk` and its `.md.njk`
-   * (decision-60), and the result says which format the theme wrote.
+   * `.md.njk`, the default theme's `.gmi.njk` and its `.md.njk`,
+   * and the result says which format the theme wrote.
    */
   renderMarkdownChrome(chrome: MarkdownChrome, options: MarkdownChromeOptions): MarkdownChromeText;
   /** Any template by name, with the site data already in the context. */
@@ -272,12 +272,12 @@ export interface CreateRendererOptions {
   config: ResolvedConfig;
   /**
    * The Google Fonts a page is set in, per the site's `headingFont` and
-   * `bodyFont` and the roles the theme declares (decision-61). A renderer
+   * `bodyFont` and the roles the theme declares. A renderer
    * built without it sets every role in the theme's own stack.
    */
   fonts?: ((site: SiteData, declared: readonly ThemeFont[]) => readonly PageFont[]) | undefined;
   /**
-   * Which theme the site is rendering through, asked per render (decision-15).
+   * Which theme the site is rendering through, asked per render.
    *
    * Injected so that one CMS has one answer: the pages, the `/theme/` assets
    * and the site's email all read the same source, so a theme that has gone
@@ -297,7 +297,7 @@ export interface CreateRendererOptions {
   pages?: (() => readonly Document[]) | undefined;
   /**
    * What has been said about a post: the replies, likes and boosts the theme
-   * renders under it (TASK-49).
+   * renders under it.
    *
    * Injected rather than read here for the same reason the pages are — the
    * renderer holds no store — and read per render, so a reply that arrives
@@ -308,7 +308,7 @@ export interface CreateRendererOptions {
   conversation?: ((document: Document, site: SiteSettings) => Conversation) | undefined;
   /**
    * What is stored about a page a post cites, by its URL: what a reply
-   * answers (TASK-123), and what a like, repost or bookmark cites (TASK-244).
+   * answers, and what a like, repost or bookmark cites.
    *
    * Read, never fetched: the context was fetched when the post was saved or
    * synced, so drawing it waits on nobody's server. A renderer built without
@@ -316,22 +316,22 @@ export interface CreateRendererOptions {
    */
   replyContext?: ((target: string, site: SiteSettings) => ReplyContext | undefined) | undefined;
   /**
-   * The syndication targets a post selects and the copies they answered with
-   * (TASK-155), read from the site's files and never fetched. A renderer built
+   * The syndication targets a post selects and the copies they answered with,
+   * read from the site's files and never fetched. A renderer built
    * without it links a post to no target and prints only the copies its front
    * matter lists by hand.
    */
   syndication?: ((document: Document, site: SiteSettings) => PostSyndication) | undefined;
   /**
-   * What the site shares of where a post was written (TASK-223), already
-   * reduced by Settings > Privacy (decision-29). Read per render so the
+   * What the site shares of where a post was written, already
+   * reduced by Settings > Privacy. Read per render so the
    * setting takes effect on the next request. A renderer built without it
    * prints no location, which is what every test over one template wants.
    */
   location?: ((document: Document, site: SiteSettings) => SharedLocation | undefined) | undefined;
   /**
    * The comment form for a post that is taking comments, and `undefined` for
-   * one that is not (TASK-50).
+   * one that is not.
    *
    * Injected for the same reason the conversation is, and asked per render for
    * a sharper reason: whether a post is still open depends on the clock, so a
@@ -347,7 +347,7 @@ export interface CreateRendererOptions {
     | undefined;
   /**
    * The contact form for a page whose front matter asks for one, and
-   * `undefined` for every other document (TASK-56).
+   * `undefined` for every other document.
    *
    * Injected for the same reason the comment form is, and asked per render for
    * the same one: a `contact: true` saved in the editor a moment ago puts a
@@ -356,10 +356,10 @@ export interface CreateRendererOptions {
    */
   contactForm?: ((document: Document) => ContactFormContext | undefined) | undefined;
   /**
-   * Who may sign in, for the byline (TASK-67).
+   * Who may sign in, for the byline.
    *
    * Injected and read per render for the reason the pages are: `data/users.json`
-   * is the truth about who exists (decision-9), a display name saved a moment
+   * is the truth about who exists, a display name saved a moment
    * ago should be on the very next page, and the renderer holds no store. It
    * is asked once per render rather than once per document, so a listing of
    * ten posts costs one read of the file.
@@ -371,7 +371,7 @@ export interface CreateRendererOptions {
   users?: (() => readonly User[]) | undefined;
   /**
    * The published posts either side of one, for `previous` and `next` under an
-   * entry (TASK-79).
+   * entry.
    *
    * Injected for the reason the conversation is — the renderer holds no index
    * — and asked per render rather than at boot, because a post published a
@@ -382,20 +382,19 @@ export interface CreateRendererOptions {
   neighbours?: ((document: Document) => DocumentNeighbours) | undefined;
   /**
    * The listed posts and pages of the site whose body links to a document,
-   * newest first, for `backlinks` on its page (TASK-322). Injected and asked
+   * newest first, for `backlinks` on its page. Injected and asked
    * per render for the reason the neighbours are; a renderer built without it
    * lists none.
    */
   backlinks?: ((document: Document) => readonly Document[]) | undefined;
   /**
-   * The newest `count` published posts, for `newestPosts` on the front page
-   * (TASK-317). The theme chooses the count; the index decides what is
+   * The newest `count` published posts, for `newestPosts` on the front page.
+   * The theme chooses the count; the index decides what is
    * published.
    */
   newestPosts?: ((count: number) => readonly Document[]) | undefined;
   /**
-   * Every published post, for a page whose front matter says `archive: true`
-   * (TASK-85).
+   * Every published post, for a page whose front matter says `archive: true`.
    *
    * Injected for the reason the newest posts are, and asked per render and
    * only for a page that asked for the list: an archive is the one listing
@@ -415,7 +414,7 @@ export interface RenderPageOptions {
   viewer?: CommentViewer | undefined;
 }
 
-/** A document's page and the fingerprint its ETag is made from (TASK-181). */
+/** A document's page and the fingerprint its ETag is made from. */
 export interface RenderedPage {
   /** The page as it is sent. */
   readonly html: string;

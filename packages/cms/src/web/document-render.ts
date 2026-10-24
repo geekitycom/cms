@@ -111,7 +111,7 @@ function documentPageContext(
   const objectId = objectIdOf(deps, document, now);
   const settings = requestSite();
   // The posts either side of this one, as the two links a theme draws under
-  // an entry (TASK-79). Each is on the context only when there is one, so a
+  // an entry. Each is on the context only when there is one, so a
   // theme asks `{% if previous %}` and the ends of the archive draw nothing.
   const either = options.neighbours?.(document) ?? {};
   const shared = options.location?.(document, settings);
@@ -135,8 +135,8 @@ function documentPageContext(
     // document, and is set here rather than in a layout so that a site which
     // overrides `post.njk` or `page.njk` keeps the link.
     ...(isServed(document, now) ? { commentsFeed: commentsFeedPath(document.permalink) } : {}),
-    // And the whole archive, for a page whose front matter asked for it
-    // (TASK-85). On the context only for that page, so a theme asks
+    // And the whole archive, for a page whose front matter asked for it.
+    // On the context only for that page, so a theme asks
     // `{% if archiveMonths %}` exactly as it asks about the contact form.
     ...contexts.archiveContext(document),
     ...responseContext(deps, document, settings, viewer, stamps),
@@ -170,7 +170,7 @@ function responseContext(
 ): Record<string, unknown> {
   // `conversation` is what was said back. It is on the context only when
   // there is something in it, so a theme can ask `{% if conversation %}`
-  // and a post nobody has answered renders no empty section (TASK-49).
+  // and a post nobody has answered renders no empty section.
   const said = options.conversation?.(document, settings);
   // `commentForm` is on the context only when the post is open, so the
   // theme asks `{% if commentForm %}` rather than working the rules out
@@ -179,12 +179,12 @@ function responseContext(
     options.commentForm?.(document, viewer, requestMailConfigured()),
     'comment',
   );
-  // And the contact form, when the page's front matter asked for one
-  // (TASK-56). Nothing about where a message would go is on the context:
+  // And the contact form, when the page's front matter asked for one.
+  // Nothing about where a message would go is on the context:
   // the address is read when a submission arrives, so a theme cannot
   // print it however it is written.
   const contact = stamps.hold(options.contactForm?.(document), 'contact');
-  // Where a webmention about this page is sent (TASK-51). On the context
+  // Where a webmention about this page is sent. On the context
   // only when the site takes them, so a theme asks `{% if webmention %}`
   // and a site that has turned them off advertises nothing.
   const site = siteData.read();
@@ -200,7 +200,7 @@ function responseContext(
 }
 
 /**
- * The targets this post links to and the copies they made of it (TASK-155):
+ * The targets this post links to and the copies they made of it:
  * the links a target verifies sit inside the h-entry, so they are on the
  * post's own page, which is the page a target fetches.
  */

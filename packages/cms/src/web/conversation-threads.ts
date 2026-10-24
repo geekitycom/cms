@@ -25,7 +25,7 @@ const RSVP_GROUP_ORDER: readonly RsvpValue[] = ['yes', 'maybe', 'interested', 'n
  * - A reply whose target is gone — deleted by its author — is shown under
  *   whatever *that* was answering, rather than disappearing with it. The
  *   conversation stays readable and only the withdrawn note is missing.
- * - A reply answering a native comment a reader may not see (TASK-325) is
+ * - A reply answering a native comment a reader may not see is
  *   shown under a placeholder for it, the way the reply's own page shows it.
  *   A comment waiting for a moderator or filed as spam still says what it
  *   answers, and the placeholder goes there; a deleted one is known by
@@ -182,7 +182,7 @@ export function saidIn(conversation: Conversation): Placed[] {
 }
 
 /**
- * Whether a feed carries it and a reply count counts it (TASK-335): somebody's
+ * Whether a feed carries it and a reply count counts it: somebody's
  * words, a reply or a mention, said here. A like, a boost or a repost says
  * nothing — "@ada liked this" would be an item with an empty body — and a
  * migrated entry was published before the site came here, so a reader must
@@ -201,7 +201,7 @@ function placed(replies: readonly ThreadReply[], parent: Interaction | null = nu
 }
 
 /**
- * The visible replies directly under an entry of a thread (TASK-324): a
+ * The visible replies directly under an entry of a thread: a
  * hidden comment's visible replies count as its parent's, as {@link Placed}
  * says, so every visible reply is directly under exactly one thing.
  */

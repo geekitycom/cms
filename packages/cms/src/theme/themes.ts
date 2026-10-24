@@ -14,12 +14,11 @@ import type { CssFontStack } from './font-family.ts';
  * `/theme/` asset finder, the mail environment and the per-render probe for
  * the optional front-page and posts-page layouts all ask here, so there is one
  * answer to "which theme is this render reading from" rather than four copies
- * of the same two-element array (decision-15).
+ * of the same two-element array.
  *
  * The admin is deliberately not a theme. Its templates and its static files
  * live at `admin/` with a loader of their own and are never on this path, so a
- * site theme cannot shadow the login form or the CSRF field inside it
- * (decision-4).
+ * site theme cannot shadow the login form or the CSRF field inside it.
  */
 
 /**
@@ -53,7 +52,7 @@ export type ThemeKind = typeof SITE_THEME_KIND;
  * One place a theme renders a menu, as its `theme.json` declares it.
  *
  * A theme decides where a menu can go, and the screen that edits menus cannot
- * know what a theme wants (TASK-107). So the theme says: a `name`, which is
+ * know what a theme wants. So the theme says: a `name`, which is
  * the key a site stores that menu under in `site.json` and the key the
  * template context carries it as, and a `label` for the person choosing which
  * menu to fill in.
@@ -66,7 +65,7 @@ export interface ThemeArea {
 }
 
 /**
- * What the `color-scheme` meta may say (TASK-146): the schemes a theme draws,
+ * What the `color-scheme` meta may say: the schemes a theme draws,
  * the one it prefers first. `only dark` is not among them because the HTML
  * standard does not allow it.
  */
@@ -103,7 +102,7 @@ export interface ThemeColors {
 
 /**
  * One colour scheme a theme draws, as its `theme.json` lists it under
- * `schemes` (decision-61):
+ * `schemes`:
  *
  *     "schemes": [
  *       { "name": "paper", "label": "Paper", "themeColor": { "light": "#faf7f2", "dark": "#171412" } },
@@ -123,8 +122,7 @@ export interface ThemeScheme {
 }
 
 /**
- * One font role a theme declares, as its `theme.json` writes it under `fonts`
- * (decision-61):
+ * One font role a theme declares, as its `theme.json` writes it under `fonts`:
  *
  *     "fonts": {
  *       "heading": { "label": "Headings", "fallback": "Georgia, serif" },
@@ -150,7 +148,7 @@ export interface ThemeFont {
 
 /**
  * Whether a page follows the reader's system setting or is always light or
- * always dark (decision-61): the `colorMode` setting.
+ * always dark: the `colorMode` setting.
  */
 export const COLOR_MODES = ['system', 'light', 'dark'] as const;
 
@@ -463,8 +461,8 @@ export interface SiteThemes {
  * `themes/` with a `.DS_Store`, a `README.md` or a `.git` in it is a site with
  * no broken themes, not a site with three of them.
  *
- * A themes directory that is not there is an empty one. Nothing scaffolds it
- * (decision-15), so a site that has never written a theme has no directory,
+ * A themes directory that is not there is an empty one. Nothing scaffolds it,
+ * so a site that has never written a theme has no directory,
  * and that is the ordinary state rather than a problem to report.
  */
 export function listSiteThemes(themesDir: string): SiteThemes {
@@ -503,7 +501,7 @@ export function listSiteThemes(themesDir: string): SiteThemes {
  *
  * A site that has chosen nothing passes nothing, and reads the packaged theme
  * alone: an unchosen theme is never on the path, and the packaged one is never
- * on it twice (decision-15).
+ * on it twice.
  */
 export function themeSearchPath(chosenThemeDir?: string): string[] {
   return chosenThemeDir === undefined ? [PACKAGED_THEME_DIR] : [chosenThemeDir, PACKAGED_THEME_DIR];
@@ -615,7 +613,7 @@ export interface ThemeSource {
  * The one thing that knows which theme a site is rendering through.
  *
  * It is a source rather than a value because the choice is a setting in
- * `content/_data/site.json` (decision-9, decision-15): the Appearance screen
+ * `content/_data/site.json`: the Appearance screen
  * writes that file, a hand edit writes the same file, and both have to reach
  * the next request without a restart. So every consumer — the template
  * environment, the `/theme/` assets, the mail templates — asks here per render

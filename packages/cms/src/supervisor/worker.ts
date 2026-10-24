@@ -1,5 +1,5 @@
 /**
- * The worker's half of `geekity serve`'s supervision (TASK-288): the
+ * The worker's half of `geekity serve`'s supervision: the
  * {@link Supervision} the Plugins screen asks for a reload, and the answers
  * to what the supervisor tells this worker to do.
  */

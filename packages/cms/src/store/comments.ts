@@ -21,7 +21,7 @@ export const COMMENT_SOURCES = ['comment', 'webmention', 'activitypub'] as const
  * One of {@link COMMENT_SOURCES}.
  *
  * `comment` is the form under the post. `webmention` is another site's post
- * pointing at this one (TASK-51), which lands in the same file with the same
+ * pointing at this one, which lands in the same file with the same
  * shape and is told apart only by this. `activitypub` is a fediverse reply or
  * reaction a site received before it ran Geekity, brought across by an import:
  * one this site receives itself is logged in the inbox instead.
@@ -38,7 +38,7 @@ export const COMMENT_KINDS = ['reply', 'like', 'boost', 'mention', 'repost'] as 
  * `mention` are the webmention vocabulary's two extra: a repost is a boost by
  * another name and is shown with them, and a mention is the one thing neither
  * of the others is — somebody's page pointing at this one without answering
- * it (TASK-51).
+ * it.
  */
 export type CommentKind = (typeof COMMENT_KINDS)[number];
 
@@ -55,7 +55,7 @@ export const COMMENT_STATUSES = ['pending', 'approved', 'spam'] as const;
  */
 export type CommentStatus = (typeof COMMENT_STATUSES)[number];
 
-/** What a comment can have had removed from it for privacy (TASK-135). */
+/** What a comment can have had removed from it for privacy. */
 export const REDACTED_FIELDS = ['email', 'addressHash', 'author'] as const;
 
 /**
@@ -81,8 +81,8 @@ export interface CommentAuthor {
   /**
    * Their avatar, or `null`.
    *
-   * A webmention has one out of the `u-photo` of the source page's `h-card`
-   * (TASK-51), and an imported fediverse comment its actor's icon (TASK-338).
+   * A webmention has one out of the `u-photo` of the source page's `h-card`,
+   * and an imported fediverse comment its actor's icon.
    * A form asks for no picture: one it did ask for would be a stranger's file
    * on somebody else's page. The page serves it through the avatar cache.
    */
@@ -101,7 +101,7 @@ export interface CommentContent {
  * One comment, as its post's file under `content/_data/comments/` holds it.
  *
  * The shape is deliberately wider than a form submission. A webmention
- * (TASK-51) is somebody else's post pointing at this one: it has a `url` and no
+ * is somebody else's post pointing at this one: it has a `url` and no
  * email, it may be a like rather than a reply, and it belongs in the same file
  * and the same thread. So every entry says its `source` and its `kind`, and
  * nothing assumes a person filled in a form.
@@ -143,7 +143,7 @@ export interface CommentRecord {
    */
   url: string | null;
   /**
-   * Whether whoever wrote it asked to hear about replies to it (TASK-55).
+   * Whether whoever wrote it asked to hear about replies to it.
    *
    * Only ever true for a comment that carries an `author.email`, because there
    * would be nowhere to send it otherwise, and only ever set by somebody
@@ -154,8 +154,8 @@ export interface CommentRecord {
   notify: boolean;
   /**
    * What was removed from it for privacy, in the order {@link REDACTED_FIELDS}
-   * lists them, when anything was (TASK-135). Absent rather than empty otherwise, so the files of a site
-   * that has never swept stay byte for byte what they were.
+   * lists them, when anything was. Absent rather than empty otherwise, so the
+   * files of a site that has never swept stay byte for byte what they were.
    *
    * It is what tells an email that was taken away from one that was never
    * given: an author whose email was removed must not match the auto-approval
@@ -164,19 +164,19 @@ export interface CommentRecord {
    */
   redacted?: readonly RedactedField[];
   /**
-   * What a reply that is an RSVP says (TASK-198): the `p-rsvp` of the page a
+   * What a reply that is an RSVP says: the `p-rsvp` of the page a
    * webmention came from. Absent for every other comment, so the files of a
    * site that has had none stay byte for byte what they were.
    */
   rsvp?: RsvpValue;
   /**
    * The page whose entry carried it, for a webmention reply read out of
-   * another webmention's source rather than sent on its own (a salmention,
-   * TASK-320). Absent for every other comment.
+   * another webmention's source rather than sent on its own (a salmention).
+   * Absent for every other comment.
    */
   via?: string;
   /**
-   * Whether it was imported from another system (TASK-336), the word a
+   * Whether it was imported from another system, the word a
    * migrated post uses. It was published before the site came here, so it is
    * shown in its thread and carried by no feed. Absent for every other comment.
    */
@@ -190,14 +190,14 @@ export interface CommentRecord {
   origin?: string;
   /**
    * The site user who wrote it, by username, for a comment written by
-   * somebody signed in to the system it was imported from (TASK-337). The
+   * somebody signed in to the system it was imported from. The
    * thread names them as it names their reply posts. Absent for every other
    * comment.
    */
   user?: string;
   /**
    * The fediverse actor who wrote it, by id, for a migrated fediverse comment
-   * whose actor the export named (TASK-338). What tells their like here from
+   * whose actor the export named. What tells their like here from
    * the same person's like delivered since, whatever profile page each names.
    * Absent for every other comment.
    */
@@ -272,7 +272,7 @@ export interface CommentStore {
   countApprovedCommentsExceptImportedFediverseSince(since: string): CommentCount[];
   /** One comment by id, or `undefined`. */
   getComment(id: string): PostComment | undefined;
-  /** The comments whose `url` is this one, whatever their status (TASK-300). */
+  /** The comments whose `url` is this one, whatever their status. */
   listCommentsAt(url: string): PostComment[];
 
   /** How many comments stand at each status. What the dashboard shows. */
@@ -293,7 +293,7 @@ export interface CommentStore {
   /**
    * Make the comment index say exactly this, in one transaction.
    *
-   * What a rebuild from `content/_data/comments/` calls (decision-9): the
+   * What a rebuild from `content/_data/comments/` calls: the
    * files are the source, so a row they do not carry is a comment that should
    * not be on the page. Nothing outside a rebuild should reach for it.
    */

@@ -60,7 +60,7 @@ export function createApp(
   }
 
   // Outside everything after it, so it compresses the body the client is
-  // about to get, the error pages and the 503 included (TASK-139).
+  // about to get, the error pages and the 503 included.
   if (resolved.compression) app.use('*', compression());
 
   const writes = createWriteGate();
@@ -117,31 +117,31 @@ export function createApp(
   // And one on every redirect, whichever part of the CMS sent it.
   app.use('*', redirectBy);
 
-  // Maintenance mode (TASK-130) turns away everything after it but the health
+  // Maintenance mode turns away everything after it but the health
   // checks, the admin and the theme's files, so it goes in front of all of
   // them: federation's inboxes included.
   app.use('*', maintenanceGate);
 
   app.get('/_geekity/health', (c) => c.json({ status: 'ok' }));
 
-  // The health check a container orchestrator or an uptime monitor probes
-  // (TASK-87). It goes on before federation, the admin and the public site,
+  // The health check a container orchestrator or an uptime monitor probes.
+  // It goes on before federation, the admin and the public site,
   // so no permalink can ever shadow it.
   mountHealth(app);
 
-  // The two well-known files a site answers for itself (TASK-133), before the
+  // The two well-known files a site answers for itself, before the
   // public site can claim either path as a permalink.
   mountWellKnown(app);
 
-  // IndieAuth's authorization server metadata (TASK-157), the endpoint that
-  // starts a sign-in (TASK-158), the one that issues tokens (TASK-160) and
-  // the ones that answer for a token once issued (TASK-161), here for the
+  // IndieAuth's authorization server metadata, the endpoint that
+  // starts a sign-in, the one that issues tokens and
+  // the ones that answer for a token once issued, here for the
   // reason the well-known files are.
   mountIndieAuthDiscovery(app);
   mountAuthorizationEndpoint(app);
   mountTokenEndpoint(app);
   mountTokenInfoEndpoints(app);
-  // Micropub (TASK-163) and its media endpoint (TASK-165), which stand on
+  // Micropub and its media endpoint, which stand on
   // those tokens.
   mountMicropub(app);
   mountMicropubMedia(app);

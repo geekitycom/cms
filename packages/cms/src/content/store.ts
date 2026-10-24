@@ -16,7 +16,7 @@ export interface OpenContentStoreOptions {
   now?: Clock | undefined;
   /**
    * The site's base URL, which the `/replies/` keys of a document are worked
-   * out against (TASK-327). Opening with a different one than last time works
+   * out against. Opening with a different one than last time works
    * every key out again; opening with none leaves new rows without keys.
    */
   baseUrl?: string | undefined;
@@ -50,7 +50,7 @@ export interface DocumentLookup {
    * The document a URL resolves to, or `undefined`.
    *
    * Permalinks are unique among live documents only: a trashed document keeps
-   * its URL so that it can answer 410 Gone (TASK-195), until a live one takes
+   * its URL so that it can answer 410 Gone, until a live one takes
    * the URL over. The live document wins; a trashed one answers only when
    * nothing live holds the URL.
    */
@@ -58,8 +58,8 @@ export interface DocumentLookup {
   /**
    * The post whose front matter names this ActivityStreams id, or `undefined`.
    *
-   * Only a migrated post (decision-13) or one moved after it was published
-   * (decision-20) has one: any other post is named by its permalink and
+   * Only a migrated post or one moved after it was published
+   * has one: any other post is named by its permalink and
    * carries no `activitypub.id` at all. This is how
    * the id its followers already hold keeps answering — with the `Article` for
    * a peer and a redirect to the permalink for a browser — so the match is on
@@ -70,7 +70,7 @@ export interface DocumentLookup {
    * The published document whose `redirect_from` names this URL, or
    * `undefined`.
    *
-   * What a URL a document used to live at resolves to (TASK-127). Only a
+   * What a URL a document used to live at resolves to. Only a
    * public document answers, so an old URL of something since drafted or
    * trashed 404s rather than redirecting to a 404. Should two claim one URL,
    * the one updated most recently wins.
@@ -110,7 +110,7 @@ export interface ArchiveReader {
   /**
    * Published, untrashed documents carrying a tag in any casing, newest first.
    *
-   * Tags match without regard to case (TASK-308): a document hydrated from
+   * Tags match without regard to case: a document hydrated from
    * the index carries each of its tags in the site's spelling, which
    * {@link TaxonomyReader.tagSpelling} names.
    */
@@ -119,15 +119,15 @@ export interface ArchiveReader {
   listByCategory(category: string, options?: ListByTagOptions): Document[];
   /**
    * Published, untrashed, already-due posts whose `author` is one of `names`,
-   * newest first: one user's archive (TASK-67).
+   * newest first: one user's archive.
    *
    * A list of names rather than one, because more than one string can read as
-   * the same person: doc-2's `author` holds a username, and a file written
-   * before decision-14 holds a display name that reads as the one user
-   * answering to it. `content/authors.ts` decides which names those are and hands
-   * them here, so the index matches strings and never has to know what a user
-   * is. An empty list matches nothing, which is what a user whose name nothing
-   * resolves to should get.
+   * the same person: a post's `author` holds a username, and a file written
+   * before every user became an actor holds a display name that reads as the
+   * one user answering to it. `content/authors.ts` decides which names those
+   * are and hands them here, so the index matches strings and never has to know
+   * what a user is. An empty list matches nothing, which is what a user whose
+   * name nothing resolves to should get.
    *
    * Posts only: an author archive is what somebody wrote, and a page is part
    * of the furniture of the site rather than of anybody's body of work.
@@ -135,8 +135,8 @@ export interface ArchiveReader {
   listByAuthor(names: readonly string[], options?: ListOptions): Document[];
   /**
    * The posts of one user's archive that carry a `pinned` key, most recently
-   * pinned first and capped at `PINNED_POST_LIMIT`: their featured collection
-   * (TASK-207). The same archive {@link ArchiveReader.listByAuthor} reads, so a
+   * pinned first and capped at `PINNED_POST_LIMIT`: their featured collection.
+   * The same archive {@link ArchiveReader.listByAuthor} reads, so a
    * draft, a trashed post or a scheduled one is never featured.
    */
   listPinnedByAuthor(names: readonly string[]): Document[];
@@ -181,14 +181,14 @@ export interface TaxonomyReader {
 export interface ReplyReader {
   /**
    * Served posts whose `in-reply-to` is exactly one of these URLs, unlisted
-   * ones included, newest first (TASK-300): the reply posts a thread shows.
+   * ones included, newest first: the reply posts a thread shows.
    * Naming nothing returns nothing.
    */
   listRepliesTo(targets: readonly string[]): Document[];
   /** Served posts with an `in-reply-to`, unlisted ones included, newest first. */
   listReplyPosts(options?: ListOptions): Document[];
   /**
-   * The served documents a `/replies/` key names (TASK-327): the ones whose
+   * The served documents a `/replies/` key names: the ones whose
    * feed guid has that key, and the reply posts whose object id has it. One
    * indexed lookup, so a key that names nothing costs nothing else.
    */
@@ -197,14 +197,14 @@ export interface ReplyReader {
 
 export interface BacklinkReader {
   /**
-   * The listed posts and pages whose body links to `document`, newest first
-   * (TASK-322): its backlinks.
+   * The listed posts and pages whose body links to `document`, newest first:
+   * its backlinks.
    *
    * A link names a path rather than a document, and is matched to one here,
    * on read: a link to the document's permalink, or to a `redirect_from` of it
    * that still leads to it, whichever way the link was spelled; to `/` when
    * `home` says the document is the homepage; and to any URL the site answers
-   * with a redirect that ends on one of those (TASK-330). So a link written
+   * with a redirect that ends on one of those. So a link written
    * before its target existed counts once the target does, a post that
    * becomes public later counts from then, and an edited redirect file moves
    * a backlink, with nothing rewritten. A document linking to itself is not
@@ -216,7 +216,7 @@ export interface BacklinkReader {
 export interface SearchReader {
   /**
    * Published, untrashed, already-due posts and pages matching a reader's
-   * query, best match first (TASK-22).
+   * query, best match first.
    *
    * `query` is what somebody typed, not FTS5 syntax: see `searchExpression`
    * for what it understands. A query with nothing searchable in it finds
@@ -296,10 +296,10 @@ export interface IndexWriter {
   /**
    * Empty the index: every document, its terms and its words.
    *
-   * What a rebuild does before it reads the files again (TASK-95), and the
+   * What a rebuild does before it reads the files again, and the
    * counterpart of the `DELETE FROM documents` three migrations run for the
-   * same reason. The index is derived and the files are the source of truth
-   * (decision-1), so this loses nothing a scan cannot work out again — and it
+   * same reason. The index is derived and the files are the source of truth,
+   * so this loses nothing a scan cannot work out again — and it
    * is the whole point: a row whose hash matches its file is a row a scan
    * leaves alone, so nothing short of emptying the index makes it read
    * everything.
@@ -319,7 +319,7 @@ export interface IndexConnection {
   /**
    * Refuse every write on this connection while on, with SQLite's
    * `query_only`. A worker handing over to a new one under `geekity serve`
-   * turns it on, so the new worker's boot migrations run alone (TASK-288).
+   * turns it on, so the new worker's boot migrations run alone.
    */
   setReadOnly(readOnly: boolean): void;
   /** Close the database. Safe to call twice. */
@@ -329,7 +329,7 @@ export interface IndexConnection {
 /**
  * The derived index over the Markdown files.
  *
- * Files are the source of truth (decision-1); this is a queryable copy that
+ * Files are the source of truth; this is a queryable copy that
  * answers the questions a directory walk cannot answer cheaply. Deleting the
  * database is safe because the next boot rebuilds it.
  */

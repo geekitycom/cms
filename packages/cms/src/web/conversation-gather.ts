@@ -263,8 +263,8 @@ function interactionOf(
             username: null,
           }
         : bylineAuthor(profileContext(user), comment.author.name),
-    // Where it can be read. A comment written here has a page of its own
-    // (TASK-318); a webmention lives on the page it was sent from, and its
+    // Where it can be read. A comment written here has a page of its own;
+    // a webmention lives on the page it was sent from, and its
     // `url` says so. A theme that prints `url` for a fediverse reply prints a
     // working link for either, and so does a feed.
     url:

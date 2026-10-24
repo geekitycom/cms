@@ -150,8 +150,8 @@ function channelImage(source: FeedSource, link: string): string[] {
 /**
  * One item as RSS.
  *
- * The `guid` is the item's id, which decision-12 makes every feed's key for
- * the post: after decision-13 that is the permalink itself, or the stored id or
+ * The `guid` is the item's id, which is every feed's key for the post: that
+ * is the permalink itself, or the stored id or
  * `guid` a migrated post carries. `isPermaLink` tells a reader which it is
  * looking at — `true` when the id is the permalink, so a reader that resolves
  * a guid finds the post, and `false` when it is a stored name like WordPress's
@@ -180,7 +180,7 @@ export function rssItem(item: FeedItem): string[] {
     // Markdown should render from this rather than from the HTML above. It is
     // the same text the ActivityStreams `Article` carries as its `source`.
     `      <source:markdown>${cdata(item.markdown)}</source:markdown>`,
-    // What a reply answers, in the same namespace (TASK-300): RSS 2.0 has no
+    // What a reply answers, in the same namespace: RSS 2.0 has no
     // element of its own for it.
     ...optionalElement('source:inReplyTo', item.inReplyTo, 3),
     '    </item>',
@@ -236,7 +236,7 @@ function alternateEnclosure(alternate: AlternateEnclosure): string[] {
  * `<comments>` is the page a person should read them on and `wfw:commentRss`
  * the feed of the whole thread a reader should poll, which is the pair
  * WordPress publishes and so the pair every reader already understands.
- * `source:comments` is the namespace's walkable tree (TASK-324): how many
+ * `source:comments` is the namespace's walkable tree: how many
  * replies answer the post directly and the feed of only those, written only
  * when there are some.
  *

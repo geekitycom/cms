@@ -27,9 +27,9 @@ import { ADMIN_TEMPLATES } from './templates.ts';
  *
  * Its own endpoint, for the reason the avatar has one: the key is a credential,
  * the secret `akismet.key` setting in `data/akismet.json`, rather than a
- * setting that lives in `content/_data/site.json` (TASK-52), so it is not a field of the Discussion
- * form, and a key Akismet will not take must not lose an edit to the closing
- * window beside it.
+ * setting that lives in `content/_data/site.json`, so it is not a field of the
+ * Discussion form, and a key Akismet will not take must not lose an edit to the
+ * closing window beside it.
  */
 export const AKISMET_PATH = `${SETTINGS_PATH}/akismet`;
 

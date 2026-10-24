@@ -15,7 +15,7 @@ export const HANDLE_TIMEOUT_MS = 5_000;
 export type HandleLearner = (body: string) => Promise<void>;
 
 /**
- * The site's {@link HandleLearner} (TASK-194): WebFinger for each new
+ * The site's {@link HandleLearner}: WebFinger for each new
  * `@user@host`, then the actor it points at, fetched signed as the site's first
  * account for a server in authorized fetch mode.
  *

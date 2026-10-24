@@ -18,13 +18,13 @@ import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**
- * The inbox: what the contact form left behind (TASK-56).
+ * The inbox: what the contact form left behind.
  *
  * A message is a file under `data/contact/` and nothing else — there is no
  * index, because this screen reads every file to sort them anyway and a second
  * copy of the truth would only be a second thing to keep true. So the two
  * actions here are a rewrite and an unlink, and the screen is a view of the
- * directory as it is at that moment (decision-9).
+ * directory as it is at that moment.
  *
  * Two lists rather than one. A checker's `spam` is an opinion about a message
  * somebody may really have sent, so it is kept rather than thrown away — but a

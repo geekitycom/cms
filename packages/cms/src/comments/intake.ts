@@ -21,9 +21,9 @@ import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms
 
 /** Who is proposing a comment, which is the one thing the rules differ on. */
 export type CommentOrigin =
-  /** Somebody filled in the form under a post (doc-6). */
+  /** Somebody filled in the form under a post. */
   | 'form'
-  /** Another page said it links here, and it was verified (doc-7). */
+  /** Another page said it links here, and it was verified. */
   | 'webmention';
 
 /**
@@ -67,7 +67,7 @@ export interface IntakeCommentOptions {
   baseUrl: string;
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
-  /** Who to tell, when there is anybody to tell (TASK-55). */
+  /** Who to tell, when there is anybody to tell. */
   notices?: CommentNotices | undefined;
   /** Where the submission came from, **unhashed**. Only the checker sees it. */
   address?: string | undefined;
@@ -187,7 +187,7 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
 /**
  * The webmention this site already holds from that page, if any.
  *
- * The source URL is a webmention's identity (doc-7), so this is what stops a
+ * The source URL is a webmention's identity, so this is what stops a
  * blog post that is edited and re-sent adding a second entry — and what the
  * endpoint asks before it fetches, so a source that has stopped linking here
  * knows what to take away.

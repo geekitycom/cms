@@ -73,7 +73,7 @@ export interface ParsedArgs {
   /**
    * The email address `user add` was given, if any. `undefined` is a user with
    * no address, which is the ordinary case: an email is optional on a user and
-   * only buys password recovery and the notices TASK-55 sends.
+   * only buys password recovery and moderation notices.
    */
   email: string | undefined;
   /**

@@ -8,7 +8,7 @@ import type { SiteColors } from '../theme/site-data.ts';
 import type { ThemeColors } from '../theme/themes.ts';
 
 /**
- * The web app manifest (TASK-147): what a browser reads before it offers to
+ * The web app manifest: what a browser reads before it offers to
  * install the site, and what a launcher draws it with.
  *
  * A fixed route at the root for the reason `robots.txt` is one, so no

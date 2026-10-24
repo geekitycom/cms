@@ -19,7 +19,7 @@ export type HandleDirectory = (handle: string) => ResolvedHandle | undefined;
 /**
  * Where the resolved handles are kept, relative to the content directory: one
  * JSON object keyed by `user@host`. It is beside `replyContexts.json` for the
- * same reason (decision-19): what the web said, read when a page is drawn.
+ * same reason: what the web said, read when a page is drawn.
  */
 export const HANDLES_FILE = '_data/handles.json';
 

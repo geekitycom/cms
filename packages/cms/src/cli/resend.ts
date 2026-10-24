@@ -7,10 +7,10 @@ import { runJobHere } from './run-job.ts';
  * read.
  *
  * Mastodon keeps the copy of a post it first fetched, so a property added
- * later — the quote policy (TASK-125) is the one that made this a command —
+ * later — the quote policy is the one that made this a command —
  * reaches a post already out only through an `Update`. This is the resend
  * button on the federation screen, for every post at once, and it runs the
- * same resend job (TASK-393). Delivery runs with no queue, so each activity
+ * same resend job. Delivery runs with no queue, so each activity
  * has been posted before the process exits.
  */
 export async function resendCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {

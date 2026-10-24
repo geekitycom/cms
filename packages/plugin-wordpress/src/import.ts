@@ -10,8 +10,7 @@ import { WORDPRESS_ACTIVITYPUB_BASE } from './records.ts';
 import type { WordPressRecords } from './records.ts';
 
 /**
- * Bringing one person across from the WordPress ActivityPub plugin
- * (decision-14, TASK-71).
+ * Bringing one person across from the WordPress ActivityPub plugin.
  *
  * Three things a site leaving the plugin cannot regenerate, and this is where
  * they arrive: the RSA key pair its followers have cached, the actor id its
@@ -20,7 +19,7 @@ import type { WordPressRecords } from './records.ts';
  * with the content or is this plugin.
  *
  * Nothing here is a screen, on purpose. A stored actor id is identity for the
- * life of the account (doc-4), and identity is not something a form should be
+ * life of the account, and identity is not something a form should be
  * able to retype.
  */
 
@@ -419,7 +418,7 @@ async function fetchAs(url: string, signer?: Signer): Promise<unknown> {
  *
  * Read straight out of the JSON rather than through Fedify's vocabulary,
  * because a command has a plain document and no federation context to
- * dereference with. The fields are the ones `followers.json` holds (doc-4):
+ * dereference with. The fields are the ones `followers.json` holds:
  * two to deliver with, the rest to show.
  */
 function followerFrom(document: unknown): PluginFollower {

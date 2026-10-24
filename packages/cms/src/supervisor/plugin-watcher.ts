@@ -1,5 +1,5 @@
 /**
- * The supervisor's watch on the plugins folder (TASK-288). It polls the
+ * The supervisor's watch on the plugins folder. It polls the
  * folder's signature, waits for it to stand still, since a copy into the
  * folder changes it many times, and then asks for a reload when what the
  * folder holds differs from what the serving worker loaded.
