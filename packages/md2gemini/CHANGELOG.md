@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/geekitycom/cms/compare/md2gemini-v0.1.1...md2gemini-v0.1.2) (2026-10-24)
+
+
+### Bug Fixes
+
+* **md2gemini:** write nested bullet items as list lines ([32c067d](https://github.com/geekitycom/cms/commit/32c067d3067c751a9a949b8be4a455a2ab666449))
+
 ## [0.1.1](https://github.com/geekitycom/cms/compare/md2gemini-v0.1.0...md2gemini-v0.1.1) (2026-10-24)
 
 
