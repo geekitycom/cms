@@ -18,8 +18,8 @@ export const LEDGER = 'admin_migrations';
  */
 export const MIGRATIONS: readonly Migration[] = [
   {
-    // Users and sessions, when SQLite still held both. decision-9 moved the
-    // accounts into `data/users.json`, so nothing reads the users table any
+    // Users and sessions, when SQLite still held both. The accounts have since
+    // moved into `data/users.json`, so nothing reads the users table any
     // more: `migrateUsersToFile` writes its rows out on the first boot of that
     // version and drops it. The migration stays exactly as it shipped, because
     // a shipped migration is never edited — which does mean a brand new
@@ -57,8 +57,8 @@ export const MIGRATIONS: readonly Migration[] = [
     sql: `ALTER TABLE sessions ADD COLUMN flash TEXT`,
   },
   {
-    // Site settings, when SQLite was still the source of them. decision-9
-    // moved them into content/_data/site.json, so nothing reads this table
+    // Site settings, when SQLite was still the source of them. They have since
+    // moved into content/_data/site.json, so nothing reads this table
     // any more: `migrateSettingsToFile` writes its rows out on the first boot
     // of that version and drops it. The migration stays exactly as it shipped,
     // because a shipped migration is never edited — which does mean a brand
@@ -73,8 +73,8 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // The site actor's signing keys, when SQLite still held them. decision-9
-    // moved them into JWK files under `data/keys`, so nothing reads this table
+    // The site actor's signing keys, when SQLite still held them. They have
+    // since moved into JWK files under `data/keys`, so nothing reads this table
     // any more: `migrateActorKeysToFiles` writes its rows out on the first boot
     // of that version and drops it. The migration stays exactly as it shipped,
     // because a shipped migration is never edited — which does mean a brand new
@@ -92,7 +92,7 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // The site's followers (doc-4). Fedify's KV store is a cache and may be
+    // The site's followers. Fedify's KV store is a cache and may be
     // thrown away; a follower may not, because an actor that followed and was
     // forgotten simply stops hearing from the site. Keyed by actor id, which
     // is what a `Follow`, an `Undo(Follow)` and an actor's own `Delete` all
@@ -138,7 +138,7 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // Outbound delivery (doc-4, decision-5). Two tables, because an activity
+    // Outbound delivery. Two tables, because an activity
     // is one thing and its fate at each follower is another: keeping the
     // JSON-LD once rather than once per follower is what makes a redelivery to
     // a thousand followers a single read, and one row per (activity, follower)
@@ -182,7 +182,7 @@ export const MIGRATIONS: readonly Migration[] = [
     //
     // It is an index of the JSON beside it rather than a fact of its own: the
     // backfill runs the very function the writer runs, so a database rebuilt
-    // from the inbox log (TASK-32) holds what this one holds.
+    // from the inbox log holds what this one holds.
     version: 8,
     sql: `
       ALTER TABLE ap_inbox ADD COLUMN in_reply_to TEXT;
@@ -197,7 +197,7 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // Relay subscriptions (FEP-ae0c, TASK-40). The list of relays is a
+    // Relay subscriptions (FEP-ae0c). The list of relays is a
     // setting mirrored to site.json; this is where each handshake stands,
     // which is operational state and derivable again from the file — a relay
     // in the list with no row here is simply followed again on the next boot.
@@ -237,7 +237,7 @@ export const MIGRATIONS: readonly Migration[] = [
   },
   {
     // Sessions without the foreign key into `users`, because there is no users
-    // table any more: decision-9 moved the accounts into `data/users.json` and
+    // table any more: the accounts live in `data/users.json`, and
     // `migrateUsersToFile` drops the table on the boot after this migration
     // runs. The constraint could not survive that either way — with
     // `foreign_keys` on, dropping the parent cascades every login away, and an
@@ -270,11 +270,11 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // The outcomes without the payloads. decision-9 replaces "send this stored
-    // activity again" with "send this post as it now reads", so nothing needs
-    // the JSON-LD any more and `ap_outbound` goes: an activity rebuilt from
-    // the file is the current answer, and a copy of what went out last time
-    // could only ever be a staler one.
+    // The outcomes without the payloads. With files as the source of truth,
+    // "send this stored activity again" becomes "send this post as it now
+    // reads", so nothing needs the JSON-LD any more and `ap_outbound` goes:
+    // an activity rebuilt from the file is the current answer, and a copy of
+    // what went out last time could only ever be a staler one.
     //
     // What that table held about an activity that an outcome cannot do
     // without — its type, the object it was about and the slug — moves onto
@@ -328,7 +328,7 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // What a post's conversation is read by (TASK-49). `in_reply_to` already
+    // What a post's conversation is read by. `in_reply_to` already
     // had an index because a post's replies are counted on every feed; the
     // object an activity is about had none, and that is the column a like, a
     // boost, a `Delete` of a reply and an `Undo` of a like are all found by.
@@ -338,7 +338,7 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // Native comments (TASK-50), which are files under
+    // Native comments, which are files under
     // `content/_data/comments/` and nothing else: this table is an index of
     // them, emptied and read back on every boot exactly as `followers` and
     // `ap_inbox` are. Nothing here is a fact the files do not carry.
@@ -373,7 +373,7 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // Webmentions (TASK-51), which are two different things and so two changes.
+    // Webmentions, which are two different things and so two changes.
     //
     // A comment may now say where it lives, because a webmention lives on
     // somebody else's page: it is what a later webmention from that page is
@@ -408,7 +408,7 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // Password reset tokens (TASK-54). They sit beside the sessions, and for
+    // Password reset tokens. They sit beside the sessions, and for
     // the same reason: a reset link is a second, shorter-lived way of proving
     // you are somebody, and it is a cache — losing one costs the person
     // nothing but a second click on Forgot password. So `data/users.json`
@@ -436,17 +436,17 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // The two halves of a notification's one-click links (TASK-55).
+    // The two halves of a notification's one-click links.
     //
     // `spent_tokens` is what makes such a link single use. The link itself is
     // not stored — it is an HMAC-signed claim, so that a moderation link in an
     // inbox goes on working across a rebuilt or restored cache, which is a
-    // thing decision-9 says a site may do whenever it likes. Only the fact
-    // that one has been used is written down, keyed by its SHA-256 for the
-    // reason `password_resets` is, and swept once the signature has expired.
-    // Losing this table forgets which links were spent, and that costs a site
-    // nothing: every action a link performs is idempotent, so doing it a
-    // second time is doing it once.
+    // thing a site may do whenever it likes, since the database is a cache.
+    // Only the fact that one has been used is written down, keyed by its
+    // SHA-256 for the reason `password_resets` is, and swept once the signature
+    // has expired. Losing this table forgets which links were spent, and that
+    // costs a site nothing: every action a link performs is idempotent, so
+    // doing it a second time is doing it once.
     //
     // `comments.notify` is the commenter's "tell me about replies", which the
     // file says and this column indexes like every other column of that table.
@@ -466,8 +466,8 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // Followers belong to a user, and the inbox log says who was told
-    // (decision-14, TASK-68). The site actor is gone, so there is nothing to
+    // Followers belong to a user, and the inbox log says who was told.
+    // The site actor is gone, so there is nothing to
     // backfill: the `followers` table is rebuilt on every boot from the files
     // under `content/_data/federation/{username}/`, and the rows a site
     // carried for the site actor name nobody. The table is therefore dropped
@@ -500,7 +500,7 @@ export const MIGRATIONS: readonly Migration[] = [
   },
   {
     // The avatar proxy asks, per request for a picture, whether its URL is one
-    // the site has recorded (TASK-134). Both columns are indexed so that
+    // the site has recorded. Both columns are indexed so that
     // question is a lookup rather than a scan of every follower and comment.
     version: 19,
     sql: `
@@ -509,16 +509,16 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // What a comment has had removed for privacy (TASK-135), as the JSON list
+    // What a comment has had removed for privacy, as the JSON list
     // its file carries. Nothing backfills it: the rebuild on the next boot
     // does, and a comment nothing was removed from leaves it `NULL`.
     version: 20,
     sql: `ALTER TABLE comments ADD COLUMN redacted TEXT;`,
   },
   {
-    // The profiles of actors who are not followers (TASK-184): whoever liked,
+    // The profiles of actors who are not followers: whoever liked,
     // boosted, answered or quoted a post, as their actor document named them.
-    // A cache and nothing else (decision-9). Nothing backfills it here: the
+    // A cache and nothing else. Nothing backfills it here: the
     // profile sweep fetches every actor the inbox log names that has none.
     version: 21,
     sql: `
@@ -539,7 +539,7 @@ export const MIGRATIONS: readonly Migration[] = [
     sql: `ALTER TABLE comments ADD COLUMN rsvp TEXT;`,
   },
   {
-    // What a \`/replies/\` key names (TASK-327), so resolving one is a lookup
+    // What a \`/replies/\` key names, so resolving one is a lookup
     // rather than a walk of every comment and logged reply. A note's key is
     // its id's and is backfilled here; a native comment's hangs off the base
     // URL, which a migration does not know, so those rows are filled when the
@@ -574,7 +574,7 @@ export const MIGRATIONS: readonly Migration[] = [
     sql: `ALTER TABLE ap_inbox ADD COLUMN fetched INTEGER NOT NULL DEFAULT 0;`,
   },
   {
-    // A comment's key is its id (decision-51), so the key worked out from its
+    // A comment's key is its id, so the key worked out from its
     // guid against the base URL has nothing left to say.
     version: 26,
     sql: `

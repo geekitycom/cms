@@ -1,11 +1,11 @@
 /**
  * What a logged inbound activity means as a reply.
  *
- * The inbox keeps every `Create` it is sent whole (doc-4), and a reply is
+ * The inbox keeps every `Create` it is sent whole, and a reply is
  * simply one whose object answers something: `inReplyTo` naming a post's
  * ActivityStreams object id. Everything the comments feeds show is read back
  * out of that stored JSON-LD rather than out of columns, so the index can be
- * thrown away and rebuilt from the files TASK-32 writes.
+ * thrown away and rebuilt from the inbox log files.
  */
 
 import type { InboxActivity } from './admin-store.ts';
@@ -138,7 +138,7 @@ function noteFrom(activity: InboxActivity):
  *
  * A guess, and the last resort: a follower is named from the profile it
  * published when it followed, and anybody else from the profile the site
- * fetched when they were first heard from (TASK-184). This is for an actor
+ * fetched when they were first heard from. This is for an actor
  * neither of those knows yet.
  *
  * An id whose last segment is a number implies nothing. A current Mastodon
@@ -195,7 +195,7 @@ export function replyTargetOf(json: string): string | null {
 /**
  * The id of the note a logged activity delivers as a reply, or `null` when it
  * delivers none: what {@link replyFrom} names the reply, worked out from what
- * a row stores so the admin store can index its `/replies/` key (TASK-327).
+ * a row stores so the admin store can index its `/replies/` key.
  */
 export function replyIdOf(
   activity: Pick<InboxActivity, 'activityType' | 'objectId' | 'json'>,

@@ -4,7 +4,7 @@ import type { MessageTransport } from './types.ts';
 type Handler = (message: unknown) => Promise<void>;
 
 /**
- * The first transport (decision-54): one message at a time on
+ * The first transport: one message at a time on
  * {@link createSerialQueue}, in this process's memory. A message sent while
  * nothing listens is held for the next listener; one that is waiting when the
  * listener stops is held again. A message is lost with the process, which the

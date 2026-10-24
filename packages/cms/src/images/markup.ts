@@ -11,8 +11,8 @@ import type { DescribedImage, ImageConfig, ImageVariant } from './variants.ts';
  *
  * This runs over the HTML on its way into a theme template and nowhere else.
  * The feeds, the JSON and Markdown representations and the ActivityStreams
- * `content` keep the plain `<img>` that {@link renderMarkdown} produced, as
- * decision-10 requires: a reader's client and a remote instance cannot resolve
+ * `content` keep the plain `<img>` that {@link renderMarkdown} produced: a
+ * reader's client and a remote instance cannot resolve
  * a `srcset` of this site's derived files sensibly, and half of them would
  * strip the `<picture>` anyway.
  */

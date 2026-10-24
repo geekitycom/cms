@@ -1,178 +1,59 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
-
-import nunjucks from 'nunjucks';
 import type { Environment } from 'nunjucks';
 
+import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
+import type { CommentThread, Conversation } from '../comments/conversation.ts';
 import type { ResolvedConfig } from '../config.ts';
+import type { ContactFormContext } from '../contact/form.ts';
 import type { Document } from '../content/document.ts';
-import {
-  CITATION_VERBS,
-  citationsOf,
-  citedPageName,
-  citesAnImage,
-  previewShown,
-} from '../content/citation.ts';
-import type { Citation, CitedPageReader } from '../content/citation.ts';
 import type { SharedLocation } from '../content/location.ts';
-import { NO_PAGE_TAGS } from '../plugins/page-tags.ts';
-import type { DrawnPageTags } from '../plugins/page-tags.ts';
-import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import type { SiteSettings } from '../site/settings.ts';
-import type { ImageLoading } from '../images/markup.ts';
-import { postLabel, replyTarget } from '../content/post-type.ts';
-import { reviewWords } from '../content/review.ts';
-import { RSVP_PHRASES } from '../content/rsvp.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
-import { visibilityOf } from '../content/visibility.ts';
-import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
-import { iconSetting, siteIcons } from '../images/icons.ts';
-import type { SiteIcon } from '../images/icons.ts';
-import type { User } from '../site/users.ts';
-import { LLMS_TXT_PATH } from './llms.ts';
-import { archiveMonths, archiveOpen } from './archive.ts';
-import type { ArchiveMonth } from './archive.ts';
-import { authorContext, siteAuthorContext } from '../site/authors.ts';
+import type { SyndicationTarget } from '../content/syndicate-to.ts';
+import type { TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
+import type { PageFont } from '../fonts/index.ts';
 import type { AuthorContext } from '../site/authors.ts';
-import {
-  backlinkContext,
-  citedPhotoContext,
-  citedPictureContext,
-  documentContext,
-  locationContext,
-  syndicationLinks,
-} from './context.ts';
+import type { SiteSettings } from '../site/settings.ts';
+import type { User } from '../site/users.ts';
+import type { SchemeTokens } from '../theme/scheme-tokens.ts';
 import {
   createSiteDataSource,
   frontPageSlugs,
   postsPerPage,
-  siteColors,
-  siteLocale,
-  siteTimezone,
   taxonomyBases,
   termRedirects,
   themeName,
 } from '../theme/site-data.ts';
-import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
-import type { ContactFormContext } from '../contact/form.ts';
-import { commentAnchor } from '../comments/conversation.ts';
-import { commentPageHref } from '../content/guids.ts';
-import type { CommentThread, Conversation } from '../comments/conversation.ts';
-import { activityStreamsId } from '../content/permalinks.ts';
-import { currentObjectId, readObjectIds } from '../federation/object-ids.ts';
-import { isServed } from '../content/served.ts';
-import { calendarDayIn } from '../content/time.ts';
-import { commentsFeedPath } from './feeds.ts';
-import type { DocumentContext, NeighbourContext, PhotoContext } from './context.ts';
-import type { FrontPageSlugs, SiteColors, SiteData } from '../theme/site-data.ts';
-import { markdownConversation } from './markdown-conversation.ts';
-import { bioOf, escapeMarkdown, HOME_LINK, oneLine } from './markdown-page.ts';
-import type {
-  MarkdownArchiveMonth,
-  MarkdownChrome,
-  MarkdownCite,
-  MarkdownEntry,
-  MarkdownLink,
-  MarkdownUrl,
-} from './markdown-page.ts';
-import { navigationLinks, navigationMenus } from '../site/navigation.ts';
-import { resolveLicense } from '../content/license.ts';
-import type { ContentLicense } from '../content/license.ts';
-import { shareImage } from './share-image.ts';
-import type { Pagination } from './pagination.ts';
-import { snippetHtml } from './search.ts';
-import { termHref } from '../content/taxonomy.ts';
-import type { Taxonomy, TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
-import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
-import { createThemeSource, findThemeFile } from '../theme/themes.ts';
+import type { FrontPageSlugs, SiteColors, SiteData, SiteDataSource } from '../theme/site-data.ts';
+import { createThemeSource } from '../theme/themes.ts';
 import type { ThemeColors, ThemeFont, ThemeSource } from '../theme/themes.ts';
-import type { PageFont } from '../fonts/index.ts';
-import { representationHref } from './negotiate.ts';
-import type { TextFormat } from './negotiate.ts';
-import { schemeTokens } from '../theme/scheme-tokens.ts';
-import type { SchemeTokens } from '../theme/scheme-tokens.ts';
-import { formatFileSize } from '../util/file-size.ts';
-import { absoluteUrl } from '../util/url.ts';
-import { capsuleUrl } from '../gemini/capsule.ts';
-import { citedPictureAlt } from '../webmention/cited-picture.ts';
-import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
-import { handSyndicationOf } from '../webmention/syndication.ts';
-import type { SyndicationTarget } from '../content/syndicate-to.ts';
-import { pingbackEndpointFor } from '../webmention/pingback.ts';
-import { webmentionEndpointFor } from '../webmention/endpoint.ts';
-
-/** Templates the default theme ships and the public routes ask for by name. */
-export const TEMPLATES = {
-  home: 'layouts/home.njk',
-  post: 'layouts/post.njk',
-  page: 'layouts/page.njk',
-  tag: 'layouts/tag.njk',
-  category: 'layouts/category.njk',
-  author: 'layouts/author.njk',
-  search: 'layouts/search.njk',
-  comment: 'layouts/comment.njk',
-  notFound: 'layouts/404.njk',
-  gone: 'layouts/410.njk',
-  serverError: 'layouts/500.njk',
-  maintenance: 'layouts/503.njk',
-} as const;
-
-/**
- * The two templates named for the Reading choice, which a theme may write and
- * which fall back to an ordinary layout when it has not.
- *
- * They are WordPress's own `front-page.php` and `home.php`, and they exist for
- * the same reason: a front page is often the one page of a site that looks
- * like nothing else, and saying so should not mean overriding the layout every
- * other page uses. The default theme ships `front-page.njk` (TASK-85) and no
- * posts page layout, so a site that sets a posts page gets the listing layout
- * until it writes one.
- */
-export const OPTIONAL_TEMPLATES = {
-  /**
-   * The front page alone. The default theme ships one (TASK-85), so the
-   * fallback is only reached by a theme that replaced it with nothing.
-   */
-  frontPage: 'layouts/front-page.njk',
-  /** The listing on the posts page. Falls back to {@link TEMPLATES.home}. */
-  postsPage: 'layouts/posts-page.njk',
-} as const;
-
-export interface TextTemplates {
-  readonly markdown: string;
-  readonly gemini: string;
-}
+import { createDocumentPages } from './document-render.ts';
+import { createListingPages } from './listing-render.ts';
+import { createMarkdownChrome } from './markdown-chrome.ts';
+import { createMarkdownEnvironment } from './markdown-environment.ts';
+import type { MarkdownChrome, MarkdownUrl } from './markdown-page.ts';
+import type { TextFormat } from './negotiate.ts';
+import { createPageContexts } from './page-context.ts';
+import type { Pagination } from './pagination.ts';
+import { requestSite } from './render-scope.ts';
+import { createThemeEnvironment, siteColorsWithTokens } from './theme-environment.ts';
+import { STATUS_PAGES, untilContext } from './theme-templates.ts';
+import type { StatusPage, StatusPageName } from './theme-templates.ts';
 
 export interface ThemeText {
   readonly format: TextFormat;
   readonly text: string;
 }
 
-const CHROME_TEMPLATES = {
-  header: { markdown: 'partials/markdown-header.md.njk', gemini: 'partials/gemini-header.gmi.njk' },
-  footer: { markdown: 'partials/markdown-footer.md.njk', gemini: 'partials/gemini-footer.gmi.njk' },
-} as const satisfies Record<string, TextTemplates>;
-
 export interface StatusMarkdownContext {
-  /** The path the request was for. */
   url: string;
   markdownUrl: MarkdownUrl;
-  /** On the maintenance page: when the operator expects the site back. */
   until?: Date | undefined;
   format: TextFormat;
 }
 
-/** What {@link Renderer.renderMarkdownChrome} writes links with. */
 export interface MarkdownChromeOptions {
-  /** A canonical URL as the representation links it. */
   markdownUrl: MarkdownUrl;
-  /** The page, when it is the site's front page: `newestPosts` is offered there. */
   frontPage?: Document | undefined;
-  /**
-   * The document the Markdown is of, for its `categories`, `tags` and
-   * `backlinks`, and `archiveMonths` when it says `archive: true`.
-   */
   document?: Document | undefined;
   /**
    * For `gemini`, the archive page's descriptions are left off, so each of
@@ -186,268 +67,73 @@ export interface MarkdownChromeText {
   readonly footer: ThemeText;
 }
 
-/** A listing of documents, ready to render. */
 export interface Listing {
-  /** Heading for the page, and the basis of its `<title>`. */
   title: string;
-  /** The listing's own URL, for `page.url`. */
   url: string;
-  /** The documents on this page of the listing, newest first. */
   documents: Document[];
-  /** Where this page sits in the sequence. */
   pagination: Pagination;
-  /** The tag, on a tag archive. Absent on the home page. */
   tag?: string | undefined;
-  /** The category, on a category archive. Absent on the home page. */
   category?: string | undefined;
-  /**
-   * Whose archive this is, on an author archive: the same profile a post's
-   * byline is given, so a theme prints the heading of an archive with what it
-   * already knows how to print under a post.
-   */
   author?: AuthorContext | undefined;
-  /** Which template to use. Defaults to the home layout. */
   template?: string | undefined;
-  /**
-   * The page whose permalink this listing is at, when the site has a posts
-   * page. Its front matter and its rendered body go on the context under the
-   * listing's own title and URL, so a theme prints the words above the posts.
-   */
   document?: Document | undefined;
 }
 
-/** One page of search results, ready to render (TASK-22). */
 export interface SearchPage {
-  /** What the reader searched for, as the page read it. Empty before a search. */
   query: string;
-  /** The page's own URL, query included, for `page.url`. */
   url: string;
-  /** The documents on this page of the results, best match first. */
   hits: readonly SearchHit[];
-  /** Where this page sits among all the results. */
   pagination: Pagination;
 }
 
-/**
- * The HTML side of the public site: everything that turns a document or a
- * listing into a page of the theme.
- *
- * It is deliberately separate from the routes. Content negotiation picks a
- * representation and then asks the renderer for the HTML one; feeds ask for
- * nothing here at all. Nothing in this interface touches a request.
- */
 export interface Renderer {
-  /** Site-wide data, re-read when `content/_data/site.json` changes. */
   site(): SiteData;
-  /** How many documents a listing page holds, per the site data. */
   pageSize(): number;
-  /**
-   * Where the taxonomy archives live, per the site data. The routes read it
-   * per request rather than at boot, so a base saved on the settings screen
-   * moves the archives on the very next one.
-   */
   taxonomyBases(): TaxonomyBases;
-  /**
-   * The archive renames the site records, per the site data. Read per request
-   * for the same reason the bases are: a rename made on the taxonomy screen
-   * has to answer at the old URL on the very next one.
-   */
   termRedirects(): readonly TaxonomyRedirect[];
-  /**
-   * The Reading choice, per the site data: which page is served at `/`, and
-   * which one's URL carries the listing. Read per request for the reason the
-   * bases are — a save on the settings screen moves the front page on the very
-   * next one — and answered as slugs, because only the index knows whether one
-   * still names a published page.
-   */
   frontPageSlugs(): FrontPageSlugs;
-  /**
-   * One document's page, as {@link renderDocument} or, with `frontPage`,
-   * {@link renderFrontPage} draws it, together with what validates it.
-   */
   renderPage(document: Document, options: RenderPageOptions): RenderedPage;
-  /**
-   * One document through its type's layout.
-   *
-   * `extra` goes on the context last and so wins: it is how the comment
-   * endpoint puts a refused form back on the page it came from, and how the
-   * redirect after a submission gets its thank-you onto the post.
-   *
-   * `viewer` is who the request's session says is reading, when it says
-   * anybody (TASK-103). The only thing it changes is the comment form, which
-   * is drawn for them rather than for a stranger; a caller with no request —
-   * a feed, a preview, an email — passes nothing and gets the page everybody
-   * else gets.
-   */
   renderDocument(
     document: Document,
     extra?: Record<string, unknown>,
     viewer?: CommentViewer,
   ): string;
-  /**
-   * One page as the site's front page: the same context its own URL would give
-   * it, at `/`, through the theme's front-page template if it has one and its
-   * page layout if it has not.
-   */
   renderFrontPage(
     document: Document,
     extra?: Record<string, unknown>,
     viewer?: CommentViewer,
   ): string;
-  /** A listing through the home, tag or category layout. */
   renderListing(listing: Listing): string;
-  /**
-   * A page of search results, or the empty search form, through the search
-   * layout. Each result is the document context a listing entry is, with a
-   * `snippet` of HTML showing where the words were found.
-   */
   renderSearch(search: SearchPage): string;
-  /**
-   * A native comment's own page (TASK-318) through the comment layout: the
-   * comment, the thread above it from its post down, and its replies.
-   */
   renderComment(thread: CommentThread): string;
-  /** The 404 page, for a path that resolved to nothing. */
   renderNotFound(url: string): string;
-  /** The 410 page, for the URL of a document that was deleted (TASK-195). */
   renderGone(url: string): string;
-  /** The 500 page, for a request whose handler threw. */
   renderServerError(url: string): string;
-  /**
-   * The maintenance page (TASK-130), for a request turned away while the site
-   * is down on purpose. `until` is when the operator expects it back.
-   */
   renderMaintenance(url: string, until: Date | undefined): string;
-  /**
-   * The body of a status page's Markdown or gemtext, from the theme's
-   * templates in {@link STATUS_PAGES}, with autoescaping off. The template
-   * gets `site`, `url`, `title`, the maintenance page's `until` and
-   * `untilText`, and the filters the Markdown partials have.
-   */
   renderStatusMarkdown(page: StatusPageName, context: StatusMarkdownContext): ThemeText;
-  /**
-   * The header and footer of a page's Markdown or gemtext, through
-   * {@link CHROME_TEMPLATES} with autoescaping off: Markdown is not HTML.
-   * The partials get `site`, `menus`, `soloAuthor`, the chrome's links as
-   * data, a document's `categories`, `tags`, `backlinks`, `conversation` and
-   * form links, `archiveMonths` on an archive page, and the `escapeMarkdown`,
-   * `nest`, `markdownUrl` and `geminiUrl` filters.
-   *
-   * Gemtext comes from the first of the chosen theme's `.gmi.njk`, its
-   * `.md.njk`, the default theme's `.gmi.njk` and its `.md.njk`
-   * (decision-60), and the result says which format the theme wrote.
-   */
   renderMarkdownChrome(chrome: MarkdownChrome, options: MarkdownChromeOptions): MarkdownChromeText;
-  /** Any template by name, with the site data already in the context. */
   render(template: string, context?: Record<string, unknown>): string;
-  /**
-   * The theme directories a render reads from right now, in order: what the
-   * `/theme/` route serves the site's static files out of, so a stylesheet and
-   * the page that links to it can never come from two different themes.
-   */
   themeDirs(): readonly string[];
-  /**
-   * The colours of the theme a render wears right now, gap-filled from the
-   * packaged theme: what the head declares and the web manifest repeats.
-   */
   themeColors(): ThemeColors;
-  /**
-   * The scheme and mode the site draws its pages in right now, with the
-   * scheme's colour tokens from the theme's stylesheet: what a page that does
-   * not load the stylesheet, the embed view, colours itself with.
-   * `undefined` under a theme with no schemes.
-   */
   siteColors(): (SiteColors & { readonly tokens: SchemeTokens }) | undefined;
-  /** The Nunjucks environment, for a site that wants to add its own filters. */
   readonly environment: Environment;
-  /**
-   * The twin the Markdown partials render through: the same loader and
-   * filters, autoescaping off, and the two Markdown filters. A filter added to
-   * `environment` is not seen here: add it to both when Markdown needs it too.
-   */
   readonly markdownEnvironment: Environment;
 }
 
-/** What {@link CreateRendererOptions.syndication} answers for one post. */
 export interface PostSyndication {
-  /** The declared targets the post selects, in declaration order. */
   readonly targets: readonly SyndicationTarget[];
-  /** The URLs of the copies those targets answered with. */
   readonly copies: readonly string[];
 }
 
-/** How to build a {@link Renderer}. */
 export interface CreateRendererOptions {
-  /** Config after defaults, for the themes directory, base URL and content directory. */
   config: ResolvedConfig;
-  /**
-   * The Google Fonts a page is set in, per the site's `headingFont` and
-   * `bodyFont` and the roles the theme declares (decision-61). A renderer
-   * built without it sets every role in the theme's own stack.
-   */
   fonts?: ((site: SiteData, declared: readonly ThemeFont[]) => readonly PageFont[]) | undefined;
-  /**
-   * Which theme the site is rendering through, asked per render (decision-15).
-   *
-   * Injected so that one CMS has one answer: the pages, the `/theme/` assets
-   * and the site's email all read the same source, so a theme that has gone
-   * missing is reported once rather than three times. A renderer built without
-   * one makes its own from the config, and follows the setting just as well.
-   */
   themes?: ThemeSource | undefined;
-  /**
-   * The public pages, for the one a site names as its posts page. Read per
-   * render rather than at boot, because a page renamed in the editor should be
-   * linked under its new title on the very next request.
-   *
-   * A renderer built without it draws no link to a posts page, which is what
-   * the tests over one template want and what a site with no index would get
-   * anyway.
-   */
   pages?: (() => readonly Document[]) | undefined;
-  /**
-   * What has been said about a post: the replies, likes and boosts the theme
-   * renders under it (TASK-49).
-   *
-   * Injected rather than read here for the same reason the pages are — the
-   * renderer holds no store — and read per render, so a reply that arrives
-   * while the page is cached in nobody's browser is on the very next one. A
-   * renderer built without it renders no conversation at all, which is what
-   * every test over one template wants.
-   */
   conversation?: ((document: Document, site: SiteSettings) => Conversation) | undefined;
-  /**
-   * What is stored about a page a post cites, by its URL: what a reply
-   * answers (TASK-123), and what a like, repost or bookmark cites (TASK-244).
-   *
-   * Read, never fetched: the context was fetched when the post was saved or
-   * synced, so drawing it waits on nobody's server. A renderer built without
-   * it draws every citation with a bare link.
-   */
   replyContext?: ((target: string, site: SiteSettings) => ReplyContext | undefined) | undefined;
-  /**
-   * The syndication targets a post selects and the copies they answered with
-   * (TASK-155), read from the site's files and never fetched. A renderer built
-   * without it links a post to no target and prints only the copies its front
-   * matter lists by hand.
-   */
   syndication?: ((document: Document, site: SiteSettings) => PostSyndication) | undefined;
-  /**
-   * What the site shares of where a post was written (TASK-223), already
-   * reduced by Settings > Privacy (decision-29). Read per render so the
-   * setting takes effect on the next request. A renderer built without it
-   * prints no location, which is what every test over one template wants.
-   */
   location?: ((document: Document, site: SiteSettings) => SharedLocation | undefined) | undefined;
-  /**
-   * The comment form for a post that is taking comments, and `undefined` for
-   * one that is not (TASK-50).
-   *
-   * Injected for the same reason the conversation is, and asked per render for
-   * a sharper reason: whether a post is still open depends on the clock, so a
-   * form decided at boot would go on being offered for a post that closed an
-   * hour ago. A renderer built without it renders no form at all.
-   */
   commentForm?:
     | ((
         document: Document,
@@ -455,747 +141,43 @@ export interface CreateRendererOptions {
         notifiable: boolean,
       ) => CommentFormContext | undefined)
     | undefined;
-  /**
-   * The contact form for a page whose front matter asks for one, and
-   * `undefined` for every other document (TASK-56).
-   *
-   * Injected for the same reason the comment form is, and asked per render for
-   * the same one: a `contact: true` saved in the editor a moment ago puts a
-   * form on the page the next request draws. A renderer built without it
-   * renders no contact form at all.
-   */
   contactForm?: ((document: Document) => ContactFormContext | undefined) | undefined;
-  /**
-   * Who may sign in, for the byline (TASK-67).
-   *
-   * Injected and read per render for the reason the pages are: `data/users.json`
-   * is the truth about who exists (decision-9), a display name saved a moment
-   * ago should be on the very next page, and the renderer holds no store. It
-   * is asked once per render rather than once per document, so a listing of
-   * ten posts costs one read of the file.
-   *
-   * A renderer built without it resolves no author at all, which is what a
-   * test over one template wants: the front matter's own name is still printed,
-   * it simply links nowhere.
-   */
   users?: (() => readonly User[]) | undefined;
-  /**
-   * The published posts either side of one, for `previous` and `next` under an
-   * entry (TASK-79).
-   *
-   * Injected for the reason the conversation is — the renderer holds no index
-   * — and asked per render rather than at boot, because a post published a
-   * minute ago is the neighbour the post before it should already be linking
-   * to. A renderer built without it draws no such links, which is what a test
-   * over one template wants.
-   */
   neighbours?: ((document: Document) => DocumentNeighbours) | undefined;
-  /**
-   * The listed posts and pages of the site whose body links to a document,
-   * newest first, for `backlinks` on its page (TASK-322). Injected and asked
-   * per render for the reason the neighbours are; a renderer built without it
-   * lists none.
-   */
   backlinks?: ((document: Document) => readonly Document[]) | undefined;
-  /**
-   * The newest `count` published posts, for `newestPosts` on the front page
-   * (TASK-317). The theme chooses the count; the index decides what is
-   * published.
-   */
   newestPosts?: ((count: number) => readonly Document[]) | undefined;
-  /**
-   * Every published post, for a page whose front matter says `archive: true`
-   * (TASK-85).
-   *
-   * Injected for the reason the newest posts are, and asked per render and
-   * only for a page that asked for the list: an archive is the one listing
-   * with no paging, so a site with a thousand posts runs the query on the one
-   * page that prints a thousand links and on no other.
-   */
   archivePosts?: (() => readonly Document[]) | undefined;
 }
 
-/**
- * Build the renderer for one site.
- *
- * Templates are cached unless the content watcher is on, which is the same
- * switch as "this is a development server": with `watch: true` a template edit
- * shows up on the next request, exactly as a content edit does.
- */
-/** Which page of a document {@link Renderer.renderPage} draws, and for whom. */
 export interface RenderPageOptions {
-  /** Whether it is being served at `/` as the site's front page. */
   frontPage?: boolean | undefined;
-  /** Context that goes on last and wins, as {@link Renderer.renderDocument} takes it. */
   extra?: Record<string, unknown> | undefined;
-  /** Who the request's session says is reading, when it says anybody. */
   viewer?: CommentViewer | undefined;
 }
 
-/** A document's page and the fingerprint its ETag is made from (TASK-181). */
 export interface RenderedPage {
-  /** The page as it is sent. */
   readonly html: string;
-  /**
-   * Everything the page shows except the forms' loaded-at stamps, which are
-   * the clock rather than the page: the same page drawn a second later is
-   * the same page. The window each stamp falls in goes in instead, so a
-   * browser revalidating an old copy is told it is fresh only while the stamp
-   * it holds is young enough to submit.
-   */
   readonly fingerprint: string;
 }
 
-const signedInReader = new AsyncLocalStorage<true>();
-
-/** Run `draw` as the request of a signed-in reader, so its pages say `signedIn`. */
-export function drawnForSignedInReader<T>(draw: () => T): T {
-  return signedInReader.run(true, draw);
+export interface RenderDeps {
+  readonly options: CreateRendererOptions;
+  readonly config: ResolvedConfig;
+  readonly siteData: SiteDataSource;
+  readonly themes: ThemeSource;
+  readonly pages: () => readonly Document[];
+  readonly users: () => readonly User[];
+  readonly citedPage: ((url: string) => ReplyContext | undefined) | undefined;
 }
-
-export interface RequestInputs {
-  readonly devMode: boolean;
-  readonly mailConfigured: boolean;
-  readonly site: SiteSettings;
-}
-
-const requestInputs = new AsyncLocalStorage<RequestInputs>();
-
-export function drawnWith<T>(inputs: RequestInputs, draw: () => T): T {
-  return requestInputs.run(inputs, draw);
-}
-
-const pageTags = new AsyncLocalStorage<DrawnPageTags>();
-
-export function drawnWithPageTags<T>(tags: DrawnPageTags, draw: () => T): T {
-  return pageTags.run(tags, draw);
-}
-
-function pluginTagsContext(): {
-  headEnd: nunjucks.runtime.SafeString;
-  bodyEnd: nunjucks.runtime.SafeString;
-} {
-  const { headEnd, bodyEnd } = pageTags.getStore() ?? NO_PAGE_TAGS;
-  return {
-    headEnd: new nunjucks.runtime.SafeString(headEnd),
-    bodyEnd: new nunjucks.runtime.SafeString(bodyEnd),
-  };
-}
-
-function requestSite(): SiteSettings {
-  return requestInputs.getStore()?.site ?? DEFAULT_SITE_SETTINGS;
-}
-
-function pageFontsContext(fonts: readonly PageFont[]): {
-  stylesheets: string[];
-  properties: { property: string; value: string }[];
-} {
-  return {
-    stylesheets: [...new Set(fonts.map((font) => font.href))],
-    properties: fonts.map((font) => ({ property: font.font.property, value: font.value })),
-  };
-}
-
-/** Half the time a form stays submittable: the oldest stamp a 304 hands back. */
-const STAMP_WINDOW_MS = (MAXIMUM_FORM_AGE_SECONDS * 1000) / 2;
 
 export function createRenderer(options: CreateRendererOptions): Renderer {
-  const { config } = options;
-  const siteData = createSiteDataSource(config);
-  const { replyContext } = options;
-  const citedPage =
-    replyContext === undefined
-      ? undefined
-      : (url: string): ReplyContext | undefined => replyContext(url, requestSite());
-  // What a form's loaded-at stamp is drawn as while its page is fingerprinted.
-  // Random per renderer so no post, reply or theme text can spell it.
-  const stampMark = `geekity-stamp-${randomUUID()}`;
-  // Which theme every render below reads from. Built here when the caller did
-  // not bring one so that a renderer made on its own — a test over one
-  // template, a site rendering a fragment of its own — still follows the
-  // `theme` in `site.json`; `createCms` hands in the one the mail templates
-  // and the `/theme/` assets share, so a site has a single answer and logs a
-  // bad choice once.
-  const themes =
-    options.themes ??
-    createThemeSource({ themesDir: config.themesDir, chosen: () => themeName(siteData.read()) });
-  const environment = createTemplateEnvironment({
-    themeDirs: themes.current().dirs,
-    baseUrl: config.baseUrl,
-    now: config.now,
-    noCache: config.watch,
-  });
-  const markdownEnvironment = createTemplateEnvironment({
-    themeDirs: themes.current().dirs,
-    baseUrl: config.baseUrl,
-    now: config.now,
-    noCache: config.watch,
-    autoescape: false,
-  });
-  markdownEnvironment.addFilter('escapeMarkdown', (value: unknown) =>
-    escapeMarkdown(filterText(value)),
-  );
-  markdownEnvironment.addFilter('fileSize', (value: unknown) =>
-    typeof value === 'number' ? formatFileSize(value) : '',
-  );
-  markdownEnvironment.addFilter('nest', (value: unknown, width: unknown) =>
-    nest(
-      value instanceof nunjucks.runtime.SafeString ? value.toString() : filterText(value),
-      typeof width === 'number' ? width : 2,
-    ),
-  );
-  markdownEnvironment.addFilter('quote', (value: unknown) => quote(filterText(value)));
-  for (const name of ['markdownUrl', 'geminiUrl']) {
-    markdownEnvironment.addFilter(name, function (this: unknown, value: unknown) {
-      const url = filterText(value);
-      const lookup = (this as { lookup?: (name: string) => unknown } | undefined)?.lookup;
-      const write = typeof lookup === 'function' ? lookup.call(this, name) : undefined;
-      return typeof write === 'function' ? (write as MarkdownUrl)(url) : url;
-    });
-  }
-  const pages = options.pages ?? ((): readonly Document[] => []);
-  const users = options.users ?? ((): readonly User[] => []);
-
-  function render(template: string, context: Record<string, unknown> = {}): string {
-    const site = siteData.read();
-    // Before anything is looked up: a theme chosen on the Appearance screen, or
-    // written into `site.json` by hand, decides this very render rather than
-    // the next boot. It costs a comparison of two short arrays when nothing
-    // has changed, which is every render of a site that is not being rethemed.
-    const chosen = themes.current();
-    useThemeDirs(environment, chosen.dirs);
-    // The menus are built here rather than by each caller because every page
-    // of the site carries them: a listing, a document, the 404 and the
-    // editor's preview all go through here, and a menu that appeared on some
-    // of them and not others would be a worse contract than one that is
-    // simply always there. It is `menus` rather than `menus` read off `site`
-    // because these items know which one the reader is on; a template reading
-    // `site.menus` would be reading the raw lists.
-    //
-    // Every menu the site stores is here, keyed by name, not only the ones the
-    // theme declares an area for: a name nothing loops over is rendered
-    // nowhere and kept (TASK-107), and the declaration in `theme.json` is for
-    // the screen that edits menus rather than a filter on the render.
-    const menus = navigationMenus({ site, url: currentUrl(context) });
-    // Who the page is by, for the bio, the `rel="me"` links and the structured
-    // data (decision-16). It is here rather than in each caller because every
-    // page of the site carries it, for the reason the menus do — and it is
-    // the site's own author only when the page is about nobody in particular:
-    // a document's byline and an author archive's person are put on the
-    // context by the callers below, and win by going on last.
-    const siteOwner = siteAuthorContext(users(), site.author);
-    const owner = context['siteAuthor'] === undefined ? siteOwner : undefined;
-    // The site's icons, as the links a head carries (TASK-81, TASK-147). They
-    // are computed here rather than in the layout because only this side knows
-    // where a derived file is served and whether the site can derive one at
-    // all: a theme that was handed the icon's path would have to build the URL
-    // itself and would link 404s on a site with image optimization off.
-    const icons = siteIcons(config, iconSetting(site));
-    // The icon a header prints before the title, when the site asks for one
-    // (TASK-486): the SVG itself if it is one, which is sharp at any size.
-    const headerIcon = site['headerIcon'] === true ? svgElseTouchIconHref(icons) : undefined;
-    // The picture a shared link shows (TASK-146), here for the reason the
-    // icons are: its alt text and its size are in files only this side reads.
-    const title = [context['title'], context['label']].find(
-      (value): value is string => typeof value === 'string' && value !== '',
-    );
-    const by = (context['siteAuthor'] ?? siteOwner) as AuthorContext | undefined;
-    // A photo post is shown by its first photo (TASK-166).
-    const [photo] = (context['photos'] ?? []) as readonly PhotoContext[];
-    const image = shareImage({
-      config,
-      image: context['image'],
-      imageAlt: context['imageAlt'],
-      title: title ?? site.title,
-      fallbacks: [
-        ...(photo === undefined
-          ? []
-          : [{ url: photo.url, describedAs: photo.alt || (title ?? site.title) }]),
-        { url: site.avatar, describedAs: siteOwner?.name ?? site.title },
-        { url: by?.avatar, describedAs: by?.name ?? site.title },
-        { url: iconSetting(site), describedAs: site.title },
-      ],
-    });
-    const fonts = options.fonts?.(site, chosen.fonts) ?? [];
-    return environment.render(template, {
-      site,
-      menus,
-      icons,
-      ...(fonts.length === 0 ? {} : { fonts: pageFontsContext(fonts) }),
-      theme: { ...chosen.colors, ...siteColors(site, chosen.schemes) },
-      // Where the index for language models is (TASK-149), while the site
-      // serves one, so a theme asks `{% if llmsTxt %}`.
-      ...(site['llmsTxt'] === false ? {} : { llmsTxt: LLMS_TXT_PATH }),
-      ...(headerIcon === undefined ? {} : { headerIcon }),
-      ...(image === undefined ? {} : { shareImage: image }),
-      ...(owner === undefined ? {} : { siteAuthor: owner }),
-      // Who the homepage speaks for, on a site whose author is a user (TASK-180,
-      // TASK-192): the bio on the homepage and the `rel="me"` claims between
-      // it and their archive. Every page carries it, because the archive is
-      // where the claim back is printed. A site with several authors has none.
-      ...(siteOwner === undefined ? {} : { soloAuthor: siteOwner }),
-      ...context,
-      ...licenseContext(site, context),
-      devMode: requestInputs.getStore()?.devMode === true,
-      signedIn: signedInReader.getStore() === true,
-      pluginTags: pluginTagsContext(),
-    });
-  }
-
-  /**
-   * What the pages a post cites say about themselves, as a theme reads them,
-   * when they were fetched. `replyContext` is what a reply answers (TASK-123),
-   * on the context only when it is known, so a theme draws the bare link from
-   * `inReplyTo` and fills it in from it. `citations` is what it reposts, likes
-   * or bookmarks, each with its `context` when that is known (TASK-244).
-   */
-  function citedBy(document: Document): {
-    replyContext?: Record<string, unknown>;
-    citations: (Citation & { context?: Record<string, unknown> })[];
-  } {
-    const shown = previewShown(document.extra);
-    const contextOf = (target: string, property: string): Record<string, unknown> | undefined => {
-      const cited = citedPage?.(target);
-      if (cited === undefined) return undefined;
-      const { picture, author, ...rest } = cited;
-      const image = citesAnImage(cited);
-      const alt = citedPictureAlt(property, cited, document);
-      const { photo, ...named } = author ?? { name: '' };
-      return {
-        ...replyContextFor(rest),
-        ...(author === undefined
-          ? {}
-          : {
-              author: {
-                ...named,
-                ...(photo === undefined || !shown
-                  ? {}
-                  : { photo: citedPhotoContext(photo, config) }),
-              },
-            }),
-        ...(image ? { image } : {}),
-        ...(picture === undefined || !shown
-          ? {}
-          : { picture: citedPictureContext(picture, property, alt, config) }),
-      };
-    };
-    const target = replyTarget(document);
-    const replyContext = target === undefined ? undefined : contextOf(target, 'in-reply-to');
-    return {
-      ...(replyContext === undefined ? {} : { replyContext }),
-      citations: citationsOf(document.extra).map((citation) => {
-        const context = contextOf(citation.url, citation.property);
-        return context === undefined ? citation : { ...citation, context };
-      }),
-    };
-  }
-
-  /**
-   * One entry of a listing: the document as a template sees it, and what it
-   * answers when it is a reply, so a feed cites a reply's target the way the
-   * reply's own page does (doc-9).
-   */
-  function entryContext(
-    document: Document,
-    people: readonly User[],
-    loading: ImageLoading,
-  ): DocumentContext {
-    const context = documentContext(
-      document,
-      config,
-      authorContext(people, document.author),
-      loading,
-      citedPage,
-    );
-    return { ...context, ...citedBy(document) };
-  }
-
-  function newestPostsContext(page: Document): Record<string, unknown> {
-    const source = options.newestPosts;
-    if (source === undefined) return {};
-
-    const pageLeads = page.html.includes('<img');
-    return {
-      newestPosts: (count: unknown) => {
-        if (typeof count !== 'number' || !Number.isInteger(count) || count < 1) {
-          throw new RangeError(
-            `newestPosts(count) takes a whole number of posts, at least 1, not ${String(count)}`,
-          );
-        }
-        const people = users();
-        return source(count).map((document, index) =>
-          entryContext(document, people, { lead: !pageLeads && index === 0 }),
-        );
-      },
-    };
-  }
-
-  /**
-   * The whole archive as the months an archive page heads, or nothing at all
-   * for every other document.
-   *
-   * The front matter key decides, so the list is on the context of exactly the
-   * page that asked for it and a layout writes `{% if archiveMonths %}` rather
-   * than reading front matter for itself — the way `contactForm` works.
-   */
-  function archiveContext(document: Document): Record<string, unknown> {
-    const months = archiveOf(document);
-    return months === undefined ? {} : { archiveMonths: months };
-  }
-
-  function archiveOf(document: Document): ArchiveMonth[] | undefined {
-    if (!archiveOpen(document)) return undefined;
-    const posts = options.archivePosts?.();
-    if (posts === undefined) return undefined;
-
-    const site = siteData.read();
-    return archiveMonths(posts, siteTimezone(site), siteLocale(site), citedPage);
-  }
-
-  function markdownArchiveContext(
-    document: Document | undefined,
-    gemfeed: boolean,
-  ): Record<string, unknown> {
-    const months = document === undefined ? undefined : archiveOf(document);
-    if (months === undefined) return {};
-
-    const timezone = siteTimezone(siteData.read());
-    const markdownMonths: MarkdownArchiveMonth[] = months.map(({ month, posts }) => ({
-      month,
-      posts: posts.map((entry) => ({
-        label: entry.title,
-        url: entry.url,
-        date: calendarDayIn(entry.date, timezone),
-        description:
-          gemfeed || entry.description === undefined ? undefined : oneLine(entry.description),
-      })),
-    }));
-    return { archiveMonths: markdownMonths };
-  }
-
-  function markdownLinksContext(document: Document | undefined): Record<string, unknown> {
-    if (document === undefined) return {};
-
-    const site = siteData.read();
-    const bases = taxonomyBases(site);
-    const timezone = siteTimezone(site);
-    const terms = (taxonomy: Taxonomy, names: readonly string[]): MarkdownLink[] =>
-      document.type === 'post'
-        ? names.map((term) => ({ label: term, url: termHref({ taxonomy, term }, 0, bases) }))
-        : [];
-    const backlinks: MarkdownEntry[] = (options.backlinks?.(document) ?? []).map((linking) => ({
-      label: postLabel(linking, citedPage),
-      url: linking.permalink,
-      date: linking.date === undefined ? undefined : calendarDayIn(linking.date, timezone),
-    }));
-    return {
-      categories: terms('category', document.categories),
-      tags: terms('tag', document.tags),
-      backlinks,
-    };
-  }
-
-  function markdownKindContext(document: Document | undefined): Record<string, unknown> {
-    if (document?.type !== 'post') return {};
-
-    const { postType, lang, rsvp, event, review, enclosure, photos } = documentContext(
-      document,
-      config,
-      undefined,
-      undefined,
-      citedPage,
-    );
-    const cite = (verb: string, target: string): MarkdownCite => {
-      const context = citedPage?.(target);
-      const url = context?.original ?? target;
-      const name = citedPageName(url, context);
-      const author = context?.author?.name.trim();
-      const named =
-        author !== undefined &&
-        author !== '' &&
-        name.trim().toLowerCase().endsWith(` by ${author.toLowerCase()}`);
-      const { startDate, startZone, published } = replyContextFor(context ?? { url });
-      return {
-        verb,
-        url,
-        name,
-        ...(author === undefined || named ? {} : { author }),
-        ...(author === undefined && context?.site !== undefined ? { site: context.site } : {}),
-        ...(startDate instanceof Date
-          ? { startDate, ...(typeof startZone === 'string' ? { startZone } : {}) }
-          : published instanceof Date
-            ? { published }
-            : {}),
-        ...(context?.location === undefined ? {} : { location: context.location }),
-        ...(context?.original === undefined ? {} : { copy: target }),
-      };
-    };
-    const target = replyTarget(document);
-    const cites = [
-      ...(target === undefined
-        ? []
-        : [cite(rsvp === undefined ? 'In reply to' : RSVP_PHRASES[rsvp.value], target)]),
-      ...citationsOf(document.extra).map((citation) =>
-        cite(CITATION_VERBS[citation.property], citation.url),
-      ),
-    ];
-    const shared = options.location?.(document, requestSite());
-    return {
-      postType,
-      ...(lang === undefined ? {} : { lang }),
-      cites,
-      photos: photos.map(({ url, alt }) => ({ url, alt })),
-      ...(enclosure === undefined ? {} : { enclosure }),
-      ...(rsvp === undefined ? {} : { rsvp: { value: rsvp.value, label: rsvp.label } }),
-      ...(event === undefined ? {} : { event }),
-      ...(review === undefined
-        ? {}
-        : {
-            review: {
-              item: review.item,
-              kindLabel: review.kindLabel,
-              ...(review.rating === undefined ? {} : { rating: review.rating }),
-              best: review.best,
-              ...reviewWords(review),
-            },
-          }),
-      ...(shared === undefined ? {} : { location: locationContext(shared) }),
-    };
-  }
-
-  function strangerCommentForm(document: Document): CommentFormContext | undefined {
-    const signedOut: CommentViewer | undefined = undefined;
-    const offersNotifications = false;
-    return options.commentForm?.(document, signedOut, offersNotifications);
-  }
-
-  function markdownConversationContext(
-    document: Document | undefined,
-    url: string,
-  ): Record<string, unknown> {
-    if (document === undefined) return {};
-
-    const said = options.conversation?.(document, requestSite());
-    const page = absoluteUrl(url, config.baseUrl);
-    const takesComments = strangerCommentForm(document) !== undefined;
-    const webmention = webmentionEndpointFor(siteData.read());
-    return {
-      ...(said === undefined || said.counts.total === 0
-        ? {}
-        : { conversation: markdownConversation(said) }),
-      ...(takesComments ? { commentForm: { url: `${page}#respond` } } : {}),
-      ...(options.contactForm?.(document) === undefined
-        ? {}
-        : { contactForm: { url: `${page}#contact` } }),
-      ...(webmention === undefined ? {} : { webmention }),
-    };
-  }
-
-  /**
-   * The page whose own URL carries the listing, as the link a front page draws
-   * to it, or nothing at all when the site names none.
-   *
-   * Resolved here rather than by the route because the renderer already holds
-   * both halves — the setting and the published pages — and because the link
-   * is the front page's alone: everywhere else the posts page is an ordinary
-   * item of the site menu.
-   */
-  function postsPageContext(): Record<string, unknown> {
-    const slug = frontPageSlugs(siteData.read()).postsPage;
-    if (slug === '') return {};
-
-    const found = pages().find((document) => document.slug === slug);
-    return found === undefined
-      ? {}
-      : { postsPage: { title: postLabel(found), url: found.permalink } };
-  }
-
-  /**
-   * Which template one listing renders through: whatever it named, the posts
-   * page's own template when it is one and the theme ships one, and the home
-   * layout otherwise.
-   */
-  function listingTemplate(listing: Listing): string {
-    if (listing.template !== undefined) return listing.template;
-    if (listing.document === undefined) return TEMPLATES.home;
-    return themeTemplate(themes.current().dirs, OPTIONAL_TEMPLATES.postsPage, TEMPLATES.home);
-  }
-
-  /**
-   * One document through one template, with everything a page of the theme is
-   * given: its own context, its ActivityStreams id, its conversation, its
-   * forms and its webmention endpoint.
-   *
-   * The template and the URL are arguments because the front page is the same
-   * page rendered somewhere else: `renderDocument` and `renderFrontPage` are
-   * this with two different answers to "which layout, and at which URL".
-   */
-  function documentPage(
-    document: Document,
-    options_: {
-      template: string;
-      url?: string | undefined;
-      extra: Record<string, unknown>;
-      viewer?: CommentViewer | undefined;
-    },
-  ): RenderedPage {
-    const { template, extra } = options_;
-    // The profile behind the document's `author`, resolved here rather than in
-    // `documentContext` for the reason the object id is: it needs the site's
-    // users, which a document on its own does not carry.
-    const writer = authorContext(users(), document.author);
-    const context = documentContext(document, config, writer, { lead: true }, citedPage);
-    // The URL it is being served at, which is its own permalink everywhere but
-    // the front page.
-    const url = options_.url ?? context.url;
-    // `activityStreams` is the object id the base layout advertises. It is
-    // added here rather than in `documentContext` because it needs the
-    // site's base URL, which a document on its own does not carry.
-    const now = config.now();
-    const naturalId = activityStreamsId(document, config.baseUrl, now);
-    const objectId =
-      naturalId === undefined
-        ? undefined
-        : currentObjectId(readObjectIds(config.contentDir), naturalId);
-    // `conversation` is what was said back. It is on the context only when
-    // there is something in it, so a theme can ask `{% if conversation %}`
-    // and a post nobody has answered renders no empty section (TASK-49).
-    // `commentsFeed` is where it is syndicated, for a served document, and
-    // is set here rather than in a layout so that a site which
-    // overrides `post.njk` or `page.njk` keeps the link.
-    const site = siteData.read();
-    const settings = requestSite();
-    const said = options.conversation?.(document, settings);
-    const feedsIt = isServed(document, now);
-    // `commentForm` is on the context only when the post is open, so the
-    // theme asks `{% if commentForm %}` rather than working the rules out
-    // for itself — and a closed post shows the thread with no form.
-    const stamps: [mark: string, loaded: string][] = [];
-    const form = heldStamp(
-      options.commentForm?.(
-        document,
-        options_.viewer,
-        requestInputs.getStore()?.mailConfigured === true,
-      ),
-      'comment',
-      stamps,
-    );
-    // And the contact form, when the page's front matter asked for one
-    // (TASK-56). Nothing about where a message would go is on the context:
-    // the address is read when a submission arrives, so a theme cannot
-    // print it however it is written.
-    const contact = heldStamp(options.contactForm?.(document), 'contact', stamps);
-    // Where a webmention about this page is sent (TASK-51). On the context
-    // only when the site takes them, so a theme asks `{% if webmention %}`
-    // and a site that has turned them off advertises nothing.
-    const webmention = webmentionEndpointFor(site);
-    const pingback = pingbackEndpointFor(site);
-    // The posts either side of this one, as the two links a theme draws under
-    // an entry (TASK-79). Each is on the context only when there is one, so a
-    // theme asks `{% if previous %}` and the ends of the archive draw nothing.
-    const either = options.neighbours?.(document) ?? {};
-    const cited = citedBy(document);
-    // The targets this post links to and the copies they made of it
-    // (TASK-155): the links a target verifies sit inside the h-entry, so they
-    // are on the post's own page, which is the page a target fetches.
-    const syndicated = options.syndication?.(document, settings);
-    const shared = options.location?.(document, settings);
-
-    const drawn = render(template, {
-      ...context,
-      // This page's own person, which is the site's author everywhere else:
-      // the byline and the identity a theme prints are one object, so what a
-      // reader sees and what the structured data says cannot drift.
-      ...(writer === undefined ? {} : { siteAuthor: writer }),
-      ...neighbourContext('previous', either.previous, citedPage),
-      ...neighbourContext('next', either.next, citedPage),
-      backlinks: (options.backlinks?.(document) ?? []).map((linking) =>
-        backlinkContext(linking, citedPage),
-      ),
-      url,
-      page: { ...context.page, url },
-      ...capsuleContext(url),
-      ...(objectId === undefined ? {} : { activityStreams: objectId }),
-      ...(feedsIt ? { commentsFeed: commentsFeedPath(document.permalink) } : {}),
-      // And the whole archive, for a page whose front matter asked for it
-      // (TASK-85). On the context only for that page, so a theme asks
-      // `{% if archiveMonths %}` exactly as it asks about the contact form.
-      ...archiveContext(document),
-      ...(said === undefined || said.counts.total === 0 ? {} : { conversation: said }),
-      ...(form === undefined ? {} : { commentForm: form }),
-      ...(contact === undefined ? {} : { contactForm: contact }),
-      ...(webmention === undefined ? {} : { webmention }),
-      ...(pingback === undefined ? {} : { pingback }),
-      ...cited,
-      syndicateTo: syndicated?.targets ?? [],
-      syndication: syndicationLinks([
-        ...handSyndicationOf(document.extra),
-        ...(syndicated?.copies ?? []),
-      ]),
-      ...(shared === undefined ? {} : { location: locationContext(shared) }),
-      ...(visibilityOf(document) === 'unlisted' ? { noindex: true } : {}),
-      ...extra,
-    });
-
-    // Only a stamp the theme printed can go stale in a reader's browser.
-    const printed = stamps.filter(([mark]) => drawn.includes(mark));
-    return {
-      html: printed.reduce((html, [mark, loaded]) => html.replaceAll(mark, loaded), drawn),
-      fingerprint: [
-        // The mark is random per renderer; a restart must not change every ETag.
-        drawn.replaceAll(stampMark, 'geekity-stamp'),
-        ...printed.map(([, loaded]) => String(Math.floor(Number(loaded) / STAMP_WINDOW_MS))),
-      ].join('\n'),
-    };
-  }
-
-  /** One document's page and its fingerprint, as {@link Renderer.renderPage} says. */
-  function renderPage(
-    document: Document,
-    { frontPage = false, extra = {}, viewer }: RenderPageOptions,
-  ): RenderedPage {
-    if (!frontPage) {
-      return documentPage(document, {
-        template: document.type === 'post' ? TEMPLATES.post : TEMPLATES.page,
-        extra,
-        viewer,
-      });
-    }
-    return documentPage(document, {
-      // A theme's own front page if it has written one, and the layout every
-      // other page uses if it has not.
-      template: themeTemplate(themes.current().dirs, OPTIONAL_TEMPLATES.frontPage, TEMPLATES.page),
-      // At `/`, which is where it is being read: the canonical link, the
-      // menu's current item and anything else a theme takes off `page.url`
-      // should say the URL this is served at rather than the one that
-      // redirects here.
-      url: '/',
-      extra: { ...newestPostsContext(document), ...postsPageContext(), ...extra },
-      viewer,
-    });
-  }
-
-  /** A form with its loaded-at stamp swapped for a mark, noted for putting back. */
-  function heldStamp<Form extends { loaded: string }>(
-    form: Form | undefined,
-    key: string,
-    stamps: [mark: string, loaded: string][],
-  ): Form | undefined {
-    if (form === undefined) return undefined;
-    const mark = `${stampMark}-${key}`;
-    stamps.push([mark, form.loaded]);
-    return { ...form, loaded: mark };
-  }
-
-  function capsuleContext(url: string): { capsuleUrl?: string } {
-    const { pathname, search } = new URL(absoluteUrl(url, config.baseUrl));
-    const capsule = capsuleUrl(
-      config,
-      requestSite(),
-      representationHref(`${pathname}${search}`, 'gemini'),
-    );
-    return capsule === undefined ? {} : { capsuleUrl: capsule };
-  }
+  const deps = renderDeps(options);
+  const { siteData, themes } = deps;
+  const theme = createThemeEnvironment(deps);
+  const { render } = theme;
+  const markdown = createMarkdownEnvironment(deps);
+  const contexts = createPageContexts(deps);
+  const { renderPage } = createDocumentPages(deps, render, contexts);
 
   function statusPage(
     { template, title }: StatusPage,
@@ -1205,363 +187,48 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return render(template, { title, url, page: { url }, ...extra });
   }
 
-  function renderMarkdownChrome(
-    chrome: MarkdownChrome,
-    { markdownUrl, frontPage, document, format }: MarkdownChromeOptions,
-  ): MarkdownChromeText {
-    const site = siteData.read();
-    const soloAuthor = siteAuthorContext(users(), site.author);
-    const context = {
-      site,
-      menus: navigationMenus({ site, url: chrome.url }),
-      navigation: navigationLinks(site),
-      ...(soloAuthor === undefined ? {} : { soloAuthor }),
-      ...(frontPage === undefined ? {} : newestPostsContext(frontPage)),
-      ...markdownArchiveContext(document, format === 'gemini'),
-      ...markdownLinksContext(document),
-      ...markdownKindContext(document),
-      ...markdownConversationContext(document, chrome.url),
-      home: HOME_LINK,
-      ...chrome,
-      bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
-      staticFrontPage: frontPage !== undefined,
-      markdownUrl,
-      ...(format === 'gemini' ? { geminiUrl: markdownUrl } : {}),
-      ...(format === 'markdown' && chrome.type !== 'status' ? capsuleContext(chrome.url) : {}),
-    };
-    return {
-      header: renderText(CHROME_TEMPLATES.header, format, context),
-      footer: renderText(CHROME_TEMPLATES.footer, format, context),
-    };
-  }
-
-  function renderText(
-    templates: TextTemplates,
-    format: TextFormat,
-    context: Record<string, unknown>,
-  ): ThemeText {
-    const { dirs } = themes.current();
-    useThemeDirs(markdownEnvironment, dirs);
-    const written = format === 'gemini' && writesGemtext(dirs, templates) ? 'gemini' : 'markdown';
-    return { format: written, text: markdownEnvironment.render(templates[written], context) };
-  }
-
   return {
-    environment,
-    markdownEnvironment,
-    renderMarkdownChrome,
-
-    site() {
-      return siteData.read();
-    },
-
-    themeDirs() {
-      return themes.current().dirs;
-    },
-
-    themeColors() {
-      return themes.current().colors;
-    },
-
-    siteColors() {
-      const chosen = themes.current();
-      const colors = siteColors(siteData.read(), chosen.schemes);
-      if (colors === undefined) return undefined;
-      const stylesheet = findThemeFile(chosen.dirs, 'static/style.css');
-      const tokens =
-        stylesheet === undefined
-          ? { light: new Map<string, string>(), dark: new Map<string, string>() }
-          : schemeTokens(stylesheet, colors.scheme.name);
-      return { ...colors, tokens };
-    },
-
-    pageSize() {
-      return postsPerPage(siteData.read());
-    },
-
-    taxonomyBases() {
-      return taxonomyBases(siteData.read());
-    },
-
-    termRedirects() {
-      return termRedirects(siteData.read());
-    },
-
-    frontPageSlugs() {
-      return frontPageSlugs(siteData.read());
-    },
-
+    environment: theme.environment,
+    markdownEnvironment: markdown.environment,
+    ...createMarkdownChrome(deps, markdown, contexts),
+    ...createListingPages(deps, render, contexts),
+    site: () => siteData.read(),
+    themeDirs: () => themes.current().dirs,
+    themeColors: () => themes.current().colors,
+    siteColors: () => siteColorsWithTokens(deps),
+    pageSize: () => postsPerPage(siteData.read()),
+    taxonomyBases: () => taxonomyBases(siteData.read()),
+    termRedirects: () => termRedirects(siteData.read()),
+    frontPageSlugs: () => frontPageSlugs(siteData.read()),
     renderPage,
-
-    renderDocument(document, extra = {}, viewer = undefined) {
-      return renderPage(document, { extra, viewer }).html;
-    },
-
-    renderFrontPage(document, extra = {}, viewer = undefined) {
-      return renderPage(document, { frontPage: true, extra, viewer }).html;
-    },
-
-    renderListing(listing) {
-      // One read of the users file for the whole page, however many posts are
-      // on it: every byline on a listing resolves against the same list.
-      const people = users();
-      // The first image on the page is fetched at once: the posts page's own
-      // when its body has one, since it is printed above the list, else the
-      // first entry's.
-      const bodyLeads = listing.document?.html.includes('<img') === true;
-      const items: DocumentContext[] = listing.documents.map((document, index) =>
-        entryContext(document, people, { lead: !bodyLeads && index === 0 }),
-      );
-      // The posts page's own front matter and rendered body, under the
-      // listing's title, URL and posts: a theme prints `{{ content | safe }}`
-      // above the list and a site without a posts page has nothing there. The
-      // listing's own keys go on after it, because this page of the listing is
-      // what is being served — page two of it is not the page's own URL.
-      const document =
-        listing.document === undefined
-          ? undefined
-          : documentContext(
-              listing.document,
-              config,
-              authorContext(people, listing.document.author),
-              { lead: bodyLeads },
-              citedPage,
-            );
-
-      return render(listingTemplate(listing), {
-        ...document,
-        title: listing.title,
-        url: listing.url,
-        page: { ...document?.page, url: listing.url },
-        ...capsuleContext(listing.url),
-        // `posts` is the friendly name a theme loops over; `pagination.items`
-        // is the same array under the name Eleventy gives it.
-        posts: items,
-        pagination: { ...listing.pagination, items },
-        ...(listing.tag === undefined ? {} : { tag: listing.tag }),
-        ...(listing.category === undefined ? {} : { category: listing.category }),
-        // On an author archive this is the person the archive is of, and it
-        // goes on last so it wins over the posts page's own `author`, which is
-        // the page's writer rather than whose archive this is. They are also
-        // whose page this is, so the identity a theme prints is theirs rather
-        // than the site's.
-        ...(listing.author === undefined
-          ? {}
-          : { author: listing.author, siteAuthor: listing.author }),
-      });
-    },
-
-    renderSearch(search) {
-      const people = users();
-      const items = search.hits.map((hit) => ({
-        ...documentContext(
-          hit.document,
-          config,
-          authorContext(people, hit.document.author),
-          undefined,
-          citedPage,
-        ),
-        // Escaped here and marked up here, so a theme prints it with `safe`
-        // and cannot get the order of the two wrong.
-        snippet: snippetHtml(hit.snippet),
-      }));
-
-      return render(TEMPLATES.search, {
-        title: search.query === '' ? 'Search' : `Search results for “${search.query}”`,
-        url: search.url,
-        page: { url: search.url },
-        ...capsuleContext(search.url),
-        // The words as the reader typed them, for the form to put back in the
-        // box and the heading to repeat. Autoescaped like any other string.
-        query: search.query,
-        posts: items,
-        pagination: { ...search.pagination, items },
-      });
-    },
-
-    renderComment({ post, comment, ancestors }) {
-      const url = commentPageHref(comment.id);
-      const on = entryContext(post, users(), { lead: false });
-      return render(TEMPLATES.comment, {
-        title: `${comment.author.name} on ${on.label}`,
-        url,
-        page: { url },
-        ...capsuleContext(url),
-        noindex: true,
-        comment,
-        ancestors,
-        post: on,
-        threadUrl: `${post.permalink}#${commentAnchor(comment.id)}`,
-      });
-    },
-
+    renderDocument: (document, extra = {}, viewer = undefined) =>
+      renderPage(document, { extra, viewer }).html,
+    renderFrontPage: (document, extra = {}, viewer = undefined) =>
+      renderPage(document, { frontPage: true, extra, viewer }).html,
     renderNotFound: (url) => statusPage(STATUS_PAGES.notFound, url),
     renderGone: (url) => statusPage(STATUS_PAGES.gone, url),
     renderServerError: (url) => statusPage(STATUS_PAGES.serverError, url),
     renderMaintenance: (url, until) =>
       statusPage(STATUS_PAGES.maintenance, url, untilContext(until)),
-
-    renderStatusMarkdown(page, { url, markdownUrl, until, format }) {
-      const templates = STATUS_PAGES[page];
-      return renderText(templates, format, {
-        site: siteData.read(),
-        url,
-        title: templates.title,
-        markdownUrl,
-        ...(format === 'gemini' ? { geminiUrl: markdownUrl } : {}),
-        ...untilContext(until),
-      });
-    },
-
     render,
   };
 }
 
-interface StatusPage extends TextTemplates {
-  readonly template: string;
-  readonly title: string;
-}
-
-export const STATUS_PAGES = {
-  notFound: {
-    template: TEMPLATES.notFound,
-    markdown: 'layouts/404.md.njk',
-    gemini: 'layouts/404.gmi.njk',
-    title: 'Not found',
-  },
-  gone: {
-    template: TEMPLATES.gone,
-    markdown: 'layouts/410.md.njk',
-    gemini: 'layouts/410.gmi.njk',
-    title: 'Deleted',
-  },
-  serverError: {
-    template: TEMPLATES.serverError,
-    markdown: 'layouts/500.md.njk',
-    gemini: 'layouts/500.gmi.njk',
-    title: 'Something went wrong',
-  },
-  maintenance: {
-    template: TEMPLATES.maintenance,
-    markdown: 'layouts/503.md.njk',
-    gemini: 'layouts/503.gmi.njk',
-    title: 'Down for maintenance',
-  },
-} as const satisfies Record<string, StatusPage>;
-
-function writesGemtext(dirs: readonly string[], templates: TextTemplates): boolean {
-  for (const dir of dirs) {
-    if (findThemeFile([dir], templates.gemini) !== undefined) return true;
-    if (findThemeFile([dir], templates.markdown) !== undefined) return false;
-  }
-  return false;
-}
-
-export type StatusPageName = keyof typeof STATUS_PAGES;
-
-function untilContext(until: Date | undefined): Record<string, string> {
-  return until === undefined ? {} : { until: until.toISOString(), untilText: until.toUTCString() };
-}
-
-/**
- * One neighbour under the name a theme reads it by, or nothing at all when
- * there is no post on that side.
- *
- * The title and the URL and no more: a link is what it says and where it goes,
- * and handing a theme a second document context would be handing it a second
- * post to print by accident.
- */
-function neighbourContext(
-  key: 'previous' | 'next',
-  document: Document | undefined,
-  cited: CitedPageReader | undefined,
-): Record<string, NeighbourContext> | object {
-  if (document === undefined) return {};
-  return { [key]: { title: postLabel(document, cited), url: document.permalink } };
-}
-
-/** Every line after the first indented by `width` spaces, blank lines left blank. */
-function nest(text: string, width: number): string {
-  const indent = ' '.repeat(width);
-  return text.replace(/\n(?=[^\n])/g, `\n${indent}`);
-}
-
-/** Markdown as a blockquote: every line after `> `, a blank line as `>`. */
-function quote(text: string): string {
-  return text
-    .trim()
-    .split('\n')
-    .map((line) => (line.trim() === '' ? '>' : `> ${line}`))
-    .join('\n');
-}
-
-/** A filter's input as text: a string, number or boolean as written, anything else empty. */
-function filterText(value: unknown): string {
-  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
-    ? String(value)
-    : '';
-}
-
-/**
- * `preferred` when a theme in the search path ships it, and `fallback`
- * otherwise.
- *
- * Asked per render rather than at boot, so adding `front-page.njk` to a theme
- * shows on the next request exactly as editing one does. It costs one `stat`
- * per theme directory, and only on the two pages that have an override point
- * at all.
- */
-function themeTemplate(themeDirs: readonly string[], preferred: string, fallback: string): string {
-  return findThemeFile(themeDirs, preferred) === undefined ? fallback : preferred;
-}
-
-function svgElseTouchIconHref(icons: readonly SiteIcon[]): string | undefined {
-  return (
-    icons.find((icon) => icon.type === 'image/svg+xml') ??
-    icons.find((icon) => icon.rel === 'apple-touch-icon')
-  )?.href;
-}
-
-/**
- * The path a render is of, for marking the current menu item.
- *
- * Read off `page.url` and then `url`, the two names every caller here already
- * sets, so nothing has to pass the path a third time. A template rendered with
- * neither — a site calling `render` for a fragment of its own — is treated as
- * the home page's, which marks nothing that a page of the site would not.
- */
-function currentUrl(context: Record<string, unknown>): string {
-  const page = context['page'];
-  if (typeof page === 'object' && page !== null) {
-    const url = (page as Record<string, unknown>)['url'];
-    if (typeof url === 'string') return url;
-  }
-  return typeof context['url'] === 'string' ? context['url'] : '/';
-}
-
-/**
- * A stored reply context as a theme reads it: the published instant as a
- * `Date`, so the `date` filter prints it in the site's zone like any other.
- */
-function replyContextFor(context: Omit<ReplyContext, 'picture'>): Record<string, unknown> {
-  const published = context.published === undefined ? undefined : new Date(context.published);
-  const { published: _published, ...rest } = context;
-  const dated =
-    published === undefined || Number.isNaN(published.getTime()) ? rest : { ...rest, published };
-  return { ...dated, ...eventStartFor(context.start) };
-}
-
-function eventStartFor(written: string | undefined): Record<string, unknown> {
-  const start = readCitedStart(written ?? '');
-  if (start === undefined) return {};
-  return start.kind === 'wall-clock'
-    ? { startDate: start.asUtc, startZone: 'UTC' }
-    : { startDate: start.at };
-}
-
-function licenseContext(
-  site: SiteData,
-  context: Record<string, unknown>,
-): { license: ContentLicense | undefined; siteLicense: ContentLicense | undefined } {
-  return { license: resolveLicense(site, context), siteLicense: resolveLicense(site) };
+function renderDeps(options: CreateRendererOptions): RenderDeps {
+  const { config, replyContext } = options;
+  const siteData = createSiteDataSource(config);
+  return {
+    options,
+    config,
+    siteData,
+    themes:
+      options.themes ??
+      createThemeSource({ themesDir: config.themesDir, chosen: () => themeName(siteData.read()) }),
+    pages: options.pages ?? ((): readonly Document[] => []),
+    users: options.users ?? ((): readonly User[] => []),
+    citedPage:
+      replyContext === undefined
+        ? undefined
+        : (url: string): ReplyContext | undefined => replyContext(url, requestSite()),
+  };
 }

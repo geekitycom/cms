@@ -133,7 +133,7 @@ export interface DeliveryService {
    * the site has.
    *
    * Not "send that activity again": the activity is built from the file at the
-   * moment this is called (decision-9), so a follower whose server was down
+   * moment this is called, so a follower whose server was down
    * ends up holding the post as it stands rather than the revision that failed
    * to reach it. Which activity that is follows the same rule a save does — a
    * published post no follower has been told about is a `Create` and is
@@ -161,7 +161,7 @@ export interface DeliveryService {
 /**
  * Build the delivery service for one site.
  *
- * doc-4's delivery table is the whole of the policy: a post that becomes
+ * The delivery policy is simple: a post that becomes
  * published is a `Create`, an edit to a published post is an `Update`, and a
  * post that stops being published — draft, trashed or deleted, which are one
  * thing from outside — is a `Delete` of a `Tombstone`.
@@ -206,10 +206,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
    * Write {@link stampFor}'s `activitypub.published` into the post's file, and
    * answer with the document as it now reads.
    *
-   * No id is minted — decision-13 makes the post's id its
-   * permalink, so there is nothing to freeze — and an `activitypub.id` the
-   * file already carries is left exactly where it is, because it is the name
-   * the post's followers already hold.
+   * No id is minted — the post's id is its permalink, so there is nothing to
+   * freeze — and an `activitypub.id` the file already carries is left exactly
+   * where it is, because it is the name the post's followers already hold.
    *
    * It is written through the same {@link saveDocument} the admin writes
    * through, which corrects the index in the same breath — so the watcher's
@@ -273,8 +272,8 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
 
   /**
    * What a version of a post is to a peer: the `Like` or `Announce` of the
-   * fediverse object it cites, or the object it is (decision-28), with the
-   * status it replies to when it answers one (TASK-240). Asked of the post as
+   * fediverse object it cites, or the object it is, with the
+   * status it replies to when it answers one. Asked of the post as
    * it reads now, so a target that stops answering makes it the object again.
    */
   async function shapeOf(
@@ -385,13 +384,13 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
    *
    * Fedify's own `sendActivity(…, 'followers', …)` would reach the follower
    * inboxes in one call, but it answers `void`: there would be no way of
-   * saying which follower did not get it, which is the thing decision-5
-   * promised to record. So the recipients are grouped into the inboxes one
+   * saying which follower did not get it, which is the thing the delivery log
+   * records. So the recipients are grouped into the inboxes one
    * POST reaches — the instance shared inbox where followers publish one, and
    * a relay's own inbox — and each group's outcome is written against every
    * actor behind it. It is also why the sender is an explicit key pair list
-   * rather than `{ identifier }`: doc-8 makes that the one shape a stored
-   * actor id can sign under.
+   * rather than `{ identifier }`: that is the one shape a stored actor id can
+   * sign under.
    */
   async function fanOut(
     context: Context<FederationContextData>,
@@ -653,7 +652,7 @@ function sameObject(
  * Everywhere one public activity goes: one user's followers, grouped by the
  * inbox they share, and every accepted relay.
  *
- * The followers are one person's (decision-14) and the relays are the site's:
+ * The followers are one person's and the relays are the site's:
  * a relay subscribes to everything public this site sends, whoever wrote it,
  * so it is a target of every author's activities. A pending or rejected relay
  * is not here at all — {@link acceptedRelays} is where that rule lives.

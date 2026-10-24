@@ -1,5 +1,5 @@
 /**
- * Admin > Plugins (decision-33): every installed plugin, where it stands, and
+ * Admin > Plugins: every installed plugin, where it stands, and
  * the Enable and Disable buttons that write the `plugins` key of
  * `content/_data/site.json`. The next request runs under the new set; there
  * is nothing to restart.

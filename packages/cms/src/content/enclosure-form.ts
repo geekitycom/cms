@@ -1,5 +1,5 @@
 /**
- * The post editor's recording fields (TASK-213): the main file, its duration,
+ * The post editor's recording fields: the main file, its duration,
  * its transcript and its other versions, as a form has them and as the front
  * matter gets them.
  *

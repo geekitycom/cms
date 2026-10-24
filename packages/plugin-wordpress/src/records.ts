@@ -3,8 +3,8 @@
  * the number the WordPress ActivityPub plugin gave each person, and when each
  * of its old paths was last asked for.
  *
- * Files rather than a table, because the database is a cache a site may delete
- * (decision-9), and both of these are facts the site cannot work out again.
+ * Files rather than a table, because the database is a cache a site may delete,
+ * and both of these are facts the site cannot work out again.
  */
 
 import { isRecord } from '@geekity/cms/plugin';

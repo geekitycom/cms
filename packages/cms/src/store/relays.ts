@@ -2,7 +2,8 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 
-import { nullableText, oneOf } from './rows.ts';
+import { allRows, getRow, nullableText, oneOf } from './rows.ts';
+import type { Row } from './rows.ts';
 
 /** Where a relay subscription stands (FEP-ae0c). */
 export const RELAY_STATES = ['pending', 'accepted', 'rejected'] as const;
@@ -92,22 +93,22 @@ export function openRelayStore(db: DatabaseSync, clock: Clock): RelayStore {
   };
   return {
     listRelays() {
-      return (statements.listRelays.all() as Record<string, unknown>[]).map(toRelay);
+      return allRows(statements.listRelays, toRelay);
     },
 
     getRelay(inboxId) {
-      const row = statements.relayByInbox.get(inboxId) as Record<string, unknown> | undefined;
-      return row === undefined ? undefined : toRelay(row);
+      return getRow(statements.relayByInbox, toRelay, inboxId);
     },
 
     getRelayByFollow(followId) {
-      const row = statements.relayByFollow.get(followId) as Record<string, unknown> | undefined;
-      return row === undefined ? undefined : toRelay(row);
+      return getRow(statements.relayByFollow, toRelay, followId);
     },
 
     putRelay(relay) {
       const now = clock().toISOString();
-      const row = statements.putRelay.get(
+      const stored = getRow(
+        statements.putRelay,
+        toRelay,
         relay.inboxId,
         relay.actorId,
         relay.state,
@@ -115,11 +116,11 @@ export function openRelayStore(db: DatabaseSync, clock: Clock): RelayStore {
         relay.followId,
         relay.createdAt ?? now,
         now,
-      ) as Record<string, unknown> | undefined;
-      if (row === undefined) {
+      );
+      if (stored === undefined) {
         throw new Error(`The relay subscription to "${relay.inboxId}" was not written.`);
       }
-      return toRelay(row);
+      return stored;
     },
 
     deleteRelay(inboxId) {
@@ -128,7 +129,7 @@ export function openRelayStore(db: DatabaseSync, clock: Clock): RelayStore {
   };
 }
 
-function toRelay(row: Record<string, unknown>): Relay {
+function toRelay(row: Row): Relay {
   return {
     inboxId: String(row['inbox_id']),
     actorId: nullableText(row['actor_id']),

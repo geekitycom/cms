@@ -5,7 +5,7 @@ import type { DrawnPageTags } from '../plugins/page-tags.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { messageOf } from '../util/errors.ts';
 import type { GeekityEnv } from './env.ts';
-import { drawnWithPageTags } from './render.ts';
+import { drawnWithPageTags } from './render-scope.ts';
 import { requestPath } from './request.ts';
 
 export const pluginPageTags: MiddlewareHandler<GeekityEnv> = async (c, next) => {

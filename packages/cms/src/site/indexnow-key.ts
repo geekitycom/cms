@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 /**
- * The IndexNow key file (TASK-151): `/{key}.txt`, holding the key and nothing
+ * The IndexNow key file: `/{key}.txt`, holding the key and nothing
  * else, which is how a search engine checks that whoever submitted a URL owns
  * the site. https://www.indexnow.org/documentation
  */

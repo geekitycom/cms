@@ -29,8 +29,8 @@ import { latestModified } from './negotiate.ts';
  * Atom 1.0: the feed and its entries, rendered from {@link FeedItem}s.
  *
  * An entry names the post by its object id and lists every term it carries,
- * which is what RSS and JSON Feed do with the same item: decision-12 leaves
- * the three formats nothing to disagree about.
+ * which is what RSS and JSON Feed do with the same item: the three formats
+ * have nothing to disagree about.
  */
 
 /** One feed as an Atom 1.0 document. */
@@ -87,7 +87,7 @@ function atomCloud(site: SiteData): string[] {
  * `<id>` is the object id and the `rel="alternate"` link is the permalink,
  * which are the same URL for every post born on this CMS and differ only for
  * one carrying a stored id. A summary is written whenever there is one, which
- * after decision-12 is every post with a body: Atom's `<summary>` is optional,
+ * is every post with a body: Atom's `<summary>` is optional,
  * and an empty one says less than none.
  */
 export function atomEntry(item: FeedItem): string[] {

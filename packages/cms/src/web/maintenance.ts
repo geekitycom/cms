@@ -70,7 +70,7 @@ function isExempt(pathname: string): boolean {
 }
 
 /**
- * Turn the site away while it is in maintenance mode (TASK-130).
+ * Turn the site away while it is in maintenance mode.
  *
  * Everything that is not exempt answers 503 with `Retry-After`, so browsers,
  * crawlers and fediverse servers all read the outage as temporary: a crawler

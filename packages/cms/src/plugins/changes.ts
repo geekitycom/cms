@@ -1,7 +1,7 @@
 /**
  * The record of who added, updated and removed which plugin from Admin >
- * Plugins (TASK-306), in `data/plugin-changes.json`. It cannot be rebuilt
- * from anything else, so it is a file (decision-9).
+ * Plugins, in `data/plugin-changes.json`. It cannot be rebuilt
+ * from anything else, so it is a file.
  */
 import { randomUUID } from 'node:crypto';
 

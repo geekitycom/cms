@@ -58,7 +58,7 @@ export function toDocument(row: Row, tags: string[], categories: string[]): Docu
 }
 
 /**
- * The `/replies/` keys of a document (TASK-327): its feed guid's, and for a
+ * The `/replies/` keys of a document: its feed guid's, and for a
  * reply post its object id's, which is what it is named by in the thread it
  * answers. The two differ only for a reply post with a stored `guid`. Both are
  * worked out against `baseUrl`, which is recorded beside them so a change of

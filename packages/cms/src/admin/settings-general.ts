@@ -2,7 +2,7 @@
  * General: what the site is called, where it lives, and what it looks like.
  *
  * WordPress's own first settings page, and the one the Settings heading lands
- * on. There is no avatar here any more: decision-14 made every user an actor
+ * on. There is no avatar here any more: every user is an actor
  * with a picture of their own, so the picture a site shows the fediverse is a
  * user's, edited on the users screen beside the rest of their profile.
  */
@@ -55,7 +55,7 @@ export const GENERAL_SETTINGS: SettingsPage = {
   //
   // The author is shown as the user it resolves to, so a site.json written
   // before the select, holding a display name, selects that user and the
-  // first save writes their username (TASK-192). A name nobody answers to
+  // first save writes their username. A name nobody answers to
   // selects Several authors.
   shown: (config, settings) => ({
     ...settings,

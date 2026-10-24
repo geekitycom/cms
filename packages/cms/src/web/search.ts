@@ -7,7 +7,7 @@ import type { DocumentJson } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
 
 /**
- * The site's search (TASK-22): where it lives, how its URLs are spelled, and
+ * The site's search: where it lives, how its URLs are spelled, and
  * what a hit looks like once it leaves the index.
  *
  * The page is a route at a fixed path rather than a document, for the reason

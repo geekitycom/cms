@@ -1,6 +1,6 @@
 /**
  * The write gate a CMS closes when it hands over to a new worker under
- * `geekity serve` (TASK-288, decision-33).
+ * `geekity serve`.
  *
  * While it is closed, a request that is not GET or HEAD is answered 503 with
  * `Retry-After`, and a GET that tries to write once the worker has gone

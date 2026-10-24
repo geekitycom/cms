@@ -143,7 +143,7 @@ export function createServices({
 }: Booted): Services {
   const site = { admin, store, config: resolved, settings };
 
-  // Which theme this site renders through (decision-15). One source for the
+  // Which theme this site renders through. One source for the
   // whole CMS: the pages, the `/theme/` assets and the site's email all read
   // it, so they cannot disagree about which theme is in use and a choice that
   // cannot be honoured is reported once rather than three times. It reads the
@@ -159,7 +159,7 @@ export function createServices({
   // rather than at whatever moment the first request happens to arrive.
   themes.current();
 
-  // The site's declared redirects (TASK-128), read per request for the reason
+  // The site's declared redirects, read per request for the reason
   // the site data is. Asked once here for the reason the theme is: an entry
   // that cannot be served, or a loop, is reported at boot.
   const redirects = createRedirectSource({ contentDir: resolved.contentDir });
@@ -186,7 +186,7 @@ export function createServices({
   // The one reader of the two indexes a conversation is made of. The page, the
   // per-post comments feed, `/comments/feed/` and the `source:comments` count
   // on a post feed are all drawn from it, so a reader cannot be shown one
-  // thing on the page and another in the feed (TASK-62).
+  // thing on the page and another in the feed.
   const conversation = createConversation({
     admin,
     store,
@@ -245,13 +245,13 @@ export function createServices({
   });
 
   // The faces in a conversation, fetched here and served from here so a
-  // reader's address never reaches the servers they live on (TASK-134).
+  // reader's address never reaches the servers they live on.
   const avatars = createAvatarService({ admin, config: resolved });
 
   const fonts = createFontStore(resolved);
 
   // What keeps a site from holding its readers' personal data for longer than
-  // its settings say (TASK-135).
+  // its settings say.
   const retention = createRetentionService({ admin, config: resolved, settings });
 
   const renderer = createRenderer({
@@ -262,7 +262,7 @@ export function createServices({
       refetch: (family, styles) => queueFontFetch(jobs, family, styles),
     }),
     // The stored context of a reply's target: a file read, never a fetch, so
-    // a page is drawn without waiting on anybody's server (TASK-123).
+    // a page is drawn without waiting on anybody's server.
     replyContext: (target, site) => replyContexts.read(target, site),
     // What has been said about a post, from the very reader the comments
     // feeds are published from, so the page and the feed cannot disagree.
@@ -295,7 +295,7 @@ export function createServices({
     federationOptions: { manuallyStartQueue: true },
   });
 
-  // The names and faces of the actors who are not followers (TASK-184),
+  // The names and faces of the actors who are not followers,
   // fetched in the background when one is heard from and on a sweep.
   const actorProfiles = createActorProfileService({
     admin,
@@ -323,10 +323,10 @@ export function createServices({
   });
 
   // Federation listens to the index rather than to the admin, so a post edited
-  // on disk federates exactly as one saved through the editor does (doc-4).
+  // on disk federates exactly as one saved through the editor does.
   const delivery = createDeliveryService({ ...federated, federation });
 
-  // Who hears about a comment (TASK-55). It reads the users file and the mail
+  // Who hears about a comment. It reads the users file and the mail
   // settings per message rather than at boot, so an address added on the users
   // screen is written to by the very next comment.
   const notifications = createCommentNotifier({ ...site, mail, cited });
@@ -337,7 +337,7 @@ export function createServices({
     notices: notifications,
   });
 
-  // And the other half of it (TASK-60): a user who asked for an hourly or a
+  // And the other half of it: a user who asked for an hourly or a
   // daily digest hears nothing above and one message per window from here,
   // listing whatever is still pending when their window comes up. It reads the
   // users file and the record of what it has sent per run, for the same
@@ -346,7 +346,7 @@ export function createServices({
 
   // And so does the webmention sender: telling the pages a post links to is
   // the same news as telling the followers, and it should not matter which
-  // door the post came in by (TASK-51).
+  // door the post came in by.
   const webmentions = createWebmentionService({
     ...site,
     notifications,
@@ -359,13 +359,13 @@ export function createServices({
   const notifier = createFeedNotifier({ config: resolved, settings });
 
   // IndexNow listens for the same reason, and wants the pages as well as the
-  // posts: a search engine indexes both (TASK-151).
+  // posts: a search engine indexes both.
   const indexNow = createIndexNowNotifier({ config: resolved, settings });
   mintMissingIndexNowKey(settings, 'boot').catch((thrown: unknown) => {
     console.error(`No IndexNow key was minted: ${messageOf(thrown)}`);
   });
 
-  // A post whose date is in the future is held back (TASK-44), and nothing
+  // A post whose date is in the future is held back, and nothing
   // watches a clock: this is what notices that one has come due and reports it
   // as the publish it is, so delivery, the notifier and a site's `onPublish`
   // all run without knowing a timer was involved. Subscribed to every change
@@ -448,7 +448,7 @@ export function createServices({
 
   // A reply under a reply post or a comment's page changes what its page
   // says, whichever door it came in by, and the page tells what it answers
-  // (a salmention, TASK-320).
+  // (a salmention).
   const conversationWriteSubscribers: readonly ((written: ConversationWrite) => void)[] = [
     (written) => {
       replyNotices.queueNoticesFor(written);

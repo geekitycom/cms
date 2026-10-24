@@ -2,23 +2,23 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 
-import { inTransaction, NO_LIMIT, nullableText } from './rows.ts';
-import type { ListPageOptions } from './rows.ts';
+import { allRows, getRow, inTransaction, NO_LIMIT, nullableText, readCount } from './rows.ts';
+import type { ListPageOptions, Row } from './rows.ts';
 
 /**
  * A remote actor that follows this site.
  *
  * The followers are irreplaceable — an actor that followed and was forgotten
  * never hears from the site again and has no way of noticing — so
- * `content/_data/federation/followers.json` is where they are kept
- * (decision-9), and this row is the index of that file, emptied and read back
+ * `content/_data/federation/followers.json` is where they are kept,
+ * and this row is the index of that file, emptied and read back
  * on every boot. The display columns are a copy of what the actor said about
  * itself when it followed, so the admin can list its followers without
  * dereferencing every one of them.
  */
 export interface Follower {
   /**
-   * Which user is followed (decision-14).
+   * Which user is followed.
    *
    * Every user is an actor with followers of their own, so a follower is only
    * ever a follower *of somebody*: the column is what makes one person's
@@ -87,8 +87,8 @@ export interface FollowerStore {
   /**
    * Make the followers index say exactly this, in one transaction.
    *
-   * What a rebuild from every `content/_data/federation/{username}/followers.json` calls
-   * (decision-9): the file is the source, so a row it does not carry is a row
+   * What a rebuild from every `content/_data/federation/{username}/followers.json` calls:
+   * the file is the source, so a row it does not carry is a row
    * that should not be delivered to, and replacing the lot is the only way to
    * say that. Nothing outside a rebuild should reach for it.
    */
@@ -127,24 +127,21 @@ export function openFollowerStore(db: DatabaseSync, clock: Clock): FollowerStore
   };
   return {
     countFollowers(username) {
-      const row = statements.countFollowers.get(username ?? null) as
-        Record<string, unknown> | undefined;
-      return Number(row?.['count'] ?? 0);
+      return readCount(statements.countFollowers, username ?? null);
     },
 
     listFollowers(username, options = {}) {
-      const rows = statements.listFollowers.all(
+      return allRows(
+        statements.listFollowers,
+        toFollower,
         username ?? null,
         options.limit ?? NO_LIMIT,
         options.offset ?? 0,
-      ) as Record<string, unknown>[];
-      return rows.map(toFollower);
+      );
     },
 
     getFollower(username, actorId) {
-      const row = statements.followerById.get(username, actorId) as
-        Record<string, unknown> | undefined;
-      return row === undefined ? undefined : toFollower(row);
+      return getRow(statements.followerById, toFollower, username, actorId);
     },
 
     putFollower(follower) {
@@ -162,12 +159,16 @@ export function openFollowerStore(db: DatabaseSync, clock: Clock): FollowerStore
       // Read back rather than returning what was written: the upsert leaves an
       // existing `followed_at` alone, so the row is the only thing that knows
       // when the follow really began.
-      const row = statements.followerById.get(follower.username, follower.actorId) as
-        Record<string, unknown> | undefined;
-      if (row === undefined) {
+      const stored = getRow(
+        statements.followerById,
+        toFollower,
+        follower.username,
+        follower.actorId,
+      );
+      if (stored === undefined) {
         throw new Error(`The follower "${follower.actorId}" vanished between insert and read.`);
       }
-      return toFollower(row);
+      return stored;
     },
 
     deleteFollower(username, actorId) {
@@ -195,7 +196,7 @@ export function openFollowerStore(db: DatabaseSync, clock: Clock): FollowerStore
   };
 }
 
-function toFollower(row: Record<string, unknown>): Follower {
+function toFollower(row: Row): Follower {
   return {
     username: String(row['username']),
     actorId: String(row['actor_id']),

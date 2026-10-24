@@ -50,7 +50,7 @@ export function themeAsset(c: Context<GeekityEnv>): Response {
 /**
  * One derived copy of an upload, generated on the spot if it is not there.
  *
- * The directory these live in is disposable (decision-9): deleting it costs
+ * The directory these live in is disposable: deleting it costs
  * the next reader of each picture one encode and costs the site nothing else,
  * which is what this handler is for. A width or a format the site does not
  * offer is a 404 and encodes nothing, so the URL space cannot be used to make

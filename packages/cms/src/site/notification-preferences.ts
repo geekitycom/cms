@@ -21,7 +21,7 @@ import type { User } from './users.ts';
  *   has never heard of is dropped on the way in and on the way out, so a file
  *   written by a newer version does not leave a switch nothing can reach.
  *
- * An event may also say that it can be *batched* (TASK-60), which adds a
+ * An event may also say that it can be *batched*, which adds a
  * second question beside the switch: not whether to send it, but how often. The
  * two are separate on purpose — a user who wants none of a notice turns it off,
  * and a user who wants it in one message a day is still a recipient. Both
@@ -84,7 +84,7 @@ export interface NotificationEvent {
   /** Whether a user who has said nothing gets it. */
   readonly byDefault: boolean;
   /**
-   * Whether a user may choose how often it arrives (TASK-60).
+   * Whether a user may choose how often it arrives.
    *
    * `false` for a notice that is only ever one message about one thing — a
    * password having been changed, say — where "hourly" would mean nothing. An
@@ -97,7 +97,7 @@ export interface NotificationEvent {
 /**
  * Every event, in the order the users screen offers them.
  *
- * One line each. TASK-55 ships the first.
+ * One line each.
  */
 export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = [
   {

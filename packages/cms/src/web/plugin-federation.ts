@@ -1,5 +1,5 @@
 /**
- * The federation phase plugins answer in (decision-33): after the canonical
+ * The federation phase plugins answer in: after the canonical
  * federation, before stored ids. A plugin running a federation of its own
  * reaches the site's through {@link PluginFederationContext}, and everything
  * that crosses is plain data, because a bundled plugin carries its own copy

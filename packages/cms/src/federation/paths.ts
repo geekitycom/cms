@@ -5,16 +5,16 @@ import { AUTHOR_BASE, INBOX_BASE } from '../content/authors.ts';
 /**
  * Where a user's ActivityPub endpoints live: at their author URL, and under it.
  *
- * decision-14 makes every user an actor whose id is their author archive,
+ * Every user is an actor whose id is their author archive,
  * `{baseUrl}/author/{username}/`, so there is no prefix of its own any more —
  * the actor is a page in a browser and an actor to a peer, exactly as a post
- * is its permalink to both (decision-13). The collections are the archive's
+ * is its permalink to both. The collections are the archive's
  * children, with the trailing slashes every URL on this site has, and Fedify
  * builds each id from these templates so nothing has to guess the form.
  *
  * A GET of `/author/ada` without the slash is a Fedify 404 that falls through
  * to the public site's own canonical redirect, which is where a browser that
- * followed an actor id without its slash lands (doc-8).
+ * followed an actor id without its slash lands.
  */
 export const ACTOR_PATH = `/${AUTHOR_BASE}/{identifier}/` as const;
 
@@ -25,7 +25,7 @@ export const FOLLOWERS_PATH = `${ACTOR_PATH}followers/` as const;
 export const FOLLOWING_PATH = `${ACTOR_PATH}following/` as const;
 
 /**
- * The actor's pinned posts (TASK-207): Mastodon's `toot:featured`, which it
+ * The actor's pinned posts: Mastodon's `toot:featured`, which it
  * reads to show pins at the top of a profile and names as the `target` of the
  * `Add` and `Remove` that pin and unpin one.
  */
@@ -41,7 +41,7 @@ export const QUOTE_AUTHORIZATION_PATH = `${ACTOR_PATH}quotes/{id}/` as const;
  * The instance-wide inbox, which a peer may use to deliver to every actor at
  * once.
  *
- * A reserved top-level path (decision-14), which is why `inbox` is one of the
+ * A reserved top-level path, which is why `inbox` is one of the
  * two names `content/authors.ts` keeps a user from taking.
  */
 export const SHARED_INBOX_PATH = `/${INBOX_BASE}/` as const;
@@ -92,8 +92,8 @@ export function deleteActivityId(objectId: URL | string, revision: string): URL 
 }
 
 /**
- * The id of the `Add` that pinned an object or the `Remove` that unpinned it
- * (TASK-207), one per pin and per unpin for the same reason a `Delete` carries
+ * The id of the `Add` that pinned an object or the `Remove` that unpinned it,
+ * one per pin and per unpin for the same reason a `Delete` carries
  * its moment: a post can be pinned, unpinned and pinned again.
  */
 export function pinActivityId(
@@ -120,7 +120,7 @@ export function federationOrigin(baseUrl: string): FederationOrigin {
 }
 
 /**
- * The domain a user's actor lists in `attributionDomains` (TASK-210): the
+ * The domain a user's actor lists in `attributionDomains`: the
  * host links to this site are shared from.
  *
  * The hostname, not {@link federationOrigin}'s `handleHost`. Mastodon credits

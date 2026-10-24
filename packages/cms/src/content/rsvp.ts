@@ -1,5 +1,5 @@
 /**
- * An RSVP (TASK-198): a reply to an event whose front matter says whether its
+ * An RSVP: a reply to an event whose front matter says whether its
  * author is going, under the mf2 property of the same name.
  *
  * ```yaml

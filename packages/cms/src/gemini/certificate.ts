@@ -35,7 +35,7 @@ export type GeminiCertificateResult =
 
 /**
  * Long enough that no client sees it expire. Gemini clients pin a certificate
- * on first sight (decision-60), so an expiry is a forced change of identity.
+ * on first sight, so an expiry is a forced change of identity.
  */
 const VALID_YEARS = 50;
 const DAY_MS = 24 * 60 * 60 * 1000;

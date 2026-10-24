@@ -25,7 +25,7 @@ import { ADMIN_TEMPLATES } from './templates.ts';
  * which is why the dashboard carries the pending count and why the default
  * list is the pending one. Every action rewrites the comment's file first and
  * the index inside the same step, exactly as the form on the public site does:
- * the file is the comment (decision-9), and this screen only ever moves it.
+ * the file is the comment, and this screen only ever moves it.
  *
  * The two reclassifications are also the only training a spam checker gets, so
  * they are where {@link CommentChecker.reportSpam} and
@@ -96,8 +96,8 @@ export interface CommentRow {
   /** A short form of the address hash, for spotting one machine's run of them. */
   address: string | null;
   /**
-   * What privacy took off it, in a few words, or `null` when nothing was
-   * (TASK-135): so a moderator can tell an email removed from one never given.
+   * What privacy took off it, in a few words, or `null` when nothing was:
+   * so a moderator can tell an email removed from one never given.
    */
   removed: string | null;
   /** The post's title, or its slug when the post is not in the index. */
@@ -177,7 +177,7 @@ export function mountCommentsScreen(
 
     // The same function the one-click links in a notification call, so the two
     // doors onto moderation can never disagree about what an action does or
-    // about when the spam checker is told (TASK-55).
+    // about when the spam checker is told.
     const outcome = await moderateComment({
       records: recordsOf(c),
       id: comment.id,

@@ -1,8 +1,8 @@
 /**
  * Federation: which relays the site subscribes to.
  *
- * It is a settings page filed under Federation rather than under Settings
- * (TASK-109). The admin used to have two menu entries called Federation,
+ * It is a settings page filed under Federation rather than under Settings.
+ * The admin used to have two menu entries called Federation,
  * neither saying the other existed, and a person looking for the relays had no
  * reason to prefer one over the other. Now the section holds everything about
  * federation: Followers is what it is opened to look at, and this is what it
@@ -29,9 +29,9 @@ export const FEDERATION_SETTINGS: SettingsPage = {
   fields: ['relays'],
 
   endpoints: (app) => {
-    // Where this page was until TASK-109. A bookmark points at it, and so do
-    // the older editions of the README, so it moves somebody along rather than
-    // telling them the screen they used is gone.
+    // Where this page was before it moved under Federation. A bookmark points
+    // at it, and so do the older editions of the README, so it moves somebody
+    // along rather than telling them the screen they used is gone.
     app.get(settingsPagePath('federation'), (c) => c.redirect(FEDERATION_SETTINGS_PATH, 301));
   },
 };

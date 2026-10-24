@@ -29,7 +29,7 @@ export interface JobQueueOptions {
 }
 
 /**
- * The job layer of decision-54, the same on every transport. A message
+ * The job layer, the same on every transport. A message
  * carries only a job id; a claim is a compare-and-set from queued to
  * running at one attempt, and the attempt fences every later write, so a
  * duplicate or late message runs nothing.

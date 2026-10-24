@@ -14,12 +14,12 @@ import { stringOrEmpty } from '../util/forms.ts';
 /**
  * A contact message as the file that holds it.
  *
- * decision-9 makes the filesystem the source of truth for everything durable,
- * and a message somebody typed into this site is exactly that: nothing else
- * holds it, and no other server can be asked for it again. So it is written to
- * disk **before** anything is emailed, which is the point — a provider that is
- * down, a key that has expired, an address that bounces, and the message is
- * still on the Messages screen tomorrow.
+ * The filesystem is the source of truth for everything durable, and a message
+ * somebody typed into this site is exactly that: nothing else holds it, and no
+ * other server can be asked for it again. So it is written to disk **before**
+ * anything is emailed, which is the point — a provider that is down, a key that
+ * has expired, an address that bounces, and the message is still on the
+ * Messages screen tomorrow.
  *
  * Two things separate this from the comment files:
  *
@@ -216,7 +216,7 @@ export async function setContactMessageRead(
  *
  * The file is re-read inside the write, so two admins with the screen open
  * cannot make one of them undo the other's delete by writing back a message
- * that is not there any more, and the retention sweep (TASK-135) cannot write
+ * that is not there any more, and the retention sweep cannot write
  * over a Mark read that landed a moment before it.
  */
 export async function updateContactMessage(

@@ -58,7 +58,7 @@ import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
-import { stringOrEmpty } from '../util/forms.ts';
+import { stringOrEmpty, trimmedField } from '../util/forms.ts';
 import { userForAuthor } from '../content/authors.ts';
 import { isServed } from '../content/served.ts';
 import { SEARCH_KINDS } from '../item-lookup/lookup.ts';
@@ -152,7 +152,7 @@ export function editorPath(kind: DocumentScreens, slug: string): string {
  * The URL of the editor for this document.
  *
  * A trashed document also names its file, because a live document may have
- * taken its slug along with its URL (TASK-195).
+ * taken its slug along with its URL.
  */
 export function documentEditorPath(
   kind: DocumentScreens,
@@ -169,7 +169,7 @@ export function newEditorPath(kind: DocumentScreens): string {
 }
 
 /**
- * The views of a listing doc-5 asks for, plus the one scheduling adds.
+ * The views of a listing the admin offers, plus the one scheduling adds.
  *
  * `published` means published *and* out: a post whose date has not arrived is
  * under `scheduled` and nowhere else, because a listing that showed it as
@@ -304,31 +304,7 @@ export function mountDocumentScreens(
     const copy = ownCopy(c, kind, document.path);
     const restore = c.req.query(RESTORE);
     if (copy !== undefined && restore !== undefined) {
-      const form = submittedForm(kind, copy.fields, c.var.config.contentDir);
-      const conflict = await conflictWith(c.var.config.contentDir, document, copy.hash);
-      if (restore === REBASE || conflict === undefined) {
-        return renderEditor(c, {
-          kind,
-          render,
-          document,
-          form: { ...form, hash: conflict?.hash ?? copy.hash },
-          postKind: isPostKind(copy.kind) ? copy.kind : undefined,
-          copy,
-        });
-      }
-      return renderConflict(c, {
-        kind,
-        render,
-        document,
-        form,
-        media: copyMedia(form, document, c.var.config.contentDir),
-        conflict,
-        restoring: {
-          rebaseUrl: withQuery(documentEditorPath(kind, document), { [RESTORE]: REBASE }),
-          discardUrl: AUTOSAVE_DISCARD_PATH,
-          key: copy.key,
-        },
-      });
+      return renderRestoredCopy(c, { kind, render, document, copy, rebase: restore === REBASE });
     }
     const location = postLocations(c.var.config.dataDir).read(document.permalink);
     return renderEditor(c, {
@@ -359,6 +335,46 @@ export function mountDocumentScreens(
   });
 }
 
+interface RestoreCopyOptions {
+  kind: DocumentScreens;
+  render: AdminRender;
+  document: Document;
+  copy: AutosaveCopy;
+  rebase: boolean;
+}
+
+async function renderRestoredCopy(
+  c: Context<GeekityEnv>,
+  options: RestoreCopyOptions,
+): Promise<Response> {
+  const { kind, render, document, copy } = options;
+  const form = submittedForm(kind, copy.fields, c.var.config.contentDir);
+  const conflict = await conflictWith(c.var.config.contentDir, document, copy.hash);
+  if (options.rebase || conflict === undefined) {
+    return renderEditor(c, {
+      kind,
+      render,
+      document,
+      form: { ...form, hash: conflict?.hash ?? copy.hash },
+      postKind: isPostKind(copy.kind) ? copy.kind : undefined,
+      copy,
+    });
+  }
+  return renderConflict(c, {
+    kind,
+    render,
+    document,
+    form,
+    media: copyMedia(form, document, c.var.config.contentDir),
+    conflict,
+    restoring: {
+      rebaseUrl: withQuery(documentEditorPath(kind, document), { [RESTORE]: REBASE }),
+      discardUrl: AUTOSAVE_DISCARD_PATH,
+      key: copy.key,
+    },
+  });
+}
+
 /**
  * The editor form as the browser submitted it, read the same way for a save
  * and for an editor action.
@@ -370,17 +386,17 @@ export function submittedForm(
 ): EditorForm {
   const declared = syndicationTargetsReader(contentDir)();
   const form: EditorForm = {
-    title: stringOrEmpty(body['title']).trim(),
-    slug: stringOrEmpty(body['slug']).trim(),
-    permalink: stringOrEmpty(body['permalink']).trim(),
-    date: stringOrEmpty(body['date']).trim(),
-    tags: stringOrEmpty(body['tags']).trim(),
-    categories: stringOrEmpty(body['categories']).trim(),
-    description: stringOrEmpty(body['description']).trim(),
-    author: stringOrEmpty(body['author']).trim(),
-    inReplyTo: stringOrEmpty(body['in-reply-to']).trim(),
+    title: trimmedField(body, 'title'),
+    slug: trimmedField(body, 'slug'),
+    permalink: trimmedField(body, 'permalink'),
+    date: trimmedField(body, 'date'),
+    tags: trimmedField(body, 'tags'),
+    categories: trimmedField(body, 'categories'),
+    description: trimmedField(body, 'description'),
+    author: trimmedField(body, 'author'),
+    inReplyTo: trimmedField(body, 'in-reply-to'),
     ...postFieldsForm(kind, (field) => field.submitted(body, declared)),
-    lang: stringOrEmpty(body['lang']).trim(),
+    lang: trimmedField(body, 'lang'),
     draft: body['draft'] !== undefined,
     visibility: formVisibility(stringOrEmpty(body['visibility'])),
     exclude: body['exclude'] !== undefined,
@@ -400,7 +416,7 @@ function withLink(form: EditorForm, body: Record<string, unknown>): EditorForm {
   if (!Object.hasOwn(LINK_FIELDS, verb) || Object.hasOwn(body, verb)) return form;
   return {
     ...form,
-    [LINK_FIELDS[verb as keyof typeof LINK_FIELDS]]: stringOrEmpty(body['link-url']).trim(),
+    [LINK_FIELDS[verb as keyof typeof LINK_FIELDS]]: trimmedField(body, 'link-url'),
   };
 }
 
@@ -486,8 +502,6 @@ async function saveFromForm(
   const form = submittedForm(kind, body, contentDir);
 
   const action = stringOrEmpty(body['action']);
-  // The buttons doc-5 names are shortcuts past the checkbox: Save draft and
-  // Publish say what they do, and Update leaves the decision to the checkbox.
   const draft = action === 'save-draft' ? true : action === 'publish' ? false : form.draft;
 
   function refuse(refusal: Refusal): Promise<Response> {
@@ -579,8 +593,8 @@ export interface AuthorChoice {
  * the form submits back what the file says and changing the attribution stays
  * a thing somebody chose to do.
  *
- * A new document starts on the signed-in user, which is what doc-5 says the
- * editor does and what {@link blankForm} deliberately leaves to a request.
+ * A new document starts on the signed-in user, which is what the editor does
+ * and what {@link blankForm} deliberately leaves to a request.
  */
 export function authorChoices(c: Context<GeekityEnv>, current: string): AuthorChoice[] {
   const users = listUsers(c.var.config.dataDir);
@@ -946,22 +960,70 @@ interface RenderEditorOptions {
   status?: 200 | 400 | undefined;
 }
 
-/**
- * The editor screen.
- *
- * The buttons follow doc-5 and the document's state: something unwritten or
- * still a draft offers Save draft and Publish, something published offers
- * Update, and anything that exists can be thrown away or, if it already has
- * been, restored.
- */
 async function renderEditor(
   c: Context<GeekityEnv>,
   options: RenderEditorOptions,
 ): Promise<Response> {
+  const model = await editorModel(c, options);
+  if (options.status !== undefined) c.status(options.status);
+  const permissions = c.var.config.securityHeaders['permissions-policy'];
+  if (options.kind.located && permissions !== undefined) {
+    c.header('Permissions-Policy', allowGeolocation(permissions));
+  }
+  return options.render(c, ADMIN_TEMPLATES.documentEditor, model);
+}
+
+function editorActions(document: Document | undefined, trashed: boolean): EditorAction[] {
+  const actions: EditorAction[] =
+    document === undefined || document.draft
+      ? [
+          { value: 'save-draft', label: 'Save draft' },
+          { value: 'publish', label: 'Publish' },
+        ]
+      : [{ value: 'update', label: 'Update' }];
+  if (trashed) actions.push({ value: 'restore', label: 'Restore' });
+  else if (document !== undefined) actions.push({ value: 'trash', label: 'Move to trash' });
+  return actions;
+}
+
+interface ResumeOfferOptions {
+  kind: DocumentScreens;
+  document: Document | undefined;
+  copy: AutosaveCopy | undefined;
+  offer: boolean | undefined;
+  autosaveKey: string;
+  postKind: PostKind;
+  timezone: string;
+}
+
+async function resumeOffer(c: Context<GeekityEnv>, options: ResumeOfferOptions) {
+  const { kind, document, copy, autosaveKey, postKind } = options;
+  if (options.offer !== true || copy === undefined) return undefined;
+  if (!laterOrOnlyKnown(copy.savedAt, document?.updated)) return undefined;
+  return {
+    key: copy.key,
+    savedAt: copy.savedAt,
+    at: formatInTimezone(copy.savedAt, options.timezone),
+    changedSince:
+      document !== undefined &&
+      (await conflictWith(c.var.config.contentDir, document, copy.hash)) !== undefined,
+    noun: kind.singular,
+    restoreUrl: resumeUrl(kind, document, autosaveKey, postKind),
+    discardUrl: AUTOSAVE_DISCARD_PATH,
+    returnUrl:
+      document === undefined
+        ? withQuery(newEditorPath(kind), newDocumentQuery(kind, autosaveKey, postKind))
+        : documentEditorPath(kind, document),
+  };
+}
+
+async function editorModel(
+  c: Context<GeekityEnv>,
+  options: RenderEditorOptions,
+): Promise<Record<string, unknown>> {
   const { kind, document, form } = options;
   const postKind = options.postKind ?? discoveredKind(form);
   const editorKind = kind.type === 'post' ? EDITOR_KINDS[postKind] : undefined;
-  const sections = editorSections(postKind, form);
   const trashed = document !== undefined && isTrashedPath(document.path);
   const now = c.var.store.now();
   const timezone = siteTimezone(c);
@@ -969,117 +1031,21 @@ async function renderEditor(
   // scheduled a post for nine in the morning meant their own morning.
   const scheduledAt =
     document === undefined || trashed || document.draft ? undefined : scheduledFor(document, now);
-
-  const actions: EditorAction[] = [];
-  if (document === undefined || document.draft) {
-    actions.push({ value: 'save-draft', label: 'Save draft' });
-    actions.push({ value: 'publish', label: 'Publish' });
-  } else {
-    actions.push({ value: 'update', label: 'Update' });
-  }
-  if (trashed) actions.push({ value: 'restore', label: 'Restore' });
-  else if (document !== undefined) actions.push({ value: 'trash', label: 'Move to trash' });
-
   const autosaveKey = document?.path ?? options.autosave ?? mintAutosaveId();
   const copy = options.copy;
-  const resume =
-    options.offer === true &&
-    copy !== undefined &&
-    laterOrOnlyKnown(copy.savedAt, document?.updated)
-      ? {
-          key: copy.key,
-          savedAt: copy.savedAt,
-          at: formatInTimezone(copy.savedAt, timezone),
-          changedSince:
-            document !== undefined &&
-            (await conflictWith(c.var.config.contentDir, document, copy.hash)) !== undefined,
-          noun: kind.singular,
-          restoreUrl: resumeUrl(kind, document, autosaveKey, postKind),
-          discardUrl: AUTOSAVE_DISCARD_PATH,
-          returnUrl:
-            document === undefined
-              ? withQuery(newEditorPath(kind), newDocumentQuery(kind, autosaveKey, postKind))
-              : documentEditorPath(kind, document),
-        }
-      : undefined;
 
-  if (options.status !== undefined) c.status(options.status);
-  const permissions = c.var.config.securityHeaders['permissions-policy'];
-  if (kind.located && permissions !== undefined) {
-    c.header('Permissions-Policy', allowGeolocation(permissions));
-  }
-
-  return options.render(c, ADMIN_TEMPLATES.documentEditor, {
+  return {
     section: kind.section,
     // The blank form is Add new; editing one that exists is still All posts,
     // the way WordPress leaves the listing marked while you are in the editor.
     child: document === undefined ? 'new' : 'all',
     kind,
     form,
-    actions,
+    actions: editorActions(document, trashed),
     trashed,
     commentSettings: COMMENT_SETTINGS,
     commentsSiteDefault: siteDefaultLabel(kind.type, commentPolicyOf(c.var.renderer.site())),
-    ...(kind.type === 'post'
-      ? {
-          enclosureFields: ENCLOSURE_FIELDS,
-          enclosureChoices: await enclosureChoices(c.var.config.contentDir, form.enclosure.url),
-          transcriptTypes: TRANSCRIPT_TYPES,
-          alternateRows: [...form.enclosure.alternates, BLANK_ALTERNATE_ROW],
-          postKind,
-          editorKind,
-          postKinds: POST_KINDS.map((key) => ({ key, ...EDITOR_KINDS[key] })),
-          sections,
-          sidebarLocation: sidebarLocation(postKind, form),
-          link: linkView(form, sections.shown.rsvp),
-          photoFields: PHOTO_FIELDS,
-          photos: await photoPicker(c.var.config, form.photos),
-          reviewPhotoThumbnail: libraryThumbnail(c.var.config, form.review.photo),
-          locationFields: LOCATION_FIELDS,
-          ...citedPreviews(c, form),
-          rsvpChoices: RSVP_VALUES.map((value) => ({ value, label: RSVP_LABELS[value] })),
-          ...(form.rsvp === '' || rsvpValue(form.rsvp) !== undefined
-            ? {}
-            : { unrecognizedRsvp: form.rsvp }),
-          eventFields: EVENT_FIELDS,
-          reviewFields: REVIEW_FIELDS,
-          itemLookupButton: ITEM_LOOKUP_BUTTON,
-          itemLookupUrl: ITEM_LOOKUP_PATH,
-          itemLookup: options.itemLookup,
-          itemSearchUrl: ITEM_SEARCH_PATH,
-          itemSearchKinds: SEARCH_KINDS,
-          reviewKinds: REVIEW_KINDS.map((value) => ({
-            value,
-            ...REVIEW_KIND_WORDS[value],
-            ...REVIEW_EDITOR_WORDS[value],
-          })),
-          reviewKindsWith: Object.fromEntries(
-            ['by', 'year', 'uid', 'url', 'photo', 'date', 'season', 'episode', 'category'].map(
-              (field) => [
-                field,
-                REVIEW_KINDS.filter((value) =>
-                  (REVIEW_KIND_FIELDS[value] as readonly string[]).includes(field),
-                ),
-              ],
-            ),
-          ),
-          reviewKindChosen:
-            form.review.kind === ''
-              ? sections.filled.review
-                ? 'other'
-                : 'book'
-              : form.review.kind,
-          ...(form.review.kind === '' || isReviewKind(form.review.kind)
-            ? {}
-            : { unrecognizedReviewKind: form.review.kind }),
-          // TASK-155: one checkbox per target the site declares.
-          syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
-            ...target,
-            field: syndicateToField(target),
-            checked: form.syndicateTo.includes(target.id),
-          })),
-        }
-      : {}),
+    ...(kind.type === 'post' ? await postEditorModel(c, form, postKind, options.itemLookup) : {}),
     // Who this can be attributed to, and who it is attributed to now.
     authors: authorChoices(c, form.author),
     editorActions: editorActionViews(c, kind, form),
@@ -1101,17 +1067,87 @@ async function renderEditor(
     autosaveFileTime: document?.updated,
     autosaveTimezone: timezone,
     words: editorWordCounter(c, form.body),
-    resume,
+    resume: await resumeOffer(c, {
+      kind,
+      document,
+      copy,
+      offer: options.offer,
+      autosaveKey,
+      postKind,
+      timezone,
+    }),
     viewUrl: document !== undefined && isServed(document, now) ? document.permalink : undefined,
     // Named beside the date field, because a wall clock with no zone on it is
-    // exactly the ambiguity decision-11 exists to remove.
+    // exactly the ambiguity storing dates as UTC instants exists to remove.
     ...(kind.dated ? { dateZone: zoneLabel(form.date, timezone, now) } : {}),
     ...(scheduledAt === undefined ? {} : { scheduledFor: formatInTimezone(scheduledAt, timezone) }),
     ...(options.refusal === undefined
       ? {}
       : { error: options.refusal.message, errorField: options.refusal.field }),
     open: openGroups(form, options.refusal?.field),
-  });
+  };
+}
+
+async function postEditorModel(
+  c: Context<GeekityEnv>,
+  form: EditorForm,
+  postKind: PostKind,
+  itemLookup: RenderEditorOptions['itemLookup'],
+): Promise<Record<string, unknown>> {
+  const sections = editorSections(postKind, form);
+  return {
+    enclosureFields: ENCLOSURE_FIELDS,
+    enclosureChoices: await enclosureChoices(c.var.config.contentDir, form.enclosure.url),
+    transcriptTypes: TRANSCRIPT_TYPES,
+    alternateRows: [...form.enclosure.alternates, BLANK_ALTERNATE_ROW],
+    postKind,
+    editorKind: EDITOR_KINDS[postKind],
+    postKinds: POST_KINDS.map((key) => ({ key, ...EDITOR_KINDS[key] })),
+    sections,
+    sidebarLocation: sidebarLocation(postKind, form),
+    link: linkView(form, sections.shown.rsvp),
+    photoFields: PHOTO_FIELDS,
+    photos: await photoPicker(c.var.config, form.photos),
+    reviewPhotoThumbnail: libraryThumbnail(c.var.config, form.review.photo),
+    locationFields: LOCATION_FIELDS,
+    ...citedPreviews(c, form),
+    rsvpChoices: RSVP_VALUES.map((value) => ({ value, label: RSVP_LABELS[value] })),
+    ...(form.rsvp === '' || rsvpValue(form.rsvp) !== undefined
+      ? {}
+      : { unrecognizedRsvp: form.rsvp }),
+    eventFields: EVENT_FIELDS,
+    reviewFields: REVIEW_FIELDS,
+    itemLookupButton: ITEM_LOOKUP_BUTTON,
+    itemLookupUrl: ITEM_LOOKUP_PATH,
+    itemLookup,
+    itemSearchUrl: ITEM_SEARCH_PATH,
+    itemSearchKinds: SEARCH_KINDS,
+    reviewKinds: REVIEW_KINDS.map((value) => ({
+      value,
+      ...REVIEW_KIND_WORDS[value],
+      ...REVIEW_EDITOR_WORDS[value],
+    })),
+    reviewKindsWith: Object.fromEntries(
+      ['by', 'year', 'uid', 'url', 'photo', 'date', 'season', 'episode', 'category'].map(
+        (field) => [
+          field,
+          REVIEW_KINDS.filter((value) =>
+            (REVIEW_KIND_FIELDS[value] as readonly string[]).includes(field),
+          ),
+        ],
+      ),
+    ),
+    reviewKindChosen:
+      form.review.kind === '' ? (sections.filled.review ? 'other' : 'book') : form.review.kind,
+    ...(form.review.kind === '' || isReviewKind(form.review.kind)
+      ? {}
+      : { unrecognizedReviewKind: form.review.kind }),
+    syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
+      ...target,
+      field: syndicateToField(target),
+      checked: form.syndicateTo.includes(target.id),
+    })),
+  };
 }
 
 const LINK_VERBS = [

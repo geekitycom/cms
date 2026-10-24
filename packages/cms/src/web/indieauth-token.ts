@@ -23,7 +23,7 @@ import {
 import type { IssuedTokens } from '../indieauth/tokens.ts';
 
 /**
- * The token endpoint (TASK-160): a client redeems its code here for a bearer
+ * The token endpoint: a client redeems its code here for a bearer
  * token, or trades a refresh token for a new pair.
  *
  * A code is checked by the same {@link redeemCode} profile redemption uses, so
@@ -86,7 +86,7 @@ function refuse<E extends GeekityEnv>(c: Context<E>, error: string, description:
 }
 
 /**
- * The endpoints that answer for a token once it is issued (TASK-161):
+ * The endpoints that answer for a token once it is issued:
  * introspection, revocation and userinfo. Outside `/admin` and behind the
  * maintenance gate, like the token endpoint.
  */

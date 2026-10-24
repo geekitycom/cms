@@ -29,7 +29,7 @@ export function actorKeysDir(dataDir: string): string {
 /**
  * The file one key pair lives in, e.g. `data/keys/ada.ed25519.jwk`.
  *
- * The identifier is the user's username (decision-14), which is also what
+ * The identifier is the user's username, which is also what
  * their actor id is built from, so a site can tell at a glance whose key a
  * file is; and the algorithm is in the name too, so the two pairs are
  * independent files that can be backed up, restored and regenerated one at a
@@ -48,7 +48,7 @@ export function actorKeyFile(dataDir: string, identifier: string, algorithm: str
  * whatever was there, and answer with the path it was written to.
  *
  * The only door into `data/keys` that is not {@link loadActorKeyPairs}, and it
- * exists for the import (TASK-71): a key pair that arrives from somewhere else
+ * exists for the import: a key pair that arrives from somewhere else
  * is the one case where a file has to be written from bytes the CMS did not
  * mint. Everything about the layout stays here rather than at the caller — the
  * name, the `0700` directory and the `0600` file — so there is one answer to
@@ -79,7 +79,7 @@ export function writeActorKeyFile(
  * one file per pair is one thing to back up and one thing that cannot fall
  * half out of step with itself.
  *
- * A file that will not import is thrown over rather than replaced (decision-9).
+ * A file that will not import is thrown over rather than replaced.
  * The old code healed a damaged row by generating a new pair, which is exactly
  * the wrong thing to do with an identity: every follower holds the public key
  * and would stop verifying the site's posts. A site that really does want a

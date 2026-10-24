@@ -50,7 +50,7 @@ function commentSettingOf(document: Document): string {
 }
 
 /**
- * The editor field each citing property fills (TASK-169). The form submits it
+ * The editor field each citing property fills. The form submits it
  * under the property's own name, as `in-reply-to` is.
  */
 export const CITATION_FIELDS = {
@@ -69,35 +69,36 @@ export interface EditorForm {
   categories: string;
   description: string;
   /**
-   * Who the front matter says wrote this, as the select submits it (TASK-67).
+   * Who the front matter says wrote this, as the select submits it.
    *
-   * A username, because doc-2's `author` names a user after decision-14 — but
-   * kept as the raw string rather than as a resolved user, because a form is
-   * strings and because a file that still holds a display name from before
-   * decision-14 has to be offered back as what it says until somebody saves it.
+   * A username, because a post's `author` names a user — but kept as the raw
+   * string rather than as a resolved user, because a form is strings and
+   * because a file that still holds a display name from before every user
+   * became an actor has to be offered back as what it says until somebody
+   * saves it.
    */
   author: string;
   /** The post this one replies to, the mf2 `in-reply-to`. Posts only. */
   inReplyTo: string;
   /**
    * Whether the author is going to the event `inReplyTo` names, the mf2
-   * `rsvp` (TASK-198), as the file or the form spells it. Posts only.
+   * `rsvp`, as the file or the form spells it. Posts only.
    */
   rsvp: string;
-  /** The post this one reposts, the mf2 `repost-of` (TASK-169). Posts only. */
+  /** The post this one reposts, the mf2 `repost-of`. Posts only. */
   repostOf: string;
-  /** The post this one likes, the mf2 `like-of` (TASK-169). Posts only. */
+  /** The post this one likes, the mf2 `like-of`. Posts only. */
   likeOf: string;
-  /** The page this one bookmarks, the mf2 `bookmark-of` (TASK-169). Posts only. */
+  /** The page this one bookmarks, the mf2 `bookmark-of`. Posts only. */
   bookmarkOf: string;
-  /** When and where the post's event is (TASK-200). Posts only. */
+  /** When and where the post's event is. Posts only. */
   event: EventForm;
   review: ReviewForm;
   /** The language it is written in, the `lang` key; empty for the site's. */
   lang: string;
   draft: boolean;
   /**
-   * Whether the document is listed or only served at its URL (TASK-227), or a
+   * Whether the document is listed or only served at its URL, or a
    * value the site does not recognize, which hides it until one is chosen.
    */
   visibility: StoredVisibility;
@@ -105,15 +106,15 @@ export interface EditorForm {
   exclude: boolean;
   /** Whether the page offers a contact form. Pages only. */
   contact: boolean;
-  /** Whether the post is pinned to its author's profile (TASK-207). Posts only. */
+  /** Whether the post is pinned to its author's profile. Posts only. */
   pinned: boolean;
   /**
    * Whether the post hides the previews of the pages it cites, `preview:
-   * false` (TASK-252). Posts only.
+   * false`. Posts only.
    */
   previewHidden: boolean;
   /**
-   * The alt text of an image the post cites, `cited-alt` (TASK-255). Posts
+   * The alt text of an image the post cites, `cited-alt`. Posts
    * only; empty for none, when the post's title describes it.
    */
   citedAlt: string;
@@ -126,17 +127,17 @@ export interface EditorForm {
    * lose is the default every document starts at.
    */
   comments: string;
-  /** The post's recording (TASK-213). Posts only; blank on a page. */
+  /** The post's recording. Posts only; blank on a page. */
   enclosure: EnclosureForm;
-  /** The post's photos (TASK-166), without the blank row the editor adds. Posts only. */
+  /** The post's photos, without the blank row the editor adds. Posts only. */
   photos: PhotoRow[];
   /**
-   * Where the post was written (TASK-223). Posts only; blank on a page. It is
+   * Where the post was written. Posts only; blank on a page. It is
    * the one field that is not written into the file: the save puts it in
-   * `data/locations.json` under the post's permalink (decision-29).
+   * `data/locations.json` under the post's permalink.
    */
   location: LocationForm;
-  /** The ids of the declared syndication targets it selects (TASK-155). Posts only. */
+  /** The ids of the declared syndication targets it selects. Posts only. */
   syndicateTo: string[];
   body: string;
   /** The hash of the file the form was filled in from; empty for a new one. */
@@ -176,8 +177,8 @@ export const AUTHOR_UNTIL_REQUEST = '';
  * The editor for a document that does not exist yet.
  *
  * The date field is filled in with the clock as the site's own zone reads it,
- * not with an instant: what a form offers is what a form takes back, and per
- * decision-11 an offset-less date in this field means the site's zone.
+ * not with an instant: what a form offers is what a form takes back, and an
+ * offset-less date in this field means the site's zone.
  */
 export function blankForm(kind: DocumentKind, timezone: string, now: Date): EditorForm {
   return {
@@ -211,7 +212,7 @@ export function blankForm(kind: DocumentKind, timezone: string, now: Date): Edit
  * submitted with the field untouched writes back the very instant it was
  * filled in from.
  *
- * `location` is what `data/locations.json` holds for the post (decision-29),
+ * `location` is what `data/locations.json` holds for the post,
  * which a document does not carry. It is required because a form loaded
  * without it would remove the stored location on save.
  */
@@ -270,7 +271,7 @@ export interface ResolvedMedia {
  * The front matter to write that the CMS does not model.
  *
  * What the file already carried comes back out untouched, so a key somebody
- * added by hand survives every admin save (doc-2). The one such key the editor
+ * added by hand survives every admin save. The one such key the editor
  * has a field for is `eleventyExcludeFromCollections`: ticking the box writes
  * it, and clearing the box takes the key back out rather than leaving a
  * `false` behind — unless the file spelled the key out itself, in which case
@@ -297,7 +298,7 @@ export function extraFromForm(
     extra[VISIBILITY_FRONT_MATTER_KEY] = form.visibility;
   else extra[VISIBILITY_FRONT_MATTER_KEY] = form.visibility.unrecognized;
 
-  // Empty is the site's language, which is the key's absence (TASK-154).
+  // Empty is the site's language, which is the key's absence.
   if (form.lang === '') delete extra[LANG_FRONT_MATTER_KEY];
   else extra[LANG_FRONT_MATTER_KEY] = form.lang;
 
@@ -316,7 +317,7 @@ export function extraFromForm(
 
   if (kind.contactable) {
     // Written or removed, never `false`: it is the CMS's own key, and absent
-    // and false mean the same thing to everything that reads it (TASK-56).
+    // and false mean the same thing to everything that reads it.
     if (form.contact) extra[CONTACT_FRONT_MATTER_KEY] = true;
     else delete extra[CONTACT_FRONT_MATTER_KEY];
   }

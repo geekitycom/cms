@@ -9,7 +9,7 @@ import type { CommentChecker, CommentReport } from '../forms/checker.ts';
  * The three things that can be done to a stored comment, in one place.
  *
  * There are two doors onto them — the moderation screen, and the one-click
- * links a notification carries (TASK-55) — and they have to agree about
+ * links a notification carries — and they have to agree about
  * everything: which file is rewritten, when the index moves, and when a spam
  * checker is told a human disagreed with it. Two copies of that would drift,
  * and the way they would drift is that the email links would quietly stop
@@ -62,7 +62,7 @@ export interface ModerateCommentOptions {
  * Approve a comment, file it as spam, or forget it.
  *
  * The file is rewritten first and the index inside the same step, exactly as
- * the form on the public site does it: the file is the comment (decision-9),
+ * the form on the public site does it: the file is the comment,
  * and moderation only ever moves it.
  */
 export async function moderateComment(options: ModerateCommentOptions): Promise<ModerationOutcome> {

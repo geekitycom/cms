@@ -21,7 +21,7 @@ interface KnownOembedProvider {
 
 /**
  * YouTube, TikTok, Reddit and Giphy serve a server a generic or slow page, or
- * refuse it, while their endpoints answer (decision-19).
+ * refuse it, while their endpoints answer.
  */
 const KNOWN_OEMBED_PROVIDERS: readonly KnownOembedProvider[] = [
   {

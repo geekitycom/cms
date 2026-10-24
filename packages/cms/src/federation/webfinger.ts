@@ -15,8 +15,8 @@ export function acctOf(username: string, baseUrl: string): string {
  * The user a WebFinger `resource` asks about, or `undefined` for one this site
  * answers for nobody.
  *
- * Every spelling of a person resolves, and they are the ones decision-14 lists
- * as their aliases: the `acct:` handle, the author archive, `/@{username}` and
+ * Every spelling of a person resolves, and they are the ones their actor lists
+ * as aliases: the `acct:` handle, the author archive, `/@{username}` and
  * — for somebody who was published elsewhere first — the id they were
  * published under. Matching every one of them is what lets a peer that holds
  * any one URL for this person find the others, which is the whole job of

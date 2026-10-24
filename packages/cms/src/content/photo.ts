@@ -1,5 +1,5 @@
 /**
- * A post's photos (TASK-166): what Micropub's `photo` property carries, each
+ * A post's photos: what Micropub's `photo` property carries, each
  * one an address with optional alt text.
  *
  * ```yaml
@@ -57,7 +57,7 @@ export function photoFrontMatter(photos: readonly Photo[]): Record<string, strin
 
 /**
  * The alt text a photo is shown with: its own, else what the media library
- * says about the upload (TASK-141), which is empty for a decorative one. So a
+ * says about the upload, which is empty for a decorative one. So a
  * library picture is described once, in the library, rather than in every
  * post that shows it. `undefined` when nobody has described it.
  */

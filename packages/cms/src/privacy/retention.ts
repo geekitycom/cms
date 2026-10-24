@@ -20,10 +20,10 @@ import { outlived } from '../site/retention-policy.ts';
 import type { RetentionPolicy } from '../site/retention-policy.ts';
 
 /**
- * The retention sweep (TASK-135): what removes the personal data a site has
+ * The retention sweep: what removes the personal data a site has
  * kept for longer than it said it would.
  *
- * The files are the truth (decision-9), so the sweep reads them rather than
+ * The files are the truth, so the sweep reads them rather than
  * the index: every comment file under `content/_data/comments/` and every
  * message under `data/contact/`, each rewritten inside the lock every other
  * writer of that file takes, and each comment it changes put back into the

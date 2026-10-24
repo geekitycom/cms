@@ -10,7 +10,7 @@ import { isRecord, nonEmptyStrings } from '../util/guards.ts';
 import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../content/locale.ts';
 
 /**
- * Syndication targets (TASK-155): services such as IndieNews and Bridgy
+ * Syndication targets: services such as IndieNews and Bridgy
  * Publish that take a copy of a post when it links to them and sends them a
  * webmention, and answer with the URL of the copy they made.
  *
@@ -19,7 +19,7 @@ import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../content/lo
  * `syndicate-to` list or by carrying a target's tag; the theme links to each
  * one inside the post's h-entry; the sender notifies them as it notifies any
  * linked page; and the URL each one answers with is kept in
- * {@link SYNDICATION_FILE} (decision-26) and printed as `u-syndication`.
+ * {@link SYNDICATION_FILE} and printed as `u-syndication`.
  */
 
 /** Where a site declares its targets, relative to the content directory. */
@@ -28,7 +28,7 @@ export const SYNDICATION_TARGETS_FILE = '_data/syndicationTargets.json';
 /**
  * Where the copies targets answered with are kept, relative to the content
  * directory: one object keyed by a post's permalink, each mapping a target's
- * URL to the copy it made (decision-26). Eleventy reads it as `syndication`.
+ * URL to the copy it made. Eleventy reads it as `syndication`.
  */
 export const SYNDICATION_FILE = '_data/syndication.json';
 
@@ -38,7 +38,7 @@ export const SYNDICATION_FRONT_MATTER_KEY = 'syndication';
 /** What an id may be made of, so it can name a form field and a Micropub uid alike. */
 const ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
-/** What a target's `url` may hold to follow the post's language (TASK-156). */
+/** What a target's `url` may hold to follow the post's language. */
 export const LANGUAGE_PLACEHOLDER = '{lang}';
 
 /** The declared targets, and a sentence for each entry that was not one. */
@@ -237,7 +237,7 @@ export function syndicationTargetProblems(contentDir: string): readonly string[]
  * each with its `url` filled for the post: those its `syndicate-to` names, and
  * those whose tag it carries. An id nobody declared selects nothing.
  *
- * The post's language is its own `lang`, else `siteLanguage` (TASK-156). A
+ * The post's language is its own `lang`, else `siteLanguage`. A
  * target that lists `languages` is selected only for a post in one of them or
  * in a regional form of one, so `de-AT` goes to a target that lists `de`, and
  * {@link LANGUAGE_PLACEHOLDER} takes the listed tag; without a list it takes
@@ -356,7 +356,7 @@ export function syndicationCopies(contentDir: string): SyndicationCopies {
 
 /**
  * The public post `url` is a copy of, as its front matter `syndication` or a
- * target's answer in the copies file says (TASK-197), or `undefined`.
+ * target's answer in the copies file says, or `undefined`.
  */
 export function postSyndicatedAt(
   url: string,

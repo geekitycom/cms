@@ -1,5 +1,5 @@
 /**
- * Users > App activity (TASK-221): the recent requests apps made to the
+ * Users > App activity: the recent requests apps made to the
  * IndieAuth and Micropub endpoints, newest first, failures marked, and one
  * request in full. Where a site owner looks when an app will not sign in or
  * post. Any signed-in admin may read it, as with the other admin screens.

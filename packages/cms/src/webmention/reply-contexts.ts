@@ -27,8 +27,8 @@ import type { FediverseLookup, ReplyContext } from './reply-context.ts';
 
 /**
  * Where the fetched contexts are kept, relative to the content directory: one
- * JSON object keyed by the URL a post replies to, likes, reposts or bookmarks
- * (decision-19). Eleventy reads it as the `replyContexts` global.
+ * JSON object keyed by the URL a post replies to, likes, reposts or bookmarks.
+ * Eleventy reads it as the `replyContexts` global.
  */
 export const REPLY_CONTEXTS_FILE = '_data/replyContexts.json';
 
@@ -47,12 +47,12 @@ export interface CreateReplyContextServiceOptions {
   readonly config: CitedPictureConfig;
   /** How host names are resolved before a target is fetched. */
   readonly lookup: HostLookup;
-  /** How the ActivityPub object a cited page links is read (TASK-199). */
+  /** How the ActivityPub object a cited page links is read. */
   readonly fediverse?: FediverseLookup | undefined;
   /** Defaults to `console`. */
   readonly logger?: ReplyContextLogger | undefined;
   /**
-   * The context of a target that is a reply this site holds (TASK-300), read
+   * The context of a target that is a reply this site holds, read
    * from the index rather than fetched or stored: a reply post answering a
    * comment cites the comment, not the post page it is on.
    */
@@ -68,7 +68,7 @@ export interface HeldReplies {
 
 /**
  * Keeps the stored contexts in step with the posts that cite: a reply's
- * `in-reply-to`, and a like's, repost's or bookmark's target (TASK-244).
+ * `in-reply-to`, and a like's, repost's or bookmark's target.
  */
 export interface ReplyContextService {
   /**
@@ -89,7 +89,7 @@ export interface ReplyContextService {
   /**
    * The context a new post can be named after: the stored one, else one fetch
    * within {@link CITED_SLUG_TIMEOUT_MS} that is stored, so the save's own
-   * {@link ReplyContextService.handle} does not fetch it again (TASK-250).
+   * {@link ReplyContextService.handle} does not fetch it again.
    * `undefined` when the target could not be read in time.
    */
   describe(target: string): Promise<ReplyContext | undefined>;

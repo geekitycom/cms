@@ -7,8 +7,7 @@ import { formatDate } from '../theme/templates.ts';
 
 /**
  * The archive page: every post the site has published, grouped by the month it
- * was published in, as the source design's essays page lists them
- * (decision-16).
+ * was published in, as the source design's essays page lists them.
 
  * A page opts in with `archive: true` in its front matter — one key, ignored
  * by Eleventy, the same shape as the `contact: true` beside it — and the
@@ -16,7 +15,7 @@ import { formatDate } from '../theme/templates.ts';
  *
  * The grouping is here rather than in the template because a month is a
  * calendar question: a date in a file is a UTC instant and the site's timezone
- * is the lens it is read through (decision-11), so what month a post belongs
+ * is the lens it is read through, so what month a post belongs
  * to is the same decision as what day the entry under it says, and Nunjucks is
  * the wrong place to make it twice.
  */

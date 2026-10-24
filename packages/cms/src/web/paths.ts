@@ -80,7 +80,7 @@ export function slashedHref(
 /**
  * Where the document that used to live at a URL lives now, in the
  * representation asked for, or `undefined` when no published document names
- * the URL in its `redirect_from` (TASK-127).
+ * the URL in its `redirect_from`.
  */
 export function movedHref(
   view: SiteView,
@@ -220,9 +220,9 @@ export function parseTermPath(
 
 /**
  * How the site spells a term some published post carries, matched without
- * regard to case, or `undefined` when none carries it (TASK-339).
+ * regard to case, or `undefined` when none carries it.
  *
- * A tag's casings are one term (TASK-308). A category stays as spelled, so a
+ * A tag's casings are one term. A category stays as spelled, so a
  * category carried in exactly the asked spelling wins, and otherwise the most
  * used one that differs only in case: WordPress lower-cased every slug, so an
  * imported `/category/rsscloud/` names the category spelled `rssCloud`.

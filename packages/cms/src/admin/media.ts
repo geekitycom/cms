@@ -176,7 +176,7 @@ interface ReferenceSource {
  * a published one does.
  *
  * The documents come out of the index rather than off the disk. The index is
- * a cache of the files (decision-1), so it may be a moment behind a hand edit;
+ * a cache of the files, so it may be a moment behind a hand edit;
  * that is acceptable here because the answer is a warning rather than a
  * decision, and the confirmation step is what makes an out-of-date answer
  * harmless in both directions.

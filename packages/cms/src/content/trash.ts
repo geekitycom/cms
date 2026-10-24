@@ -23,17 +23,16 @@ export type MoveOutcome =
 
 /**
  * Move a document into `content/_trash/` or back out of it, the move behind
- * the editor's trash and restore and Micropub's delete and undelete
- * (TASK-167).
+ * the editor's trash and restore and Micropub's delete and undelete.
  *
  * The trash mirrors the content tree — `posts/2026-03-04-x.md` becomes
  * `_trash/posts/2026-03-04-x.md` — so restoring is the same move backwards and
  * needs to remember nothing. The index is corrected as soon as the file has
  * landed rather than waiting for the watcher, so the public site stops or
- * starts serving the document with this request (doc-1).
+ * starts serving the document with this request.
  *
- * A live document may take a trashed one's URL, and its file name with it
- * (TASK-195). So a restore that would land on either is refused, and a trashed
+ * A live document may take a trashed one's URL, and its file name with it.
+ * So a restore that would land on either is refused, and a trashed
  * file already at the name is kept by numbering the newcomer: the permalink in
  * the front matter, not the file name, is what the document answers at.
  */

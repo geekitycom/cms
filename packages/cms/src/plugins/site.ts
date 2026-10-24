@@ -1,5 +1,5 @@
 /**
- * The site as a plugin reaches it (decision-33): the accounts, keys and
+ * The site as a plugin reaches it: the accounts, keys and
  * followers behind {@link PluginSite}. Shared by requests and the command
  * line, so a plugin's command and its federation read the same files the same
  * way.

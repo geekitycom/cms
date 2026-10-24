@@ -1,6 +1,6 @@
 /**
- * What a CMS running under `geekity serve`'s supervisor knows about it
- * (TASK-288): which plugin folders it loaded, how to ask for a reload, and
+ * What a CMS running under `geekity serve`'s supervisor knows about it:
+ * which plugin folders it loaded, how to ask for a reload, and
  * why the last one failed.
  */
 

@@ -22,7 +22,7 @@ import type { CommentRecords } from './records.ts';
  * Three defences run before anything is proposed, in the order that costs least
  * and gives away least — the honeypot, the age of the form and the per-address
  * rate limit. The first two are `forms/protection.ts`, shared with the contact
- * form (TASK-56) so the two public forms cannot drift into different rules; the
+ * form so the two public forms cannot drift into different rules; the
  * third is the same limiter the login form uses, over the commenter's address,
  * so one machine cannot post a hundred comments while a moderator sleeps.
  *
@@ -59,7 +59,7 @@ export const COMMENT_FIELDS = {
   /** When the form was rendered, in epoch milliseconds. */
   loaded: FORM_LOADED_FIELD,
   /**
-   * The CSRF token, which only the signed-in form carries (TASK-103).
+   * The CSRF token, which only the signed-in form carries.
    *
    * Spelled exactly as every admin form spells it, because it is the same
    * per-session token and is checked by the same comparison.
@@ -70,12 +70,12 @@ export const COMMENT_FIELDS = {
    *
    * A checkbox, so any non-empty value is a yes. It only ever means anything
    * alongside an email address, and the form only offers it when the site can
-   * actually send mail (TASK-55).
+   * actually send mail.
    */
   notify: 'notify',
   /**
-   * "Include in posts and feeds", which only the signed-in form carries
-   * (TASK-300): ticked, the reply post is Public; left empty, Unlisted. A
+   * "Include in posts and feeds", which only the signed-in form carries:
+   * ticked, the reply post is Public; left empty, Unlisted. A
    * stranger's form has no such box, and one sent anyway is never read.
    */
   listed: 'listed',
@@ -122,7 +122,7 @@ export type CommentProblems = Partial<Record<'name' | 'email' | 'url' | 'body', 
  * limit are not here: none of them is the commenter's mistake, and two of them
  * should not be explained to whoever tripped them.
  *
- * A signed-in commenter is asked for nothing but the comment (TASK-103), so
+ * A signed-in commenter is asked for nothing but the comment, so
  * only the comment is checked: the name, the email and the website come off
  * the account and there are no boxes on the form to put anything right in.
  */
@@ -189,7 +189,7 @@ export interface SubmitCommentOptions {
   baseUrl: string;
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
-  /** Who to tell about what lands, handed straight to the intake (TASK-55). */
+  /** Who to tell about what lands, handed straight to the intake. */
   notices?: CommentNotices | undefined;
   /** Where the request came from, as far as the site can tell. */
   address?: string | undefined;
@@ -201,7 +201,7 @@ export interface SubmitCommentOptions {
   throttle: CommentThrottle;
   /**
    * Whether "tell me about replies" is worth recording, which it is when the
-   * site can send mail at all (TASK-55).
+   * site can send mail at all.
    *
    * Read per submission rather than assumed, so a site that has just pasted a
    * mail credential starts honouring the box on the very next comment, and one
@@ -249,7 +249,7 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     name: form.name.trim(),
     url: normalizeWebsite(form.url.trim()) ?? null,
     email: form.email.trim() === '' ? null : form.email.trim(),
-    // A form asks for no picture: only a webmention brings one (TASK-51).
+    // A form asks for no picture: only a webmention brings one.
     avatar: null,
   };
   const proposed: ProposedComment = {
@@ -262,7 +262,7 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     submitted: now.toISOString(),
     inReplyTo: parentOf(form.inReplyTo, document.slug, records),
     // A comment written here lives here: only a webmention has a page of its
-    // own somewhere else (TASK-51).
+    // own somewhere else.
     url: null,
     // Only ever true when there is an address to send to. A box ticked with
     // the email field empty is somebody asking to be told at nowhere.
@@ -346,7 +346,7 @@ export function normalizeWebsite(value: string): string | undefined {
  * Whether something looks like an email address.
  *
  * Deliberately loose. The address is never shown and nothing is ever sent to
- * it (TASK-50 has no email at all), so the only thing checking it buys is
+ * it, so the only thing checking it buys is
  * catching a typo; a stricter rule would refuse valid addresses and buy
  * nothing.
  */

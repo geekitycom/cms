@@ -22,12 +22,12 @@ import { NOTIFICATION_DIGESTS, dataPath } from '../files/data-files.ts';
 /**
  * One message a window instead of one message a comment.
  *
- * TASK-55 emails every moderator the moment something enters the queue, which
- * is right for a quiet site and wrong for a spam wave that Akismet let
- * through. A user who has chosen `hourly` or `daily` on `/admin/users` is sent
- * nothing when a comment arrives; instead this sends them one message per
- * window listing everything still waiting, each item with its own approve,
- * spam and delete links.
+ * The moderation notice emails every moderator the moment something enters the
+ * queue, which is right for a quiet site and wrong for a spam wave that Akismet
+ * let through. A user who has chosen `hourly` or `daily` on `/admin/users` is
+ * sent nothing when a comment arrives; instead this sends them one message per
+ * window listing everything still waiting, each item with its own approve, spam
+ * and delete links.
  *
  * Three decisions hold the whole thing up:
  *
@@ -38,7 +38,7 @@ import { NOTIFICATION_DIGESTS, dataPath } from '../files/data-files.ts';
  *   remember what it meant to send.
  * - **The only new state is when each user was last written to**, and it lives
  *   in `data/notification-digests.json` rather than in the database, because
- *   decision-9 says the database may be deleted whenever the site is stopped —
+ *   the database is a cache that may be deleted whenever the site is stopped —
  *   and a forgotten timestamp would mean either a window silently skipped or a
  *   digest sent twice. It is its own file rather than a field in
  *   `data/users.json` because that file is the answer to "who may sign in",

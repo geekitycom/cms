@@ -12,7 +12,7 @@ import type { ShownImage } from './image-tags.ts';
  *
  * It is kept in one JSON object keyed by the upload's path under
  * `content/uploads/`, beside `site.json` in `content/_data/`: it is public,
- * it cannot be derived from anything, and so it is a file (decision-9). An
+ * it cannot be derived from anything, and so it is a file. An
  * entry is `{"alt": "A dog asleep on a rug"}` or `{"decorative": true}`; an
  * upload with no entry has no alt text yet, which is the case to fix.
  *
@@ -117,7 +117,7 @@ export function undescribedImages(html: string, library: AltTextLibrary): Undesc
 }
 
 /**
- * A post's photos (TASK-166) that nobody has described, neither the post nor
+ * A post's photos that nobody has described, neither the post nor
  * the media library.
  */
 export function undescribedPhotos(

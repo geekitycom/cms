@@ -12,7 +12,7 @@ import type { Document } from './document.ts';
  * A post's ActivityStreams object id: its permalink, absolute on the site's
  * base URL, or the id its file already names.
  *
- * decision-13. A permalink is by name permanent, and the fediverse id is the
+ * A permalink is by name permanent, and the fediverse id is the
  * same promise made to a different audience, so one URL answers both: a
  * browser gets the page and a peer gets the `Article`, by content negotiation.
  * There is no second URL to mint and none to keep in step.
@@ -20,7 +20,7 @@ import type { Document } from './document.ts';
  * A stored `activitypub.id` wins, for the life of the post. That is not a
  * cache: it is what lets a post migrated from WordPress keep the
  * `https://example.com/?p=813` id its followers, its replies and its RSS
- * subscribers already hold (decision-14), so the CMS serves the object there
+ * subscribers already hold, so the CMS serves the object there
  * too and names it in every `Update` and `Delete`. A hand-written
  * `activitypub.id` that is not a URL is not an id, and the permalink is used
  * instead.
@@ -42,10 +42,10 @@ export function postObjectId(document: Document, baseUrl: string): string {
 }
 
 /**
- * The guid every feed keys a document by (decision-12): a migrated document's
+ * The guid every feed keys a document by: a migrated document's
  * stored `guid`, else a post's object id, else its permalink. The post feeds
  * and the comments feeds both name it so, which is what lets a reply's
- * `source:inReplyTo` name the item it answers (TASK-324).
+ * `source:inReplyTo` name the item it answers.
  *
  * It is the guid the document has while it is served, which is the only time
  * a feed carries it, so it does not depend on the clock and the index can
@@ -59,7 +59,7 @@ export function feedGuid(document: Document, baseUrl: string): string {
     : absoluteUrl(document.permalink, baseUrl);
 }
 
-/** Where a native comment's own page is (TASK-318), by its key. */
+/** Where a native comment's own page is, by its key. */
 export function commentPageHref(key: string): string {
   return `${COMMENT_PAGE_PREFIX}${key}/`;
 }
@@ -74,7 +74,7 @@ export function repliesKey(guid: string): string {
 
 /**
  * A key: 16 lowercase hex digits, the one name every comment and every item
- * that can be replied to has in a URL (decision-51): `/comment/{key}/`,
+ * that can be replied to has in a URL: `/comment/{key}/`,
  * `/replies/{key}/` and `#comment-{key}`. A stored comment's key is its id;
  * anything else's is {@link repliesKey} of its feed guid. 64 bits, so two
  * items of one site sharing a key is a birthday event only past about four
@@ -84,7 +84,7 @@ const KEY = /^[0-9a-f]{16}$/;
 
 /**
  * A webmention's key: the key of its source and the post it was sent to,
- * which together are its identity (doc-7). The source alone would give one
+ * which together are its identity. The source alone would give one
  * key to a page that mentions two posts. `undefined`, so a key is minted, for
  * one with no source.
  */

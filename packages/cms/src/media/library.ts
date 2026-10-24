@@ -191,8 +191,8 @@ export interface DeleteUploadOptions {
   /**
    * Take the file's derived files with it.
    *
-   * The original under `content/uploads/` is the only source of truth
-   * (decision-10); the image variants beside it are derived, and derived state
+   * The original under `content/uploads/` is the only source of truth;
+   * the image variants beside it are derived, and derived state
    * that outlives what it was derived from is rubbish nobody will ever clean
    * up. The hook is passed the same content-relative path, is awaited before
    * the delete reports success, and is expected to be forgiving: a file with

@@ -7,7 +7,7 @@ const SOURCE_ROOT = import.meta.dirname;
 
 const SETTINGS = 'settings';
 
-const FORBIDDEN = ['admin/', 'web/', 'cms/', 'plugins/', 'cli.ts'];
+const FORBIDDEN = ['admin/', 'web/', 'cms/', 'plugins/', 'cli/', 'cli.ts'];
 
 const IMPORT = /(?:\bfrom\s+|\bimport\s*\(\s*|^\s*import\s+)['"]([^'"]+)['"]/g;
 

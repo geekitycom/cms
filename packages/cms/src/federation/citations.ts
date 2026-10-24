@@ -1,5 +1,5 @@
 /**
- * How a like or a repost federates (decision-28): as the `Like` or `Announce`
+ * How a like or a repost federates: as the `Like` or `Announce`
  * of the fediverse object it cites, when what it cites is one. Every other
  * post, a bookmark included, federates as the `Note` or `Article` it is, whose
  * content links the page it cites.

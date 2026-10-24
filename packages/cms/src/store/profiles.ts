@@ -1,13 +1,14 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-import { nullableText } from './rows.ts';
+import { allRows, getRow, nullableText } from './rows.ts';
+import type { Row } from './rows.ts';
 
 /**
  * How a remote actor presents itself: what a conversation shows of somebody
- * who is not a follower (TASK-184).
+ * who is not a follower.
  *
  * Read out of the actor document when one of their activities arrives, and
- * kept only in the cache (decision-9): a profile is somebody else's to change,
+ * kept only in the cache: a profile is somebody else's to change,
  * and it can always be fetched again.
  */
 export interface ActorProfile {
@@ -34,13 +35,13 @@ export interface ProfileStore {
    * Whether a URL is an avatar a reader of this site can be shown: the picture
    * of a follower, which the admin's follower list shows, of a remote actor
    * who has done something to a post, or of the author of an approved comment
-   * or webmention. The avatar proxy fetches nothing else
-   * (TASK-134), so it cannot be pointed at an arbitrary URL.
+   * or webmention. The avatar proxy fetches nothing else,
+   * so it cannot be pointed at an arbitrary URL.
    */
   isAvatarSource(url: string): boolean;
   /** Every URL {@link ProfileStore.isAvatarSource} answers yes for, each once. */
   listAvatarSources(): string[];
-  /** The stored profile of a remote actor, or `undefined` (TASK-184). */
+  /** The stored profile of a remote actor, or `undefined`. */
   getActorProfile(actorId: string): StoredActorProfile | undefined;
   /** Store a remote actor's profile, replacing whatever was stored for them. */
   putActorProfile(profile: StoredActorProfile): void;
@@ -96,14 +97,11 @@ export function openProfileStore(db: DatabaseSync): ProfileStore {
     },
 
     listAvatarSources() {
-      return (statements.listAvatarSources.all() as Record<string, unknown>[]).map((row) =>
-        String(row['url']),
-      );
+      return allRows(statements.listAvatarSources, (row) => String(row['url']));
     },
 
     getActorProfile(actorId) {
-      const row = statements.actorProfileById.get(actorId) as Record<string, unknown> | undefined;
-      return row === undefined ? undefined : toActorProfile(row);
+      return getRow(statements.actorProfileById, toActorProfile, actorId);
     },
 
     putActorProfile(profile) {
@@ -118,14 +116,16 @@ export function openProfileStore(db: DatabaseSync): ProfileStore {
     },
 
     listActorsToProfile(fetchedBefore) {
-      return (statements.listActorsToProfile.all(fetchedBefore) as Record<string, unknown>[]).map(
+      return allRows(
+        statements.listActorsToProfile,
         (row) => String(row['actor_id']),
+        fetchedBefore,
       );
     },
   };
 }
 
-function toActorProfile(row: Record<string, unknown>): StoredActorProfile {
+function toActorProfile(row: Row): StoredActorProfile {
   return {
     actorId: String(row['actor_id']),
     handle: nullableText(row['handle']),

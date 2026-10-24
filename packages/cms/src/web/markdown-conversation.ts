@@ -50,7 +50,7 @@ export interface MarkdownConversation {
 /** A reply a reader can see, as {@link MarkdownReply} has it. */
 export type MarkdownSaid = Exclude<MarkdownReply, { readonly withheld: true }>;
 
-/** A native comment's page (TASK-318) as `layouts/comment.njk` draws it, for the Markdown partials. */
+/** A native comment's page as `layouts/comment.njk` draws it, for the Markdown partials. */
 export interface MarkdownCommentThread {
   readonly post: {
     readonly label: string;

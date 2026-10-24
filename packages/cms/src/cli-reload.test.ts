@@ -16,7 +16,7 @@ import { cleanupTemporaryDirs, CLI, runCli, temporaryDir } from './__testing__/c
 import { fakeNpmRegistry, pluginFiles } from './__testing__/npm-registry.ts';
 import { freePort, geminiRequest } from './gemini/__testing__/client.ts';
 import { nextEvent } from './__testing__/wait.ts';
-import { PLUGIN_SETTLE_MS } from './supervisor/primary.ts';
+import { PLUGIN_SETTLE_MS } from './supervisor/plugin-watcher.ts';
 
 after(cleanupTemporaryDirs);
 

@@ -52,7 +52,7 @@ export function selectFromAccept(
 
 /**
  * Whether this is a page drawn for a signed-in reader, which carries the admin
- * bar (TASK-183) and so must never be answered with a 304 off the validators of
+ * bar and so must never be answered with a 304 off the validators of
  * the copy an anonymous visit left in their browser.
  */
 export function drawnForSomebody(c: Context<GeekityEnv>, representation: Representation): boolean {

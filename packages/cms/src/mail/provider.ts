@@ -1,8 +1,8 @@
 /**
  * The seam every way of sending email goes through.
  *
- * The CMS knows about mail services the way it knows about spam services
- * (doc-6): one interface, and nothing else. Two implementations ship — Brevo's
+ * The CMS knows about mail services the way it knows about spam services:
+ * one interface, and nothing else. Two implementations ship — Brevo's
  * transactional API and plain SMTP through nodemailer — and a site may hand in
  * its own, which is what {@link createMemoryMailProvider} is for in a test.
  *

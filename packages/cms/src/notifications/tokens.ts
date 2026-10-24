@@ -11,8 +11,8 @@ import { NOTIFICATION_SECRET, dataPath } from '../files/data-files.ts';
  * that are a random string written down somewhere and a signed claim that
  * needs nothing written down. This is the second, for one reason: a link lives
  * in an inbox for a week, and `data/geekity.db` is a cache that a site may
- * legitimately delete, rebuild or restore from a backup at any moment
- * (decision-9). A stack of rows would take every link in flight with it.
+ * legitimately delete, rebuild or restore from a backup at any moment.
+ * A stack of rows would take every link in flight with it.
  *
  * So the token says what it is for — approve *this* comment, unsubscribe
  * *this* address — and carries an HMAC over exactly that, taken with a secret

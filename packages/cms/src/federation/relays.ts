@@ -142,13 +142,13 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
   }
 
   /**
-   * Who subscribes to a relay: the site's first account (decision-14).
+   * Who subscribes to a relay: the site's first account.
    *
    * A relay subscription is an instance-wide agreement — it boosts everything
-   * public this site sends, whoever wrote it — and after decision-14 there is
-   * no site actor left to make one. The first account is the one actor that
-   * can be chosen without asking, and it is the account a one-person blog has
-   * anyway. `undefined` before anybody has signed up, and then nothing is
+   * public this site sends, whoever wrote it — and with every user an actor
+   * there is no site actor left to make one. The first account is the one actor
+   * that can be chosen without asking, and it is the account a one-person blog
+   * has anyway. `undefined` before anybody has signed up, and then nothing is
    * sent: a site in first-run setup has no identity to sign with.
    */
   function subscriber(): User | undefined {
@@ -347,7 +347,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
 /**
  * Mark the subscription an `Accept` answers as accepted, and record who the
  * relay turned out to be. `undefined` when it answers no follow this site
- * sent — the site follows nothing but relays (doc-4), so that is a stray.
+ * sent — the site follows nothing but relays, so that is a stray.
  *
  * A free function over the store rather than a method on the service: nothing
  * about it is queued or sent, and the inbox listener that calls it has the

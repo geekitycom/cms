@@ -49,7 +49,7 @@ import type { ConversationReader, ThreadReply, Upstream } from '../comments/conv
  * denial of service with this site's name on it.
  *
  * What is recorded is a cache of outcomes, one row per (post, target), exactly
- * as `ap_deliveries` is (decision-9): the links themselves are in the post's
+ * as `ap_deliveries` is: the links themselves are in the post's
  * file, so a database thrown away costs the record of how it went and nothing
  * else — and {@link WebmentionSender.send} reads the file again rather than
  * replaying anything.
@@ -59,8 +59,8 @@ import type { ConversationReader, ThreadReply, Upstream } from '../comments/conv
 export const SEND_TIMEOUT_MS = 10_000;
 
 /**
- * How many salmentions one page sends one target in {@link SALMENTION_WINDOW_MS}
- * (TASK-320). Two sites that both send them, each answering the other, stop
+ * How many salmentions one page sends one target in {@link SALMENTION_WINDOW_MS}.
+ * Two sites that both send them, each answering the other, stop
  * on their own once neither has anything new; this is for one that never
  * settles, such as a page that prints something different every time it is
  * read.
@@ -101,7 +101,7 @@ export interface CreateWebmentionServiceOptions {
   /** Where failures are reported. Defaults to `console`. */
   logger?: WebmentionLogger | undefined;
   /**
-   * Who to tell when an incoming webmention lands in the queue (TASK-55).
+   * Who to tell when an incoming webmention lands in the queue.
    *
    * Handed straight to the intake, which decides whether this one is worth a
    * message. Optional, because a service built for a test of sending has
@@ -109,13 +109,13 @@ export interface CreateWebmentionServiceOptions {
    */
   notifications?: CommentNotices | undefined;
   /**
-   * The original a cited silo copy is of, from the stored reply contexts
-   * (TASK-197). A reply to the copy tells the original too.
+   * The original a cited silo copy is of, from the stored reply contexts.
+   * A reply to the copy tells the original too.
    */
   originalOf?: ((url: string) => string | undefined) | undefined;
   /**
-   * What says which reply on a post an incoming webmention answers (TASK-319),
-   * and which pages a salmention goes from (TASK-320).
+   * What says which reply on a post an incoming webmention answers,
+   * and which pages a salmention goes from.
    */
   conversation: Pick<ConversationReader, 'replyNamed' | 'upstreams' | 'documentOf'>;
 }
@@ -129,7 +129,7 @@ export interface WebmentionService {
    */
   handle(change: DocumentChange): void;
   /**
-   * Consider one comment or activity written to the index (TASK-320), and send
+   * Consider one comment or activity written to the index, and send
    * a salmention from each page whose replies it changed. Returns at once, as
    * {@link handle} does.
    */
@@ -138,7 +138,7 @@ export interface WebmentionService {
    * Send one post's webmentions again, from the file as it now reads.
    *
    * Not "send those again": the links are read out of the post at the moment
-   * this is called (decision-9), so a link added since the last publish goes
+   * this is called, so a link added since the last publish goes
    * out and one taken out is told, which is what somebody pressing Resend is
    * asking for. `undefined` when no post answers to that slug.
    */
@@ -155,7 +155,7 @@ export interface WebmentionService {
   receive(incoming: IncomingWebmention): Promise<WebmentionOutcome>;
   /**
    * Tell `original` about every public post that replies to `copy`, once its
-   * reply context has found that the copy is of it (TASK-197): the post was
+   * reply context has found that the copy is of it: the post was
    * sent before anybody knew.
    */
   originalFound(copy: string, original: string): void;
@@ -256,11 +256,11 @@ export function createWebmentionService(
   }
 
   /**
-   * Bring the post's recorded copies in line with what was just sent
-   * (decision-26): a target the post selects keeps the copy it answered with,
+   * Bring the post's recorded copies in line with what was just sent:
+   * a target the post selects keeps the copy it answered with,
    * and one only an earlier version selected, or any of a post nobody can
    * read, claims none. A target's URL is the one it had for the version that
-   * selected it, since it can follow the post's language (TASK-156).
+   * selected it, since it can follow the post's language.
    */
   async function keepCopies(
     permalink: string,
@@ -563,7 +563,7 @@ interface Told {
 
 /**
  * Every external page any of these versions of a post links to, in order: the
- * post it replies to first, and the original that post is a copy of (TASK-197),
+ * post it replies to first, and the original that post is a copy of,
  * then what it reposts, likes, bookmarks or reads, then the links in its body,
  * then the syndication targets it selects, which the theme links to inside its
  * h-entry.
@@ -620,8 +620,8 @@ function isPublic(document: Document | undefined, now: Date): boolean {
 }
 
 /**
- * File the outcomes of a post whose slug changed under the post it is now
- * (TASK-332). Rows are keyed by slug, so a moved post would otherwise show
+ * File the outcomes of a post whose slug changed under the post it is now.
+ * Rows are keyed by slug, so a moved post would otherwise show
  * nothing sent and leave its rows to whatever post takes the old slug. A row
  * whose slug names no document belongs to the document its source names, by
  * the redirect rule comment files follow.

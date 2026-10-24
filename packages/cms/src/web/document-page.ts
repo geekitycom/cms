@@ -43,8 +43,8 @@ export function negotiateDocument(
     return notAcceptableResponse(href, DOCUMENT_REPRESENTATIONS);
   }
 
-  // Who the request's session says is reading, when it says anybody
-  // (TASK-103). Only the HTML has a form on it, so only the HTML asks; the
+  // Who the request's session says is reading, when it says anybody.
+  // Only the HTML has a form on it, so only the HTML asks; the
   // Markdown and JSON of a post are the same bytes for everybody.
   const account = representation === 'html' ? c.var.signedIn : undefined;
   const viewer = account === undefined ? undefined : commenterOf(account);
@@ -83,7 +83,7 @@ export function negotiateDocument(
     // Where a webmention about this page is sent. It is a header rather than
     // only a `<link>` because a sender is allowed to find the endpoint without
     // parsing the page, and because the JSON and Markdown representations of a
-    // post have no head to put one in (TASK-51).
+    // post have no head to put one in.
     links: webmentionLinks(c),
     ...(drawnForSomebody(c, representation) ? { private: true } : {}),
     ...validatorsFor(representation, document, page?.fingerprint ?? markdown),
@@ -140,7 +140,7 @@ function commentNotice(
           : c.var.conversation.thread(document, c.var.siteAtRequestStart),
     }),
     // And the thank-you after a contact form was sent, which travels the same
-    // way for the same reason (TASK-56).
+    // way for the same reason.
     ...contactNotice(c),
   };
 }

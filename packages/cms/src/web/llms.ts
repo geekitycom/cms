@@ -9,7 +9,7 @@ import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 
 /**
- * `/llms.txt` (TASK-149): the site described for a language model, in the
+ * `/llms.txt`: the site described for a language model, in the
  * llmstxt.org shape. A heading with the site's title, its tagline as a quote,
  * then the site's navigation and every page and every post the site lists as
  * lists of links, each to the Markdown the site already serves for what it

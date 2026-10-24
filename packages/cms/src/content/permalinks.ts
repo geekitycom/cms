@@ -42,12 +42,12 @@ export function previewDocumentAt(
 /**
  * The ActivityStreams id of a document, or `undefined` when it has none.
  *
- * Only a published post federates (doc-4), so only a published post has an id
+ * Only a published post federates, so only a published post has an id
  * to advertise. This is what the theme's `<link rel="alternate">` points at,
- * what every feed keys the post by (decision-12) and what the permalink
+ * what every feed keys the post by and what the permalink
  * answers an ActivityStreams request with: the page, the feed item and the
- * object all agree about the post's name in the fediverse, because after
- * decision-13 they are the same URL.
+ * object all agree about the post's name in the fediverse, because they are
+ * the same URL.
  */
 export function activityStreamsId(
   document: Document,

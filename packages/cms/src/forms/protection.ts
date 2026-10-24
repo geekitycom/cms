@@ -6,7 +6,7 @@ import { COMMENT_SALT, dataPath } from '../files/data-files.ts';
 /**
  * What every form on the public site defends itself with.
  *
- * A comment form (TASK-50) and a contact form (TASK-56) are the same problem
+ * A comment form and a contact form are the same problem
  * wearing different fields: an anonymous stranger posting text at a site that
  * has to store it. So the three cheap defences in front of both live here
  * rather than once each, and neither feature can quietly drift into a weaker

@@ -83,7 +83,7 @@ export interface OpenAdminStoreOptions {
  * the followers and inbox indexes, the delivery outcomes, the relay handshake
  * and the scheduler's watermark.
  *
- * All of it is a cache (decision-9). The followers and the inbox rows are read
+ * All of it is a cache. The followers and the inbox rows are read
  * back from `content/_data/federation/` on every boot; the rest a site is free
  * to lose, and docs/content.md says what losing it costs. It is deliberately
  * not part of the {@link ContentStore}: the two share the file, one database per
@@ -107,7 +107,7 @@ export type AdminStore = SessionStore &
     /**
      * Refuse every write on this connection while on, with SQLite's
      * `query_only`. A worker handing over to a new one under `geekity serve`
-     * turns it on, so the new worker's boot migrations run alone (TASK-288).
+     * turns it on, so the new worker's boot migrations run alone.
      */
     setReadOnly(readOnly: boolean): void;
     /** Close the database. Safe to call twice. */

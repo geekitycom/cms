@@ -79,7 +79,7 @@ export async function addCommentOptOut(dataDir: string, email: string): Promise<
 
 /**
  * Forget that an address ever asked to stop, because its owner asked for
- * everything this site holds about them to be erased (TASK-135). Returns
+ * everything this site holds about them to be erased. Returns
  * whether it was on the list. Nothing is written when it was not.
  */
 export async function removeCommentOptOut(dataDir: string, email: string): Promise<boolean> {

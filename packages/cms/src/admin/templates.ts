@@ -15,7 +15,7 @@ import { drawBlock } from './blocks.ts';
  *
  * They are a set of their own, not part of the theme search path: the theme a
  * site wears may override any public template, and must not be able to shadow
- * the login form or the CSRF field inside it (decision-4, decision-15).
+ * the login form or the CSRF field inside it.
  *
  * A template is in exactly one of three folders under it:
  *
@@ -27,7 +27,7 @@ import { drawBlock } from './blocks.ts';
  *   component, and what a page includes: the flash and the admin bar.
  *
  * Beside them, `static/` holds what a browser fetches and `src/` the stylesheet
- * source that `pnpm build` compiles into `static/admin.css` (decision-30).
+ * source that `pnpm build` compiles into `static/admin.css`.
  */
 export const PACKAGED_ADMIN_DIR: string = fileURLToPath(new URL('../../admin/', import.meta.url));
 

@@ -14,7 +14,7 @@ export type HealthOutcome = 'ok' | 'fail';
 export interface HealthReport {
   status: HealthOutcome;
   /**
-   * Whether the site is in maintenance mode (TASK-130). Reported rather than
+   * Whether the site is in maintenance mode. Reported rather than
    * failed: the process is healthy, and an orchestrator that restarted it for
    * being down on purpose would be fighting the operator.
    */

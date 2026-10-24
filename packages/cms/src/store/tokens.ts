@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 
+import { getRow } from './rows.ts';
 import { randomToken } from './sessions.ts';
 
 /**
@@ -70,7 +71,7 @@ export interface TokenStore {
    * Spend a one-click link's token, and say whether it had anything left.
    *
    * `true` the first time and `false` for ever after, which is what makes a
-   * link in an email single use (TASK-55). Only the token's SHA-256 is kept,
+   * link in an email single use. Only the token's SHA-256 is kept,
    * as a password reset's is, so a copy of this file is not a list of the
    * links a site has sent. `expiresAt` is the moment the token's own signature
    * stops meaning anything, and is only there so the row can be swept.
@@ -117,14 +118,16 @@ export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
 
     getPasswordReset(token, now = clock()) {
       const hash = hashToken(token);
-      const row = statements.passwordResetByHash.get(hash) as Record<string, unknown> | undefined;
-      if (row === undefined) return undefined;
-
-      const reset: PasswordReset = {
-        userId: Number(row['user_id']),
-        createdAt: String(row['created_at']),
-        expiresAt: String(row['expires_at']),
-      };
+      const reset = getRow(
+        statements.passwordResetByHash,
+        (row): PasswordReset => ({
+          userId: Number(row['user_id']),
+          createdAt: String(row['created_at']),
+          expiresAt: String(row['expires_at']),
+        }),
+        hash,
+      );
+      if (reset === undefined) return undefined;
 
       // The same rule the sessions follow: an expired row is deleted rather
       // than ignored, so a clock that goes backwards cannot revive a link.

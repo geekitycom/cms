@@ -59,12 +59,12 @@ const ALLOWED: readonly Allowance[] = [
     because: 'createUser is public; a caller outside createCms may name no instant',
   },
   {
-    file: 'content/sync.ts',
+    file: 'content/content-watcher.ts',
     line: 'const deadline = Date.now() + PROBE_DEADLINE_MS;',
     because: ELAPSED_WALL_TIME,
   },
   {
-    file: 'content/sync.ts',
+    file: 'content/content-watcher.ts',
     line: 'while (Date.now() < deadline) {',
     because: ELAPSED_WALL_TIME,
   },

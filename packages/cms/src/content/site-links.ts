@@ -13,7 +13,7 @@ import type { RedirectTable } from './redirects.ts';
  * One link to a page of this site, as the index keeps it: the path, spelled
  * as {@link siteLinkKey} spells a permalink, and the query sorted as a
  * redirect source's is, or `''`. The query is kept because the site answers
- * `/?p=7` with a redirect rather than with `/` (TASK-330).
+ * `/?p=7` with a redirect rather than with `/`.
  */
 export interface SiteLink {
   readonly path: string;
@@ -21,8 +21,7 @@ export interface SiteLink {
 }
 
 /**
- * Every page of this site a rendered body links to, each named once
- * (TASK-322).
+ * Every page of this site a rendered body links to, each named once.
  */
 export function ownSiteLinks(html: string, pageUrl: string, baseUrl: string): SiteLink[] {
   const found = new Map<string, SiteLink>();
@@ -69,7 +68,7 @@ export function spelling(link: SiteLink): string {
 
 /**
  * The links that land on one document, as the site resolves a request for
- * them (TASK-330).
+ * them.
  */
 export interface LinksInto {
   /** Paths a link lands here through, whatever query it carries. */

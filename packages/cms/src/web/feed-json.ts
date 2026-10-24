@@ -11,8 +11,8 @@ import { absoluteUrl } from '../util/url.ts';
  * in.
  *
  * An item is keyed by the post's object id and lists every term it carries,
- * which is what the two XML formats do with the same item: decision-12 leaves
- * the three formats nothing to disagree about.
+ * which is what the two XML formats do with the same item, so the three
+ * formats have nothing to disagree about.
  */
 
 /** The `version` every JSON Feed this CMS writes declares. */
@@ -87,9 +87,9 @@ export interface JsonFeedItem {
   tags?: string[];
   /** The post's own author, when it names one. */
   authors?: JsonFeedAuthor[];
-  /** The post's own language, when it is not the feed's (TASK-154). */
+  /** The post's own language, when it is not the feed's. */
   language?: string;
-  /** The post's recording, the main file first and then its other versions (TASK-213). */
+  /** The post's recording, the main file first and then its other versions. */
   attachments?: JsonFeedAttachment[];
   /**
    * This CMS's extension object, which JSON Feed 1.1 allows under any key that

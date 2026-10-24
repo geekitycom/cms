@@ -18,7 +18,7 @@ import { FEDERATION_DATA_DIRECTORY } from './records.ts';
  * which the permalink route ignores, so the id still dereferences to the post.
  *
  * Keyed by the natural id, and kept in `content/_data/federation/` beside the
- * followers, because the files are the truth (decision-9): a rebuilt database
+ * followers, because the files are the truth: a rebuilt database
  * must not forget what the fediverse has been told is gone.
  */
 export interface ObjectIdRecord {

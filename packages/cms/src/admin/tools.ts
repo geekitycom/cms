@@ -138,7 +138,7 @@ export interface MountToolsOptions {
  * what it did on the flash. There is no progress bar and nothing to poll:
  * `node:sqlite` is synchronous, so a rebuild moved off the request would block
  * the same event loop from somewhere nobody can see, and progress would need
- * state the database is not allowed to keep (decision-9). A site whose scan
+ * state the database is not allowed to keep. A site whose scan
  * takes long enough for that to matter is one that should be told, which is
  * what the screen does.
  */

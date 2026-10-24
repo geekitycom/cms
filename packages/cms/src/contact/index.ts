@@ -1,5 +1,5 @@
 /**
- * The contact form (TASK-56): a page that offers one, the defences in front of
+ * The contact form: a page that offers one, the defences in front of
  * it, the file every message lands in, and the mail that carries it.
  *
  * The barrel every other module and the package index import from, so nothing

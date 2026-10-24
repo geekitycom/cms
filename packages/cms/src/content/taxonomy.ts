@@ -78,18 +78,19 @@ export const TAXONOMY_BASE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 /**
  * Top-level paths the site already answers on, which a base may not take over.
  *
- * `feed` was here before anything served it: TASK-37 put the feeds at `/feed/`,
- * and a site that had taken the word would find its archives shadowed by an
- * upgrade. `comments` is the site-wide comments feed's root, for the same
- * reason. `taxonomy.test.ts` pins this list against the prefixes those routes
- * are actually registered under, so it cannot fall behind them.
+ * `feed` was here before anything served it, because the feeds were going to
+ * live at `/feed/` and a site that had taken the word would have found its
+ * archives shadowed by the upgrade that put them there. `comments` is the
+ * site-wide comments feed's root, for the same reason. `taxonomy.test.ts` pins
+ * this list against the prefixes those routes are actually registered under, so
+ * it cannot fall behind them.
  *
  * `sitemap.xml` and `robots.txt` are here because they are paths the site
  * answers on, which is what the list is: {@link TAXONOMY_BASE_PATTERN} would
  * refuse either of them anyway for the dot, so the entries are belt and
  * braces rather than the only thing standing in the way.
  *
- * `author` and `inbox` are reserved harder than the rest (decision-14). Every
+ * `author` and `inbox` are reserved harder than the rest. Every
  * user is an actor at `/author/{username}/` and the shared inbox is `/inbox/`,
  * and an actor id is a name a follower's server has filed the account under:
  * a base that took one of those words would not shadow an archive, it would
@@ -115,8 +116,8 @@ export const RESERVED_TOP_LEVEL_PATHS: readonly string[] = [
 ];
 
 /**
- * What makes two spellings one term: a tag's key, which ignores case
- * (TASK-308), or a category exactly as it is spelled.
+ * What makes two spellings one term: a tag's key, which ignores case,
+ * or a category exactly as it is spelled.
  */
 export function termKey(taxonomy: Taxonomy, term: string): string {
   return taxonomy === 'tag' ? tagKey(term) : term;

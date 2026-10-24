@@ -12,7 +12,7 @@ const SIGNATURE_TIME_WINDOW_MS = 60 * 60 * 1000;
 export const REFUSAL_LOG_WINDOW_MS = 5 * 60 * 1000;
 
 /**
- * The log of inbox deliveries refused for their signature (TASK-427). One
+ * The log of inbox deliveries refused for their signature. One
  * instance serves the site's inboxes and every plugin's, so a peer retrying
  * at several of them is still one burst.
  */

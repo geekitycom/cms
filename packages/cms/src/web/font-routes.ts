@@ -13,7 +13,7 @@ import type { GeekityEnv } from './env.ts';
 import { notFound } from './status-pages.ts';
 
 /**
- * Register the route the hosted Google Fonts are served from (decision-61),
+ * Register the route the hosted Google Fonts are served from,
  * under `/_geekity/` so no permalink can take it. Only the files the font
  * store wrote are answered: a stylesheet and the WOFF2 files it names.
  *

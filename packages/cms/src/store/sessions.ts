@@ -3,6 +3,9 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 
+import { getRow } from './rows.ts';
+import type { Row } from './rows.ts';
+
 /**
  * A login, or the anonymous session that carries a CSRF token to a visitor who
  * has not logged in yet.
@@ -52,7 +55,7 @@ export interface CreateSessionInput {
   now?: Date | undefined;
 }
 
-/** How long a session id is, in bytes. 32 is the 256 bits doc-5 asks for. */
+/** How long a session id is, in bytes: 32 bytes is 256 bits. */
 export const SESSION_ID_BYTES = 32;
 
 export interface SessionStore {
@@ -118,15 +121,15 @@ export function openSessionStore(
    * every admin page until the row is cleaned up by hand.
    */
   function readFlash(sessionId: string): FlashMessage[] {
-    const row = statements.readFlash.get(sessionId) as Record<string, unknown> | undefined;
-    return parseList(row?.['flash']).filter(isFlashMessage);
+    return parseList(getRow(statements.readFlash, (row) => row['flash'], sessionId)).filter(
+      isFlashMessage,
+    );
   }
 
   function readCleared(sessionId: string): string[] {
-    const row = statements.readCleared.get(sessionId) as Record<string, unknown> | undefined;
-    return parseList(row?.['cleared_autosaves']).filter(
-      (key): key is string => typeof key === 'string',
-    );
+    return parseList(
+      getRow(statements.readCleared, (row) => row['cleared_autosaves'], sessionId),
+    ).filter((key): key is string => typeof key === 'string');
   }
 
   return {
@@ -150,10 +153,9 @@ export function openSessionStore(
     },
 
     getSession(id, now = clock()) {
-      const row = statements.sessionById.get(id) as Record<string, unknown> | undefined;
-      if (row === undefined) return undefined;
+      const session = getRow(statements.sessionById, toSession, id);
+      if (session === undefined) return undefined;
 
-      const session = toSession(row);
       // ISO 8601 in UTC sorts the way time runs, so string order is time order.
       if (session.expiresAt <= now.toISOString()) {
         statements.deleteSession.run(id);
@@ -212,11 +214,15 @@ function parseList(raw: unknown): unknown[] {
 
 function isFlashMessage(value: unknown): value is FlashMessage {
   if (typeof value !== 'object' || value === null) return false;
-  const entry = value as Record<string, unknown>;
-  return FLASH_KINDS.has(entry['kind']) && typeof entry['message'] === 'string';
+  return (
+    'kind' in value &&
+    FLASH_KINDS.has(value.kind) &&
+    'message' in value &&
+    typeof value.message === 'string'
+  );
 }
 
-function toSession(row: Record<string, unknown>): Session {
+function toSession(row: Row): Session {
   const userId = row['user_id'];
   return {
     id: String(row['id']),

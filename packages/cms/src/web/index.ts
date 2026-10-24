@@ -43,7 +43,8 @@ export { documentContext } from './context.ts';
 export type { BacklinkContext, DocumentContext, NeighbourContext, PageContext } from './context.ts';
 export type { FrontPageSlugs, SiteData, SiteDataSource } from '../theme/site-data.ts';
 export { commentAnchor } from '../comments/conversation.ts';
-export { createConversation, feedComments, spokenIn } from './conversation.ts';
+export { createConversation } from './conversation.ts';
+export { feedComments, spokenIn } from './conversation-feed.ts';
 export type {
   Conversation,
   ConversationReader,
@@ -58,7 +59,7 @@ export type {
   RepliesOf,
   SiteInteraction,
 } from '../comments/conversation.ts';
-export type { ConversationContext } from './conversation.ts';
+export type { ConversationContext } from './conversation-context.ts';
 export { activityStreamsId, publicDocumentAt } from '../content/permalinks.ts';
 export { isListed, isServed } from '../content/served.ts';
 export { postObjectId } from '../content/guids.ts';
@@ -203,7 +204,8 @@ export type {
 export { HEALTH_PATH, mountHealth } from './health.ts';
 export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
-export { createRenderer, OPTIONAL_TEMPLATES, TEMPLATES } from './render.ts';
+export { createRenderer } from './render.ts';
+export { OPTIONAL_TEMPLATES, TEMPLATES } from './theme-templates.ts';
 export type { CreateRendererOptions, Listing, Renderer, SearchPage } from './render.ts';
 export { feedHref, homeHref, listingPageHref } from './listing-subject.ts';
 export { commentsFeedHref } from './paths.ts';

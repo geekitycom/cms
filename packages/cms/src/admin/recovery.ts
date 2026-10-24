@@ -33,7 +33,7 @@ import type { LoginThrottle } from '../web/throttle.ts';
  *   that user had outstanding and ends every session they had, because the
  *   ordinary reason to reset a password is that somebody else may have had it.
  * - **It cannot be a lever.** Requests are rate limited exactly as sign-ins
- *   are (TASK-47), on a throttle of their own, so a flood of recovery requests
+ *   are, on a throttle of their own, so a flood of recovery requests
  *   for one username cannot lock that person out of logging in.
  */
 

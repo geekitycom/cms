@@ -25,8 +25,8 @@ export function redemptionForm(body: Readonly<Record<string, unknown>>): Redempt
 }
 
 /**
- * Take the code a client posts and check it against what it was issued for
- * (TASK-159). The token endpoint (TASK-160) redeems codes through this too,
+ * Take the code a client posts and check it against what it was issued for.
+ * The token endpoint redeems codes through this too,
  * so the two cannot disagree about what makes a code good.
  *
  * The code is taken before it is checked, so a try with the wrong verifier,

@@ -35,8 +35,8 @@ import { feedExcerpt } from '../content/excerpt.ts';
  * others printed nothing. One derivation, done once per post and site, means
  * there is one answer to each of those questions and one place to change it.
  *
- * decision-12 is what each of those answers is, and the shape here is what
- * makes it unavoidable: there is one {@link FeedItem.id}, one
+ * Every format gives the same answer to each, and the shape here is what
+ * makes that unavoidable: there is one {@link FeedItem.id}, one
  * {@link FeedItem.terms} list and one {@link FeedItem.summary}, so a format
  * cannot print a second-best version of any of them. The one pair left,
  * {@link FeedItem.id} beside {@link FeedItem.link}, is two real things: what
@@ -46,10 +46,9 @@ import { feedExcerpt } from '../content/excerpt.ts';
 export interface FeedItem {
   /**
    * The post's name: the `guid` its front matter sets, else its ActivityStreams
-   * object id, which after decision-13 is the permalink, or the stored id a
-   * migrated post carries. decision-12 makes this every feed's key for the
-   * post, so all three formats print it: RSS as `guid`, Atom as `<id>` and
-   * JSON Feed as `id`.
+   * object id, which is the permalink, or the stored id a migrated post
+   * carries. This is every feed's key for the post, so all three formats print
+   * it: RSS as `guid`, Atom as `<id>` and JSON Feed as `id`.
    */
   id: string;
   /**
@@ -88,7 +87,7 @@ export interface FeedItem {
    * One list rather than two because no feed format distinguishes them: RSS has
    * a single `<category>`, Atom a single `<category term>` and JSON Feed a
    * single `tags`, which is exactly how WordPress publishes both taxonomies
-   * too. decision-12 says every format lists every term, and a model that
+   * too. Every format lists every term, and a model that
    * cannot say which vocabulary a term came from is a model no format can
    * quietly list half of.
    */
@@ -102,11 +101,11 @@ export interface FeedItem {
    */
   summary: string;
   /**
-   * What every format prints as the content: a review's item and rating
-   * (TASK-432), the post's photos (TASK-166), then its rendered body with
+   * What every format prints as the content: a review's item and rating,
+   * the post's photos, then its rendered body with
    * every relative URL in it made absolute. Each photo is a plain `<img>` of
    * the original, absolute on the site's base URL, with the alt text the page
-   * gives it (decision-10: a reader cannot resolve the site's variants), so a
+   * gives it (a reader cannot resolve the site's variants), so a
    * photo-only post does not read empty.
    */
   html: string;
@@ -127,12 +126,12 @@ export interface FeedItem {
    * The URL the post answers, when it is a reply: its `in-reply-to`, and only
    * when that is a URL a reader can follow ({@link replyTarget}). Atom writes
    * it as `thr:in-reply-to`, JSON Feed in its `_geekity` extension and RSS as
-   * the source namespace's `source:inReplyTo` (TASK-300).
+   * the source namespace's `source:inReplyTo`.
    */
   inReplyTo?: string | undefined;
   /**
    * The language the post is written in, when its front matter names one that
-   * is not the feed's own (TASK-154). A post in the feed's language says
+   * is not the feed's own. A post in the feed's language says
    * nothing, since every format already declares that once for the whole
    * feed. RSS writes it as `dc:language`, Atom as `xml:lang` on the entry and
    * JSON Feed as the item's `language`.
@@ -146,7 +145,7 @@ export interface FeedItem {
    */
   license?: ContentLicense | undefined;
   /**
-   * The post's recording (TASK-213), with every URL absolute on the site's
+   * The post's recording, with every URL absolute on the site's
    * base URL. RSS writes the main file as `<enclosure>` and the rest in the
    * Podcasting 2.0 namespace, Atom writes the main file as a
    * `rel="enclosure"` link, and JSON Feed lists every version as an
@@ -176,7 +175,7 @@ export interface FeedItem {
  * nothing was read from by its host and a cited image as one, and revision 12
  * kept the title of a titled post with no words,
  * and revision 13 escaped the RSS description as HTML text, and revision 14
- * pointed RSS `source:comments` at the direct replies' feed (TASK-324) —
+ * pointed RSS `source:comments` at the direct replies' feed —
  * would leave the validator where it was, and a reader polling with
  * `If-None-Match` would be handed a 304 that hides the new bytes.
  *
@@ -193,7 +192,7 @@ export interface FeedItemComments {
   page: string;
   /** The feed of the whole thread, which a reader polls for them. */
   feed: string;
-  /** How many replies answer the item directly, and the feed of only those (TASK-324). */
+  /** How many replies answer the item directly, and the feed of only those. */
   replies: { count: number; feed: string };
 }
 
@@ -210,7 +209,7 @@ export interface FeedItemContext {
   /** The media library, for a photo's alt text the post does not give. Empty when absent. */
   altTexts?: AltTextLibrary | undefined;
   /**
-   * What is stored about a page a post cites (decision-19), by its URL. A
+   * What is stored about a page a post cites, by its URL. A
    * citation with nothing stored names the page by its host.
    */
   replyContext?: ((target: string) => ReplyContext | undefined) | undefined;

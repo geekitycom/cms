@@ -12,11 +12,10 @@ export interface IdentitySite {
 }
 
 /**
- * The one user a me URL names, or `undefined` when it names nobody
- * (decision-23).
+ * The one user a me URL names, or `undefined` when it names nobody.
  *
  * `/author/{username}/` names that user. The root names the user the author
- * setting names, which makes it a solo author site (TASK-192); on a site with
+ * setting names, which makes it a solo author site; on a site with
  * several authors it is nobody's. Anything else names nobody, a query or a fragment
  * included.
  *
@@ -30,8 +29,7 @@ export function userForMe(me: string, site: IdentitySite): User | undefined {
 }
 
 /**
- * The me a sign-in hands back for `user`, who has just approved it
- * (decision-23).
+ * The me a sign-in hands back for `user`, who has just approved it.
  *
  * The URL the person typed when it names them, spelled canonically: the root
  * for the solo author who typed it, their author URL otherwise. A typed URL

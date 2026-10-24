@@ -114,13 +114,13 @@ function refused(message: string, field?: EditorField): Refused {
 }
 
 /**
- * The write path behind the editor and Micropub (TASK-164): one form in, one
+ * The write path behind the editor and Micropub: one form in, one
  * file out, announced to every subscriber.
  *
  * The order matters: the form is checked before anything is touched, the
  * on-disk file is re-hashed and compared with the hash the form loaded with
- * (doc-1's conflict rule), and only then is a file written. A write that is
- * refused leaves the content directory exactly as it was.
+ * (the conflict rule: files win), and only then is a file written. A write that
+ * is refused leaves the content directory exactly as it was.
  */
 export async function writeDocument(
   site: DocumentSite,
@@ -199,7 +199,7 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
   if ('error' in located) return refused(located.error, located.field);
   const { location } = located;
 
-  // TASK-207: a pin is new when the file does not carry one yet, and only a
+  // A pin is new when the file does not carry one yet, and only a
   // new one can take an author past Mastodon's limit.
   if (form.pinned && (document === undefined || pinnedAt(document) === undefined)) {
     const users = site.users();
@@ -213,9 +213,9 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
     }
   }
 
-  // TASK-141: an image nobody described is a problem to fix before readers
+  // An image nobody described is a problem to fix before readers
   // meet it. A draft is not checked, since nobody meets a draft.
-  // A photo counts too, unless the media library describes it (TASK-166).
+  // A photo counts too, unless the media library describes it.
   const library = readAltTexts(contentDir);
   const undescribed = draft
     ? []
@@ -241,7 +241,7 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
     return refused('An event needs a name. Put it in Title.', 'editor-title');
   }
 
-  // decision-11: what the file gets is a UTC instant, and an offset-less field
+  // What the file gets is a UTC instant, and an offset-less field
   // is the site's own wall clock rather than the server's.
   const typed = kind.dated ? (form.date === '' ? store.now().toISOString() : form.date) : undefined;
   if (typed !== undefined && !/^\d{4}-\d{2}-\d{2}/.test(typed)) {
@@ -578,7 +578,7 @@ function promisedDocument(
 }
 
 /**
- * The URLs a document is saved as having lived at (TASK-127).
+ * The URLs a document is saved as having lived at.
  *
  * Every entry names the document itself rather than the next hop, so a chain
  * of renames collapses by construction: the URL it is leaving joins the ones
@@ -601,9 +601,9 @@ function formerPermalinks(
 
 /**
  * The `activitypub` block to write, which pins the object id when a promised
- * post moves (decision-20).
+ * post moves.
  *
- * decision-13 makes a post's object id its permalink, and a fediverse server
+ * A post's object id is its permalink, and a fediverse server
  * cannot rename an object it holds. So the URL the post is leaving is written
  * as its stored id, and the stored-id path does the rest: a peer at the old
  * URL still gets the `Article`, a browser there is sent on, and every `Update`
@@ -629,7 +629,7 @@ function keptIdentity(
  * The extra front matter to write, which pins the feed guid when a promised
  * page moves.
  *
- * A page has no object id, so its feed guid is its permalink (decision-12),
+ * A page has no object id, so its feed guid is its permalink,
  * and the `/replies/` feed a reader subscribed to is keyed by that guid. The
  * URL the page is leaving is written as its stored `guid`, as a moved post's
  * is written as its `activitypub.id`.
@@ -651,8 +651,8 @@ function keptGuid(
 /**
  * The permalink to write.
  *
- * A permalink is explicit in the file and the stored value is what counts
- * (doc-2), so one that was customised is never quietly rewritten. One that is
+ * A permalink is explicit in the file and the stored value is what counts,
+ * so one that was customised is never quietly rewritten. One that is
  * still the URL its old slug and date implied follows them to the new ones,
  * which is what makes renaming a slug in the editor do what it looks like it
  * does.
@@ -716,8 +716,8 @@ function previousDefaultPermalink(
  * October rather than the September UTC was still on.
  *
  * For a document whose date has not moved it is the day already in its
- * filename. That is the whole of decision-11's promise that changing the
- * timezone setting cannot move an existing URL: the instant is the same, the
+ * filename. That is the whole of the promise that changing the timezone
+ * setting cannot move an existing URL: the instant is the same, the
  * zone is a lens, and the day this post was filed under was decided once, when
  * it was written, and is on disk where no setting can reach it.
  */
@@ -758,9 +758,9 @@ function normalizePermalink(value: string): string | undefined {
  *
  * The submitted value is resolved through the same rule the public site reads
  * it by ({@link userForAuthor}), and what is written is that user's login: so
- * a file carrying a display name from before decision-14 is rewritten as a
- * username the first time somebody saves it, which is exactly the "until it is
- * next saved" doc-2 promises.
+ * a file carrying a display name from before every user became an actor is
+ * rewritten as a username the first time somebody saves it, which is exactly
+ * the "until it is next saved" the content format promises.
  *
  * A value naming nobody this site has changes nothing. There is no form this
  * CMS renders that could submit one — the select only ever offers the users
@@ -788,7 +788,7 @@ export interface Conflict {
 }
 
 /**
- * Whether the file has moved on since the form loaded, per doc-1: files win,
+ * Whether the file has moved on since the form loaded. Files win,
  * and an edit made behind the editor's back is never silently overwritten.
  *
  * The file is read and re-parsed rather than trusted to the index, so the

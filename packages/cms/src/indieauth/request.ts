@@ -1,8 +1,8 @@
 import { clientIdentifier, sameClient } from '../util/client-id.ts';
 
 /**
- * The scopes a client may ask for: the profile ones (TASK-158) and the
- * Micropub ones a token is issued for (TASK-160).
+ * The scopes a client may ask for: the profile ones and the
+ * Micropub ones a token is issued for.
  */
 export const SCOPES = ['profile', 'email', 'create', 'update', 'delete', 'media'] as const;
 

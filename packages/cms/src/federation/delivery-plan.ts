@@ -37,7 +37,7 @@ export interface ActivityAbout {
 }
 
 /**
- * What a version of a post is to a peer (decision-28), and the id that names
+ * What a version of a post is to a peer, and the id that names
  * it: the post's object id, or its `Like` or `Announce`'s activity id, which
  * carries the id of what it cites.
  */

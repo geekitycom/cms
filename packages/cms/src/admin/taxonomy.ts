@@ -2,7 +2,7 @@
  * Managing the terms themselves: renaming a tag, merging one into another, and
  * deleting one.
  *
- * The files are the truth (doc-1), so every one of those is a rewrite of the
+ * The files are the truth, so every one of those is a rewrite of the
  * front matter of every file carrying the term rather than an edit of a row.
  * The whole of the change to one file's term list is
  * {@link applyTermChange}; everything else here is what turns that into a
@@ -218,7 +218,7 @@ export interface TermRewriteReport {
  * is `undefined`, so it carries neither.
  *
  * Each file is read and re-parsed from disk rather than taken out of the index
- * (doc-1: the files are the truth). The index can be a moment behind — a hand
+ * (the files are the truth). The index can be a moment behind — a hand
  * edit the watcher has not seen yet — and a bulk rewrite that trusted it would
  * quietly put that edit back. A file that has gone or will not parse is
  * skipped and reported rather than overwritten with what the index remembers.
@@ -380,8 +380,8 @@ export function changedTerms(
  * already had rather than jumping to the source's; a `to` of `undefined` is a
  * delete. A list that does not carry `from` comes back as it was.
  *
- * `keyOf` says which spellings are one term: every casing of a tag is one
- * (TASK-308), so a rename reaches all of them.
+ * `keyOf` says which spellings are one term: every casing of a tag is one,
+ * so a rename reaches all of them.
  */
 export function applyTermChange(
   terms: readonly string[],

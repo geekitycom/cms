@@ -27,7 +27,7 @@ import { authorContext, siteAuthorContext } from '../site/authors.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
 import { siteTimezone } from '../theme/site-data.ts';
 import type { Archive } from './listing-subject.ts';
-import { commentedPost } from './conversation.ts';
+import { commentedPost } from './conversation-lookup.ts';
 import { markdownCommentThread } from './markdown-conversation.ts';
 import {
   bioOf,
@@ -44,8 +44,9 @@ import type { MarkdownChrome, MarkdownFeed, MarkdownLink, MarkdownUrl } from './
 import { representationHref } from './negotiate.ts';
 import type { TextFormat } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
-import { STATUS_PAGES } from './render.ts';
-import type { StatusPageName, ThemeText } from './render.ts';
+import type { ThemeText } from './render.ts';
+import { STATUS_PAGES } from './theme-templates.ts';
+import type { StatusPageName } from './theme-templates.ts';
 import { classifyPath } from './paths.ts';
 import { documentLabel, encodePath } from './request.ts';
 import { SEARCH_PATH, snippetMarkdown } from './search.ts';

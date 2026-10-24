@@ -9,10 +9,10 @@ import { findAccessToken, recordUse, verifyAccessToken } from '../indieauth/toke
 import type { Audience, StoredToken } from '../indieauth/tokens.ts';
 
 /**
- * What a route asks of a token (TASK-161).
+ * What a route asks of a token.
  *
  * `audience` is the resource server checking it, which decides whether a
- * token bound to a resource, or bound to none, is good here (decision-24).
+ * token bound to a resource, or bound to none, is good here.
  * The authorization server's own endpoints, introspection and userinfo, take
  * any live token it issued, wherever the token is bound.
  */

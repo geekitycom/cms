@@ -1,10 +1,7 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, SQLInputValue, StatementSync } from 'node:sqlite';
 
-/** How {@link FollowerStore.listFollowers} and its inbox-log sibling page. */
 export interface ListPageOptions {
-  /** Largest number of rows to return. Everything, when it is not given. */
   limit?: number | undefined;
-  /** How many rows to skip first. Zero when it is not given. */
   offset?: number | undefined;
 }
 
@@ -14,24 +11,39 @@ export interface ListPageOptions {
  */
 export const NO_LIMIT = -1;
 
-/**
- * A `TEXT` column that may be `NULL`, as a string or `null`.
- *
- * Anything that is not text is read as `null` rather than stringified: every
- * column this is used on is declared `TEXT`, so a value of another shape is a
- * row somebody else wrote, and `[object Object]` is a worse answer than none.
- */
+export type Row = Record<string, unknown>;
+
+export function allRows<T>(
+  statement: StatementSync,
+  map: (row: Row) => T,
+  ...parameters: SQLInputValue[]
+): T[] {
+  return statement.all(...parameters).map(map);
+}
+
+export function getRow<T>(
+  statement: StatementSync,
+  map: (row: Row) => T,
+  ...parameters: SQLInputValue[]
+): T | undefined {
+  const row = statement.get(...parameters);
+  return row === undefined ? undefined : map(row);
+}
+
+export function readCount(statement: StatementSync, ...parameters: SQLInputValue[]): number {
+  return getRow(statement, (row) => Number(row['count'] ?? 0), ...parameters) ?? 0;
+}
+
 export function nullableText(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-/** A stored enumeration value, or the fallback for one this version does not know. */
 export function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
 export function countByStatus<S extends string>(
-  rows: readonly Record<string, unknown>[],
+  rows: readonly Row[],
   statuses: readonly S[],
   statusOf: (value: unknown) => S,
 ): Record<S, number> {
@@ -40,13 +52,6 @@ export function countByStatus<S extends string>(
   return counts;
 }
 
-/**
- * Run a body with every write in it committed together, or none of them.
- *
- * The rebuilds are what need it: emptying an index and filling it again is
- * one step to everything reading it, and a half-emptied `followers` is a
- * site that has quietly stopped delivering to half its followers.
- */
 export function inTransaction(db: DatabaseSync, body: () => void): void {
   db.exec('BEGIN');
   try {

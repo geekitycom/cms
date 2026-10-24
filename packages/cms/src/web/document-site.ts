@@ -43,7 +43,7 @@ export function documentSiteFrom(
   };
 }
 
-/** The signed-in user's login, which is what doc-2's `author` holds. */
+/** The signed-in user's login, which is what a post's `author` holds. */
 export function currentUsername(c: Context<GeekityEnv>): string | undefined {
   const userId = c.var.session?.userId;
   if (userId == null) return undefined;

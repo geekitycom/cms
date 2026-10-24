@@ -2,7 +2,16 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 
-import { countByStatus, inTransaction, nullableText, oneOf } from './rows.ts';
+import {
+  allRows,
+  countByStatus,
+  getRow,
+  inTransaction,
+  nullableText,
+  oneOf,
+  readCount,
+} from './rows.ts';
+import type { Row } from './rows.ts';
 
 /** How one webmention this site sent to one page ended. */
 export const WEBMENTION_SEND_STATUSES = ['sent', 'none', 'failed'] as const;
@@ -22,7 +31,7 @@ export type WebmentionSendStatus = (typeof WEBMENTION_SEND_STATUSES)[number];
  * How one attempt to tell one page that a post links to it ended.
  *
  * The whole of what SQLite keeps about the webmentions a site has sent, and a
- * cache like every other outcome here (decision-9): the links are in the
+ * cache like every other outcome here: the links are in the
  * post's file, so a database thrown away costs the record of how yesterday's
  * notification went and nothing else. One row per (post, target), because the
  * question it answers is "where does this post stand with that page" and a
@@ -65,7 +74,7 @@ export interface WebmentionStore {
   listSentWebmentionSources(): Pick<SentWebmention, 'slug' | 'source'>[];
   /**
    * File what one post sent from one source under another post, as a post
-   * whose slug changed is (TASK-332). Where both hold an outcome for one
+   * whose slug changed is. Where both hold an outcome for one
    * target, the later attempt is the one kept.
    */
   moveSentWebmentions(from: Pick<SentWebmention, 'slug' | 'source'>, to: string): void;
@@ -118,7 +127,9 @@ export function openWebmentionStore(db: DatabaseSync, clock: Clock): WebmentionS
   };
   return {
     recordSentWebmention(sent) {
-      const row = statements.recordSentWebmention.get(
+      const recorded = getRow(
+        statements.recordSentWebmention,
+        toSentWebmention,
         sent.slug,
         sent.source,
         sent.target,
@@ -126,21 +137,22 @@ export function openWebmentionStore(db: DatabaseSync, clock: Clock): WebmentionS
         sent.status,
         sent.error,
         sent.attemptedAt ?? clock().toISOString(),
-      ) as Record<string, unknown> | undefined;
-      if (row === undefined) {
+      );
+      if (recorded === undefined) {
         throw new Error(`The webmention to ${sent.target} could not be recorded.`);
       }
-      return toSentWebmention(row);
+      return recorded;
     },
 
     listSentWebmentions(slug) {
-      const rows = statements.listSentWebmentions.all(slug) as Record<string, unknown>[];
-      return rows.map(toSentWebmention);
+      return allRows(statements.listSentWebmentions, toSentWebmention, slug);
     },
 
     listSentWebmentionSources() {
-      const rows = statements.listSentWebmentionSources.all() as Record<string, unknown>[];
-      return rows.map((row) => ({ slug: String(row['slug']), source: String(row['source']) }));
+      return allRows(statements.listSentWebmentionSources, (row) => ({
+        slug: String(row['slug']),
+        source: String(row['source']),
+      }));
     },
 
     moveSentWebmentions(from, to) {
@@ -152,17 +164,20 @@ export function openWebmentionStore(db: DatabaseSync, clock: Clock): WebmentionS
     },
 
     countSentWebmentionsByStatus(slug) {
-      const rows = statements.countSentWebmentionsByStatus.all(slug) as Record<string, unknown>[];
-      return countByStatus(rows, WEBMENTION_SEND_STATUSES, webmentionSendStatus);
+      return countByStatus(
+        statements.countSentWebmentionsByStatus.all(slug),
+        WEBMENTION_SEND_STATUSES,
+        webmentionSendStatus,
+      );
     },
 
     countFailedWebmentionsSince(since) {
-      return Number(statements.countFailedWebmentionsSince.get(since)?.['count'] ?? 0);
+      return readCount(statements.countFailedWebmentionsSince, since);
     },
   };
 }
 
-function toSentWebmention(row: Record<string, unknown>): SentWebmention {
+function toSentWebmention(row: Row): SentWebmention {
   return {
     slug: String(row['slug']),
     source: String(row['source']),

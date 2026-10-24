@@ -15,7 +15,7 @@ import { shareImage } from './share-image.ts';
 import { formatDate } from '../theme/templates.ts';
 
 /**
- * The oEmbed provider (TASK-205): what WordPress, Discourse and the rest ask
+ * The oEmbed provider: what WordPress, Discourse and the rest ask
  * to turn a pasted post URL into a card.
  *
  * Under `/_geekity/`, the CMS's own prefix, so no permalink can take it. Each
@@ -26,7 +26,7 @@ import { formatDate } from '../theme/templates.ts';
 export const OEMBED_PATH = '/_geekity/oembed';
 
 /**
- * The embed view's URL (TASK-208): the card alone as a page, with the
+ * The embed view's URL: the card alone as a page, with the
  * document's absolute URL in `?url=`, and the one response on the site another
  * origin may frame.
  *
@@ -110,7 +110,7 @@ export interface EmbedSubject {
  * inside has told it how tall it is. The thumbnail is the
  * document's own `image`, never the site's avatar, and only when its size is
  * recorded: the spec requires the size with the URL, and a render never opens
- * an image (decision-10). One wider or taller than the consumer allows is left
+ * an image. One wider or taller than the consumer allows is left
  * out, because the spec says it must respect `maxwidth` and `maxheight` too.
  */
 export function oEmbedFor(

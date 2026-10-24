@@ -1,5 +1,5 @@
 /**
- * `@geekity/plugin-post-summary` (decision-33): Suggest title and Suggest
+ * `@geekity/plugin-post-summary`: Suggest title and Suggest
  * description beside the editor's fields. A press sends the draft to the
  * language model `@geekity/plugin-llm` connects to and shows its answer, which
  * the author accepts into the field or dismisses. Nothing is sent on save or

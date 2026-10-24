@@ -8,7 +8,7 @@ import type { CommentChecker, CommentReport, CommentSubmission } from '../forms/
 /**
  * Akismet, as the one {@link CommentChecker} this package ships.
  *
- * The CMS knows about spam services through a seam and nothing else (doc-6):
+ * The CMS knows about spam services through a seam and nothing else:
  * everything below implements that interface and reaches one HTTP API. Take
  * this file away and comments still work, still queue, and still moderate.
  *
@@ -105,7 +105,7 @@ export interface AkismetCheckerOptions {
    *
    * A function rather than a string because the setting is a file the admin
    * rewrites: reading it when a comment arrives is what makes a change to it
-   * take effect at once, the way every other setting does (decision-9).
+   * take effect at once, the way every other setting does.
    */
   language: () => Promise<string>;
   /** The HTTP client. Defaults to the global `fetch`; a test hands in its own. */
@@ -129,8 +129,8 @@ export interface AkismetCheckerOptions {
  * without sending anything, which is what lets a key pasted into the settings
  * screen start working on the very next comment.
  *
- * Nothing here throws. The seam would catch it and call it `unknown` anyway
- * (doc-6), but then the log would say only that a checker refused to answer;
+ * Nothing here throws. The seam would catch it and call it `unknown` anyway,
+ * but then the log would say only that a checker refused to answer;
  * catching it here is what puts Akismet's own words — a 503, a
  * `X-akismet-debug-help` — in front of whoever has to work out why the queue
  * has stopped being filtered.
@@ -188,8 +188,8 @@ export function createAkismetChecker(options: AkismetCheckerOptions): CommentChe
       }
 
       // `false` is not `ham`. Akismet saw nothing wrong; whether that means
-      // approved or pending is TASK-50's rule about who has commented before,
-      // and this has no business overruling it.
+      // approved or pending is the moderation rule about who has commented
+      // before, and this has no business overruling it.
       return 'unknown';
     },
 
@@ -247,7 +247,7 @@ function checkFields(
  * As close to the original `comment-check` as this site can get, which is what
  * Akismet asks for — but not all the way there. `user_ip`, `user_agent` and
  * `referrer` are gone, because a stored comment keeps a salted hash of the
- * address and nothing else (doc-6): the file is published with the site, and
+ * address and nothing else: the file is published with the site, and
  * an address in it would be a reader's home written into a public repository.
  * The content, the author and the permalink are what is left, and they are
  * what a correction is mostly about.

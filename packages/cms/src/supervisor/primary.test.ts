@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createSupervisor, PLUGIN_POLL_MS, PLUGIN_SETTLE_MS } from './primary.ts';
+import { PLUGIN_POLL_MS, PLUGIN_SETTLE_MS } from './plugin-watcher.ts';
+import { createSupervisor } from './primary.ts';
 import type { WorkerHandle } from './primary.ts';
 import type { SupervisorMessage } from './protocol.ts';
 import type { ReloadOutcome } from './supervision.ts';

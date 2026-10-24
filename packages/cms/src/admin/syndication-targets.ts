@@ -1,8 +1,8 @@
 /**
- * Posts > Syndication (TASK-218): the services a post can be sent to, as
+ * Posts > Syndication: the services a post can be sent to, as
  * `content/_data/syndicationTargets.json` declares them.
  *
- * The file stays the source of truth (decision-9, decision-26). The screen
+ * The file stays the source of truth. The screen
  * reads it on every request and writes it back, so the editor's checkboxes,
  * Micropub's `q=syndicate-to` and the webmention sender, which all read the
  * file through `syndicationTargetsReader`, offer a change on the next request.

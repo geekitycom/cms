@@ -1,5 +1,5 @@
 /**
- * `geekity plugin add` and `geekity plugin remove` (decision-33): a plugin
+ * `geekity plugin add` and `geekity plugin remove`: a plugin
  * package's bundle, fetched from the npm registry and unpacked into the
  * plugins folder, with no npm and no `package.json` on the machine.
  *

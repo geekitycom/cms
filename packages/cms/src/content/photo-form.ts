@@ -1,11 +1,11 @@
 /**
- * The post editor's photo rows (TASK-166): each photo's address and alt text,
+ * The post editor's photo rows: each photo's address and alt text,
  * as a form has them and as the front matter gets them.
  *
  * The rows are numbered, so a plain form with no script carries any number of
  * them; the editor adds a blank one to fill in, and a row whose address was
  * emptied is a photo taken out. An empty alt text leaves the photo to the
- * media library's (TASK-141), so a library picture is described in one place.
+ * media library's, so a library picture is described in one place.
  */
 import path from 'node:path';
 

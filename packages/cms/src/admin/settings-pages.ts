@@ -12,7 +12,7 @@
  * Six of the seven are Settings' own children. Federation's is a settings page
  * in every other respect — the same fields, the same save, the same refusals —
  * but the menu files it under the Federation section, beside the followers it
- * is about (TASK-109), so it is in {@link ALL_SETTINGS_PAGES} and not in
+ * is about, so it is in {@link ALL_SETTINGS_PAGES} and not in
  * {@link SETTINGS_PAGES}. Both lists matter: {@link ALL_SETTINGS_PAGES} is
  * what the mount registers and what "every setting is on exactly one page" is
  * checked against, and {@link SETTINGS_PAGES} is what the Settings menu has to

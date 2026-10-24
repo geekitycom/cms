@@ -15,7 +15,7 @@ import { siteLocale, siteTimezone } from '../theme/site-data.ts';
 import { hiddenReason } from '../content/served.ts';
 import type { HiddenReason } from '../content/served.ts';
 import { PRIVATE_CACHE_CONTROL } from '../web/negotiate.ts';
-import { drawnForSignedInReader } from '../web/render.ts';
+import { drawnForSignedInReader } from '../web/render-scope.ts';
 import { requestPath } from '../web/request.ts';
 import { formatDate } from '../theme/templates.ts';
 
@@ -29,8 +29,7 @@ const KINDS: Readonly<Record<DocumentType, DocumentScreens>> = {
 let environment: Environment | undefined;
 
 /**
- * The admin bar across the top of the public site, for a signed-in user
- * (TASK-183).
+ * The admin bar across the top of the public site, for a signed-in user.
  *
  * Where the public site's pages learn who is reading them. An anonymous request
  * goes through untouched, so what everybody else is sent, headers and bytes, is what
@@ -45,7 +44,7 @@ let environment: Environment | undefined;
  *
  * Not inside `/admin`, which has a bar of its own and a CSP that would refuse
  * this one's inline stylesheet. Not on a response marked `frameable` either:
- * the embed view (TASK-208) is put in other sites' pages, so it must look the
+ * the embed view is put in other sites' pages, so it must look the
  * same whoever's browser fetched it, and carry no session's CSRF token.
  */
 export const publicAdminBar: MiddlewareHandler<GeekityEnv> = async (c, next) => {
@@ -129,7 +128,7 @@ function hiddenBecause(c: Context<GeekityEnv>, document: Document, reason: Hidde
 }
 
 /**
- * `html` with every `<script type="speculationrules">` taken out (TASK-140).
+ * `html` with every `<script type="speculationrules">` taken out.
  *
  * A signed-in reader's pages are drawn for them alone and never stored, so a
  * prefetch is a second render nobody may see, and a speculative request that

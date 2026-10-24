@@ -11,7 +11,7 @@ import type { FederationContextData } from './federation.ts';
 import { federatedUsernames, userDirectory } from './records.ts';
 
 /**
- * Quote approvals (FEP-044f), as the files decision-9 makes the truth.
+ * Quote approvals (FEP-044f), as files, which are the truth.
  *
  * Mastodon 4.5 shows a quote only once the quoted author's server has stamped
  * it: an `Accept` of the `QuoteRequest` whose `result` is a

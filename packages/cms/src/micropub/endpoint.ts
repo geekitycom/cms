@@ -105,7 +105,7 @@ type Query = (typeof QUERY_NAMES)[number];
 interface QueryContext {
   readonly baseUrl: string;
   readonly store: DocumentLookup & TaxonomyReader & IndexClock;
-  /** The syndication targets the site declares (TASK-155). */
+  /** The syndication targets the site declares. */
   readonly targets: readonly SyndicationTarget[];
   readonly locations: PostLocations;
   readonly kept: PermalinkFile<KeptProperties>;
@@ -197,7 +197,7 @@ function postAt(
   return document;
 }
 
-/** The site's targets as a client offers them: a target's id is its uid (decision-26). */
+/** The site's targets as a client offers them: a target's id is its uid. */
 function offered(targets: readonly SyndicationTarget[]): { uid: string; name: string }[] {
   return targets.map(({ id, name }) => ({ uid: id, name }));
 }
@@ -226,8 +226,8 @@ const MICROPUB_INSUFFICIENT_SCOPE_STATUS = 401;
 
 /**
  * The bearer guard for a token bound to this site, the resource its protected
- * resource metadata names, or bound to none, as Micropub clients' tokens are
- * (decision-24), and granted any one of `scopes` when they are named. Built per
+ * resource metadata names, or bound to none, as Micropub clients' tokens are,
+ * and granted any one of `scopes` when they are named. Built per
  * request because the base URL is a setting.
  */
 export function requireSiteToken(scopes?: Scopes): MiddlewareHandler<BearerEnv> {
@@ -473,11 +473,11 @@ async function moved(
 }
 
 /**
- * The Micropub endpoint: the queries a client asks before it posts (TASK-163)
- * and `q=source` (TASK-167), which any live token of this site's may ask
- * whatever its scopes, and the create (TASK-164), update, delete and undelete
- * (TASK-167), each needing its own scope. A token bound to another resource
- * is refused either way (decision-24). Behind the maintenance gate, like the
+ * The Micropub endpoint: the queries a client asks before it posts
+ * and `q=source`, which any live token of this site's may ask
+ * whatever its scopes, and the create, update, delete and undelete,
+ * each needing its own scope. A token bound to another resource
+ * is refused either way. Behind the maintenance gate, like the
  * IndieAuth endpoints beside it.
  */
 export function mountMicropub(app: Hono<GeekityEnv>): void {

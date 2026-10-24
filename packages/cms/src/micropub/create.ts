@@ -13,7 +13,7 @@ import type { SyndicationTarget } from '../content/syndicate-to.ts';
 import { cleanMarkdown, markdownFromHtml } from '../content/html-to-markdown.ts';
 
 /**
- * A Micropub create (TASK-164), whichever way it was encoded: the one
+ * A Micropub create, whichever way it was encoded: the one
  * microformats2 type it names and each property's values.
  */
 export interface CreateRequest {

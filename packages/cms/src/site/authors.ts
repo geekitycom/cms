@@ -6,9 +6,9 @@ import { relText } from './navigation.ts';
  * Where a person is on this site: their archive, their feeds, and which user
  * a post's `author` names.
  *
- * decision-14 makes every user an actor at `{baseUrl}/author/{username}/`, and
+ * Every user is an actor at `{baseUrl}/author/{username}/`, and
  * an actor id has to be a URL that already means something — so the author URL
- * is a page first (TASK-67) and an actor second (TASK-68). Everything that
+ * is a page first and an actor second. Everything that
  * builds or reads one of those URLs goes through this module, so the archive,
  * its feeds, the byline a theme prints and, later, the dispatcher Fedify
  * registers cannot disagree about where a person lives.
@@ -36,7 +36,7 @@ export function authorName(users: readonly User[], author: string | undefined): 
 
 /**
  * Who the site credits: the display name of the user `author` in `site.json`
- * names, else the site title (TASK-192).
+ * names, else the site title.
  *
  * A site whose author names nobody has several authors, and the site itself
  * stands in for them in a footer or a feed.
@@ -78,7 +78,7 @@ export interface PublishedProfileLink extends ProfileLink {
    * Always something, because `rel="me"` is what the Links box is for — it is
    * how Mastodon verifies a profile field pointing back at this site and how
    * IndieAuth knows the link is theirs — and it is added whether or not
-   * anybody typed it (TASK-114). A theme prints this attribute and nothing
+   * anybody typed it. A theme prints this attribute and nothing
    * else, so a typed `me` is not a second one.
    */
   readonly rel: string;
@@ -119,7 +119,7 @@ export function profileContext(user: User): AuthorContext {
  * nobody this site has.
  *
  * What a theme is given as `siteAuthor` on a page that is about nobody in
- * particular (decision-16): the site's own identity, the same object a byline
+ * particular: the site's own identity, the same object a byline
  * is, so the visible h-card, the footer's `rel="me"` links and the structured
  * data all read one profile and cannot drift.
  *
@@ -142,7 +142,7 @@ export function siteAuthorContext(
  * it names nobody at all.
  *
  * Always an object rather than sometimes a string, which is the change a theme
- * sees (TASK-67): `author.name` is what to print and `author.url` is where to
+ * sees: `author.name` is what to print and `author.url` is where to
  * link, and a name resolving to no user has the first and not the second. A
  * theme therefore writes one thing — `{% if author.url %}` — instead of
  * working out whether the front matter happened to hold a login.

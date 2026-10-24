@@ -9,10 +9,10 @@ import { absoluteUrl } from '../util/url.ts';
  * Where an interaction came from.
  *
  * `activitypub` is a reply, a like or a boost the site's inbox was sent.
- * `comment` is the form under the post (TASK-50). `webmention` is another
- * site's post pointing at this one (TASK-51). `post` is a reply post a user of
+ * `comment` is the form under the post. `webmention` is another
+ * site's post pointing at this one. `post` is a reply post a user of
  * this site wrote, whose `in-reply-to` names the post or something said under
- * it (TASK-300). All four are the same shape and thread together, which is the
+ * it. All four are the same shape and thread together, which is the
  * whole point of naming the source rather than keeping four lists.
  */
 export type InteractionSource = 'activitypub' | 'comment' | 'webmention' | 'post';
@@ -25,7 +25,7 @@ export type InteractionSource = 'activitypub' | 'comment' | 'webmention' | 'post
  * webmention's word for a boost and is grouped with them, because to a reader
  * they are the same act under two vocabularies. `mention` is the one thing
  * none of the others is: somebody's page linking to this one without answering
- * it (TASK-51).
+ * it.
  */
 export type InteractionKind = 'reply' | 'like' | 'boost' | 'repost' | 'mention';
 
@@ -50,13 +50,13 @@ export interface InteractionAuthor {
   readonly url: string | null;
   /**
    * Their avatar, when the site knows one: always a same-origin path, never
-   * the remote URL, so a reader's browser asks this site for it (TASK-134).
+   * the remote URL, so a reader's browser asks this site for it.
    */
   readonly avatar: string | null;
   /** Their id, which is what identifies them however they are named. */
   readonly actorId: string | null;
   /**
-   * Where to follow what they publish, when the site knows (TASK-324): a
+   * Where to follow what they publish, when the site knows: a
    * webmention author's h-card or site, or a site user's author feed. A
    * visitor's own website is only what they typed, and a fediverse actor
    * publishes no feed the site knows of, so both are `null`.
@@ -64,7 +64,7 @@ export interface InteractionAuthor {
   readonly feed: string | null;
   /**
    * The site user they are, by username, else `null`: whoever a reply post
-   * is by, or whoever a stored comment names (TASK-337). A theme vouches for
+   * is by, or whoever a stored comment names. A theme vouches for
    * the link of a site user and of nobody else.
    */
   readonly username: string | null;
@@ -75,7 +75,7 @@ export interface Interaction {
   /** What it is called: the note's id, and what a reply to it names. */
   readonly id: string;
   /**
-   * Its key (decision-51): a stored comment's id, else the key of its guid.
+   * Its key: a stored comment's id, else the key of its guid.
    * The one thing in its anchor, `#comment-{key}`, and its replies feed,
    * `/replies/{key}/`.
    */
@@ -87,7 +87,7 @@ export interface Interaction {
    */
   readonly guid: string;
   /**
-   * Whether it was imported from another system (TASK-336): shown in the
+   * Whether it was imported from another system: shown in the
    * thread like any other, and carried by no feed and no reply count.
    */
   readonly migrated: boolean;
@@ -110,16 +110,16 @@ export interface Interaction {
   /** The replies to this one, oldest first. */
   readonly replies: ThreadReply[];
   /**
-   * What a reply that is an RSVP says (TASK-198): its `rsvp` value and the
+   * What a reply that is an RSVP says: its `rsvp` value and the
    * words for it. A webmention carries one, and so does a fediverse answer
-   * to an event (TASK-200).
+   * to an event.
    */
   readonly rsvp?: { readonly value: RsvpValue; readonly label: string };
 }
 
 /**
  * A comment a reader may not see, standing in the thread for the replies to it
- * that a reader may (TASK-325): it is waiting for a moderator, filed as spam or
+ * that a reader may: it is waiting for a moderator, filed as spam or
  * deleted. It names nobody and says nothing, and there is one only while a
  * visible reply sits under it.
  */
@@ -163,7 +163,7 @@ export interface Conversation {
   /** The pages that linked here without answering, oldest first. */
   readonly mentions: Interaction[];
   /**
-   * The answers to an event (TASK-200), grouped as going, maybe, interested
+   * The answers to an event, grouped as going, maybe, interested
    * and not going, each group oldest first and only when it has somebody in
    * it. Empty on a post that is no event.
    */
@@ -181,7 +181,7 @@ export interface RsvpGroup {
 }
 
 /**
- * Something said in a conversation, with the reply it sits under (TASK-324):
+ * Something said in a conversation, with the reply it sits under:
  * what the comments feeds name as what it answers.
  */
 export interface Placed extends Interaction {
@@ -198,8 +198,8 @@ export interface SiteInteraction extends Placed {
   /** The post it answers. */
   readonly post: Document;
   /**
-   * Who wrote the reply it answers, when it answers one a reader can see
-   * (TASK-318), and `null` for an answer to the post itself.
+   * Who wrote the reply it answers, when it answers one a reader can see,
+   * and `null` for an answer to the post itself.
    */
   readonly replyingTo: string | null;
 }
@@ -228,7 +228,7 @@ export interface ConversationReader {
   /**
    * How many visible replies answer each of these documents directly, by
    * permalink: what a reader following `source:comments` finds in its
-   * `/replies/` feed (TASK-324). Read off each thread, since that is the only
+   * `/replies/` feed. Read off each thread, since that is the only
    * reading that knows which replies a reader sees and where they sit.
    */
   readonly counts: (documents: readonly Document[], site: ConversationSite) => Map<string, number>;
@@ -242,14 +242,14 @@ export interface ConversationReader {
    */
   readonly latest: (limit: number, site: ConversationSite) => SiteInteraction[];
   /**
-   * One native comment as its own page reads it (TASK-318), or `undefined`
+   * One native comment as its own page reads it, or `undefined`
    * for an id that names no approved comment written on this site. The post
    * comes back in whatever state it is in, so the page can answer as the post
    * itself would.
    */
   readonly comment: (id: string, site: ConversationSite) => CommentThread | undefined;
   /**
-   * The reply on a post that a URL names, or `undefined` (TASK-319):
+   * The reply on a post that a URL names, or `undefined`:
    * a comment by its own page or by the post's `#comment-` anchor, a
    * webmention by the page it was sent from, a fediverse reply by its url or
    * its id. Every stored comment counts whatever its status, because what a
@@ -265,24 +265,24 @@ export interface ConversationReader {
    * What a URL names on this site, while a reader may see it: a reply (a
    * comment by its page or its anchor, a webmention by the page it was sent
    * from, a fediverse reply by its id or url, a reply post by its permalink)
-   * with the post it is on, or a served post or page itself (TASK-300,
-   * TASK-326). What a reply post answering it cites, instead of fetching a page.
+   * with the post it is on, or a served post or page itself. What a reply post
+   * answering it cites, instead of fetching a page.
    */
   readonly heldAt: (url: string, site: ConversationSite) => HeldAt | undefined;
   /**
-   * What a key names and its direct replies (TASK-324, decision-51), or
+   * What a key names and its direct replies, or
    * `undefined`: a served post or page, or a reply a reader can see.
    */
   readonly repliesTo: (key: string, site: ConversationSite) => RepliesOf | undefined;
   /**
-   * The document whose conversation a URL is in (TASK-320): the post a
+   * The document whose conversation a URL is in: the post a
    * comment's page or anchor is on, the post a webmention was sent to, the
    * post a fediverse reply answers however deep, or the document at the URL.
    */
   readonly documentOf: (url: string) => Document | undefined;
   /**
    * Every page in the conversation a document is in that answers something
-   * off this site, with what a reader sees under it (TASK-320): what a
+   * off this site, with what a reader sees under it: what a
    * salmention is sent from. A reply post answers its `in-reply-to`; a
    * comment's own page answers the webmention reply it is under. One
    * answering something here has nobody to tell: this site already knows.
@@ -290,7 +290,7 @@ export interface ConversationReader {
   readonly upstreams: (document: Document, site: ConversationSite) => Upstream[];
 }
 
-/** One page of this site's answering a page elsewhere (TASK-320). */
+/** One page of this site's answering a page elsewhere. */
 export interface Upstream {
   /** The document the page is, or that the comment is on. */
   readonly post: Document;
@@ -302,7 +302,7 @@ export interface Upstream {
   readonly replies: readonly ThreadReply[];
 }
 
-/** What one `/replies/` feed is about, and what is in it (TASK-324). */
+/** What one `/replies/` feed is about, and what is in it. */
 export interface RepliesOf {
   /** The document whose conversation it is. */
   readonly post: Document;
@@ -317,7 +317,7 @@ export type HeldAt =
   | { readonly kind: 'reply'; readonly post: Document; readonly reply: Interaction }
   | { readonly kind: 'document'; readonly post: Document; readonly author: InteractionAuthor };
 
-/** A native comment, what it answers and what answers it (TASK-318). */
+/** A native comment, what it answers and what answers it. */
 export interface CommentThread {
   /** The post it is on. */
   readonly post: Document;
@@ -342,7 +342,7 @@ export function commentNames(id: string, permalink: string, baseUrl: string): st
 /**
  * The stored comment holding a fediverse note or activity id as its origin:
  * one imported from the site this one replaced, keyed by that id as it would
- * have been had it arrived here (TASK-336). A delivery or a fetch of the same
+ * have been had it arrived here. A delivery or a fetch of the same
  * id is that comment again, and the stored one wins, since it is the one the
  * moderator decided on and the thread anchors.
  */
@@ -361,7 +361,7 @@ export function commentAnchor(key: string): string {
   return `comment-${key}`;
 }
 
-/** The key of the comment whose page a path is, or `undefined` (TASK-319). */
+/** The key of the comment whose page a path is, or `undefined`. */
 export function commentKeyAt(pathname: string): string | undefined {
   if (!pathname.startsWith(COMMENT_PAGE_PREFIX) || !pathname.endsWith('/')) return undefined;
   const key = pathname.slice(COMMENT_PAGE_PREFIX.length, -1);

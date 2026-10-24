@@ -66,12 +66,12 @@ function invalidRequest(c: Context, description: string): Response {
 }
 
 /**
- * The Micropub media endpoint (TASK-165). A `file` part is stored through
+ * The Micropub media endpoint. A `file` part is stored through
  * {@link storeUpload}, the media library's own rules and directory, so a
- * client's photo is a library file like any other with its variants derived
- * (decision-10). Every refusal is Micropub's 400 `invalid_request` rather
+ * client's photo is a library file like any other with its variants derived.
+ * Every refusal is Micropub's 400 `invalid_request` rather
  * than the admin's 413 or 415. A create token may upload as well as a media
- * one, since a create can already carry a photo file part (TASK-238).
+ * one, since a create can already carry a photo file part.
  * `q=source` answers the token's user's last upload as
  * `{ items: [{ url, published }] }`, which Quill offers as the photo of the
  * next note when it is under 15 minutes old; `q=last` answers it as `{ url }`,

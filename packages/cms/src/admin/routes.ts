@@ -83,9 +83,9 @@ export function postEditorPath(slug: string): string {
  * Register the admin on a Hono app.
  *
  * Everything under `/admin` goes through one guard, registered as middleware
- * rather than per route, so a path with no handler of its own — `/admin/posts`
- * before TASK-11 builds it — still redirects an anonymous visitor to the login
- * form instead of falling through to the public site's 404.
+ * rather than per route, so a path with no handler of its own still redirects
+ * an anonymous visitor to the login form instead of falling through to the
+ * public site's 404.
  *
  * The guard decides three things, in order: whether the site has any users at
  * all (none means every admin URL is the setup form), whether the request
@@ -119,7 +119,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   }
 
   // A second throttle, on the same machinery and the same limits, for the
-  // forgot-password form (TASK-54). Deliberately not the login one: sharing it
+  // forgot-password form. Deliberately not the login one: sharing it
   // would let a stranger lock somebody out of signing in by asking for their
   // password to be reset over and over, which would turn the recovery feature
   // into a weapon against the person it exists for.
@@ -333,7 +333,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   for (const kind of TAXONOMY_KINDS) mountTaxonomyScreens(app, { kind, render });
 
   // Where a post can be sent: content/_data/syndicationTargets.json itself,
-  // read and written the way the settings are (TASK-218).
+  // read and written the way the settings are.
   mountSyndicationTargetsScreen(app, { render });
 
   mountPreview(app);
@@ -342,7 +342,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
   // Every menu the site holds, and which of them the active theme renders. A
   // section of its own rather than a settings page: a menu is content a site
-  // arranges, and the shape of the screen comes from the theme (TASK-108).
+  // arranges, and the shape of the screen comes from the theme.
   mountNavigationScreen(app, { render });
 
   // Everything under content/uploads: what is there, what links to it, and
@@ -358,7 +358,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountCommentsScreen(app, { render });
 
   // What the site is wearing: the themes on disk, and the one setting that
-  // says which of them (decision-15).
+  // says which of them.
   mountAppearanceScreen(app, { render });
   mountLookScreen(app, { render });
 
@@ -376,13 +376,13 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountExportScreen(app, { render });
 
   // The site's own settings, which are content/_data/site.json itself: the
-  // screen reads that file and writes it back (decision-9).
+  // screen reads that file and writes it back.
   mountSettings(app, { render });
 
-  // The apps that hold a token for whoever is signed in (TASK-162). Before the
+  // The apps that hold a token for whoever is signed in. Before the
   // users screens, whose `/admin/users/:id` answers anything else with a 404.
   mountConnectedApps(app, { render });
-  // What apps sent to the IndieAuth and Micropub endpoints (TASK-221), before
+  // What apps sent to the IndieAuth and Micropub endpoints, before
   // the users screens for the same reason.
   mountAppActivity(app, { render });
   mountWritingGoals(app, { render });
@@ -395,7 +395,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // site sent to whom.
   mountFederationScreen(app, { render });
 
-  // Where a person approves signing in to another site as this one (TASK-158).
+  // Where a person approves signing in to another site as this one.
   mountConsentScreen(app, { render });
 
   // `/admin/` is the same screen as `/admin`, and only one of them is the URL.
@@ -447,7 +447,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   }
 }
 
-/** Drawn without the signed-in user's theme (decision-30). */
+/** Drawn without the signed-in user's theme. */
 const ACCOUNT_TEMPLATES: ReadonlySet<string> = new Set([
   ADMIN_TEMPLATES.login,
   ADMIN_TEMPLATES.setup,
@@ -463,7 +463,7 @@ const RETURN_TO_FIELD = 'return_to';
 /**
  * Pages a login carries a return address for: the IndieAuth consent screen,
  * which somebody reaches signed out from another site and must come back to
- * with the request intact (TASK-158).
+ * with the request intact.
  */
 const RETURNABLE_PATHS: ReadonlySet<string> = new Set([CONSENT_PATH]);
 
@@ -521,7 +521,7 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
 
   const isSetup = pathname === SETUP_PATH;
   // The three screens somebody with no login is allowed to reach: the login
-  // form, and the two halves of forgetting a password (TASK-54). Everything
+  // form, and the two halves of forgetting a password. Everything
   // else under /admin redirects an anonymous visitor to the login form.
   const isAnonymous =
     pathname === LOGIN_PATH || pathname === FORGOT_PATH || pathname === RESET_PATH;
