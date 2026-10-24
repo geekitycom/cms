@@ -119,7 +119,10 @@ export const ACTIVITY_STREAMS_MEDIA_TYPES: readonly string[] = [
  *
  * It is the same comparison {@link selectRepresentation} makes — highest q
  * wins, the more specific range wins a tie — with the ActivityStreams types on
- * one side and the document's own on the other. A tie goes to the document, so
+ * one side and the document's own on the other. A tie between exact types goes
+ * to the object: a peer that names `application/activity+json` and lists
+ * `application/json` beside it at the same q, as activitypub-bot does, is asking
+ * for the actor or post. Any other tie goes to the document, so
  * `Accept: application/*` still gets JSON and a browser's
  * `text/html,…,*\/*;q=0.8` still gets a page.
  */
@@ -138,9 +141,10 @@ export function prefersActivityStreams(accept: string | undefined): boolean {
   );
   if (alternative === undefined || alternative.quality <= 0) return true;
 
+  if (wanted.quality !== alternative.quality) return wanted.quality > alternative.quality;
   return (
-    wanted.quality > alternative.quality ||
-    (wanted.quality === alternative.quality && wanted.specificity > alternative.specificity)
+    wanted.specificity > alternative.specificity ||
+    (wanted.specificity === alternative.specificity && wanted.specificity === EXACT)
   );
 }
 
@@ -595,15 +599,17 @@ function bestRange(
   return best;
 }
 
+const EXACT = 2;
+
 /**
- * How specifically a range names a media type: 2 for an exact match, 1 for
- * `type/*`, 0 for `*\/*`, `undefined` for no match at all.
+ * How specifically a range names a media type: {@link EXACT} for an exact
+ * match, 1 for `type/*`, 0 for `*\/*`, `undefined` for no match at all.
  */
 function specificityOf(range: AcceptRange, type: string, subtype: string): number | undefined {
   if (range.type === '*' && range.subtype === '*') return 0;
   if (range.type !== type) return undefined;
   if (range.subtype === '*') return 1;
-  return range.subtype === subtype ? 2 : undefined;
+  return range.subtype === subtype ? EXACT : undefined;
 }
 
 /** The `q` parameter of a media range, clamped to the range the grammar allows. */
