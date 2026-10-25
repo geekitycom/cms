@@ -2,23 +2,39 @@
 
 The site runs a Model Context Protocol (MCP) server, so an MCP client such as
 Claude Code can call tools on the site as you. The server is at
-`/_geekity/mcp`. It needs a token that you approve on the site's own consent
-screen.
+`/_geekity/mcp`. It needs a token bound to that endpoint. You approve one on
+the site's consent screen, or create one in the admin.
 
-## Connect Claude Code
+## Connect a client
 
-Add the site with its MCP URL:
+A client connects in one of two ways. It signs in through the site's consent
+screen and gets a token for the scopes you approve, or it sends a token you
+create in the admin. The steps below use Claude Code.
+[Other MCP clients](#other-mcp-clients) lists what any other client needs.
 
-```sh
-claude mcp add --transport http my-site https://example.com/_geekity/mcp
-```
+### Connect Claude Code by signing in
 
-Then run `/mcp` in Claude Code and choose the site to sign in. Claude Code
-opens the site's consent screen in your browser. Sign in to the admin if you
-are not signed in, untick each scope you do not want the agent to have, and
-approve.
+1. Add the site with its MCP URL:
 
-### With a token you create
+   ```sh
+   claude mcp add --transport http my-site https://example.com/_geekity/mcp
+   ```
+
+2. Run `/mcp` in Claude Code, choose the site, and choose to authenticate.
+   Claude Code opens the site's consent screen in your browser. On a machine
+   with no browser, run `claude mcp login --no-browser my-site` instead. It
+   prints the address of the consent screen and asks you to paste the address
+   your browser ends up on after you approve.
+3. On the consent screen, sign in to the admin if you are not signed in.
+   Claude Code asks for every scope in [Scopes](#scopes). Untick each scope
+   you do not want the agent to have.
+4. Choose **Approve**.
+
+The connection is listed on Users > Connected apps under the name Claude
+Code. Revoke it there to cut the agent off. To grant a scope you left out,
+run `/mcp` again and sign in again.
+
+### Connect Claude Code with a token you create
 
 A client that cannot sign in, or a machine where you would rather paste a
 token, can use a token you create in the admin:
@@ -38,6 +54,50 @@ claude mcp add --transport http my-site https://example.com/_geekity/mcp \
 
 The token is listed on Connected apps with the badge For MCP. Revoke it there
 to cut the agent off.
+
+### Check the connection
+
+Run `claude mcp list`. The site shows as `Connected` once Claude Code holds a
+token the endpoint takes. Before you sign in, it shows `Needs
+authentication`.
+
+Then ask the agent to call `whoami`. It answers with the user the connection
+acts as, the client name or token name, and the scopes the token holds.
+
+### Other MCP clients
+
+Any MCP client that speaks the Streamable HTTP transport can connect. It
+needs:
+
+- The URL, `https://example.com/_geekity/mcp`.
+- The transport, Streamable HTTP. Some clients call it `http`. The server
+  does not offer the older HTTP with SSE transport.
+- One way to get a token. Either the client signs in by OAuth, using the
+  discovery in [How a client finds where to sign in](#how-a-client-finds-where-to-sign-in),
+  or you give it a token you create, sent as `Authorization: Bearer <token>`.
+
+A client that signs in must name itself with a client metadata document URL
+and use S256 PKCE. The site has no dynamic client registration, so a client
+that can only register itself cannot sign in. Give that client a token you
+create.
+
+Many clients read servers from JSON in the shape of Claude Code's
+`.mcp.json`. For a token you create:
+
+```json
+{
+  "mcpServers": {
+    "my-site": {
+      "type": "http",
+      "url": "https://example.com/_geekity/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+Leave out `headers` for a client that signs in. A client that can start only
+local stdio servers cannot connect to the site.
 
 ## How a client finds where to sign in
 
@@ -276,6 +336,57 @@ plugin declares one.
 | Tool                               | Plugin                  | Scope     | What it does                                                                                           |
 | ---------------------------------- | ----------------------- | --------- | ------------------------------------------------------------------------------------------------------ |
 | `geekity_plugin_umami__post_stats` | `@geekity/plugin-umami` | `inspect` | A post's views, visitors, visits and referrers over the last days, from Umami, beside the span before. |
+
+## Debug federation from an agent
+
+An agent with the `inspect` scope can answer a federation question from the
+site's own records, and with `repair` it can fix the common causes. Ask in
+plain words, such as "my reply to @alice@social.example did not show on her
+server, find out why". These tools answer it, in this order:
+
+1. `federation_status` lists the messages waiting in the federation queue,
+   the retrying deliveries, recent failures and the newest jobs.
+2. `post_federation` with `post` set to the post's slug or permalink shows
+   the object a peer gets for the post, every activity sent about it, and each
+   delivery with its error. Add `status: "failed"` to list only the failures.
+3. `inbox_search` shows what came in from the other side. Filter by `actor`
+   for one remote account, or by `inReplyTo` with the post's id for the
+   replies that reached the site.
+4. `remote_lookup` with `target` set to `@alice@social.example` shows what
+   her server answers the site, such as an actor whose inbox moved, or a 401
+   or 410.
+5. When deliveries to a follower fail because their server moved its inbox,
+   `refresh_actor` with `actor` set to their actor id stores the inbox the
+   actor publishes now.
+6. `retry_deliveries` with `post`, `inbox`, or both queues a job that sends
+   the post again to each recipient whose newest delivery failed.
+7. `post_federation` again, once the job has run, shows each delivery's new
+   status.
+
+## Write and publish a post from an agent
+
+An agent with the `media`, `create` and `update` scopes can write a draft.
+Publishing it needs `publish` as well. To keep the last step yourself, leave
+`publish` unticked and publish the draft from the editor.
+
+1. `upload_media` with `filename`, the file as base64 in `data`, and `alt`
+   stores an image and answers its address.
+2. `create_draft` with `properties` writes the draft and answers its `url`
+   and `slug`. Put the image address in `photo`, as in
+   `{"content": ["Text"], "photo": ["<address>"]}`. The draft is not
+   served, federated or mentioned.
+3. Review the draft in the editor, or ask the agent to read it with
+   `get_post_source`, which answers the properties and the `hash`.
+4. `update_post` with `post`, that `hash`, and the changes, such as
+   `{"replace": {"content": ["New text"]}}`, edits the draft.
+5. `publish_post` with `post` makes the draft public. The site federates a
+   `Create` and sends the post's webmentions.
+
+With `@geekity/plugin-umami` enabled, an agent with `inspect` can then ask
+how a post did. `geekity_plugin_umami__post_stats` takes `path`, the post's
+permalink such as `/2026/10/hello/`, and `days`, 30 unless given. It answers
+views, visitors, visits and the top referrers, beside the same number of days
+before.
 
 ## The record of tool calls
 

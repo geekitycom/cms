@@ -1,10 +1,11 @@
 ---
 id: TASK-179
 title: Connect Claude Code to a real site and debug federation end to end
-status: To Do
-assignee: []
-created_date: '2026-09-29 02:14'
-updated_date: '2026-10-23 16:56'
+status: In Progress
+assignee:
+  - '@claude'
+created_date: 2026-09-29 02:14
+updated_date: '2026-10-25T17:28:00Z'
 labels:
   - mcp
   - federation
@@ -37,3 +38,34 @@ The point of the milestone: the owner adds their blog to Claude Code and uses it
 - [ ] #4 The plugin-umami tool answers a stats question for a real post
 - [ ] #5 Anything that was awkward becomes a follow-up task
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Consolidate docs/mcp.md: one Connect section covering Claude Code by OAuth (claude mcp add, /mcp or claude mcp login), by a personal token (Users > Connected apps, Works with MCP, --header), checking the connection (claude mcp list, whoami), and other MCP clients (URL, transport, JSON config, OAuth discovery or a bearer header).
+2. Add two walkthroughs with the real tool names: debugging federation (federation_status, post_federation, inbox_search, refresh_actor, retry_deliveries, post_federation) and authoring (upload_media, create_draft, get_post_source, update_post, publish_post), plus the plugin-umami post_stats call.
+3. Check every command, scope and tool name against the code (CORE_TOOLS, MCP_SCOPES, the connected-apps form, plugin-umami input schema).
+4. Prove the documented Claude Code steps against a local geekity serve with a throwaway CLAUDE_CONFIG_DIR: OAuth via claude mcp login --no-browser and a personal token via --header, claude mcp list shows Connected.
+5. Leave AC#1-#5 unchecked: they need the branch deployed to shll.me. Record what remains in the notes.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-25, docs half of AC#1 and a local rehearsal. Nothing here ran against shll.me, so no criterion is checked.
+
+Docs (docs/mcp.md): Connect a client now has Connect Claude Code by signing in (claude mcp add --transport http, then /mcp or claude mcp login --no-browser, untick scopes, Approve), Connect Claude Code with a token you create (Users > Connected apps, Works with MCP, --header 'Authorization: Bearer <token>'), Check the connection (claude mcp list, whoami), and Other MCP clients (URL, Streamable HTTP, OAuth with a client metadata document and S256 or a bearer header, the .mcp.json shape, no DCR, no stdio). New sections Debug federation from an agent (federation_status, post_federation, inbox_search, remote_lookup, refresh_actor, retry_deliveries, post_federation) and Write and publish a post from an agent (upload_media, create_draft, get_post_source, update_post, publish_post, then geekity_plugin_umami__post_stats). Tool names and arguments checked against CORE_TOOLS in src/mcp/endpoint.ts, each tool's inputSchema, MCP_SCOPES, the connected-apps form and the plugin-umami README.
+
+Local rehearsal, not the deployed site: geekity init in a scratch dir, geekity user add, geekity serve on :4817 in dev mode, Claude Code 2.1.310 with a throwaway CLAUDE_CONFIG_DIR.
+- OAuth: claude mcp add, then claude mcp list said Needs authentication. claude mcp login --no-browser driven by expect printed the authorize URL (CIMD client_id https://claude.ai/oauth/claude-code-client-metadata, S256, resource http://localhost:4817/_geekity/mcp, all seven scopes). The consent screen showed Claude Code with seven boxes. Approved with publish and repair unticked, pasted the callback URL back, got Authenticated, and claude mcp list said Connected.
+- Personal token: created on /admin/users/apps with Works with MCP, scopes profile and inspect, badge For MCP. claude mcp add --header 'Authorization: Bearer ...' and claude mcp add-json with the documented JSON shape both listed Connected. whoami over curl named the token and its two scopes. create_draft with that token got the -32001 error naming the create scope.
+- Walkthrough calls, over curl with a full-scope token: create_draft, get_post_source, update_post with the hash, upload_media of a PNG, publish_post, federation_status, post_federation, inbox_search, retry_deliveries and refresh_actor all answered as documented. No federation traffic: dev mode, no followers.
+- Not rehearsed: a tool call from inside a Claude Code model session (the throwaway config is not logged in to a model), and geekity_plugin_umami__post_stats (needs the plugin and an Umami server).
+
+What remains, all on shll.me after the branch is deployed (deploys need the owner):
+1. AC#1: connect Claude Code to https://shll.me/_geekity/mcp by OAuth and by a personal token, following docs/mcp.md, and correct the docs if a step differs.
+2. AC#2: answer a real federation question with the tools alone and note the transcript summary here.
+3. AC#3: have the agent draft a post, review it, and publish it through the tools.
+4. AC#4: call geekity_plugin_umami__post_stats for a real post.
+5. AC#5: file a follow-up task for anything awkward.
+<!-- SECTION:NOTES:END -->
