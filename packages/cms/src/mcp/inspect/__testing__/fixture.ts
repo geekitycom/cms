@@ -4,7 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { Sandbox } from '../../../admin/__testing__/harness.ts';
-import type { Cms } from '../../../index.ts';
+import type { Cms, GeekityConfig } from '../../../index.ts';
 import type { Scope } from '../../../indieauth/request.ts';
 import { issueTokens } from '../../../indieauth/tokens.ts';
 import { createUser } from '../../../site/users.ts';
@@ -17,7 +17,7 @@ export const BOB = 'https://me.example/users/bob';
 export const RELAY = 'https://relay.example/inbox';
 
 /** A site with one announced post and a little of everything federation records. */
-export async function fixtureSite(box: Sandbox): Promise<Cms> {
+export async function fixtureSite(box: Sandbox, config: GeekityConfig = {}): Promise<Cms> {
   const contentDir = await box.dir('geekity-inspect-content-');
   const dataDir = await box.dir('geekity-inspect-data-');
   await mkdir(path.join(contentDir, '_data', 'federation', 'ada'), { recursive: true });
@@ -56,7 +56,7 @@ export async function fixtureSite(box: Sandbox): Promise<Cms> {
     ]),
   );
   await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
-  const cms = await box.open({ contentDir, dataDir, baseUrl: BASE });
+  const cms = await box.open({ ...config, contentDir, dataDir, baseUrl: BASE });
 
   const { admin } = cms;
   admin.putFollower({

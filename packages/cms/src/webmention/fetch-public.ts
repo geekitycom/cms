@@ -124,6 +124,8 @@ export interface RequestPublicOptions {
   readonly body?: string;
   readonly userAgent?: string | undefined;
   readonly allowed?: ((url: URL) => boolean) | undefined;
+  /** Signs each hop's request, so a redirect is signed for the URL it is sent to. */
+  readonly sign?: ((request: Request) => Promise<Request>) | undefined;
 }
 
 export interface PublicAnswer {
@@ -158,7 +160,10 @@ export async function requestPublic(
 
       const response = await fetch(url, {
         method,
-        headers,
+        headers:
+          options.sign === undefined
+            ? headers
+            : (await options.sign(new Request(url, { method, headers, body }))).headers,
         body,
         redirect: 'manual',
         signal: options.signal,
@@ -209,7 +214,7 @@ export function webUrl(value: string): URL | undefined {
  * A response body no bigger than the limit. A bigger one is `undefined` when
  * refused, or its first `maxBytes` when truncated.
  */
-async function readWithin(
+export async function readWithin(
   response: Response,
   maxBytes: number,
   overflow: 'refuse' | 'truncate',

@@ -28,6 +28,7 @@ import { whoami } from './whoami.ts';
 import { inboxSearch } from './inspect/inbox.ts';
 import { postFederation } from './inspect/post.ts';
 import { followers, quoteApprovals, relays } from './inspect/records.ts';
+import { remoteLookup } from './inspect/remote.ts';
 import { federationStatus } from './inspect/status.ts';
 import { webmentions } from './inspect/webmentions.ts';
 
@@ -41,6 +42,7 @@ const CORE_TOOLS: readonly McpTool[] = [
   relays,
   quoteApprovals,
   webmentions,
+  remoteLookup,
 ];
 
 /** How many tool calls one token may make in {@link MCP_CALL_WINDOW_SECONDS}. */

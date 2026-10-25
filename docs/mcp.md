@@ -94,6 +94,7 @@ them in one sign-in. The body is a JSON-RPC error that names the missing scope.
 | `relays`            | `inspect` | The relay subscriptions, their state, and the last delivery to each.                                                                                                          |
 | `quote_approvals`   | `inspect` | The quotes of the site's posts that the site approved, from each user's `quotes.json`.                                                                                        |
 | `webmentions`       | `inspect` | The webmentions one post sent, with each endpoint and error, or the webmentions it received.                                                                                  |
+| `remote_lookup`     | `inspect` | Fetches a handle's WebFinger result and the actor it names, or the object at a URL, signed as a local user, with each status, the headers that matter and the body.           |
 
 ### The inspect tools
 
@@ -117,6 +118,32 @@ or any object id it was federated under. `post_federation` builds the object
 with the same code that answers a peer's fetch, so it shows the post as it
 reads now. `peerState` says whether a peer gets the object, a `Tombstone`
 with 410, or 404.
+
+`remote_lookup` shows the other side of a federation problem: what a remote
+server answers the site. Given `@user@host`, it asks the host's WebFinger
+endpoint for the handle and then fetches the ActivityPub actor the answer
+links with `rel="self"`. Given an `http` or `https` URL, it fetches the actor
+or object at that URL. The actor or object fetch is an HTTP Signature GET,
+signed with the RSA key of a local user, so servers in authorized fetch mode
+answer as they answer the site. By default the tool signs as the site author,
+or as the first user when the site has several authors. To sign as another
+user, give that user's username as `actor`. The WebFinger request is not
+signed. The answer has one entry for each request. Each entry gives the URL
+asked for, the URL that answered after redirects, the HTTP status, the
+response headers that matter for debugging, and the body. The body is in
+`json` when it is a JSON object and in `text` when it is not. A server's
+refusal, such as 401 or 410, is part of the answer and not a tool error.
+
+`remote_lookup` makes outbound requests, so it is annotated `openWorldHint`
+and has these limits:
+
+- It reaches public addresses only. It refuses loopback, private,
+  link-local and reserved addresses, written as an IP address or resolved
+  from a name, and it checks every redirect hop the same way. It does not
+  follow the federation's `allowPrivateAddress` setting.
+- It stops after 10 seconds, for WebFinger and the object fetch together.
+- It reads at most 256 KiB of each body and sets `truncated` when it cuts
+  a body short.
 
 The tools cannot show the access log, which is written only to standard
 output, or refused inbox signatures, which are only logged. See
