@@ -255,7 +255,8 @@ An agent that reads untrusted pages can be steered by prompt injection. So
   library's rules apply, as for the admin's uploads and the Micropub media
   endpoint: the allowed types, the size limits and the removal of location
   data. The answer is the file's address, to use as a `photo` value or in a
-  post's content.
+  post's content. The request body limit in [The transport](#the-transport)
+  is sized to fit the largest file.
 
 Words written through these tools do not count toward anyone's writing
 goal. See [Writing goals](writing-goals.md#what-counts-as-writing).
@@ -332,6 +333,15 @@ another origin gets 403. A request whose `MCP-Protocol-Version` header names a
 version the server does not speak gets 400. The server speaks 2025-11-25,
 2025-06-18 and 2025-03-26. Claude Code 2.1 first tries a newer revision, gets
 the 400, and then connects with `initialize` at 2025-11-25.
+
+A request body can be as large as an `upload_media` call that carries the
+largest file the site accepts: the base64 length of the larger of
+[`uploadMaxBytes` and `uploadMediaMaxBytes`](configuration.md#uploads-and-images),
+plus 8 KiB. With the default limits, that is about 267 MiB. The server answers
+a larger body with 413 and does not parse it. It checks the `Content-Length`
+header first. A body that has no `Content-Length` is read only up to the limit.
+The server checks the bearer token before it reads the body, so a request with
+no valid token gets 401 and its body is not read.
 
 In maintenance mode the endpoint answers 503, like the authorization and token
 endpoints.

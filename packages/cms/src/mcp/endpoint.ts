@@ -9,7 +9,9 @@ import {
   MCP_RESOURCE_METADATA_PATH,
   MCP_SERVER_CARD_PATH,
 } from '../web/indieauth-discovery.ts';
+import { largestUploadLimit, UPLOAD_ENVELOPE_BYTES } from '../media/uploads.ts';
 import { PACKAGE_VERSION } from '../util/package-version.ts';
+import { readWithin } from '../webmention/fetch-public.ts';
 import {
   failure,
   isSupportedVersion,
@@ -29,7 +31,7 @@ import { createDraft } from './authoring/create.ts';
 import { publishPost } from './authoring/publish.ts';
 import { getPostSource } from './authoring/source.ts';
 import { updatePost } from './authoring/update.ts';
-import { uploadMedia } from './authoring/upload.ts';
+import { base64Length, uploadMedia } from './authoring/upload.ts';
 import { inboxSearch } from './inspect/inbox.ts';
 import { postFederation } from './inspect/post.ts';
 import { followers, quoteApprovals, relays } from './inspect/records.ts';
@@ -107,9 +109,21 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
       );
     }
 
+    const limit = bodyLimit(c.var.config);
+    const read = await readWithin(c.req.raw, limit, 'refuse');
+    if (read === undefined) {
+      return c.json(
+        failure(null, {
+          code: JSON_RPC_ERRORS.invalidRequest,
+          message: `The request is larger than the ${String(limit)} bytes this server takes.`,
+        }),
+        413,
+      );
+    }
+
     let message: unknown;
     try {
-      message = await c.req.json();
+      message = JSON.parse(new TextDecoder().decode(read.body));
     } catch {
       return c.json(
         failure(null, { code: JSON_RPC_ERRORS.parseError, message: 'The body is not JSON.' }),
@@ -156,6 +170,15 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
       tools: toolsFor(c.var).map(({ name, title, description }) => ({ name, title, description })),
     });
   });
+}
+
+/**
+ * The most a request body may weigh: an upload_media call carrying the largest
+ * file the site takes, as base64, with the same slack for its envelope that
+ * the other upload endpoints allow.
+ */
+function bodyLimit(config: ResolvedConfig): number {
+  return base64Length(largestUploadLimit(config)) + UPLOAD_ENVELOPE_BYTES;
 }
 
 /** Core's tools and those of the plugins active for this request. */

@@ -211,11 +211,11 @@ export function webUrl(value: string): URL | undefined {
 }
 
 /**
- * A response body no bigger than the limit. A bigger one is `undefined` when
- * refused, or its first `maxBytes` when truncated.
+ * A response or request body no bigger than the limit. A bigger one is
+ * `undefined` when refused, or its first `maxBytes` when truncated.
  */
 export async function readWithin(
-  response: Response,
+  response: Pick<Response, 'headers' | 'body'>,
   maxBytes: number,
   overflow: 'refuse' | 'truncate',
 ): Promise<{ body: Uint8Array; truncated: boolean } | undefined> {

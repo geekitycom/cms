@@ -9,7 +9,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
-import type { Cms } from '../index.ts';
+import type { Cms, GeekityConfig } from '../index.ts';
 import { createUser } from '../site/users.ts';
 import type { AuthorizationCode } from '../indieauth/grants.ts';
 import type { Scope } from '../indieauth/request.ts';
@@ -24,7 +24,7 @@ const MCP_RESOURCE = `${BASE}${MCP}`;
 const MCP_METADATA_PATH = '/.well-known/oauth-protected-resource/_geekity/mcp';
 const APP = 'https://claude.example/client.json';
 
-async function site(config: { maintenance?: boolean } = {}): Promise<Cms> {
+async function site(config: GeekityConfig = {}): Promise<Cms> {
   const contentDir = await box.dir('geekity-mcp-content-');
   const dataDir = await box.dir('geekity-mcp-data-');
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
@@ -292,6 +292,90 @@ describe('a client the MCP endpoint refuses', () => {
     const error = called.body?.['error'] as { code: number; message: string; data: unknown };
     assert.match(error.message, /profile/);
     assert.deepEqual(error.data, { scope: 'profile' });
+  });
+});
+
+describe('a request body over the limit', () => {
+  // The largest upload's base64 length plus 8 KiB for the JSON envelope.
+  const UPLOAD_LIMIT = 3000;
+  const BODY_LIMIT = 4000 + 8192;
+  const CHUNK = 1024;
+  const smallUploads = { uploadMaxBytes: UPLOAD_LIMIT, uploadMediaMaxBytes: UPLOAD_LIMIT };
+
+  /** A body that hands over `CHUNK` bytes each time it is read, and never ends. */
+  function endless(): { stream: ReadableStream<Uint8Array>; pulled: () => number } {
+    let pulled = 0;
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          pulled += CHUNK;
+          controller.enqueue(new Uint8Array(CHUNK).fill(0x20));
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    return { stream, pulled: () => pulled };
+  }
+
+  function post(
+    token: string | undefined,
+    body: ReadableStream<Uint8Array>,
+    headers: Record<string, string> = {},
+  ): Request {
+    return new Request(`${BASE}${MCP}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+        ...headers,
+      },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+  }
+
+  it('is refused with 413 by its declared length, without being read', async () => {
+    const cms = await site(smallUploads);
+    const token = await tokenFor(cms, ['profile']);
+    const body = endless();
+    const response = await cms.app.request(
+      post(token, body.stream, { 'content-length': String(BODY_LIMIT + 1) }),
+    );
+    assert.equal(response.status, 413);
+    const answer = (await response.json()) as { error: { code: number; message: string } };
+    assert.equal(answer.error.code, -32600);
+    assert.match(answer.error.message, new RegExp(String(BODY_LIMIT)));
+    assert.equal(body.pulled(), 0);
+  });
+
+  it('is cut off at the limit while it streams in, when it declares no length', async () => {
+    const cms = await site(smallUploads);
+    const token = await tokenFor(cms, ['profile']);
+    const body = endless();
+    const response = await cms.app.request(post(token, body.stream));
+    assert.equal(response.status, 413);
+    assert.ok(body.pulled() <= BODY_LIMIT + CHUNK, String(body.pulled()));
+  });
+
+  it('is refused for a client with no token as before, and never read', async () => {
+    const cms = await site(smallUploads);
+    const body = endless();
+    const response = await cms.app.request(post(undefined, body.stream));
+    assert.equal(response.status, 401);
+    assert.equal(body.pulled(), 0);
+  });
+
+  it('lets a body at the limit through', async () => {
+    const cms = await site(smallUploads);
+    const token = await tokenFor(cms, ['profile']);
+    const message = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' });
+    const padded = message + ' '.repeat(BODY_LIMIT - message.length);
+    const response = await cms.app.request(MCP, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: padded,
+    });
+    assert.equal(response.status, 200);
   });
 });
 

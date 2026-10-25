@@ -16,7 +16,7 @@ import { readAltTexts } from '../../content/alt-text.ts';
 import { dataPath, WRITING_LEDGERS } from '../../files/data-files.ts';
 import type { Scope } from '../../indieauth/request.ts';
 import { issueTokens } from '../../indieauth/tokens.ts';
-import type { Cms } from '../../index.ts';
+import type { Cms, GeekityConfig } from '../../index.ts';
 import { problemsWith } from '../../util/json-schema.ts';
 import type { JsonSchema } from '../../util/json-schema.ts';
 import { readActivityLog } from '../../web/indieauth-activity-log.ts';
@@ -77,8 +77,10 @@ beforeEach(() => {
 
 async function authoringSite(
   scopes: readonly Scope[] = WRITER,
+  config: GeekityConfig = {},
 ): Promise<{ cms: Cms; token: string }> {
   const cms = await fixtureSite(box, {
+    ...config,
     federation: { queue: null, allowPrivateAddress: true },
     now: () => NOW,
   });
@@ -575,6 +577,24 @@ describe('upload_media', () => {
       text: 'A single red dot',
     });
     assert.equal((await cms.app.request(new URL(url).pathname)).status, 200);
+  });
+
+  it('stores a file at the largest size the site takes', async () => {
+    const limit = 40_000;
+    const { cms, token } = await authoringSite(['media'], {
+      uploadMaxBytes: limit,
+      uploadMediaMaxBytes: limit / 2,
+    });
+
+    const answer = await call(cms, token, 'upload_media', {
+      filename: 'notes.txt',
+      data: Buffer.alloc(limit, 'a').toString('base64'),
+      alt: 'x'.repeat(1000),
+    });
+
+    assert.equal(answer.isError, false, answer.text);
+    const stored = await cms.app.request(new URL(answer.structured['url'] as string).pathname);
+    assert.equal((await stored.arrayBuffer()).byteLength, limit);
   });
 
   it('refuses what the media library refuses, and data larger than the site takes', async () => {
