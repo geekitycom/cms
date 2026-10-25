@@ -234,7 +234,6 @@ function mayRedirect(clientId: string, redirectUri: string, client: ClientInform
 
 const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
 
-/** Whether `listed` and `target` are one loopback address but for the port. */
 function sameLoopback(listed: string, target: URL): boolean {
   const url = URL.parse(listed);
   return (

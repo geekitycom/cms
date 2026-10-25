@@ -1,8 +1,3 @@
-/**
- * The remote lookup tool from the outside: an MCP client asking the site to
- * fetch a handle or a URL from the fediverse, with every outbound request
- * answered by a stub that stands in for the remote servers.
- */
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
 
@@ -125,10 +120,6 @@ beforeEach(() => {
 
 type Row = Record<string, unknown>;
 
-/**
- * Check a draft-cavage HTTP Signature against the public key the site's own
- * actor publishes, as a remote server would.
- */
 async function signatureHolds(cms: Cms, request: Request): Promise<boolean> {
   const fields = Object.fromEntries(
     [...(request.headers.get('signature') ?? '').matchAll(/(\w+)="([^"]*)"/g)].map(

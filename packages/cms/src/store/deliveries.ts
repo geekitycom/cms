@@ -81,13 +81,11 @@ export type NewDelivery = Omit<Delivery, 'attemptedAt'> & {
   attemptedAt?: string | undefined;
 };
 
-/** One activity the site sent, and how its deliveries stand. */
 export interface SentActivity {
   readonly activityId: string;
   readonly activityType: string;
   readonly objectId: string;
   readonly slug: string | null;
-  /** When its newest delivery was attempted. */
   readonly lastAttemptedAt: string;
   readonly counts: Record<DeliveryStatus, number>;
 }

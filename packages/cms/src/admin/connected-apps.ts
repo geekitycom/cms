@@ -53,14 +53,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const NAME_LIMIT = 100;
 
-/** How many of a connection's latest requests and tool calls its row shows. */
 const RECENT_ACTIVITY_LIMIT = 5;
 
-/**
- * What a created token can be bound to. A resource server takes only a token
- * bound to it, so the choice decides where the token works and which scopes
- * make sense on it.
- */
 const TOKEN_RESOURCES = [
   {
     name: 'micropub',
@@ -82,7 +76,6 @@ type TokenResource = (typeof TOKEN_RESOURCES)[number];
 
 const DEFAULT_TOKEN_RESOURCE: TokenResource = TOKEN_RESOURCES[0];
 
-/** The form field holding the scopes ticked for `resource`. */
 function scopeField(resource: TokenResource): string {
   return `${resource.name}_scope`;
 }
@@ -313,11 +306,6 @@ function row(token: StoredToken, timezone: string, baseUrl: string) {
   };
 }
 
-/**
- * Whether an entry is this connection's: made with its token, or, for an
- * app, a sign-in by the same client as the same user, before the connection's
- * token existed to carry.
- */
 function isActivityOf(
   token: StoredToken,
   username: string | undefined,

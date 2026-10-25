@@ -7,7 +7,6 @@ import type { CallLimit } from './call-limit.ts';
 import { problemsWith } from '../util/json-schema.ts';
 import type { FromSchema, ObjectSchema } from '../util/json-schema.ts';
 
-/** The parts of the site a core tool reads and acts through: the request's own variables. */
 export type ToolSite = Readonly<
   Pick<
     GeekityEnv['Variables'],
@@ -27,7 +26,6 @@ export type ToolSite = Readonly<
   >
 >;
 
-/** Who is calling a tool, through which connection, on which site. */
 export interface ToolCall {
   readonly user: User;
   readonly token: StoredToken;
@@ -35,10 +33,6 @@ export interface ToolCall {
   readonly site: ToolSite;
 }
 
-/**
- * A core tool's answer when this call needs a scope beyond the tool's own,
- * which the token lacks: refused as a call without the tool's scope is.
- */
 export interface ScopeShortfall {
   readonly needsScope: McpScope;
 }
@@ -59,7 +53,6 @@ interface ToolSpec<I extends ObjectSchema, O extends ObjectSchema> {
   readonly name: string;
   readonly title: string;
   readonly description: string;
-  /** The one scope a token needs for this tool. The registry checks it before `run`. */
   readonly scope: McpScope;
   readonly annotations: McpToolAnnotations;
   readonly inputSchema: I;
@@ -67,12 +60,10 @@ interface ToolSpec<I extends ObjectSchema, O extends ObjectSchema> {
   readonly run: (args: FromSchema<I>, call: ToolCall) => Promise<ToolAnswer<FromSchema<O>>>;
 }
 
-/** A tool as the registry holds it, its argument types erased once they are checked. */
 export interface McpTool extends Omit<ToolSpec<ObjectSchema, ObjectSchema>, 'run'> {
   readonly run: (args: unknown, call: ToolCall) => Promise<ToolAnswer<unknown>>;
 }
 
-/** The app a connection was issued to: its `client_id` and name, or a hand-made token's name. */
 export function callingClient(token: StoredToken): {
   readonly client: string;
   readonly clientName: string | undefined;
@@ -82,7 +73,6 @@ export function callingClient(token: StoredToken): {
     : { client: token.clientId, clientName: token.clientName };
 }
 
-/** A tool whose `run` is handed only arguments that fit its input schema. */
 export function defineTool<const I extends ObjectSchema, const O extends ObjectSchema>(
   spec: ToolSpec<I, O>,
 ): McpTool {
@@ -96,7 +86,6 @@ export function defineTool<const I extends ObjectSchema, const O extends ObjectS
   };
 }
 
-/** A tool as `tools/list` describes it. */
 export function listedTool(tool: McpTool) {
   return {
     name: tool.name,
@@ -114,26 +103,18 @@ export type ToolCallResult =
   | { readonly kind: 'rate-limited'; readonly retryAfter: number }
   | { readonly kind: 'ran'; readonly outcome: McpToolOutcome<unknown> };
 
-/** One call as the registry hands it to the record: what was asked, by whom, and how it ended. */
 export interface ToolCallRecord {
   readonly tool: string;
   readonly args: unknown;
   readonly call: ToolCall;
-  /** The answer the client was given, or why the tool threw, which the client is not told. */
   readonly outcome: ToolCallResult | { readonly kind: 'crashed'; readonly reason: string };
 }
 
-/** What every call passes through, whatever the tool: the per-token limit and the record. */
 export interface ToolGuards {
   readonly limit: CallLimit;
-  /** Called once per call, after it is decided. Must not throw, and is not awaited. */
   readonly record: (record: ToolCallRecord) => void;
 }
 
-/**
- * Every tool the MCP endpoint offers, and the one way to call one, so the
- * limit, the scope check and the record cannot be skipped by a tool.
- */
 export interface ToolRegistry {
   list(): readonly McpTool[];
   call(name: string, args: unknown, call: ToolCall): Promise<ToolCallResult>;

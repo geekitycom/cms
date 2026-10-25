@@ -10,11 +10,6 @@ import { findPost } from '../inspect/post.ts';
 import { isRefused, refused } from '../tools.ts';
 import type { Refused, ToolSite } from '../tools.ts';
 
-/**
- * The post a reference names, when `user` may change it. A post attributed
- * to another user is theirs; one attributed to nobody the site knows is
- * anybody's, as it is in the editor and over Micropub.
- */
 export function ownPost(site: ToolSite, user: User, reference: string): Document | Refused {
   const document = findPost(site, reference);
   if (isRefused(document)) return document;
@@ -25,7 +20,6 @@ export function ownPost(site: ToolSite, user: User, reference: string): Document
   return document;
 }
 
-/** What Micropub's source and update read a post's properties against. */
 export function sourceSite(site: ToolSite): SourceSite {
   return {
     baseUrl: site.config.baseUrl,
@@ -35,7 +29,6 @@ export function sourceSite(site: ToolSite): SourceSite {
   };
 }
 
-/** A write that did not save, as the message the agent is told. */
 export function unsaved(
   written: Exclude<WriteOutcome, { outcome: 'saved' }>,
   slug: string,

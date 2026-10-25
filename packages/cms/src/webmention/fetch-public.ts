@@ -124,7 +124,6 @@ export interface RequestPublicOptions {
   readonly body?: string;
   readonly userAgent?: string | undefined;
   readonly allowed?: ((url: URL) => boolean) | undefined;
-  /** Signs each hop's request, so a redirect is signed for the URL it is sent to. */
   readonly sign?: ((request: Request) => Promise<Request>) | undefined;
 }
 

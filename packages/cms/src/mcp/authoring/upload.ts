@@ -12,7 +12,6 @@ import { defineTool, refused } from '../tools.ts';
 
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
-/** The longest base64 text a file of `bytes` is written as. */
 export function base64Length(bytes: number): number {
   return Math.ceil(bytes / 3) * 4;
 }

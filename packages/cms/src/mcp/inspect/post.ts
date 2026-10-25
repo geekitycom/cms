@@ -26,10 +26,6 @@ export const POST_INPUT = {
   description: 'The post: its slug, its permalink, or any object id it was federated under.',
 } as const;
 
-/**
- * The post a slug, a permalink or an object id names, trashed ones included,
- * or the refusal an agent is told when none does.
- */
 export function findPost(site: ToolSite, reference: string): Document | Refused {
   const url = URL.parse(reference);
   const permalink =
@@ -48,12 +44,6 @@ type PeerView =
   | { readonly state: 'served' | 'gone'; readonly object: object }
   | { readonly state: 'not-served'; readonly object: null };
 
-/**
- * What a peer that dereferences the post's id is answered, by the rule the
- * ActivityStreams route serves by: a served post's object, a trashed post's
- * tombstone (with 410), or nothing (404). Built through the same dispatcher
- * context and object builders, so it cannot drift from what peers get.
- */
 async function peerView(site: ToolSite, document: Document, objectId: string): Promise<PeerView> {
   const now = site.store.now();
   const served = isFederatedDocument(document, now);

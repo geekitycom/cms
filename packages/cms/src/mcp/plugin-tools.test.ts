@@ -1,9 +1,3 @@
-/**
- * A plugin's MCP tool from the outside: an MCP client lists and calls it
- * under the plugin's prefix while the plugin is enabled, and core holds it to
- * the scope check, the per-token limit and the record without the plugin
- * doing anything for it.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -150,7 +144,6 @@ async function rpc(
   return { status: response.status, body: (await response.json()) as Record<string, unknown> };
 }
 
-/** The plugin tools in a list of names, after `whoami`, which stands for core's. */
 function pluginAndWhoami(names: readonly string[]): string[] {
   return names.filter((name) => name === 'whoami' || name.includes('__'));
 }

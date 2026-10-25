@@ -1,7 +1,3 @@
-/**
- * The tool registry: one place that lists tools, checks the scope a tool
- * declares before it runs, and checks the arguments against its input schema.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -40,7 +36,6 @@ function callAs(scopes: readonly Scope[]): ToolCall {
 
 let ran = 0;
 
-/** Guards that let every call through and keep what the registry records. */
 function watching(refuse?: { retryAfter: number; first: boolean }): {
   guards: ToolGuards;
   records: ToolCallRecord[];

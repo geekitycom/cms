@@ -122,16 +122,10 @@ export function assertActorKeysUsable(dataDir: string, identifier: string): void
   }
 }
 
-/**
- * How one of an actor's key files stands. Absent is not damaged: the first
- * boot of a new site has no key files at all, and the first actor request
- * writes them.
- */
 export type ActorKeyHealth = { readonly algorithm: ActorKeyAlgorithm; readonly file: string } & (
   { readonly state: 'usable' | 'missing' } | { readonly state: 'unusable'; readonly cause: unknown }
 );
 
-/** Each of one actor's key files, checked as {@link assertActorKeysUsable} checks them. */
 export function actorKeyHealth(dataDir: string, identifier: string): ActorKeyHealth[] {
   return ACTOR_KEY_ALGORITHMS.map((algorithm) => {
     const file = actorKeyFile(dataDir, identifier, algorithm);

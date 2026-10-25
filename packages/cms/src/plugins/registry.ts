@@ -65,9 +65,7 @@ export interface PluginRoute {
   handler: PluginRouteHandler;
 }
 
-/** One MCP tool a plugin declared, under the name clients call it by. */
 export interface PluginMcpTool {
-  /** The plugin's prefix, `__`, and the tool's id, as {@link pluginToolName} makes it. */
   name: string;
   tool: PluginTool;
 }
@@ -602,13 +600,6 @@ function register(
 
 const DECLARED_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-/**
- * The name MCP clients call a plugin's tool by: the plugin's environment
- * variable prefix in lower case, `__`, and the id with `_` for `-`. Two
- * installed plugins never share a prefix, and neither part can hold `__`, so
- * no two plugins' tools share a name and none takes a core tool's, which
- * never holds `__`. Only letters, digits and `_`, which every client accepts.
- */
 function pluginToolName(plugin: string, id: string): string {
   return `${pluginEnvPrefix(plugin).toLowerCase()}__${id.replaceAll('-', '_')}`;
 }

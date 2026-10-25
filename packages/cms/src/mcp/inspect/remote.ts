@@ -14,10 +14,8 @@ import { defineTool } from '../tools.ts';
 import type { ToolSite } from '../tools.ts';
 import { ANY_OBJECT, READ_ONLY } from './schemas.ts';
 
-/** How long one lookup, WebFinger and object together, may take. */
 const TIMEOUT_MS = 10_000;
 
-/** The most of one response body that is read. */
 const MAX_BYTES = 256 * 1024;
 
 const ACTIVITY_ACCEPT =
@@ -25,7 +23,6 @@ const ACTIVITY_ACCEPT =
 
 const ACTIVITY_TYPE = /^application\/(activity\+json|ld\+json)/;
 
-/** The response headers worth showing when debugging a fetch, in the order shown. */
 const HEADERS_SHOWN = [
   'content-type',
   'content-length',
@@ -41,12 +38,10 @@ const HEADERS_SHOWN = [
   'server',
 ] as const;
 
-/** What the tool is asked to look up. */
 export type RemoteTarget =
   | { readonly kind: 'handle'; readonly user: string; readonly host: string }
   | { readonly kind: 'url'; readonly url: URL };
 
-/** One HTTP request the lookup made, and what came back. */
 const EXCHANGE = {
   type: 'object',
   properties: {
@@ -85,7 +80,6 @@ interface LookupOptions {
   readonly signal: AbortSignal;
   readonly timeoutMs: number;
   readonly maxBytes: number;
-  /** Signs the object fetch. WebFinger is never signed. */
   readonly sign: ((request: Request) => Promise<Request>) | undefined;
 }
 
@@ -102,10 +96,6 @@ function parseTarget(target: string): RemoteTarget | undefined {
   return url === undefined ? undefined : { kind: 'url', url };
 }
 
-/**
- * WebFinger for a handle, then the actor or object, all within one timeout,
- * public hosts only on every hop, and no body read past `maxBytes`.
- */
 export async function lookupRemote(
   target: RemoteTarget,
   options: LookupOptions,
@@ -207,10 +197,6 @@ interface Signer {
   readonly sign: (request: Request) => Promise<Request>;
 }
 
-/**
- * The local user whose key signs the fetch: the one named, else the site
- * author, else the first user. A site with no users signs nothing.
- */
 async function signerFor(
   site: ToolSite,
   username: string | undefined,

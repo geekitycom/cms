@@ -79,7 +79,6 @@ export const refreshActor = defineTool({
     if (fetched === undefined) {
       return { ok: false, message: `${actorId} did not answer with an actor that has an inbox.` };
     }
-    // Kept under the id the records already use, whatever the document calls itself.
     const current = { ...fetched, actorId };
 
     const held = admin.listFollowers().filter((follower) => follower.actorId === actorId);

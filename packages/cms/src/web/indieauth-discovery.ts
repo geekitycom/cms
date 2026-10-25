@@ -33,10 +33,8 @@ export const MICROPUB_PATH = '/_geekity/micropub';
 /** Where a Micropub client uploads a file before it names it in a post. */
 export const MICROPUB_MEDIA_PATH = '/_geekity/micropub/media';
 
-/** Where an MCP client talks to the site, and the MCP resource's identifier under the base URL. */
 export const MCP_PATH = '/_geekity/mcp';
 
-/** The draft MCP server card, which describes the server before a client connects. */
 export const MCP_SERVER_CARD_PATH = '/.well-known/mcp/server-card.json';
 
 /**
@@ -119,12 +117,6 @@ export function protectedResourceMetadata(baseUrl: string): ProtectedResourceMet
   };
 }
 
-/**
- * The MCP endpoint's protected resource metadata. It is a resource of its
- * own, so a token issued for it works nowhere else and a Micropub token does
- * not work here. An MCP client asks for every scope listed, and the person
- * unticks what they do not want on the consent screen.
- */
 export function mcpResourceMetadata(baseUrl: string): ProtectedResourceMetadata {
   return {
     resource: `${baseUrl}${MCP_PATH}`,

@@ -96,7 +96,6 @@ export interface UmamiClient {
     range: UmamiRange,
     options: UmamiCallOptions & { readonly timezone: string },
   ): Promise<UmamiDailyCounts>;
-  /** The top values of a metric, of the whole site or of the views of one `path`. */
   metrics(
     type: UmamiMetricType,
     range: UmamiRange,

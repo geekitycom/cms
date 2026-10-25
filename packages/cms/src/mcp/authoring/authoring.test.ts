@@ -1,8 +1,3 @@
-/**
- * The authoring tools from the outside: an MCP client drafting, reading back,
- * editing and publishing posts and uploading media, with every remote server
- * played by a stub so what federates and what is mentioned can be counted.
- */
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -87,7 +82,6 @@ async function authoringSite(
   return { cms, token: await inspectToken(cms, [...scopes]) };
 }
 
-/** A token for the site itself, as a Micropub client holds one. */
 async function micropubToken(cms: Cms): Promise<string> {
   return (
     await issueTokens(

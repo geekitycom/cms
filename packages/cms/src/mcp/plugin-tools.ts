@@ -3,11 +3,6 @@ import type { GeekityEnv } from '../web/env.ts';
 import { callingClient, defineTool } from './tools.ts';
 import type { McpTool } from './tools.ts';
 
-/**
- * The MCP tools of the plugins active for this request, under their prefixed
- * names. Read per request, so a plugin enabled or disabled since the last one
- * is offered or withdrawn without a restart.
- */
 export function activePluginTools(vars: Readonly<GeekityEnv['Variables']>): McpTool[] {
   const declared = [...vars.activePlugins].flatMap((name) => vars.plugins.find(name)?.tools ?? []);
   if (declared.length === 0) return [];

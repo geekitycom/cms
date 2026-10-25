@@ -83,7 +83,6 @@ export function resendJob(services: ResendJobServices): JobDefinition<ResendPayl
   };
 }
 
-/** What one resend's delivery report comes to, counted by outcome. */
 export function resendActivity(report: DeliveryReport): ResendActivity {
   return {
     activityType: report.activityType,

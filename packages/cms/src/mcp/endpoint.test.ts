@@ -1,8 +1,3 @@
-/**
- * The MCP endpoint from the outside: an MCP client speaking Streamable HTTP
- * with a token bound to the endpoint, and every client the endpoint turns
- * away.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -296,13 +291,11 @@ describe('a client the MCP endpoint refuses', () => {
 });
 
 describe('a request body over the limit', () => {
-  // The largest upload's base64 length plus 8 KiB for the JSON envelope.
   const UPLOAD_LIMIT = 3000;
   const BODY_LIMIT = 4000 + 8192;
   const CHUNK = 1024;
   const smallUploads = { uploadMaxBytes: UPLOAD_LIMIT, uploadMediaMaxBytes: UPLOAD_LIMIT };
 
-  /** A body that hands over `CHUNK` bytes each time it is read, and never ends. */
   function endless(): { stream: ReadableStream<Uint8Array>; pulled: () => number } {
     let pulled = 0;
     const stream = new ReadableStream<Uint8Array>(

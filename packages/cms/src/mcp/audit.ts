@@ -2,7 +2,6 @@ import { recordMcpCall } from '../web/indieauth-activity-log.ts';
 import type { McpCallFacts } from '../web/indieauth-activity-log.ts';
 import type { ToolCallRecord } from './tools.ts';
 
-/** Record one tool call in the app activity record, as the client was answered. */
 export function auditToolCall(dataDir: string, record: ToolCallRecord, at: Date): void {
   recordMcpCall(
     dataDir,
@@ -17,10 +16,6 @@ export function auditToolCall(dataDir: string, record: ToolCallRecord, at: Date)
   );
 }
 
-/**
- * What a call came to, as an HTTP status and an error code. Every call but a
- * refusal for scope is answered 200, its failure carried in the JSON-RPC body.
- */
 function answered(
   outcome: ToolCallRecord['outcome'],
 ): Pick<McpCallFacts, 'status' | 'error' | 'errorDescription'> {

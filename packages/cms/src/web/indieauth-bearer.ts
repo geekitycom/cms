@@ -20,10 +20,6 @@ export interface Guard {
   readonly audience: Audience | 'authorization-server';
   readonly scopes?: Scopes;
   readonly insufficientScopeStatus?: InsufficientScopeStatus;
-  /**
-   * Where a refused client reads the protected resource metadata, for a
-   * resource server with its own identifier. Defaults to the site's.
-   */
   readonly resourceMetadataPath?: string;
 }
 

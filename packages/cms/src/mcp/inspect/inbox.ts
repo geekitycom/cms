@@ -16,7 +16,6 @@ import {
 } from './paging.ts';
 import { ANY_OBJECT, READ_ONLY } from './schemas.ts';
 
-/** Resolve one of the site's own object ids to the post behind it, as the federation screen does. */
 function postResolver(site: ToolSite): (objectId: string | null) => LocalPost | null {
   return localPosts(
     site.store,

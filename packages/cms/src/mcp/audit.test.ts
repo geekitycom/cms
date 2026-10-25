@@ -1,8 +1,3 @@
-/**
- * What every MCP tool call leaves behind, through the endpoint as a client
- * calls it: an entry in the app activity record, the per-token limit, the
- * age limit on the record, and where the owner reads it in the admin.
- */
 import assert from 'node:assert/strict';
 import { readFile, stat } from 'node:fs/promises';
 import { after, describe, it } from 'node:test';

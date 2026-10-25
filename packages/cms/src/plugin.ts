@@ -907,10 +907,6 @@ export const MCP_SCOPES = [
 
 export type McpScope = (typeof MCP_SCOPES)[number];
 
-/**
- * The part of JSON Schema an MCP tool's input and output are described in,
- * and the value a schema describes, so a tool's `run` is typed by its schema.
- */
 export type {
   ArraySchema,
   BooleanSchema,

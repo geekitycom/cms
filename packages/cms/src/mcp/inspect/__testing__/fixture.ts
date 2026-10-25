@@ -1,4 +1,3 @@
-/** A fixture site for the inspect tools, and an MCP client to question it with. */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -16,7 +15,6 @@ export const ALICE = 'https://mastodon.example/users/alice';
 export const BOB = 'https://me.example/users/bob';
 export const RELAY = 'https://relay.example/inbox';
 
-/** A site with one announced post and a little of everything federation records. */
 export async function fixtureSite(box: Sandbox, config: GeekityConfig = {}): Promise<Cms> {
   const contentDir = await box.dir('geekity-inspect-content-');
   const dataDir = await box.dir('geekity-inspect-data-');
@@ -92,8 +90,6 @@ export async function fixtureSite(box: Sandbox, config: GeekityConfig = {}): Pro
     receivedAt: '2026-03-02T00:00:00.000Z',
     json: JSON.stringify({ type: 'Like', actor: ALICE, object: POST_ID }),
   });
-  // A reply that names the post without its trailing slash, so it answers
-  // no id the post was federated under.
   admin.logInboxActivity({
     activityId: 'https://me.example/notes/9/activity',
     activityType: 'Create',
@@ -196,7 +192,6 @@ export interface ToolAnswer {
   readonly structured: Record<string, unknown>;
 }
 
-/** Call a tool and hand back its answer, failing the test on a protocol error. */
 export async function call(
   cms: Cms,
   token: string,

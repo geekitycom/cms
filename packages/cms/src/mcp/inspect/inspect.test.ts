@@ -1,8 +1,3 @@
-/**
- * The read-only federation tools from the outside: an MCP client with the
- * inspect scope searching what a fixture site recorded, and one without it
- * getting nothing.
- */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 
@@ -37,7 +32,6 @@ const INSPECT_TOOLS = [
   'webmentions',
 ] as const;
 
-/** Arguments each tool can be called with on the fixture site. */
 const SAMPLE_ARGS: Readonly<Record<(typeof INSPECT_TOOLS)[number], Record<string, unknown>>> = {
   federation_status: {},
   inbox_search: {},

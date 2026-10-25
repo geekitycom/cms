@@ -1,7 +1,3 @@
-/**
- * Two debugging questions answered the way an agent would, from the inspect
- * tools alone: no database, no files, only tool calls over MCP.
- */
 import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
@@ -14,7 +10,6 @@ after(() => box.cleanup());
 
 type Row = Record<string, unknown>;
 
-/** Why a reply from `actor` to the post named `post` is not shown under it. */
 async function whyNoReply(cms: Cms, token: string, post: string, actor: string): Promise<string> {
   const target = await call(cms, token, 'post_federation', { post });
   const ids = target.structured['objectIds'] as string[];
@@ -41,7 +36,6 @@ async function whyNoReply(cms: Cms, token: string, post: string, actor: string):
   return `${String(create['activityId'])} replies to ${answers}, which is none of the ids the post was federated under (${ids.join(', ')}).`;
 }
 
-/** Which inboxes refused the post, and what each said. */
 async function failedInboxes(cms: Cms, token: string, post: string): Promise<string[]> {
   const failed = await call(cms, token, 'post_federation', { post, status: 'failed' });
   return (failed.structured['deliveries'] as Row[]).map(

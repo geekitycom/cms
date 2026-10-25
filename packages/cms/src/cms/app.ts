@@ -147,7 +147,6 @@ export function createApp(
   // those tokens.
   mountMicropub(app);
   mountMicropubMedia(app);
-  // And the MCP endpoint, which takes only tokens bound to it.
   mountMcp(app);
 
   // Federation goes on first. It answers its own paths and falls through on

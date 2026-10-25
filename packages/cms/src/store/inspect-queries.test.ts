@@ -1,7 +1,3 @@
-/**
- * The searches the MCP inspect tools ask of the inbox log and the delivery
- * outcomes: narrowed by any of their columns, paged, and counted.
- */
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

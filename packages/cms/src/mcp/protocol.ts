@@ -3,10 +3,6 @@ import { isRecord } from '../util/guards.ts';
 import { listedTool } from './tools.ts';
 import type { ToolCall, ToolRegistry } from './tools.ts';
 
-/**
- * The MCP revisions this server speaks, newest first. It offers tools and
- * nothing else, which reads the same in each.
- */
 export const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'] as const;
 
 export type ProtocolVersion = (typeof PROTOCOL_VERSIONS)[number];
@@ -48,11 +44,6 @@ export interface ServerInfo {
   readonly version: string;
 }
 
-/**
- * What one posted message comes to, for the transport to send: 202 with no
- * body for a notification or a response, 200 with an answer, 400 for what is
- * not a message, and 403 for a tool call the token lacks the scope for.
- */
 export type McpReply =
   | { readonly kind: 'accepted' }
   | { readonly kind: 'answer'; readonly message: JsonRpcResponse }
@@ -73,7 +64,6 @@ export function failure(id: RequestId | null, error: JsonRpcError): JsonRpcRespo
   return { jsonrpc: '2.0', id, error };
 }
 
-/** Answer one JSON-RPC message posted to the endpoint. */
 export async function reply(message: unknown, server: McpServer): Promise<McpReply> {
   if (!isRecord(message) || message['jsonrpc'] !== '2.0') {
     return malformed('The body must be one JSON-RPC 2.0 message.');
@@ -158,10 +148,7 @@ async function callTool(
   }
 }
 
-/**
- * A tool's outcome as MCP's CallToolResult. The structured result is also
- * written out as text, as the spec asks, for clients that read only text.
- */
+/** MCP asks that structured content also be sent as text, for clients that read only text. */
 function toolResult(outcome: McpToolOutcome<unknown>) {
   if (!outcome.ok) return { content: [{ type: 'text', text: outcome.message }], isError: true };
   return {
@@ -174,7 +161,6 @@ function toolResult(outcome: McpToolOutcome<unknown>) {
   };
 }
 
-/** The client's version when this server speaks it, or else its own newest, as the spec says. */
 function negotiatedVersion(asked: unknown): ProtocolVersion {
   return isSupportedVersion(asked) ? asked : LATEST_PROTOCOL_VERSION;
 }

@@ -323,7 +323,6 @@ export function contextData(c: Context<GeekityEnv>): FederationContextData {
   return federationContextData(c.var);
 }
 
-/** What the dispatchers are handed, off a request's variables. */
 export function federationContextData(
   vars: Pick<
     GeekityEnv['Variables'],

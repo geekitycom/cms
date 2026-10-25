@@ -42,7 +42,6 @@ import { refreshActor } from './repair/refresh.ts';
 import { resendPost } from './repair/resend.ts';
 import { retryDeliveries } from './repair/retry.ts';
 
-/** The tools core offers. */
 const CORE_TOOLS: readonly McpTool[] = [
   whoami,
   federationStatus,
@@ -63,24 +62,11 @@ const CORE_TOOLS: readonly McpTool[] = [
   uploadMedia,
 ];
 
-/** How many tool calls one token may make in {@link MCP_CALL_WINDOW_SECONDS}. */
 export const MCP_CALLS_PER_WINDOW = 60;
 
 export const MCP_CALL_WINDOW_SECONDS = 60;
 
-/**
- * The MCP endpoint, over Streamable HTTP, and the server card that describes
- * it.
- *
- * Stateless: every POST carries one JSON-RPC message and its bearer token,
- * and is answered with one JSON object, so there is no session to keep and no
- * stream to hold open. GET and DELETE, which open a stream and end a session,
- * answer 405, as the transport allows. Not exempt from maintenance mode, like
- * the authorization and token endpoints its tokens come from.
- */
 export function mountMcp(app: Hono<GeekityEnv>): void {
-  // Built on the first call, because the clock and the data directory are on
-  // the context. The limit lives in the process, like the sign-in throttle.
   let guards: ToolGuards | undefined;
   function guardsFor(config: ResolvedConfig): ToolGuards {
     guards ??= {
@@ -149,6 +135,8 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
     }
   });
 
+  // Streamable HTTP lets a server that opens no stream and keeps no session
+  // answer GET and DELETE with 405.
   app.on(['GET', 'DELETE'], MCP_PATH, sameOriginOnly, requireMcpToken, (c) => {
     c.header('allow', 'POST');
     return c.body(null, 405);
@@ -172,16 +160,10 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
   });
 }
 
-/**
- * The most a request body may weigh: an upload_media call carrying the largest
- * file the site takes, as base64, with the same slack for its envelope that
- * the other upload endpoints allow.
- */
 function bodyLimit(config: ResolvedConfig): number {
   return base64Length(largestUploadLimit(config)) + UPLOAD_ENVELOPE_BYTES;
 }
 
-/** Core's tools and those of the plugins active for this request. */
 function toolsFor(vars: Readonly<GeekityEnv['Variables']>): readonly McpTool[] {
   return [...CORE_TOOLS, ...activePluginTools(vars)];
 }
@@ -190,10 +172,6 @@ function serverInfo(title: string): ServerInfo {
   return { name: 'geekity', title, version: PACKAGE_VERSION };
 }
 
-/**
- * The bearer guard for a token bound to the MCP endpoint and nothing else.
- * Built per request because the base URL is a setting.
- */
 const requireMcpToken: MiddlewareHandler<BearerEnv> = async (c, next) =>
   await requireBearer({
     audience: { resource: `${c.var.config.baseUrl}${MCP_PATH}`, acceptsUnbound: false },

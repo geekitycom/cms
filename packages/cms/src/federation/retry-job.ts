@@ -14,7 +14,6 @@ import { objectIdsOf, readObjectIds } from './object-ids.ts';
 import { resendActivity } from './resend-job.ts';
 import type { ResendActivity } from './resend-job.ts';
 
-/** Which failed deliveries to retry: those of one post, those to one inbox, or both at once. */
 export type RetryFilter =
   | { readonly slug: string; readonly inbox: string | null }
   | { readonly slug: null; readonly inbox: string };
@@ -23,15 +22,9 @@ export type RetryRecipient = {
   readonly actorId: string;
   readonly inboxId: string;
   readonly error: string | null;
-  /**
-   * Whether the newest `Create` this recipient was sent for the post failed,
-   * so it never stored the post and is sent the `Create` again: an `Update`
-   * of a status it does not hold is one a peer drops.
-   */
   readonly missedAnnouncement: boolean;
 };
 
-/** One post to send again, and the recipients whose newest delivery of it failed. */
 export type Retry = { readonly slug: string; readonly recipients: RetryRecipient[] };
 
 export type RetryReport = {
@@ -44,7 +37,7 @@ export type RetryReport = {
 
 export const RETRY_DELIVERIES_JOB = jobName<RetryFilter, RetryReport>('retry-deliveries');
 
-/** How long the job waits between one post and the next, so one inbox is not sent a burst. */
+/** A burst of deliveries to one server can trip its bot protection. */
 export const RETRY_PACE_MS = 2000;
 
 export interface RetryPlanServices {
@@ -57,16 +50,6 @@ export interface RetryJobServices extends RetryPlanServices {
   readonly delivery: Pick<DeliveryService, 'resend'>;
 }
 
-/**
- * The deliveries the filter names whose newest outcome for their post and
- * recipient is `failed`, grouped by post.
- *
- * Read from the delivery record each time, so a retry that worked, or a later
- * resend that reached the recipient, leaves nothing here to retry again. The
- * newest outcome is judged across every inbox the recipient was sent to, so
- * one that failed at an inbox it has since moved away from and was reached at
- * the new one is not retried.
- */
 export function failedRetries(services: RetryPlanServices, filter: RetryFilter): Retry[] {
   const { admin, config } = services;
   let objectIds: string[] | undefined;
@@ -116,13 +99,6 @@ export function failedRetries(services: RetryPlanServices, filter: RetryFilter):
   return [...retries].map(([slug, recipients]) => ({ slug, recipients }));
 }
 
-/**
- * Send each post named by {@link failedRetries} again, as it reads now, to
- * those recipients alone, one post at a time with a pause between, so a burst
- * to one server cannot trip its bot protection. A post's recipients that
- * missed its `Create` get the `Create`, and the rest an `Update`, so the
- * report can name one post twice.
- */
 export function retryDeliveriesJob(
   services: RetryJobServices,
   pace: (signal: AbortSignal) => Promise<void> = (signal) =>

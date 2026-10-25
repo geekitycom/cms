@@ -2,9 +2,7 @@ import { clientIdentifier, sameClient } from '../util/client-id.ts';
 
 /**
  * The scopes a client may ask for: the profile ones, the Micropub ones, and
- * the ones only MCP tools need. Core fixes the list; a plugin's tool picks
- * one of these and cannot add its own, so the consent screen is always this
- * readable list.
+ * the ones only MCP tools need.
  */
 export const SCOPES = [
   'profile',
@@ -21,7 +19,6 @@ export const SCOPES = [
 /** A scope this site can grant. */
 export type Scope = (typeof SCOPES)[number];
 
-/** The scopes a token bound to the site itself, for Micropub and its media endpoint, can use. */
 export const SITE_SCOPES = [
   'profile',
   'email',

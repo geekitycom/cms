@@ -123,10 +123,6 @@ export interface GeekityEnv {
      * away from any request.
      */
     delivery: DeliveryService;
-    /**
-     * The site's Fedify federation, so an MCP tool can build a post's object
-     * through the same dispatcher context a peer's fetch gets.
-     */
     federation: SiteFederation;
     jobs: JobQueue;
     /**

@@ -28,12 +28,10 @@ const ENDPOINT_LABELS: Readonly<Record<ActivityEndpoint, string>> = {
   mcp: 'MCP',
 };
 
-/** Where one entry is shown in full. */
 export function activityEntryUrl(entry: ActivityEntry): string {
   return `${APP_ACTIVITY_PATH}/${entry.id}`;
 }
 
-/** An entry in a few words: its endpoint and what it did there. */
 export function activityLabel(entry: ActivityEntry): string {
   return `${ENDPOINT_LABELS[entry.endpoint]} ${entry.action}`;
 }
@@ -84,7 +82,6 @@ export function mountAppActivity(app: Hono<GeekityEnv>, options: { render: Admin
   });
 }
 
-/** Every entry still inside the age limit, newest first. */
 export async function freshEntries(dataDir: string, now: Date): Promise<ActivityEntry[]> {
   return (await readActivityLog(dataDir)).filter((entry) => isFresh(entry, now));
 }

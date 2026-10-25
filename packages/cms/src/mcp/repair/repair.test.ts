@@ -1,8 +1,3 @@
-/**
- * The federation repair tools from the outside: an MCP client with the repair
- * scope resending a post, retrying the deliveries that failed and refreshing
- * a follower whose inbox moved, with every remote server played by a stub.
- */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';

@@ -10,10 +10,7 @@
  * middleware placed in front of it, which sees the final status and reads the
  * refusal out of the response itself: Micropub's and OAuth's JSON error
  * bodies, or the `error` on an authorization redirect. A handler adds only
- * what its response does not show, through {@link noteActivity}. An MCP tool
- * call is recorded by the tool registry's guard, through {@link recordMcpCall}, one
- * entry per call rather than per request, in a file of its own so a busy
- * agent never pushes a failed sign-in out of the other.
+ * what its response does not show, through {@link noteActivity}.
  *
  * Nothing secret is kept. No header is read, so no `Authorization` and no
  * cookie; a field named in {@link SECRET_FIELDS} is kept as its name alone,
@@ -44,7 +41,6 @@ export const ACTIVITY_LOG_MODE = 0o600;
 /** How many IndieAuth and Micropub entries are kept, newest first. */
 export const ACTIVITY_LOG_LIMIT = 100;
 
-/** How many MCP tool calls are kept, newest first: an agent makes many more calls than an app makes sign-ins. */
 export const MCP_ACTIVITY_LIMIT = 500;
 
 /** How long an entry is kept: fourteen days. */
@@ -85,9 +81,7 @@ interface Facts {
   readonly clientId?: string | undefined;
   /** The username the request acted as, when that is known. */
   readonly user?: string | undefined;
-  /** The id of the connection whose token the request carried, once the bearer guard let it in. */
   readonly connection?: string | undefined;
-  /** The name of a token created by hand, which has no client URL to go by. */
   readonly tokenName?: string | undefined;
   readonly carried: readonly CarriedField[];
 }
@@ -119,7 +113,6 @@ export type EndpointFacts = Facts &
       }
     | {
         readonly endpoint: 'mcp';
-        /** The tool called, as the client named it. */
         readonly action: string;
       }
   );
@@ -162,7 +155,6 @@ export function isFresh(entry: ActivityEntry, now: Date): boolean {
   return now.getTime() - Date.parse(entry.at) <= ACTIVITY_LOG_MAX_AGE_MS;
 }
 
-/** One of the two files entries are kept in, and how many it holds. */
 interface ActivityFile {
   readonly declaration: DataFileDeclaration;
   readonly limit: number;
@@ -270,7 +262,6 @@ function warn(error: unknown): void {
   console.warn(`Could not write the app activity log: ${reason}`);
 }
 
-/** One MCP tool call as the registry saw it, and what the client was answered. */
 export interface McpCallFacts {
   readonly tool: string;
   readonly args: unknown;
@@ -281,12 +272,6 @@ export interface McpCallFacts {
   readonly errorDescription?: string;
 }
 
-/**
- * Record one MCP tool call: who made it, through which connection, the
- * arguments it named with every secret field replaced and every value cut
- * short, and what it came to. Like the HTTP entries, the write is not
- * awaited and a failure is a warning.
- */
 export function recordMcpCall(dataDir: string, call: McpCallFacts, at: Date): void {
   try {
     const entry: ActivityEntry = {
@@ -315,7 +300,6 @@ export function recordMcpCall(dataDir: string, call: McpCallFacts, at: Date): vo
   }
 }
 
-/** Which connection a bearer token is: its id, and its client or, for a token made by hand, its name. */
 function connectionFacts(token: StoredToken): Pick<Facts, 'clientId' | 'connection' | 'tokenName'> {
   return token.kind === 'created'
     ? { connection: token.id, tokenName: short(token.name) }

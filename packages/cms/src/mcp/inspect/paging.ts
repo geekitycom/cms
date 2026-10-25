@@ -1,8 +1,3 @@
-/**
- * The paging and time filters every inspect tool shares, so an agent learns
- * one convention: `limit` and `offset` in, `total` and `nextOffset` out, and
- * `since` and `until` as ISO 8601 instants wherever the records carry a time.
- */
 import type { Page } from '../../store/rows.ts';
 import { nullable } from '../../util/json-schema.ts';
 
@@ -54,7 +49,6 @@ export function pageFields<T>(
   return { total: page.total, nextOffset: next < page.total ? next : null };
 }
 
-/** A page's summary: how many match, and which of them it shows. */
 export function counted(
   total: number,
   noun: string,
@@ -65,7 +59,6 @@ export function counted(
   return `${String(total)} ${total === 1 ? noun : plural}; showing ${String(shown)} from ${String(offset)}.`;
 }
 
-/** One page of records already in memory. */
 export function pageOfList<T>(items: readonly T[], at: PageAt): Page<T> {
   return { total: items.length, items: items.slice(at.offset, at.offset + at.limit) };
 }
@@ -74,10 +67,6 @@ export type Instants =
   | { readonly ok: true; readonly since?: string; readonly until?: string }
   | { readonly ok: false; readonly message: string };
 
-/**
- * `since` and `until` as the stored instants are written, so a date such as
- * `2026-03-01` compares with them as the instant it means.
- */
 export function instants(args: { readonly since?: string; readonly until?: string }): Instants {
   const parsed: { since?: string; until?: string } = {};
   for (const key of ['since', 'until'] as const) {
@@ -92,7 +81,6 @@ export function instants(args: { readonly since?: string; readonly until?: strin
   return { ok: true, ...parsed };
 }
 
-/** Whether an instant falls inside `since` and `until`. */
 export function within(at: string, range: { readonly since?: string; readonly until?: string }) {
   return (
     (range.since === undefined || at >= range.since) &&

@@ -1,7 +1,3 @@
-/**
- * The per-token call limit: a fixed window of calls per key, a wait to the
- * end of the window when it is spent, and a mark on the first refusal.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

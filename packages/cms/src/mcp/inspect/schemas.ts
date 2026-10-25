@@ -2,7 +2,6 @@ import { DELIVERY_STATUSES } from '../../store/deliveries.ts';
 import { nullable } from '../../util/json-schema.ts';
 import type { McpToolAnnotations } from '../../plugin.ts';
 
-/** A tool that reads what the site recorded and changes nothing, as every inspect tool does. */
 export const READ_ONLY: McpToolAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -10,7 +9,6 @@ export const READ_ONLY: McpToolAnnotations = {
   openWorldHint: false,
 };
 
-/** An object with one integer, a count, for each of `values`. */
 export function countsOf<const V extends readonly [string, ...string[]]>(values: V) {
   return {
     type: 'object',
@@ -27,7 +25,6 @@ export const STATUS_COUNTS = {
   description: 'How many recipients stand at each delivery status.',
 } as const;
 
-/** One recorded outcome of one activity sent to one recipient, as the store keeps it. */
 export const DELIVERY = {
   type: 'object',
   properties: {
@@ -54,5 +51,4 @@ export const DELIVERY = {
   ],
 } as const;
 
-/** Any JSON object, such as an activity as it was received. */
 export const ANY_OBJECT = { type: 'object', properties: {} } as const;

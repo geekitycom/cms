@@ -35,7 +35,6 @@ function plugin(name: string, requires: Record<string, string> = {}, extra: Part
   });
 }
 
-/** An MCP tool with nothing to it but what every tool declares. */
 const TOOL = {
   id: 'echo',
   title: 'Echo',

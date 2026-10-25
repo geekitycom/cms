@@ -78,10 +78,8 @@ export interface DeliveryReport {
   readonly held: boolean;
 }
 
-/** Who a resend goes to, when it is not every follower and relay. */
 export interface ResendRecipients {
   readonly actors: ReadonlySet<string>;
-  /** Whether the post's announcement, usually its `Create`, never reached them. */
   readonly missedAnnouncement: boolean;
 }
 
@@ -153,11 +151,8 @@ export interface DeliveryService {
    * not published now, so there is neither a copy to withdraw nor anything to
    * announce.
    *
-   * With `to`, only the inboxes that reach one of its actors are sent to, at
-   * the inbox each uses now: how a retry reaches the recipients a delivery
-   * failed for and nobody else. Recipients that missed the announcement are
-   * sent it again rather than an `Update`, which a peer drops for a post it
-   * never stored.
+   * Recipients in `to` that missed the announcement are sent it again rather
+   * than an `Update`, which a peer drops for a post it never stored.
    */
   resend(slug: string, to?: ResendRecipients): Promise<DeliveryReport | undefined>;
   /**

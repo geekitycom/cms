@@ -1,8 +1,3 @@
-/**
- * The part of JSON Schema a tool's input and output are described in. Small
- * enough to check arguments against without a validator library, and typed
- * so a tool's `run` is handed exactly the shape its schema promises.
- */
 import { isRecord } from './guards.ts';
 
 interface Described {
@@ -78,7 +73,6 @@ type ObjectFrom<P, R> = {
   readonly [K in Exclude<keyof P, R>]?: FromSchema<P[K]>;
 };
 
-/** What is wrong with `value` as `schema` describes it, one sentence per fault; empty when it fits. */
 export function problemsWith(schema: JsonSchema, value: unknown, name?: string): string[] {
   const label = name ?? 'the arguments';
   if ('anyOf' in schema) return value === null ? [] : problemsWith(schema.anyOf[0], value, name);

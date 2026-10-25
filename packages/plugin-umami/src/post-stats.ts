@@ -59,7 +59,6 @@ const OUTPUT = {
   required: ['path', 'from', 'to', 'views', 'visitors', 'visits', 'referrers'],
 } as const satisfies ObjectSchema;
 
-/** One post's, or one path's, views, visitors and referrers from Umami, as an MCP tool. */
 export function postStatsTool(
   client: UmamiClient,
   postsAt: (paths: readonly string[]) => Promise<readonly PostAtPath[]>,
@@ -126,7 +125,6 @@ function counts(totals: UmamiTotals) {
   return { views: totals.pageviews, visitors: totals.visitors, visits: totals.visits };
 }
 
-/** The path a reader's browser sent Umami, from a path or a full URL; `undefined` for neither. */
 function pathOf(asked: string): string | undefined {
   if (asked.startsWith('/')) return asked.split(/[?#]/)[0];
   const url = URL.parse(asked);

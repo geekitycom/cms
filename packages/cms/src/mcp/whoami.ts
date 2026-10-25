@@ -1,7 +1,6 @@
 import { READ_ONLY } from './inspect/schemas.ts';
 import { callingClient, defineTool } from './tools.ts';
 
-/** Who the connection acts as, through which client, with which scopes. */
 export const whoami = defineTool({
   name: 'whoami',
   title: 'Who am I',
