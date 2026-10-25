@@ -20,11 +20,12 @@ import { findUserById, listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { clientIdentifier, sameClient } from '../util/client-id.ts';
 import { SCOPE_LABELS } from './indieauth-consent.ts';
-import { SITE_SCOPES } from '../indieauth/request.ts';
+import { MCP_SCOPES, SITE_SCOPES } from '../indieauth/request.ts';
 import { meForSignIn } from '../indieauth/identity.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { createToken, lapsesAt, listTokens, revokeConnection } from '../indieauth/tokens.ts';
 import type { StoredToken } from '../indieauth/tokens.ts';
+import { MCP_PATH } from '../web/indieauth-discovery.ts';
 
 /** Where a Revoke button posts. */
 export const REVOKE_CONNECTION_PATH = `${CONNECTED_APPS_PATH}/revoke`;
@@ -48,8 +49,40 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const NAME_LIMIT = 100;
 
+/**
+ * What a created token can be bound to. A resource server takes only a token
+ * bound to it, so the choice decides where the token works and which scopes
+ * make sense on it.
+ */
+const TOKEN_RESOURCES = [
+  {
+    name: 'micropub',
+    label: 'Micropub',
+    hint: 'Posting apps and scripts, such as the Manual tab of micropub.rocks.',
+    scopes: SITE_SCOPES,
+    url: (baseUrl: string) => baseUrl,
+  },
+  {
+    name: 'mcp',
+    label: 'MCP',
+    hint: 'AI assistants and agents, such as Claude Code.',
+    scopes: MCP_SCOPES,
+    url: (baseUrl: string) => `${baseUrl}${MCP_PATH}`,
+  },
+] as const;
+
+type TokenResource = (typeof TOKEN_RESOURCES)[number];
+
+const DEFAULT_TOKEN_RESOURCE: TokenResource = TOKEN_RESOURCES[0];
+
+/** The form field holding the scopes ticked for `resource`. */
+function scopeField(resource: TokenResource): string {
+  return `${resource.name}_scope`;
+}
+
 interface TokenForm {
   name: string;
+  resource: string;
   scopes: readonly string[];
   expires: string;
 }
@@ -109,30 +142,39 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
   app.post(CREATE_TOKEN_PATH, async (c) => {
     const { config } = c.var;
     const body = await c.req.parseBody({ all: true });
+    const resourceName = stringOrEmpty(body['resource']);
+    const resource = TOKEN_RESOURCES.find((choice) => choice.name === resourceName);
     const form: TokenForm = {
       name: stringOrEmpty(body['name']).trim(),
-      scopes: [body['scope'] ?? []].flat().map(stringOrEmpty),
+      resource: resourceName,
+      scopes:
+        resource === undefined ? [] : [body[scopeField(resource)] ?? []].flat().map(stringOrEmpty),
       expires: stringOrEmpty(body['expires']),
     };
     const user =
       c.var.session?.userId == null
         ? undefined
         : findUserById(config.dataDir, c.var.session.userId);
-    const scopes = form.scopes.filter((scope): scope is Scope =>
-      (SITE_SCOPES as readonly string[]).includes(scope),
-    );
+    const offered: readonly string[] = resource?.scopes ?? [];
+    const scopes = form.scopes.filter((scope): scope is Scope => offered.includes(scope));
     const days = TOKEN_LIFETIME_DAYS.find((choice) => String(choice) === form.expires);
     const problems: TokenProblems = {
       ...(form.name === '' ? { name: 'Give the token a name, so you can tell it apart.' } : {}),
       ...(form.name.length > NAME_LIMIT
         ? { name: `Keep the name to ${NAME_LIMIT} characters.` }
         : {}),
-      ...(scopes.length === 0 || scopes.length < form.scopes.length
+      ...(resource === undefined ? { resource: 'Choose what the token works with.' } : {}),
+      ...(resource !== undefined && (scopes.length === 0 || scopes.length < form.scopes.length)
         ? { scopes: 'Choose at least one thing the token may do.' }
         : {}),
       ...(days === undefined ? { expires: 'Choose when the token expires.' } : {}),
     };
-    if (user === undefined || days === undefined || Object.keys(problems).length > 0) {
+    if (
+      user === undefined ||
+      resource === undefined ||
+      days === undefined ||
+      Object.keys(problems).length > 0
+    ) {
       c.status(400);
       return render(
         c,
@@ -153,7 +195,7 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
         }),
         name: form.name,
         scopes,
-        resource: baseUrl,
+        resource: resource.url(baseUrl),
         lifetimeMs: days * DAY_MS,
       },
       config.now(),
@@ -189,9 +231,11 @@ function screen(
   const connections = listTokens(config.dataDir)
     .filter((stored) => stored.userId === userId && Date.parse(lapsesAt(stored)) > now)
     .sort((a, b) => b.issuedAt.localeCompare(a.issuedAt))
-    .map((stored) => row(stored, settings.timezone));
+    .map((stored) => row(stored, settings.timezone, config.baseUrl));
   const form = token !== undefined && 'refused' in token ? token.refused : undefined;
-  const chosen = new Set(form?.scopes ?? []);
+  const chosenResource =
+    TOKEN_RESOURCES.find((resource) => resource.name === form?.resource) ?? DEFAULT_TOKEN_RESOURCE;
+  const ticked = new Set(form?.scopes ?? []);
   return {
     section: 'users',
     child: CONNECTED_APPS_CHILD,
@@ -209,11 +253,21 @@ function screen(
     createToken: {
       url: CREATE_TOKEN_PATH,
       name: form?.name ?? '',
-      scopes: SITE_SCOPES.map((scope) => ({
-        name: scope,
-        label: SCOPE_LABELS[scope],
-        checked: chosen.has(scope),
-      })),
+      resources: TOKEN_RESOURCES.map((resource) => {
+        const chosen = resource === chosenResource;
+        return {
+          name: resource.name,
+          label: resource.label,
+          hint: resource.hint,
+          chosen,
+          field: scopeField(resource),
+          scopes: resource.scopes.map((scope) => ({
+            name: scope,
+            label: SCOPE_LABELS[scope],
+            checked: chosen && ticked.has(scope),
+          })),
+        };
+      }),
       expiries: TOKEN_LIFETIME_DAYS.map((days) => ({
         days,
         selected: String(days) === (form?.expires ?? String(DEFAULT_TOKEN_LIFETIME_DAYS)),
@@ -225,12 +279,16 @@ function screen(
 }
 
 /** One connection as the table shows it. */
-function row(token: StoredToken, timezone: string) {
+function row(token: StoredToken, timezone: string, baseUrl: string) {
   const when = (instant: string) => ({ iso: instant, text: formatInTimezone(instant, timezone) });
   return {
     id: token.id,
     name: clientLabel(token),
     url: token.kind === 'created' ? undefined : token.clientId,
+    resource:
+      token.kind === 'created'
+        ? TOKEN_RESOURCES.find((resource) => resource.url(baseUrl) === token.resource)?.label
+        : undefined,
     scopes: token.scopes.map((scope) => SCOPE_LABELS[scope]),
     issued: when(token.issuedAt),
     lastUsed: token.lastUsedAt === undefined ? undefined : when(token.lastUsedAt),

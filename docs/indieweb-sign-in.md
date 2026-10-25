@@ -156,6 +156,23 @@ connection:
 To reconnect, the app must ask you again through the consent screen. With no
 apps connected, the screen lists the kinds of app that connect here.
 
+## Tokens you create
+
+Some tools and scripts cannot sign in, but accept a token you paste in. Create
+a token at the Create a token form on Users > Connected apps. Give it a name,
+choose what it works with, tick its scopes and choose when it expires: 7, 30 or 90
+days, or a year. The site shows the token once and keeps only its hash.
+
+What it works with decides where the token works:
+
+- Micropub. The token works at the Micropub endpoint and its media endpoint,
+  with the Micropub scopes.
+- MCP. The token works only at the [MCP endpoint](mcp.md), with the scopes its
+  tools use.
+
+A token you create is listed with the badge Token you created and a badge that
+names what it is for. It has a Revoke button like an app's connection.
+
 ## Apps allowed without PKCE
 
 The IndieAuth spec requires PKCE. The site refuses every sign-in request

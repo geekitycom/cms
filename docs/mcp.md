@@ -18,6 +18,27 @@ opens the site's consent screen in your browser. Sign in to the admin if you
 are not signed in, untick each scope you do not want the agent to have, and
 approve.
 
+### With a token you create
+
+A client that cannot sign in, or a machine where you would rather paste a
+token, can use a token you create in the admin:
+
+1. Open Users > Connected apps, at `/admin/users/apps`.
+2. Under Create a token, enter a name such as Claude Code on my laptop.
+3. Under Works with, choose MCP. A Micropub token does not work at the MCP endpoint.
+4. Tick the scopes the agent needs, and choose when the token expires.
+5. Choose Create token, and copy the token. The site shows it once.
+
+Then add the site with the token in an `Authorization` header:
+
+```sh
+claude mcp add --transport http my-site https://example.com/_geekity/mcp \
+  --header 'Authorization: Bearer <token>'
+```
+
+The token is listed on Connected apps with the badge For MCP. Revoke it there
+to cut the agent off.
+
 ## How a client finds where to sign in
 
 A request with no token, or with a token the endpoint does not take, gets

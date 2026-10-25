@@ -304,7 +304,8 @@ describe('creating a token (TASK-230)', () => {
     agent: Browser,
     fields: [string, string][] = [
       ['name', 'Publishing script'],
-      ['scope', 'create'],
+      ['resource', 'micropub'],
+      ['micropub_scope', 'create'],
       ['expires', '30'],
     ],
   ): Promise<Response> {
@@ -339,13 +340,33 @@ describe('creating a token (TASK-230)', () => {
     return found;
   }
 
-  it('offers only the scopes a token bound to the site can use', async () => {
+  it('asks which resource the token is for, Micropub first, and offers the scopes each takes', async () => {
     const { agent } = await site();
     const html = await screen(agent);
-    assert.match(html, /<input[^>]*name="scope"[^>]*value="create"/);
-    for (const scope of ['inspect', 'repair', 'publish']) {
-      assert.doesNotMatch(html, new RegExp(`<input[^>]*name="scope"[^>]*value="${scope}"`));
-    }
+    assert.match(html, /<input[^>]*type="radio" name="resource" value="micropub"[^>]*checked/);
+    assert.match(html, /<input[^>]*type="radio" name="resource" value="mcp"/);
+    assert.doesNotMatch(html, /name="resource" value="mcp"[^>]*checked/);
+    const offered = (field: string) =>
+      [...html.matchAll(new RegExp(`<input[^>]*name="${field}"[^>]*value="([a-z]+)"`, 'g'))].map(
+        ([, scope]) => scope,
+      );
+    assert.deepEqual(offered('micropub_scope'), [
+      'profile',
+      'email',
+      'create',
+      'update',
+      'delete',
+      'media',
+    ]);
+    assert.deepEqual(offered('mcp_scope'), [
+      'profile',
+      'create',
+      'update',
+      'media',
+      'publish',
+      'inspect',
+      'repair',
+    ]);
   });
 
   it('shows the new token once, with no-store, and lists it by name after', async () => {
@@ -361,6 +382,7 @@ describe('creating a token (TASK-230)', () => {
     const later = await screen(agent);
     assert.ok(!later.includes(token), 'the token is not shown a second time');
     const row = rowFor(later, 'Publishing script');
+    assert.match(row, /For Micropub/);
     assert.match(row, /Create posts as you/);
     assert.ok(!row.includes('Upload media'), 'only the scope chosen');
     assert.match(row, /<button type="submit"[^>]*>Revoke Publishing script<\/button>/);
@@ -416,26 +438,54 @@ describe('creating a token (TASK-230)', () => {
     assert.equal(refused.status, 401);
   });
 
-  it('refuses a missing name, no scope or an unknown expiry, saving nothing', async () => {
+  it('refuses a missing name, no scope, an unknown resource, a scope the resource does not take or an unknown expiry, saving nothing', async () => {
     const { cms, agent } = await site();
     for (const fields of [
       [
         ['name', ' '],
-        ['scope', 'create'],
+        ['resource', 'micropub'],
+        ['micropub_scope', 'create'],
         ['expires', '30'],
       ],
       [
         ['name', 'Script'],
+        ['resource', 'micropub'],
         ['expires', '30'],
       ],
       [
         ['name', 'Script'],
-        ['scope', 'everything'],
+        ['resource', 'micropub'],
+        ['micropub_scope', 'everything'],
         ['expires', '30'],
       ],
       [
         ['name', 'Script'],
-        ['scope', 'create'],
+        ['resource', 'webmention'],
+        ['micropub_scope', 'create'],
+        ['expires', '30'],
+      ],
+      [
+        ['name', 'Script'],
+        ['resource', 'micropub'],
+        ['micropub_scope', 'inspect'],
+        ['expires', '30'],
+      ],
+      [
+        ['name', 'Script'],
+        ['resource', 'mcp'],
+        ['mcp_scope', 'email'],
+        ['expires', '30'],
+      ],
+      [
+        ['name', 'Script'],
+        ['resource', 'mcp'],
+        ['micropub_scope', 'create'],
+        ['expires', '30'],
+      ],
+      [
+        ['name', 'Script'],
+        ['resource', 'micropub'],
+        ['micropub_scope', 'create'],
         ['expires', '3650'],
       ],
     ] as [string, string][][]) {
@@ -449,11 +499,93 @@ describe('creating a token (TASK-230)', () => {
     assert.deepEqual(listTokens(cms.config.dataDir), []);
   });
 
+  it('keeps MCP chosen, and the MCP scopes ticked, on a refused form', async () => {
+    const { agent } = await site();
+    const response = await create(agent, [
+      ['name', ''],
+      ['resource', 'mcp'],
+      ['mcp_scope', 'inspect'],
+      ['expires', '30'],
+    ]);
+    const html = await response.text();
+    assert.equal(response.status, 400);
+    assert.match(html, /name="resource" value="mcp"[^>]*checked/);
+    assert.doesNotMatch(html, /name="resource" value="micropub"[^>]*checked/);
+    assert.match(html, /<input[^>]*name="mcp_scope" type="checkbox" value="inspect" checked/);
+  });
+
+  async function whoami(cms: Cms, token: string): Promise<Response> {
+    return await cms.app.request('/_geekity/mcp', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'whoami', arguments: {} },
+      }),
+    });
+  }
+
+  it('binds a token created for MCP to the MCP endpoint, which takes it, and Micropub refuses it', async () => {
+    const { cms, agent } = await site();
+    const token = shownToken(
+      await (
+        await create(agent, [
+          ['name', 'Claude Code'],
+          ['resource', 'mcp'],
+          ['mcp_scope', 'profile'],
+          ['mcp_scope', 'inspect'],
+          ['expires', '30'],
+        ])
+      ).text(),
+    );
+
+    const [stored] = listTokens(cms.config.dataDir);
+    assert.equal(stored?.resource, `${BASE}/_geekity/mcp`);
+    assert.deepEqual(stored?.scopes, ['profile', 'inspect']);
+
+    const called = await whoami(cms, token);
+    const answer = (await called.json()) as {
+      result?: { structuredContent?: { client?: string } };
+    };
+    assert.equal(called.status, 200, JSON.stringify(answer));
+    assert.equal(answer.result?.structuredContent?.client, 'Claude Code');
+
+    const posted = await micropub(cms, token, { h: 'entry', content: 'Not with this token.' });
+    assert.equal(posted.status, 401);
+
+    const row = rowFor(await screen(agent), 'Claude Code');
+    assert.match(row, /For MCP/);
+    assert.match(row, /Read your site’s federation and delivery records/);
+  });
+
+  it('has the MCP endpoint refuse a token created for Micropub', async () => {
+    const { cms, agent } = await site();
+    const token = shownToken(
+      await (
+        await create(agent, [
+          ['name', 'Publishing script'],
+          ['resource', 'micropub'],
+          ['micropub_scope', 'profile'],
+          ['expires', '30'],
+        ])
+      ).text(),
+    );
+    const called = await whoami(cms, token);
+    assert.equal(called.status, 401);
+  });
+
   it('refuses a create without the CSRF token', async () => {
     const { cms, agent } = await site();
     const response = await agent.post(CREATE, [
       ['name', 'Script'],
-      ['scope', 'create'],
+      ['resource', 'micropub'],
+      ['micropub_scope', 'create'],
       ['expires', '30'],
     ]);
     assert.equal(response.status, 403);
