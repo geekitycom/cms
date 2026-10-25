@@ -1,5 +1,6 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
+import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { bearerChallenge, requireBearer } from '../web/indieauth-bearer.ts';
 import type { BearerEnv } from '../web/indieauth-bearer.ts';
@@ -18,12 +19,19 @@ import {
   SERVER_CAPABILITIES,
 } from './protocol.ts';
 import type { JsonRpcResponse, ServerInfo } from './protocol.ts';
+import { auditToolCall } from './audit.ts';
+import { createCallLimit } from './call-limit.ts';
 import { createToolRegistry } from './tools.ts';
-import type { ToolRegistry } from './tools.ts';
+import type { McpTool, ToolRegistry } from './tools.ts';
 import { whoami } from './whoami.ts';
 
 /** The tools core offers. */
-const registry: ToolRegistry = createToolRegistry([whoami]);
+const CORE_TOOLS: readonly McpTool[] = [whoami];
+
+/** How many tool calls one token may make in {@link MCP_CALL_WINDOW_SECONDS}. */
+export const MCP_CALLS_PER_WINDOW = 60;
+
+export const MCP_CALL_WINDOW_SECONDS = 60;
 
 /**
  * The MCP endpoint, over Streamable HTTP, and the server card that describes
@@ -36,6 +44,23 @@ const registry: ToolRegistry = createToolRegistry([whoami]);
  * the authorization and token endpoints its tokens come from.
  */
 export function mountMcp(app: Hono<GeekityEnv>): void {
+  // Built on the first call, because the clock and the data directory are on
+  // the context. The limit lives in the process, like the sign-in throttle.
+  let registry: ToolRegistry | undefined;
+  function registryFor(config: ResolvedConfig): ToolRegistry {
+    registry ??= createToolRegistry(CORE_TOOLS, {
+      limit: createCallLimit({
+        calls: MCP_CALLS_PER_WINDOW,
+        windowSeconds: MCP_CALL_WINDOW_SECONDS,
+        now: config.now,
+      }),
+      record: (record) => {
+        auditToolCall(config.dataDir, record, config.now());
+      },
+    });
+    return registry;
+  }
+
   app.post(MCP_PATH, sameOriginOnly, requireMcpToken, async (c) => {
     c.header('cache-control', 'no-store');
     const version = c.req.header('mcp-protocol-version');
@@ -61,7 +86,7 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
 
     const { user, token } = c.var.bearer;
     const answered = await reply(message, {
-      registry,
+      registry: registryFor(c.var.config),
       info: serverInfo(c.var.siteAtRequestStart.title),
       call: { user, token, signal: c.req.raw.signal },
     });
@@ -95,7 +120,7 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
         schemes: ['oauth2'],
         resourceMetadata: `${baseUrl}${MCP_RESOURCE_METADATA_PATH}`,
       },
-      tools: registry.list().map(({ name, title, description }) => ({ name, title, description })),
+      tools: CORE_TOOLS.map(({ name, title, description }) => ({ name, title, description })),
     });
   });
 }

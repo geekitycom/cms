@@ -1,7 +1,8 @@
 /**
- * A short log of what apps sent to the IndieAuth and Micropub endpoints, and
- * what they were answered, so a site owner can see why a client
- * failed to sign in or to post without reading the client's source.
+ * A short log of what apps sent to the IndieAuth and Micropub endpoints and
+ * the MCP server's tools, and what they were answered, so a site owner can
+ * see why a client failed to sign in or to post, and what an agent did,
+ * without reading the client's source.
  *
  * One entry per request to the authorization endpoint (the request as it
  * reaches the consent screen, and the profile redemption), the token
@@ -9,7 +10,10 @@
  * middleware placed in front of it, which sees the final status and reads the
  * refusal out of the response itself: Micropub's and OAuth's JSON error
  * bodies, or the `error` on an authorization redirect. A handler adds only
- * what its response does not show, through {@link noteActivity}.
+ * what its response does not show, through {@link noteActivity}. An MCP tool
+ * call is recorded by the tool registry's guard, through {@link recordMcpCall}, one
+ * entry per call rather than per request, in a file of its own so a busy
+ * agent never pushes a failed sign-in out of the other.
  *
  * Nothing secret is kept. No header is read, so no `Authorization` and no
  * cookie; a field named in {@link SECRET_FIELDS} is kept as its name alone,
@@ -30,13 +34,18 @@ import { findUserById } from '../site/users.ts';
 import { messageOf } from '../util/errors.ts';
 import { isRecord } from '../util/guards.ts';
 import type { Bearer } from './indieauth-bearer.ts';
-import { INDIEAUTH_ACTIVITY, dataPath } from '../files/data-files.ts';
+import { INDIEAUTH_ACTIVITY, MCP_ACTIVITY, dataPath } from '../files/data-files.ts';
+import type { DataFileDeclaration } from '../files/data-files.ts';
+import type { StoredToken } from '../indieauth/tokens.ts';
 
 /** Readable and writable by the site's own user only, like the tokens beside it. */
 export const ACTIVITY_LOG_MODE = 0o600;
 
-/** How many entries are kept, newest first. */
+/** How many IndieAuth and Micropub entries are kept, newest first. */
 export const ACTIVITY_LOG_LIMIT = 100;
+
+/** How many MCP tool calls are kept, newest first: an agent makes many more calls than an app makes sign-ins. */
+export const MCP_ACTIVITY_LIMIT = 500;
 
 /** How long an entry is kept: fourteen days. */
 export const ACTIVITY_LOG_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -68,7 +77,7 @@ export type CarriedField =
   | { readonly name: string; readonly redacted: true };
 
 /** Which endpoint a request went to. */
-export type ActivityEndpoint = 'authorization' | 'token' | 'micropub' | 'media';
+export type ActivityEndpoint = 'authorization' | 'token' | 'micropub' | 'media' | 'mcp';
 
 /** What a request's own route knows about it. */
 interface Facts {
@@ -76,6 +85,10 @@ interface Facts {
   readonly clientId?: string | undefined;
   /** The username the request acted as, when that is known. */
   readonly user?: string | undefined;
+  /** The id of the connection whose token the request carried, once the bearer guard let it in. */
+  readonly connection?: string | undefined;
+  /** The name of a token created by hand, which has no client URL to go by. */
+  readonly tokenName?: string | undefined;
   readonly carried: readonly CarriedField[];
 }
 
@@ -102,6 +115,11 @@ export type EndpointFacts = Facts &
     | {
         readonly endpoint: 'micropub' | 'media';
         /** The POST's action (`create` when none), `upload`, or the GET's `q=…`. */
+        readonly action: string;
+      }
+    | {
+        readonly endpoint: 'mcp';
+        /** The tool called, as the client named it. */
         readonly action: string;
       }
   );
@@ -144,8 +162,20 @@ export function isFresh(entry: ActivityEntry, now: Date): boolean {
   return now.getTime() - Date.parse(entry.at) <= ACTIVITY_LOG_MAX_AGE_MS;
 }
 
-function logFile(dataDir: string): string {
-  return dataPath(dataDir, INDIEAUTH_ACTIVITY);
+/** One of the two files entries are kept in, and how many it holds. */
+interface ActivityFile {
+  readonly declaration: DataFileDeclaration;
+  readonly limit: number;
+}
+
+const HTTP_LOG: ActivityFile = { declaration: INDIEAUTH_ACTIVITY, limit: ACTIVITY_LOG_LIMIT };
+
+const MCP_LOG: ActivityFile = { declaration: MCP_ACTIVITY, limit: MCP_ACTIVITY_LIMIT };
+
+const ACTIVITY_FILES = [HTTP_LOG, MCP_LOG] as const;
+
+function logFile(dataDir: string, log: ActivityFile): string {
+  return dataPath(dataDir, log.declaration);
 }
 
 function parseLog(text: string | undefined): ActivityEntry[] {
@@ -159,25 +189,38 @@ function parseLog(text: string | undefined): ActivityEntry[] {
 }
 
 /**
- * Every entry, newest first. Read in the file's queue, so a read follows the
- * writes queued before it and a screen shows the request that just finished.
+ * Every entry from both files, newest first. Each is read in its file's
+ * queue, so a read follows the writes queued before it and a screen shows the
+ * request that just finished.
  */
 export async function readActivityLog(dataDir: string): Promise<ActivityEntry[]> {
-  const file = logFile(dataDir);
-  return await withFileLock(file, () => parseLog(readFileIfPresentSync(file)));
+  const logs = await Promise.all(
+    ACTIVITY_FILES.map(async (log) => {
+      const file = logFile(dataDir, log);
+      return await withFileLock(file, () => parseLog(readFileIfPresentSync(file)));
+    }),
+  );
+  return logs.flat().sort((a, b) => b.at.localeCompare(a.at));
 }
 
-/** Settles once every entry already on its way to the file has landed, so closing never leaves one half written. */
+/** Settles once every entry already on its way to a file has landed, so closing never leaves one half written. */
 export async function activityLogSettled(dataDir: string): Promise<void> {
-  await withFileLock(logFile(dataDir), () => undefined);
+  await Promise.all(
+    ACTIVITY_FILES.map((log) => withFileLock(logFile(dataDir, log), () => undefined)),
+  );
 }
 
-async function appendEntry(dataDir: string, entry: ActivityEntry, now: Date): Promise<void> {
+async function appendEntry(
+  dataDir: string,
+  log: ActivityFile,
+  entry: ActivityEntry,
+  now: Date,
+): Promise<void> {
   await updateFileAtomically(
-    logFile(dataDir),
+    logFile(dataDir, log),
     (current) => {
       const kept = parseLog(current).filter((old) => isFresh(old, now));
-      const entries = [entry, ...kept].slice(0, ACTIVITY_LOG_LIMIT);
+      const entries = [entry, ...kept].slice(0, log.limit);
       return `${JSON.stringify({ entries }, null, 2)}\n`;
     },
     { mode: ACTIVITY_LOG_MODE },
@@ -213,7 +256,7 @@ function recordActivity(describe: Describe): MiddlewareHandler<ActivityEnv> {
         error: refusal?.error,
         errorDescription: refusal?.description,
       };
-      appendEntry(dataDir, entry, at).catch((error: unknown) => {
+      appendEntry(dataDir, HTTP_LOG, entry, at).catch((error: unknown) => {
         warn(error);
       });
     } catch (error) {
@@ -224,7 +267,59 @@ function recordActivity(describe: Describe): MiddlewareHandler<ActivityEnv> {
 
 function warn(error: unknown): void {
   const reason = messageOf(error);
-  console.warn(`Could not write the IndieAuth and Micropub activity log: ${reason}`);
+  console.warn(`Could not write the app activity log: ${reason}`);
+}
+
+/** One MCP tool call as the registry saw it, and what the client was answered. */
+export interface McpCallFacts {
+  readonly tool: string;
+  readonly args: unknown;
+  readonly token: StoredToken;
+  readonly username: string;
+  readonly status: number;
+  readonly error?: string;
+  readonly errorDescription?: string;
+}
+
+/**
+ * Record one MCP tool call: who made it, through which connection, the
+ * arguments it named with every secret field replaced and every value cut
+ * short, and what it came to. Like the HTTP entries, the write is not
+ * awaited and a failure is a warning.
+ */
+export function recordMcpCall(dataDir: string, call: McpCallFacts, at: Date): void {
+  try {
+    const entry: ActivityEntry = {
+      id: randomUUID(),
+      at: at.toISOString(),
+      method: 'tools/call',
+      endpoint: 'mcp',
+      action: short(call.tool),
+      ...connectionFacts(call.token),
+      user: call.username,
+      carried: isRecord(call.args)
+        ? Object.entries(call.args)
+            .map(([name, value]) => field(name, value))
+            .slice(0, CARRIED_LIMIT)
+        : [],
+      status: call.status,
+      error: call.error,
+      errorDescription:
+        call.errorDescription === undefined ? undefined : short(call.errorDescription),
+    };
+    appendEntry(dataDir, MCP_LOG, entry, at).catch((error: unknown) => {
+      warn(error);
+    });
+  } catch (error) {
+    warn(error);
+  }
+}
+
+/** Which connection a bearer token is: its id, and its client or, for a token made by hand, its name. */
+function connectionFacts(token: StoredToken): Pick<Facts, 'clientId' | 'connection' | 'tokenName'> {
+  return token.kind === 'created'
+    ? { connection: token.id, tokenName: short(token.name) }
+    : { connection: token.id, clientId: short(token.clientId) };
 }
 
 /**
@@ -390,13 +485,12 @@ export const logTokenRequest = recordActivity(async (c) => {
 });
 
 /** Who a Micropub request acted as, once the bearer guard let it in. */
-function bearerFacts(c: Context<ActivityEnv>): Pick<Facts, 'clientId' | 'user'> {
+function bearerFacts(
+  c: Context<ActivityEnv>,
+): Pick<Facts, 'clientId' | 'user' | 'connection' | 'tokenName'> {
   const { bearer } = c.var;
-  const token = bearer?.token;
-  return {
-    clientId: token?.kind === 'created' ? undefined : token?.clientId,
-    user: bearer?.user.username,
-  };
+  if (bearer === undefined) return {};
+  return { ...connectionFacts(bearer.token), user: bearer.user.username };
 }
 
 /** A query, or a create, update, delete or undelete, at the Micropub endpoint. */

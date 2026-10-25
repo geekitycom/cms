@@ -237,6 +237,8 @@ The site records one entry for each request to these endpoints:
 - The Micropub endpoint, with the action or query and the properties the
   request carried.
 - The media endpoint, with the file part's name, type, and size.
+- Each MCP tool call, in a file of its own.
+  [MCP](mcp.md#the-record-of-tool-calls) describes what it keeps.
 
 The list shows the newest request first, with the endpoint, the action, the
 app's `client_id`, the user, and the result. A refused request is marked

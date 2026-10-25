@@ -5,7 +5,7 @@
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
 {% from "components/alert.njk" import alert %}
-{% from "components/badge.njk" import badge %}
+{% from "components/badge.njk" import badge, status %}
 {% from "components/button.njk" import button %}
 {% from "components/table.njk" import table %}
 
@@ -25,8 +25,9 @@
       These apps signed in as you and can act as you, within the permissions
       listed. An app that keeps using its connection stays connected; one left
       unused is disconnected on the date shown. A token you created works
-      until the date shown. Revoking disconnects it now: its next request is
-      refused, and it has to ask you again.
+      until the date shown. Recent activity lists each one's latest sign-ins,
+      posts and MCP tool calls; App activity has them all. Revoking disconnects
+      it now: its next request is refused, and it has to ask you again.
     </p>
 
     {% call table('Connected apps') %}
@@ -37,6 +38,7 @@
           <th scope="col">Connected</th>
           <th scope="col">Last used</th>
           <th scope="col">Expires</th>
+          <th scope="col">Recent activity</th>
           <th scope="col">Actions</th>
         </tr>
       </thead>
@@ -69,6 +71,21 @@
               {% endif %}
             </td>
             <td class="whitespace-nowrap"><time datetime="{{ connection.expires.iso }}">{{ connection.expires.text }}</time></td>
+            <td>
+              {% if connection.recent | length %}
+                <ul>
+                  {% for entry in connection.recent %}
+                    <li class="whitespace-nowrap">
+                      <a class="link link-hover" href="{{ entry.url }}">{{ entry.label }}</a>
+                      {% if entry.failed %}{{ status('failed', 'Refused') }}{% endif %}
+                      <time class="text-xs" datetime="{{ entry.when.iso }}">{{ entry.when.text }}</time>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                None lately
+              {% endif %}
+            </td>
             <td>
               <form method="post" action="{{ revokeUrl }}">
                 <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />

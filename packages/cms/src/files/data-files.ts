@@ -280,6 +280,12 @@ export const INDIEAUTH_ACTIVITY = declareDataFile({
   lost: 'The last IndieAuth and Micropub requests, which exist for debugging.',
 });
 
+export const MCP_ACTIVITY = declareDataFile({
+  pattern: 'mcp-activity.json',
+  dataClass: REBUILDABLE,
+  lost: 'The record of recent MCP tool calls: which agent called which tool, with what, and how it ended.',
+});
+
 export const NOTIFICATION_DIGESTS = declareDataFile({
   pattern: 'notification-digests.json',
   dataClass: REBUILDABLE,
@@ -366,6 +372,7 @@ export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   DEV_MODE_RECORD,
   FOLLOWER_HISTORY,
   INDIEAUTH_ACTIVITY,
+  MCP_ACTIVITY,
   NOTIFICATION_DIGESTS,
   MICROPUB_MEDIA,
   DATABASE,

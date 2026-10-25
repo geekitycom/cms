@@ -1,6 +1,6 @@
 /**
  * Users > Connected apps: the apps that hold a token for whoever is
- * signed in, and the button that cuts one off.
+ * signed in, what each did lately, and the button that cuts one off.
  *
  * Only ever your own connections, because a token acts as the person who
  * approved it. Revoking deletes the connection from `data/indieauth-tokens.json`,
@@ -9,12 +9,15 @@
 
 import type { Context, Hono } from 'hono';
 
+import { activityEntryUrl, activityLabel, freshEntries } from './app-activity.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { CONNECTED_APPS_CHILD, CONNECTED_APPS_PATH } from './users.ts';
 import type { GeekityEnv } from '../web/env.ts';
+import { isFailure } from '../web/indieauth-activity-log.ts';
+import type { ActivityEntry } from '../web/indieauth-activity-log.ts';
 import { editSiteSetting } from './site-setting-edit.ts';
 import { findUserById, listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
@@ -48,6 +51,9 @@ const DEFAULT_TOKEN_LIFETIME_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const NAME_LIMIT = 100;
+
+/** How many of a connection's latest requests and tool calls its row shows. */
+const RECENT_ACTIVITY_LIMIT = 5;
 
 /**
  * What a created token can be bound to. A resource server takes only a token
@@ -105,22 +111,24 @@ interface RefusedClient {
 export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: AdminRender }): void {
   const { render } = options;
 
-  app.get(CONNECTED_APPS_PATH, (c) => render(c, ADMIN_TEMPLATES.connectedApps, screen(c)));
+  app.get(CONNECTED_APPS_PATH, async (c) =>
+    render(c, ADMIN_TEMPLATES.connectedApps, await screen(c)),
+  );
 
   app.post(ADD_CLIENT_WITHOUT_PKCE_PATH, async (c) => {
     const value = stringOrEmpty((await c.req.parseBody())[CLIENT_FIELD]).trim();
-    const refuse = (problem: string): Response => {
+    const refuse = async (problem: string): Promise<Response> => {
       c.status(400);
-      return render(c, ADMIN_TEMPLATES.connectedApps, screen(c, { value, problem }));
+      return render(c, ADMIN_TEMPLATES.connectedApps, await screen(c, { value, problem }));
     };
-    if (clientIdentifier(value) === undefined) return refuse(NOT_A_CLIENT_ID);
+    if (clientIdentifier(value) === undefined) return await refuse(NOT_A_CLIENT_ID);
     let listed = false;
     const saved = await editSiteSetting(c.var.settings, 'clients_without_pkce', (current) => {
       listed = current.some((id) => sameClient(id, value));
       return listed ? current : [...current, value];
     });
-    if (!saved.ok) return refuse(Object.values(saved.problems).join(' '));
-    if (listed) return refuse(`${value} is already on the list.`);
+    if (!saved.ok) return await refuse(Object.values(saved.problems).join(' '));
+    if (listed) return await refuse(`${value} is already on the list.`);
     flash(c, 'notice', `${value} may now sign in without PKCE.`);
     return c.redirect(CONNECTED_APPS_PATH, 303);
   });
@@ -179,7 +187,7 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
       return render(
         c,
         ADMIN_TEMPLATES.connectedApps,
-        screen(c, undefined, { refused: form, problems }),
+        await screen(c, undefined, { refused: form, problems }),
       );
     }
 
@@ -200,7 +208,7 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
       },
       config.now(),
     );
-    return showTokenOnceWithoutStoringIt(c, render, form.name, accessToken);
+    return await showTokenOnceWithoutStoringIt(c, render, form.name, accessToken);
   });
 
   app.post(REVOKE_CONNECTION_PATH, async (c) => {
@@ -219,19 +227,27 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
 const NOT_A_CLIENT_ID =
   'Enter the app’s client_id exactly as it sends it: an http or https URL with a domain name, such as https://ia.net/writer.';
 
-function screen(
+async function screen(
   c: Context<GeekityEnv>,
   refused?: RefusedClient,
   token?: TokenOutcome,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const { config } = c.var;
   const userId = c.var.session?.userId;
+  const username = userId == null ? undefined : findUserById(config.dataDir, userId)?.username;
   const settings = c.var.siteAtRequestStart;
-  const now = config.now().getTime();
+  const now = config.now();
+  const activity = await freshEntries(config.dataDir, now);
   const connections = listTokens(config.dataDir)
-    .filter((stored) => stored.userId === userId && Date.parse(lapsesAt(stored)) > now)
+    .filter((stored) => stored.userId === userId && Date.parse(lapsesAt(stored)) > now.getTime())
     .sort((a, b) => b.issuedAt.localeCompare(a.issuedAt))
-    .map((stored) => row(stored, settings.timezone, config.baseUrl));
+    .map((stored) => ({
+      ...row(stored, settings.timezone, config.baseUrl),
+      recent: activity
+        .filter((entry) => isActivityOf(stored, username, entry))
+        .slice(0, RECENT_ACTIVITY_LIMIT)
+        .map((entry) => recentRow(entry, settings.timezone)),
+    }));
   const form = token !== undefined && 'refused' in token ? token.refused : undefined;
   const chosenResource =
     TOKEN_RESOURCES.find((resource) => resource.name === form?.resource) ?? DEFAULT_TOKEN_RESOURCE;
@@ -296,21 +312,49 @@ function row(token: StoredToken, timezone: string, baseUrl: string) {
   };
 }
 
+/**
+ * Whether an entry is this connection's: made with its token, or, for an
+ * app, a sign-in by the same client as the same user, before the connection's
+ * token existed to carry.
+ */
+function isActivityOf(
+  token: StoredToken,
+  username: string | undefined,
+  entry: ActivityEntry,
+): boolean {
+  if (entry.connection !== undefined) return entry.connection === token.id;
+  return (
+    token.kind !== 'created' &&
+    entry.clientId !== undefined &&
+    entry.user === username &&
+    sameClient(entry.clientId, token.clientId)
+  );
+}
+
+function recentRow(entry: ActivityEntry, timezone: string) {
+  return {
+    url: activityEntryUrl(entry),
+    when: { iso: entry.at, text: formatInTimezone(entry.at, timezone) },
+    label: activityLabel(entry),
+    failed: isFailure(entry),
+  };
+}
+
 function clientLabel(token: StoredToken): string {
   if (token.kind === 'created') return token.name;
   return token.clientName ?? token.clientId;
 }
 
-function showTokenOnceWithoutStoringIt(
+async function showTokenOnceWithoutStoringIt(
   c: Context<GeekityEnv>,
   render: AdminRender,
   name: string,
   token: string,
-): Response | Promise<Response> {
+): Promise<Response> {
   c.header('cache-control', 'no-store');
   return render(
     c,
     ADMIN_TEMPLATES.connectedApps,
-    screen(c, undefined, { created: { name, token } }),
+    await screen(c, undefined, { created: { name, token } }),
   );
 }

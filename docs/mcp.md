@@ -88,6 +88,52 @@ them in one sign-in. The body is a JSON-RPC error that names the missing scope.
 | -------- | --------- | -------------------------------------------------------------------------------- |
 | `whoami` | `profile` | Names the user the connection acts as, its client or token name, and its scopes. |
 
+## The record of tool calls
+
+The site records every tool call, whichever tool it is, core or plugin. A tool
+does not opt in: the registry records the call before it answers. Each entry
+keeps:
+
+- When the call came.
+- The user it acted as.
+- The app's `client_id`, or the name of a token you created.
+- The connection it came through.
+- The tool it named.
+- The arguments, each value cut to 100 characters. An argument named
+  `access_token`, `refresh_token`, `code`, `code_verifier`, `client_secret`,
+  `password` or `cookie` is listed as sent but not recorded.
+- How the call ended: it ran, the tool answered with an error, the tool
+  failed on the server, the token lacked the scope, no tool has that name, or
+  the call was over the rate limit.
+
+A tool that fails on the server answers the client with a tool error that
+says so, and the entry keeps the reason. The client does not see the reason.
+
+Users > App activity, at `/admin/users/activity`, lists the calls with the
+IndieAuth and Micropub requests, under the endpoint MCP, the tool as the
+action. Choose a call's time to see its arguments and its outcome. Users >
+Connected apps lists each connection's five latest requests and tool calls
+under Recent activity.
+
+The record holds the last 500 calls from the past 14 days, in
+`data/mcp-activity.json`, mode `0600`. An older call is dropped when the next
+one is written, and is never shown. It is a separate file from the IndieAuth
+and Micropub requests, so an agent's calls never push a failed sign-in out of
+the record. Writing the record never changes or delays the answer the client
+gets.
+
+## Rate limit
+
+Each token may make 60 tool calls a minute. The minute starts at the token's
+first call. A call over the limit is not run. It gets a JSON-RPC error with
+code `-32002`, a message that says how many seconds to wait, and
+`data.retryAfter`, the same wait in seconds. The HTTP status is 200. Each token
+has its own limit, so one agent's loop does not stop another connection.
+
+The record keeps the first refused call in each minute, not every one, so a
+client that keeps calling cannot fill the record. The limit is kept in memory,
+and a restart clears it. `initialize`, `tools/list` and `ping` are not limited.
+
 ## The transport
 
 The server uses MCP's Streamable HTTP transport and keeps no session. Each

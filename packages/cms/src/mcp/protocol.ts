@@ -22,6 +22,7 @@ export const JSON_RPC_ERRORS = {
   invalidParams: -32602,
   /** In the range JSON-RPC leaves to servers. */
   insufficientScope: -32001,
+  rateLimited: -32002,
 } as const;
 
 type RequestId = string | number;
@@ -133,6 +134,15 @@ async function callTool(
           code: JSON_RPC_ERRORS.insufficientScope,
           message: `${name} needs the ${result.scope} scope, which this connection was not granted. Sign in again and approve it.`,
           data: { scope: result.scope },
+        }),
+      };
+    case 'rate-limited':
+      return {
+        kind: 'answer',
+        message: failure(id, {
+          code: JSON_RPC_ERRORS.rateLimited,
+          message: `Too many tool calls through this connection. Try again in ${String(result.retryAfter)} seconds.`,
+          data: { retryAfter: result.retryAfter },
         }),
       };
     case 'ran':

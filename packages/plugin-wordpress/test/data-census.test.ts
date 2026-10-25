@@ -403,6 +403,32 @@ async function indieAuthToken(cms: Cms, admin: Admin): Promise<string> {
   return token;
 }
 
+async function mcpCall(cms: Cms, admin: Admin): Promise<void> {
+  const created = await admin.post('/admin/users/apps/tokens', [
+    ['name', 'Census agent'],
+    ['resource', 'mcp'],
+    ['mcp_scope', 'profile'],
+    ['expires', '30'],
+  ]);
+  const token = /id="created-token"[^>]*value="([^"]+)"/.exec(await created.text())?.[1];
+  assert.ok(token !== undefined, 'an MCP token was created');
+  const answer = await cms.app.request('/_geekity/mcp', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'whoami', arguments: {} },
+    }),
+  });
+  assert.equal(answer.status, 200, 'the MCP tool was called');
+}
+
 async function micropub(cms: Cms, token: string): Promise<void> {
   const authorization = { authorization: `Bearer ${token}` };
   const note = await cms.app.request(
@@ -546,6 +572,7 @@ describe('the data census', () => {
         url: null,
       });
       await micropub(cms, await indieAuthToken(cms, admin));
+      await mcpCall(cms, admin);
       const avatar = await cms.app.request(
         `/_geekity/avatars/${Buffer.from(AVATAR).toString('base64url')}`,
       );

@@ -1,6 +1,8 @@
 import type { McpScope } from '../indieauth/request.ts';
 import type { StoredToken } from '../indieauth/tokens.ts';
 import type { User } from '../site/users.ts';
+import { messageOf } from '../util/errors.ts';
+import type { CallLimit } from './call-limit.ts';
 import { problemsWith } from './schema.ts';
 import type { FromSchema, ObjectSchema } from './schema.ts';
 
@@ -77,12 +79,28 @@ export function listedTool(tool: McpTool) {
 export type ToolCallResult =
   | { readonly kind: 'unknown-tool' }
   | { readonly kind: 'insufficient-scope'; readonly scope: McpScope }
+  | { readonly kind: 'rate-limited'; readonly retryAfter: number }
   | { readonly kind: 'ran'; readonly outcome: ToolOutcome<unknown> };
+
+/** One call as the registry hands it to the record: what was asked, by whom, and how it ended. */
+export interface ToolCallRecord {
+  readonly tool: string;
+  readonly args: unknown;
+  readonly call: ToolCall;
+  /** The answer the client was given, or why the tool threw, which the client is not told. */
+  readonly outcome: ToolCallResult | { readonly kind: 'crashed'; readonly reason: string };
+}
+
+/** What every call passes through, whatever the tool: the per-token limit and the record. */
+export interface ToolGuards {
+  readonly limit: CallLimit;
+  /** Called once per call, after it is decided. Must not throw, and is not awaited. */
+  readonly record: (record: ToolCallRecord) => void;
+}
 
 /**
  * Every tool the MCP endpoint offers, and the one way to call one, so the
- * scope check, and whatever else every call must pass, cannot be skipped by
- * a tool.
+ * limit, the scope check and the record cannot be skipped by a tool.
  */
 export interface ToolRegistry {
   list(): readonly McpTool[];
@@ -92,22 +110,50 @@ export interface ToolRegistry {
 /** MCP's rule for a tool name. */
 const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/;
 
-export function createToolRegistry(tools: readonly McpTool[]): ToolRegistry {
+export function createToolRegistry(tools: readonly McpTool[], guards: ToolGuards): ToolRegistry {
   const byName = new Map<string, McpTool>();
   for (const tool of tools) {
     if (!TOOL_NAME.test(tool.name)) throw new Error(`"${tool.name}" is not an MCP tool name.`);
     if (byName.has(tool.name)) throw new Error(`Two MCP tools are named "${tool.name}".`);
     byName.set(tool.name, tool);
   }
+
+  async function decide(
+    name: string,
+    args: unknown,
+    call: ToolCall,
+  ): Promise<ToolCallRecord['outcome']> {
+    const tool = byName.get(name);
+    if (tool === undefined) return { kind: 'unknown-tool' };
+    if (!call.token.scopes.includes(tool.scope)) {
+      return { kind: 'insufficient-scope', scope: tool.scope };
+    }
+    try {
+      return { kind: 'ran', outcome: await tool.run(args, call) };
+    } catch (error) {
+      return { kind: 'crashed', reason: messageOf(error) };
+    }
+  }
+
   return {
     list: () => tools,
     call: async (name, args, call) => {
-      const tool = byName.get(name);
-      if (tool === undefined) return { kind: 'unknown-tool' };
-      if (!call.token.scopes.includes(tool.scope)) {
-        return { kind: 'insufficient-scope', scope: tool.scope };
+      const allowed = guards.limit.take(call.token.id);
+      if (allowed.kind === 'refused') {
+        const refused = { kind: 'rate-limited', retryAfter: allowed.retryAfter } as const;
+        if (allowed.first) guards.record({ tool: name, args, call, outcome: refused });
+        return refused;
       }
-      return { kind: 'ran', outcome: await tool.run(args, call) };
+      const outcome = await decide(name, args, call);
+      guards.record({ tool: name, args, call, outcome });
+      if (outcome.kind !== 'crashed') return outcome;
+      return {
+        kind: 'ran',
+        outcome: {
+          ok: false,
+          message: `${name} failed on the server. The site owner can see why in the admin, under Users > App activity.`,
+        },
+      };
     },
   };
 }
