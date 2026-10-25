@@ -201,6 +201,28 @@ settings for the stats are incomplete, the cards are not drawn. When Umami
 does not answer, a card shows the last figures it had, marked Stale, or says
 the stats are unavailable. The rest of the dashboard draws as normal.
 
+## For MCP clients
+
+While the plugin is enabled, the site's [MCP endpoint](https://github.com/geekitycom/cms/blob/main/docs/mcp.md)
+offers one tool from it, `geekity_plugin_umami__post_stats`. It needs a token
+with the `inspect` scope. It reads Umami and changes nothing.
+
+It takes `path`, a post's permalink such as `/2026/10/hello/` or its full URL,
+and `days`, from 1 to 365, 30 when left out. The days end today in the site's
+time zone. It answers:
+
+- the path, and the post's title when the path leads to a published post
+- the first and last day counted
+- views, visitors and visits, with the same counts for the same number of days
+  before when Umami has them
+- up to ten referring domains with their visitors, `(direct)` for visitors with
+  no referrer
+
+It asks Umami's `stats` and `metrics` endpoints with the `path` filter, so it
+needs Umami 3 and the settings in [Reading the stats](#reading-the-stats).
+While those settings are incomplete, or when Umami refuses or does not answer,
+the tool answers with an error that says why.
+
 ## Where the tracker is drawn
 
 The tag goes on every public HTML page: posts, pages, listings, search, the

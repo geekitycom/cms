@@ -96,10 +96,11 @@ export interface UmamiClient {
     range: UmamiRange,
     options: UmamiCallOptions & { readonly timezone: string },
   ): Promise<UmamiDailyCounts>;
+  /** The top values of a metric, of the whole site or of the views of one `path`. */
   metrics(
     type: UmamiMetricType,
     range: UmamiRange,
-    options?: UmamiCallOptions & { readonly limit?: number },
+    options?: UmamiCallOptions & { readonly limit?: number; readonly path?: string },
   ): Promise<readonly UmamiMetric[]>;
   /**
    * The top values of a metric with their views and visitors, most visitors
@@ -344,7 +345,7 @@ export function umamiClient(options: UmamiClientOptions): UmamiClient {
     stats: (range, call = {}) =>
       read(
         (id) => `/websites/${id}/stats`,
-        { ...between(range), ...(call.path === undefined ? {} : { path: `eq.${call.path}` }) },
+        { ...between(range), ...pathFilter(call.path) },
         call,
         'the stats',
         parseStats,
@@ -360,7 +361,7 @@ export function umamiClient(options: UmamiClientOptions): UmamiClient {
     metrics: (type, range, call = {}) =>
       read(
         (id) => `/websites/${id}/metrics`,
-        metricQuery(type, range, call.limit),
+        { ...metricQuery(type, range, call.limit), ...pathFilter(call.path) },
         call,
         `the ${type} metrics`,
         parseMetrics,
@@ -382,6 +383,11 @@ type Send = (url: string, init: PluginFetchInit) => Promise<Response>;
 
 function between(range: UmamiRange): Record<string, string> {
   return { startAt: String(range.start.getTime()), endAt: String(range.end.getTime()) };
+}
+
+/** Umami 3's filter to the views of one path. */
+function pathFilter(path: string | undefined): Record<string, string> {
+  return path === undefined ? {} : { path: `eq.${path}` };
 }
 
 function metricQuery(

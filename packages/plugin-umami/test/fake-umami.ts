@@ -140,7 +140,21 @@ const ROUTES: Record<string, (exchange: Exchange) => Answer> = {
       const filter = exchange.query.get('path');
       if (filter === null) return exchange.fake.data.stats;
       const views = exchange.fake.data.pathViews[filter.replace(/^eq\./, '')] ?? 0;
-      return { pageviews: views, visitors: views, visits: views, bounces: 0, totaltime: 0 };
+      const before = Math.floor(views / 2);
+      return {
+        pageviews: views,
+        visitors: views,
+        visits: views,
+        bounces: 0,
+        totaltime: 0,
+        comparison: {
+          pageviews: before,
+          visitors: before,
+          visits: before,
+          bounces: 0,
+          totaltime: 0,
+        },
+      };
     }),
   'websites/:id/pageviews': (exchange) => withRange(exchange, () => exchange.fake.data.pageviews),
   'websites/:id/metrics': (exchange) =>
