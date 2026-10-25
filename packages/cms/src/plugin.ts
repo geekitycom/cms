@@ -13,6 +13,8 @@ import type { webcrypto } from 'node:crypto';
 
 import type { KvStore } from '@fedify/fedify';
 
+import type { FromSchema, ObjectSchema } from './util/json-schema.ts';
+
 /**
  * The version of the host API this core provides. A plugin names the version
  * it targets in {@link Plugin.hostApi}, and one that targets a newer version
@@ -27,7 +29,7 @@ import type { KvStore } from '@fedify/fedify';
  * removed or renamed, an argument or return value reshaped, or a behavior a
  * plugin relies on changed) also raises the oldest version the core keeps.
  */
-export const HOST_API_VERSION = 3;
+export const HOST_API_VERSION = 4;
 
 /**
  * The site federation's key-value store, as Fedify defines it. A plugin that
@@ -888,6 +890,99 @@ export interface PluginFetchInit {
   readonly signal?: AbortSignal | undefined;
 }
 
+/**
+ * The scopes an MCP tool, core's or a plugin's, may declare. Core fixes the
+ * list so the consent screen reads the same whatever is installed: a tool
+ * needs exactly one of these and no plugin can add its own.
+ */
+export const MCP_SCOPES = [
+  'profile',
+  'create',
+  'update',
+  'media',
+  'publish',
+  'inspect',
+  'repair',
+] as const;
+
+export type McpScope = (typeof MCP_SCOPES)[number];
+
+/**
+ * The part of JSON Schema an MCP tool's input and output are described in,
+ * and the value a schema describes, so a tool's `run` is typed by its schema.
+ */
+export type {
+  ArraySchema,
+  BooleanSchema,
+  FromSchema,
+  JsonSchema,
+  NumberSchema,
+  ObjectSchema,
+  StringSchema,
+} from './util/json-schema.ts';
+
+/**
+ * What a tool tells a client about itself beyond its schemas. Every hint is
+ * stated, so no tool falls back on MCP's defaults, which assume the worst
+ * about writes and nothing about reads.
+ */
+export interface McpToolAnnotations {
+  readonly readOnlyHint: boolean;
+  readonly destructiveHint: boolean;
+  readonly idempotentHint: boolean;
+  readonly openWorldHint: boolean;
+}
+
+/**
+ * What a tool's run came to: a short summary for a person and the structured
+ * result its output schema describes, or a message the model can act on.
+ */
+export type McpToolOutcome<O> =
+  | { readonly ok: true; readonly summary: string; readonly structured: O }
+  | { readonly ok: false; readonly message: string };
+
+/** Who calls a plugin's MCP tool, through which connection, and on which site. */
+export interface PluginToolContext {
+  /** The site user the connection acts as. */
+  readonly user: PluginUser;
+  /** The `client_id` of the app, or the name of a token created by hand. */
+  readonly client: string;
+  /** What the app called itself, when it said. */
+  readonly clientName: string | undefined;
+  /** Aborts when the client goes away. Pass it to {@link PluginHost.fetch}. */
+  readonly signal: AbortSignal;
+  readonly site: PluginSite;
+  /** The site's time zone, an IANA name such as `Europe/London`, which days follow. */
+  readonly timezone: string;
+}
+
+/**
+ * A tool an MCP client can call, offered while the plugin is enabled. Core
+ * names it after the plugin, checks the arguments against `inputSchema` and
+ * the token's scopes against `scope` before `run`, and counts and records
+ * every call, so a plugin cannot skip any of it.
+ */
+export interface PluginTool<
+  I extends ObjectSchema = ObjectSchema,
+  O extends ObjectSchema = ObjectSchema,
+> {
+  /**
+   * Lower case words joined by `-`, unique among the plugin's tools. Clients
+   * see it after the plugin's prefix: `post-stats` from `@acme/plugin-stats`
+   * is `acme_plugin_stats__post_stats`.
+   */
+  readonly id: string;
+  readonly title: string;
+  /** What the tool does and when to call it, for the model choosing a tool. */
+  readonly description: string;
+  /** The one scope a token needs to call it, from {@link MCP_SCOPES}. */
+  readonly scope: McpScope;
+  readonly annotations: McpToolAnnotations;
+  readonly inputSchema: I;
+  readonly outputSchema: O;
+  run(args: FromSchema<I>, context: PluginToolContext): Promise<McpToolOutcome<FromSchema<O>>>;
+}
+
 /** What a plugin knows of the site it runs on. */
 export interface PluginSiteInfo {
   /** The site's public URL. */
@@ -960,6 +1055,12 @@ export interface PluginHost<
   ): void;
   /** Add a card to the admin dashboard, drawn while the plugin is enabled. */
   widget(widget: PluginWidget): void;
+  /**
+   * Offer a tool to MCP clients at `/_geekity/mcp` while the plugin is
+   * enabled. Throws for an id that is not lower case words joined by `-`, one
+   * the plugin already declared, or a scope outside {@link MCP_SCOPES}.
+   */
+  tool<const I extends ObjectSchema, const O extends ObjectSchema>(tool: PluginTool<I, O>): void;
   /** The site's base URL and its title as the settings have it when asked. */
   siteInfo(): Promise<PluginSiteInfo>;
   /**

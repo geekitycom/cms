@@ -1,4 +1,4 @@
-import { defineTool } from './tools.ts';
+import { callingClient, defineTool } from './tools.ts';
 
 /** Who the connection acts as, through which client, with which scopes. */
 export const whoami = defineTool({
@@ -29,8 +29,7 @@ export const whoami = defineTool({
     required: ['me', 'username', 'client', 'scopes'],
   },
   run: (_args, { user, token }) => {
-    const client = token.kind === 'created' ? token.name : token.clientId;
-    const clientName = token.kind === 'created' ? undefined : token.clientName;
+    const { client, clientName } = callingClient(token);
     const scopes = [...token.scopes];
     return Promise.resolve({
       ok: true,

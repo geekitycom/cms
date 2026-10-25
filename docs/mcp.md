@@ -88,6 +88,22 @@ them in one sign-in. The body is a JSON-RPC error that names the missing scope.
 | -------- | --------- | -------------------------------------------------------------------------------- |
 | `whoami` | `profile` | Names the user the connection acts as, its client or token name, and its scopes. |
 
+Enabled plugins add tools of their own. A plugin's tool name starts with the
+plugin's prefix and `__`, such as `geekity_plugin_umami__post_stats` from
+`@geekity/plugin-umami`, so it never collides with a core tool or with
+another plugin's tool. Core checks the scope of a plugin's tool, counts the
+call toward the rate limit, and records it, as it does for its own tools. When
+a plugin is disabled, its tools leave the list and a call to one is refused.
+When it is enabled again, they come back. The site does not need a restart.
+The server sends no notice when the list changes, so a client sees the change
+the next time it lists the tools.
+[MCP tools](plugins.md#writing-a-plugin) in the plugin guide describes how a
+plugin declares one.
+
+| Tool                               | Plugin                  | Scope     | What it does                                                                                           |
+| ---------------------------------- | ----------------------- | --------- | ------------------------------------------------------------------------------------------------------ |
+| `geekity_plugin_umami__post_stats` | `@geekity/plugin-umami` | `inspect` | A post's views, visitors, visits and referrers over the last days, from Umami, beside the span before. |
+
 ## The record of tool calls
 
 The site records every tool call, whichever tool it is, core or plugin. A tool
@@ -151,8 +167,9 @@ endpoints.
 ## Discovery
 
 - `/.well-known/mcp/server-card.json` describes the server: its name and
-  version, the endpoint, the transport, how to authenticate, and the tools. The
-  server card is a draft convention and may change.
+  version, the endpoint, the transport, how to authenticate, and the tools,
+  those of enabled plugins included. The server card is a draft convention and
+  may change.
 - The home page sends `Link: </.well-known/mcp/server-card.json>; rel="mcp"`.
 - The generated [`/llms.txt`](public-site.md#llmstxt) names the endpoint and
   the server card.

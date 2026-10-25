@@ -3,7 +3,8 @@ import type { Hono, MiddlewareHandler } from 'hono';
 import type { GeekityEnv } from './env.ts';
 import { parseAuthorPath } from '../content/authors.ts';
 import { requestPath } from './request.ts';
-import { MCP_SCOPES, SCOPES, SITE_SCOPES } from '../indieauth/request.ts';
+import { SCOPES, SITE_SCOPES } from '../indieauth/request.ts';
+import { MCP_SCOPES } from '../plugin.ts';
 
 /** Where the authorization server metadata document is published. */
 export const INDIEAUTH_METADATA_PATH = '/_geekity/indieauth/metadata';

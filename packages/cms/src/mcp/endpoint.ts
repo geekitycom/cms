@@ -22,7 +22,8 @@ import type { JsonRpcResponse, ServerInfo } from './protocol.ts';
 import { auditToolCall } from './audit.ts';
 import { createCallLimit } from './call-limit.ts';
 import { createToolRegistry } from './tools.ts';
-import type { McpTool, ToolRegistry } from './tools.ts';
+import type { McpTool, ToolGuards } from './tools.ts';
+import { activePluginTools } from './plugin-tools.ts';
 import { whoami } from './whoami.ts';
 
 /** The tools core offers. */
@@ -46,9 +47,9 @@ export const MCP_CALL_WINDOW_SECONDS = 60;
 export function mountMcp(app: Hono<GeekityEnv>): void {
   // Built on the first call, because the clock and the data directory are on
   // the context. The limit lives in the process, like the sign-in throttle.
-  let registry: ToolRegistry | undefined;
-  function registryFor(config: ResolvedConfig): ToolRegistry {
-    registry ??= createToolRegistry(CORE_TOOLS, {
+  let guards: ToolGuards | undefined;
+  function guardsFor(config: ResolvedConfig): ToolGuards {
+    guards ??= {
       limit: createCallLimit({
         calls: MCP_CALLS_PER_WINDOW,
         windowSeconds: MCP_CALL_WINDOW_SECONDS,
@@ -57,8 +58,8 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
       record: (record) => {
         auditToolCall(config.dataDir, record, config.now());
       },
-    });
-    return registry;
+    };
+    return guards;
   }
 
   app.post(MCP_PATH, sameOriginOnly, requireMcpToken, async (c) => {
@@ -86,7 +87,7 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
 
     const { user, token } = c.var.bearer;
     const answered = await reply(message, {
-      registry: registryFor(c.var.config),
+      registry: createToolRegistry(toolsFor(c.var), guardsFor(c.var.config)),
       info: serverInfo(c.var.siteAtRequestStart.title),
       call: { user, token, signal: c.req.raw.signal },
     });
@@ -120,9 +121,14 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
         schemes: ['oauth2'],
         resourceMetadata: `${baseUrl}${MCP_RESOURCE_METADATA_PATH}`,
       },
-      tools: CORE_TOOLS.map(({ name, title, description }) => ({ name, title, description })),
+      tools: toolsFor(c.var).map(({ name, title, description }) => ({ name, title, description })),
     });
   });
+}
+
+/** Core's tools and those of the plugins active for this request. */
+function toolsFor(vars: Readonly<GeekityEnv['Variables']>): readonly McpTool[] {
+  return [...CORE_TOOLS, ...activePluginTools(vars)];
 }
 
 function serverInfo(title: string): ServerInfo {

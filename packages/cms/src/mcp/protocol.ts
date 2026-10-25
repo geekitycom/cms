@@ -1,6 +1,6 @@
-import type { McpScope } from '../indieauth/request.ts';
+import type { McpScope, McpToolOutcome } from '../plugin.ts';
 import { listedTool } from './tools.ts';
-import type { ToolCall, ToolOutcome, ToolRegistry } from './tools.ts';
+import type { ToolCall, ToolRegistry } from './tools.ts';
 
 /**
  * The MCP revisions this server speaks, newest first. It offers tools and
@@ -12,7 +12,11 @@ export type ProtocolVersion = (typeof PROTOCOL_VERSIONS)[number];
 
 export const LATEST_PROTOCOL_VERSION = PROTOCOL_VERSIONS[0];
 
-/** What the server can do: list and call tools, from a list that does not change mid-session. */
+/**
+ * What the server can do: list and call tools. The list changes when a
+ * plugin is enabled or disabled, but a stateless server holds no stream to
+ * announce that on, so a client finds out when it lists again.
+ */
 export const SERVER_CAPABILITIES = { tools: { listChanged: false } } as const;
 
 export const JSON_RPC_ERRORS = {
@@ -157,7 +161,7 @@ async function callTool(
  * A tool's outcome as MCP's CallToolResult. The structured result is also
  * written out as text, as the spec asks, for clients that read only text.
  */
-function toolResult(outcome: ToolOutcome<unknown>) {
+function toolResult(outcome: McpToolOutcome<unknown>) {
   if (!outcome.ok) return { content: [{ type: 'text', text: outcome.message }], isError: true };
   return {
     content: [

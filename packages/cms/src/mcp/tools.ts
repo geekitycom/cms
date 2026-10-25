@@ -1,22 +1,10 @@
-import type { McpScope } from '../indieauth/request.ts';
+import type { McpScope, McpToolAnnotations, McpToolOutcome } from '../plugin.ts';
 import type { StoredToken } from '../indieauth/tokens.ts';
 import type { User } from '../site/users.ts';
 import { messageOf } from '../util/errors.ts';
 import type { CallLimit } from './call-limit.ts';
-import { problemsWith } from './schema.ts';
-import type { FromSchema, ObjectSchema } from './schema.ts';
-
-/**
- * What a tool tells a client about itself beyond its schemas. Every hint is
- * stated, so no tool falls back on MCP's defaults, which assume the worst
- * about writes and nothing about reads.
- */
-export interface ToolAnnotations {
-  readonly readOnlyHint: boolean;
-  readonly destructiveHint: boolean;
-  readonly idempotentHint: boolean;
-  readonly openWorldHint: boolean;
-}
+import { problemsWith } from '../util/json-schema.ts';
+import type { FromSchema, ObjectSchema } from '../util/json-schema.ts';
 
 /** Who is calling a tool, through which connection. */
 export interface ToolCall {
@@ -25,29 +13,31 @@ export interface ToolCall {
   readonly signal: AbortSignal;
 }
 
-/**
- * What a tool's run came to: a short summary for a person and the structured
- * result its output schema describes, or a message the model can act on.
- */
-export type ToolOutcome<O> =
-  | { readonly ok: true; readonly summary: string; readonly structured: O }
-  | { readonly ok: false; readonly message: string };
-
 interface ToolSpec<I extends ObjectSchema, O extends ObjectSchema> {
   readonly name: string;
   readonly title: string;
   readonly description: string;
   /** The one scope a token needs for this tool. The registry checks it before `run`. */
   readonly scope: McpScope;
-  readonly annotations: ToolAnnotations;
+  readonly annotations: McpToolAnnotations;
   readonly inputSchema: I;
   readonly outputSchema: O;
-  readonly run: (args: FromSchema<I>, call: ToolCall) => Promise<ToolOutcome<FromSchema<O>>>;
+  readonly run: (args: FromSchema<I>, call: ToolCall) => Promise<McpToolOutcome<FromSchema<O>>>;
 }
 
 /** A tool as the registry holds it, its argument types erased once they are checked. */
 export interface McpTool extends Omit<ToolSpec<ObjectSchema, ObjectSchema>, 'run'> {
-  readonly run: (args: unknown, call: ToolCall) => Promise<ToolOutcome<unknown>>;
+  readonly run: (args: unknown, call: ToolCall) => Promise<McpToolOutcome<unknown>>;
+}
+
+/** The app a connection was issued to: its `client_id` and name, or a hand-made token's name. */
+export function callingClient(token: StoredToken): {
+  readonly client: string;
+  readonly clientName: string | undefined;
+} {
+  return token.kind === 'created'
+    ? { client: token.name, clientName: undefined }
+    : { client: token.clientId, clientName: token.clientName };
 }
 
 /** A tool whose `run` is handed only arguments that fit its input schema. */
@@ -80,7 +70,7 @@ export type ToolCallResult =
   | { readonly kind: 'unknown-tool' }
   | { readonly kind: 'insufficient-scope'; readonly scope: McpScope }
   | { readonly kind: 'rate-limited'; readonly retryAfter: number }
-  | { readonly kind: 'ran'; readonly outcome: ToolOutcome<unknown> };
+  | { readonly kind: 'ran'; readonly outcome: McpToolOutcome<unknown> };
 
 /** One call as the registry hands it to the record: what was asked, by whom, and how it ended. */
 export interface ToolCallRecord {

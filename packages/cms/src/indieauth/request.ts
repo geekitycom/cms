@@ -31,22 +31,6 @@ export const SITE_SCOPES = [
   'media',
 ] as const satisfies readonly Scope[];
 
-/**
- * The scopes the MCP endpoint's tools may declare. A tool needs exactly one
- * of them.
- */
-export const MCP_SCOPES = [
-  'profile',
-  'create',
-  'update',
-  'media',
-  'publish',
-  'inspect',
-  'repair',
-] as const satisfies readonly Scope[];
-
-export type McpScope = (typeof MCP_SCOPES)[number];
-
 export type CodeChallenge =
   { readonly method: 'S256'; readonly value: string } | { readonly method: 'none' };
 

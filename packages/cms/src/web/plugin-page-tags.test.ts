@@ -435,7 +435,7 @@ describe('the reader a page tag is drawn for (TASK-459)', () => {
 
 describe('the host API version (TASK-443, AC #6)', () => {
   it('goes up for page tags, and a plugin built against version 2 still loads and runs', async () => {
-    assert.equal(HOST_API_VERSION, 3);
+    assert.ok(HOST_API_VERSION >= 3);
     const older = definePlugin({
       name: '@test/plugin-older',
       version: '1.0.0',

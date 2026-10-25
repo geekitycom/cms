@@ -31,6 +31,7 @@ import {
   SITE,
 } from '@geekity/cms';
 import type { Cms } from '@geekity/cms';
+import { HOST_API_VERSION } from '@geekity/cms/plugin';
 
 import config from '../geekity.config.ts';
 
@@ -526,7 +527,7 @@ describe('the demo example plugins (decision-33)', () => {
     await enable([HELLO, GREETINGS]);
     assert.equal(
       await text('/plugin-hello/'),
-      'Hello from a plugin, on host API version 3.\n',
+      `Hello from a plugin, on host API version ${String(HOST_API_VERSION)}.\n`,
       'the route is served on the next request, with no restart',
     );
 

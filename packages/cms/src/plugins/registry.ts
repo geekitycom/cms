@@ -11,7 +11,7 @@
 import semver from 'semver';
 
 import type { DataFileDeclaration } from '../files/data-files.ts';
-import { HOST_API_VERSION } from '../plugin.ts';
+import { HOST_API_VERSION, MCP_SCOPES } from '../plugin.ts';
 import { PACKAGE_VERSION } from '../util/package-version.ts';
 import type {
   CoreServices,
@@ -28,6 +28,7 @@ import type {
   PluginSettings,
   PluginSettingValues,
   PluginSiteInfo,
+  PluginTool,
   PluginWidget,
   UsedService,
 } from '../plugin.ts';
@@ -64,6 +65,13 @@ export interface PluginRoute {
   handler: PluginRouteHandler;
 }
 
+/** One MCP tool a plugin declared, under the name clients call it by. */
+export interface PluginMcpTool {
+  /** The plugin's prefix, `__`, and the tool's id, as {@link pluginToolName} makes it. */
+  name: string;
+  tool: PluginTool;
+}
+
 /** What a plugin declared in `register`. */
 export interface PluginContributions {
   routes: readonly PluginRoute[];
@@ -78,6 +86,7 @@ export interface PluginContributions {
   pageTags:
     ((context: PluginPageTagsContext) => PluginPageTags | Promise<PluginPageTags>) | undefined;
   widgets: readonly PluginWidget[];
+  tools: readonly PluginMcpTool[];
   dataFiles: readonly DataFileDeclaration[];
 }
 
@@ -362,6 +371,7 @@ const NOTHING_DECLARED: PluginContributions = {
   editorActions: [],
   pageTags: undefined,
   widgets: [],
+  tools: [],
   dataFiles: [],
 };
 
@@ -424,6 +434,7 @@ function register(
   const commands: PluginCommand[] = [];
   const editorActions: PluginEditorAction[] = [];
   const widgets: PluginWidget[] = [];
+  const tools: PluginMcpTool[] = [];
   let screen: PluginScreen | undefined;
   let pageTags: PluginContributions['pageTags'];
   let renderedSettings: readonly RenderedSetting[] | undefined;
@@ -497,6 +508,25 @@ function register(
       }
       widgets.push(declared);
     },
+    tool(declared) {
+      declaring('an MCP tool');
+      if (!DECLARED_ID.test(declared.id)) {
+        throw new Error(
+          `${JSON.stringify(declared.id)} is not an MCP tool id: use lower case words joined by -.`,
+        );
+      }
+      if (tools.some((entry) => entry.tool.id === declared.id)) {
+        throw new Error(
+          `${name} declares two MCP tools with the id ${JSON.stringify(declared.id)}.`,
+        );
+      }
+      if (!(MCP_SCOPES as readonly string[]).includes(declared.scope)) {
+        throw new Error(
+          `The ${declared.id} tool asks for the scope ${JSON.stringify(declared.scope)}. A plugin’s tool picks one of the scopes core offers: ${MCP_SCOPES.join(', ')}.`,
+        );
+      }
+      tools.push({ name: pluginToolName(name, declared.id), tool: declared });
+    },
     siteInfo: () => options.siteInfo(),
     fetch: (url, init = {}) => pluginFetch(url, init, options),
     provide(value) {
@@ -554,6 +584,7 @@ function register(
         editorActions,
         pageTags,
         widgets,
+        tools,
         dataFiles,
       },
       service,
@@ -570,6 +601,17 @@ function register(
 }
 
 const DECLARED_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * The name MCP clients call a plugin's tool by: the plugin's environment
+ * variable prefix in lower case, `__`, and the id with `_` for `-`. Two
+ * installed plugins never share a prefix, and neither part can hold `__`, so
+ * no two plugins' tools share a name and none takes a core tool's, which
+ * never holds `__`. Only letters, digits and `_`, which every client accepts.
+ */
+function pluginToolName(plugin: string, id: string): string {
+  return `${pluginEnvPrefix(plugin).toLowerCase()}__${id.replaceAll('-', '_')}`;
+}
 
 async function lifecycle(plugin: Plugin, hook: 'start' | 'stop'): Promise<void> {
   try {
