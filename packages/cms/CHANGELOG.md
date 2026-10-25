@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.44.0](https://github.com/geekitycom/cms/compare/v0.43.0...v0.44.0) (2026-10-25)
+
+
+### Features
+
+* **cms:** add a remote lookup MCP tool that fetches fediverse objects as the site ([8f9cffd](https://github.com/geekitycom/cms/commit/8f9cffd28af5485eaf381e79f6b4e8553b30d7f6))
+* **cms:** add MCP authoring tools to draft, read, update and publish posts and upload media ([13d395c](https://github.com/geekitycom/cms/commit/13d395c1d6b8e91490ef9078daa64d5b50a2b5f2))
+* **cms:** add MCP repair tools to resend posts, retry failed deliveries and refresh remote actors ([780a4c6](https://github.com/geekitycom/cms/commit/780a4c60939d879c8d4c13dce9ed629104293f0b))
+* **cms:** add read-only MCP tools for debugging federation ([884153e](https://github.com/geekitycom/cms/commit/884153ee64a37e7ab7cc0817f3c7f48d44cda9e2))
+* **cms:** choose Micropub or MCP for a token created on the connected apps screen ([8ccf55a](https://github.com/geekitycom/cms/commit/8ccf55a08ccf1e8a764b1f157c90f2cd7810dcf7))
+* **cms:** let plugins offer MCP tools through host.tool ([5f354d7](https://github.com/geekitycom/cms/commit/5f354d73a320e4b962c60d05fe376686783367d0))
+* **cms:** record every MCP tool call and limit calls per token ([14760cf](https://github.com/geekitycom/cms/commit/14760cf169594225c2fe9c7ec31c8c8dd9e54c32))
+* **cms:** serve an MCP endpoint behind IndieAuth tokens, with discovery ([2d1d1a5](https://github.com/geekitycom/cms/commit/2d1d1a5b6097c269c27bc20e2866d589970a6eb5))
+
+
+### Bug Fixes
+
+* **cms:** cap the mcp request body before parsing it ([0a75a63](https://github.com/geekitycom/cms/commit/0a75a63f95c80bfeba75b6e25090ab790577a00f))
+* **cms:** retry a failed create as a create, not an update ([cbdd65e](https://github.com/geekitycom/cms/commit/cbdd65e9d3bc9141007bd2baada865665432d4d8))
+
 ## [0.43.0](https://github.com/geekitycom/cms/compare/v0.42.2...v0.43.0) (2026-10-24)
 
 

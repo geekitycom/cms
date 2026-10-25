@@ -1,2 +1,2 @@
 /** This package's version, which release-please keeps in step with package.json. */
-export const VERSION = '0.10.0'; // x-release-please-version
+export const VERSION = '0.11.0'; // x-release-please-version
