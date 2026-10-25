@@ -78,6 +78,13 @@ export interface DeliveryReport {
   readonly held: boolean;
 }
 
+/** Who a resend goes to, when it is not every follower and relay. */
+export interface ResendRecipients {
+  readonly actors: ReadonlySet<string>;
+  /** Whether the post's announcement, usually its `Create`, never reached them. */
+  readonly missedAnnouncement: boolean;
+}
+
 /** Where a delivery service reports what it could not do. `console` will do. */
 export interface DeliveryLogger {
   warn(message: string): void;
@@ -146,11 +153,13 @@ export interface DeliveryService {
    * not published now, so there is neither a copy to withdraw nor anything to
    * announce.
    *
-   * With `to`, a set of actor ids, only the inboxes that reach one of those
-   * actors are sent to, at the inbox each uses now: how a retry reaches the
-   * recipients a delivery failed for and nobody else.
+   * With `to`, only the inboxes that reach one of its actors are sent to, at
+   * the inbox each uses now: how a retry reaches the recipients a delivery
+   * failed for and nobody else. Recipients that missed the announcement are
+   * sent it again rather than an `Update`, which a peer drops for a post it
+   * never stored.
    */
-  resend(slug: string, to?: ReadonlySet<string>): Promise<DeliveryReport | undefined>;
+  resend(slug: string, to?: ResendRecipients): Promise<DeliveryReport | undefined>;
   /**
    * Bring the followers' copies of the posts that cite a page up to date with
    * its newly stored context: an `Update` for each served, announced post
@@ -589,7 +598,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
           // A draft, a trashed post, or one re-dated into the future: every
           // one of them is gone as far as a follower is concerned, and the
           // file still carries the id their copy is filed under.
-          return await withdraw(context, document, await shapeOf(context, document), to);
+          return await withdraw(context, document, await shapeOf(context, document), to?.actors);
         }
 
         requireSender(context, document);
@@ -597,15 +606,20 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         const shape = await shapeOf(context, stamped);
         // A like or a repost is sent again as it is: its id is one a peer
         // that already holds it recognises, and one that missed it does not.
-        if (!announced || shape.kind === 'citing' || wasDeleted(shape.id)) {
-          return await announce(context, stamped, shape, to);
+        if (
+          !announced ||
+          to?.missedAnnouncement === true ||
+          shape.kind === 'citing' ||
+          wasDeleted(shape.id)
+        ) {
+          return await announce(context, stamped, shape, to?.actors);
         }
 
         // The moment rather than the content hash, which is what a save uses:
         // the point of a resend is that the followers hear about a revision
         // they have already been sent and ignored, or never received at all,
         // and an activity id a peer has seen is one it is entitled to drop.
-        return await revise(context, stamped, shape, store.now().toISOString(), to);
+        return await revise(context, stamped, shape, store.now().toISOString(), to?.actors);
       });
     },
 

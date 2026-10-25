@@ -306,6 +306,15 @@ the same table as a save:
 `resend` returns `undefined` when there is no post with that slug and nothing
 to withdraw.
 
+A retry sends what each recipient missed. The `retry_deliveries`
+[MCP tool](mcp.md) passes `resend` the recipients whose newest delivery failed,
+in two groups. A recipient whose newest `Create` for the post failed never
+stored the post, and Mastodon drops an `Update` of a status it does not hold,
+so that group is sent the `Create` again, built from the post as it reads now,
+under the `Create` id the other followers already have. The other group is sent
+an `Update`. A resend with no recipients, as the Resend button and
+`geekity resend` send, follows the table above for every follower.
+
 The site stores nothing else. For each activity it sends, SQLite keeps one
 outcome row per recipient: the activity's id, type, object id and slug, the
 inbox used, the status, the error, and the time. That cache may be empty.

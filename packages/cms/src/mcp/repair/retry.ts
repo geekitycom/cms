@@ -9,7 +9,7 @@ export const retryDeliveries = defineTool({
   name: 'retry_deliveries',
   title: 'Retry failed deliveries',
   description:
-    'Find the recipients whose newest delivery of a post failed, for one post, for one inbox, or both, and queue a job that sends each post again, as it reads now, to those recipients alone, at the inbox each uses now. Posts go one at a time with a pause between. Returns what will be retried and the queued job; outcomes appear in post_federation as the queue settles them.',
+    'Find the recipients whose newest delivery of a post failed, for one post, for one inbox, or both, and queue a job that sends each post again, as it reads now, to those recipients alone, at the inbox each uses now. A recipient whose Create failed is sent the Create; the rest are sent an Update. Posts go one at a time with a pause between. Returns what will be retried and the queued job; outcomes appear in post_federation as the queue settles them.',
   scope: 'repair',
   annotations: REPAIR,
   inputSchema: {
@@ -41,8 +41,13 @@ export const retryDeliveries = defineTool({
                   actorId: { type: 'string' },
                   inboxId: { type: 'string', description: 'The inbox the failed delivery used.' },
                   error: nullable({ type: 'string' }),
+                  missedAnnouncement: {
+                    type: 'boolean',
+                    description:
+                      'True when the newest Create this recipient was sent failed, so the retry sends the Create rather than an Update.',
+                  },
                 },
-                required: ['actorId', 'inboxId', 'error'],
+                required: ['actorId', 'inboxId', 'error', 'missedAnnouncement'],
               },
             },
           },

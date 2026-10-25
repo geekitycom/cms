@@ -194,8 +194,13 @@ inbox the recipient was sent to. So, with `inbox`, a recipient that failed at
 that inbox and was later reached at a new inbox is not retried. The answer
 lists each post and its recipients with the recorded error. The tool then
 queues a `retry-deliveries` job. When the job runs, it reads the failures
-again and sends each post as a resend would, to those recipients only. Each
-recipient gets the post at the inbox its follower record names at that time.
+again and sends each post as it reads now, to those recipients only. A
+recipient whose newest `Create` for the post failed never stored the post, and
+a server such as Mastodon drops an `Update` of a status it does not hold. So
+that recipient is sent the `Create` again, and the answer marks it with
+`missedAnnouncement`. The other recipients are sent an `Update`, as a resend
+would. Each recipient gets the post at the inbox its follower record names at
+that time.
 The job waits 2 seconds between posts, so that many posts to one server do
 not trigger the server's bot protection. Activities that are not about a
 post, such as a profile `Update`, are not retried.

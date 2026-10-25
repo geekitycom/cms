@@ -23,6 +23,7 @@ import { queuedMessages } from '../__testing__/federation-queue.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { addFollower } from './records.ts';
+import { retryDeliveriesJob } from './retry-job.ts';
 import { SITE } from '../site/namespace.ts';
 import { readDevModeRecord } from '../settings/dev-mode.ts';
 import type { DevModeEntry } from '../settings/dev-mode.ts';
@@ -2144,6 +2145,73 @@ describe('resending a post', () => {
 
     assert.equal(await cms.delivery.resend('secret'), undefined);
     assert.deepEqual(deliveries, [], 'there is no copy anywhere to withdraw');
+  });
+});
+
+describe('retrying a failed delivery', () => {
+  const RETRIED = `${BASE_URL}/2026/03/hello-world/`;
+
+  async function retry(cms: Cms): Promise<void> {
+    const job = retryDeliveriesJob(cms, () => Promise.resolve());
+    await job.run(
+      { slug: 'hello-world', inbox: null },
+      { signal: new AbortController().signal, attempt: 1, progress: () => Promise.resolve() },
+    );
+  }
+
+  it('sends a recipient whose Create failed the Create, for the post as it now reads', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    rejectingEveryPost = true;
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    assert.equal(cms.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX)?.status, 'failed');
+    rejectingEveryPost = false;
+
+    await retry(cms);
+
+    assert.deepEqual(delivered('Update'), [], 'an Update of a post it never stored is dropped');
+    const creates = delivered('Create');
+    assert.equal(creates.length, 1, `expected one Create, saw ${JSON.stringify(deliveries)}`);
+    const object = (creates[0] as Delivery).body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], RETRIED);
+    assert.equal(cms.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX)?.status, 'sent');
+  });
+
+  it('sends a recipient whose Update failed an Update, when its Create arrived', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    rejectingEveryPost = true;
+    await submitEditor(agent, '/admin/posts/hello-world', { body: 'Edited while it was down.' });
+    await cms.delivery.settled();
+    assert.equal(cms.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX)?.activityType, 'Update');
+    rejectingEveryPost = false;
+    deliveries.length = 0;
+
+    await retry(cms);
+
+    assert.deepEqual(delivered('Create'), []);
+    assert.equal(delivered('Update').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.match(contentOf(delivered('Update')[0]), /Edited while it was down\./);
+  });
+
+  it('sends the Create when the Create and the Update after it both failed', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    rejectingEveryPost = true;
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/hello-world', { body: 'Edited while it was down.' });
+    await cms.delivery.settled();
+    rejectingEveryPost = false;
+
+    await retry(cms);
+
+    assert.deepEqual(delivered('Update'), []);
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.match(contentOf(delivered('Create')[0]), /Edited while it was down\./);
   });
 });
 

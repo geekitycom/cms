@@ -16,10 +16,11 @@ function row(
   inboxId: string,
   status: DeliveryStatus,
   attemptedAt: string,
+  activityType = 'Update',
 ): Delivery {
   return {
     activityId: `https://blog.example/${slug}#${attemptedAt}`,
-    activityType: 'Update',
+    activityType,
     objectId: `https://blog.example/${slug}/`,
     slug,
     actorId: `https://social.example/users/${actor}`,
@@ -50,10 +51,10 @@ function services(rows: readonly Delivery[]): RetryJobServices & { resent: unkno
     },
     delivery: {
       resend(slug, to) {
-        resent.push([slug, [...(to ?? [])]]);
+        resent.push([slug, [...(to?.actors ?? [])]]);
         return Promise.resolve({
           activityId: `https://blog.example/${slug}#retry`,
-          activityType: 'Update',
+          activityType: to?.missedAnnouncement === true ? 'Create' : 'Update',
           objectId: `https://blog.example/${slug}/`,
           deliveries: [],
           held: false,
@@ -84,10 +85,39 @@ describe('which deliveries a retry sends again', () => {
       {
         slug: 'two',
         recipients: [
-          { actorId: 'https://social.example/users/carol', inboxId: INBOX, error: 'HTTP 403' },
+          {
+            actorId: 'https://social.example/users/carol',
+            inboxId: INBOX,
+            error: 'HTTP 403',
+            missedAnnouncement: false,
+          },
         ],
       },
     ]);
+  });
+
+  it('marks a recipient whose newest Create failed as one that missed the announcement', () => {
+    const site = services([
+      row('one', 'carol', INBOX, 'failed', '2026-03-02T00:00:00Z'),
+      row('one', 'carol', INBOX, 'failed', '2026-03-01T00:00:00Z', 'Create'),
+      row('one', 'dave', INBOX, 'failed', '2026-03-02T00:00:00Z'),
+      row('one', 'dave', INBOX, 'sent', '2026-03-01T00:00:00Z', 'Create'),
+      row('one', 'erin', INBOX, 'failed', '2026-03-02T00:00:00Z'),
+      row('one', 'erin', INBOX, 'sent', '2026-02-01T00:00:00Z', 'Create'),
+      row('one', 'erin', INBOX, 'failed', '2026-01-01T00:00:00Z', 'Create'),
+      row('one', 'frank', INBOX, 'failed', '2026-03-02T00:00:00Z'),
+    ]);
+
+    const [retry] = failedRetries(site, { slug: null, inbox: INBOX });
+    assert.deepEqual(
+      retry?.recipients.map((one) => [one.actorId.split('/').at(-1), one.missedAnnouncement]),
+      [
+        ['carol', true],
+        ['dave', false],
+        ['erin', false],
+        ['frank', false],
+      ],
+    );
   });
 
   it('leaves out an activity about no post, such as a profile Update', () => {
@@ -143,6 +173,30 @@ describe('the retry job', () => {
       [
         ['one', 1, 'Update'],
         ['two', 2, 'Update'],
+      ],
+    );
+  });
+
+  it('sends a post’s Create to the recipients that missed it before the Update to the rest', async () => {
+    const site = services([
+      row('one', 'carol', INBOX, 'failed', '2026-03-02T00:00:00Z'),
+      row('one', 'dave', INBOX, 'failed', '2026-03-01T00:00:00Z', 'Create'),
+    ]);
+
+    const report = await retryDeliveriesJob(site, () => Promise.resolve()).run(
+      { slug: null, inbox: INBOX },
+      context,
+    );
+
+    assert.deepEqual(site.resent, [
+      ['one', ['https://social.example/users/dave']],
+      ['one', ['https://social.example/users/carol']],
+    ]);
+    assert.deepEqual(
+      report.posts.map((post) => [post.slug, post.recipients, post.activity?.activityType]),
+      [
+        ['one', 1, 'Create'],
+        ['one', 1, 'Update'],
       ],
     );
   });

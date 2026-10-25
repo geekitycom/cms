@@ -182,7 +182,14 @@ describe('retry_deliveries', () => {
     assert.deepEqual(answer.structured['retries'], [
       {
         slug: 'hello',
-        recipients: [{ actorId: BOB, inboxId: BOB_SHARED_INBOX, error: 'HTTP 403 Forbidden' }],
+        recipients: [
+          {
+            actorId: BOB,
+            inboxId: BOB_SHARED_INBOX,
+            error: 'HTTP 403 Forbidden',
+            missedAnnouncement: true,
+          },
+        ],
       },
     ]);
     const status = await cms.jobs.status((answer.structured['job'] as Row)['id'] as string);
@@ -214,7 +221,7 @@ describe('retry_deliveries', () => {
     const finished = await cms.jobs.run((answer.structured['job'] as Row)['id'] as string);
 
     assert.equal(finished.state, 'finished', JSON.stringify(finished));
-    assert.deepEqual(posted, [{ url: BOB_SHARED_INBOX, type: 'Update' }]);
+    assert.deepEqual(posted, [{ url: BOB_SHARED_INBOX, type: 'Create' }]);
     const again = await call(cms, token, 'retry_deliveries', { post: 'hello' });
     assert.deepEqual(again.structured['retries'], []);
     assert.equal(again.structured['queued'], false);
@@ -260,8 +267,8 @@ describe('refresh_actor', () => {
     await cms.jobs.run((answer.structured['job'] as Row)['id'] as string);
 
     assert.deepEqual(
-      posted.filter((post) => post.type === 'Update'),
-      [{ url: BOB_MOVED_INBOX, type: 'Update' }],
+      posted.filter((post) => post.type === 'Create'),
+      [{ url: BOB_MOVED_INBOX, type: 'Create' }],
     );
   });
 
