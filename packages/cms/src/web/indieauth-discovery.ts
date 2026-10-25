@@ -3,7 +3,7 @@ import type { Hono, MiddlewareHandler } from 'hono';
 import type { GeekityEnv } from './env.ts';
 import { parseAuthorPath } from '../content/authors.ts';
 import { requestPath } from './request.ts';
-import { SCOPES, SITE_SCOPES } from '../indieauth/request.ts';
+import { SCOPES, MICROPUB_SCOPES } from '../indieauth/request.ts';
 import { MCP_SCOPES } from '../plugin.ts';
 
 /** Where the authorization server metadata document is published. */
@@ -112,7 +112,7 @@ export function protectedResourceMetadata(baseUrl: string): ProtectedResourceMet
   return {
     resource: baseUrl,
     authorization_servers: [authorizationServerMetadata(baseUrl).issuer],
-    scopes_supported: SITE_SCOPES,
+    scopes_supported: MICROPUB_SCOPES,
     bearer_methods_supported: ['header', 'body'],
   };
 }

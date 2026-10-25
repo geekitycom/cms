@@ -79,16 +79,16 @@ export const refreshActor = defineTool({
     if (fetched === undefined) {
       return { ok: false, message: `${actorId} did not answer with an actor that has an inbox.` };
     }
-    const current = { ...fetched, actorId };
+    const refetchedUnderStoredId = { ...fetched, actorId };
 
     const held = admin.listFollowers().filter((follower) => follower.actorId === actorId);
     const records = { admin, contentDir: config.contentDir, dataDir: config.dataDir };
     for (const follower of held) {
-      await addFollower(records, follower.username, current);
+      await addFollower(records, follower.username, refetchedUnderStoredId);
     }
     const profileUpdated = admin.getActorProfile(actorId) !== undefined;
     if (profileUpdated) {
-      const { handle, name, iconUrl, url } = current;
+      const { handle, name, iconUrl, url } = refetchedUnderStoredId;
       admin.putActorProfile({
         actorId,
         handle,
@@ -101,17 +101,18 @@ export const refreshActor = defineTool({
 
     const moved = held.filter(
       (follower) =>
-        follower.inboxId !== current.inboxId || follower.sharedInboxId !== current.sharedInboxId,
+        follower.inboxId !== refetchedUnderStoredId.inboxId ||
+        follower.sharedInboxId !== refetchedUnderStoredId.sharedInboxId,
     ).length;
     return {
       ok: true,
-      summary: `${actorId} publishes inbox ${current.sharedInboxId ?? current.inboxId}; rewrote ${String(held.length)} follower ${held.length === 1 ? 'record' : 'records'}, ${String(moved)} of them with a new inbox.`,
+      summary: `${actorId} publishes inbox ${refetchedUnderStoredId.sharedInboxId ?? refetchedUnderStoredId.inboxId}; rewrote ${String(held.length)} follower ${held.length === 1 ? 'record' : 'records'}, ${String(moved)} of them with a new inbox.`,
       structured: {
         actorId,
-        handle: current.handle,
-        name: current.name,
-        inbox: current.inboxId,
-        sharedInbox: current.sharedInboxId,
+        handle: refetchedUnderStoredId.handle,
+        name: refetchedUnderStoredId.name,
+        inbox: refetchedUnderStoredId.inboxId,
+        sharedInbox: refetchedUnderStoredId.sharedInboxId,
         followers: held.map((follower) => ({
           username: follower.username,
           before: { inbox: follower.inboxId, sharedInbox: follower.sharedInboxId },

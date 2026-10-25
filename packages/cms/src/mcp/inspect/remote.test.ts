@@ -322,7 +322,7 @@ describe('lookupRemote', () => {
         signal: new AbortController().signal,
         timeoutMs: 50,
         maxBytes: 1024,
-        sign: undefined,
+        signObjectFetch: undefined,
       },
     );
     assert.deepEqual(result, { ok: false, reason: `${SLOW}: no answer within 50 ms` });

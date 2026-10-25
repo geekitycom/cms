@@ -11,6 +11,7 @@ import { createUser } from '../../../site/users.ts';
 export const BASE = 'https://blog.example';
 export const MCP = '/_geekity/mcp';
 export const POST_ID = `${BASE}/2026/03/hello/`;
+export const POST_ID_WITHOUT_SLASH = POST_ID.slice(0, -1);
 export const ALICE = 'https://mastodon.example/users/alice';
 export const BOB = 'https://me.example/users/bob';
 export const RELAY = 'https://relay.example/inbox';
@@ -103,7 +104,7 @@ export async function fixtureSite(box: Sandbox, config: GeekityConfig = {}): Pro
       object: {
         id: 'https://me.example/notes/9',
         type: 'Note',
-        inReplyTo: `${BASE}/2026/03/hello`,
+        inReplyTo: POST_ID_WITHOUT_SLASH,
         content: 'Nice post!',
       },
     }),

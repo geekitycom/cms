@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { Scope } from '../indieauth/request.ts';
 import type { StoredToken } from '../indieauth/tokens.ts';
+import { PLUGIN_TOOL_SEPARATOR } from '../plugins/registry.ts';
 import type { User } from '../site/users.ts';
 import { createToolRegistry, defineTool, listedTool } from './tools.ts';
 import type { McpTool, ToolCall, ToolCallRecord, ToolGuards, ToolSite } from './tools.ts';
@@ -59,7 +60,7 @@ function watching(refuse?: { retryAfter: number; first: boolean }): {
 }
 
 function registryOf(tools: readonly McpTool[]) {
-  return createToolRegistry(tools, watching().guards);
+  return createToolRegistry({ core: tools }, watching().guards);
 }
 
 const echo = defineTool({
@@ -163,6 +164,19 @@ describe('the tool registry', () => {
     assert.throws(() => registryOf([echo, echo]), /echo/);
     assert.throws(() => registryOf([{ ...echo, name: 'has space' }]), /has space/);
   });
+
+  it('keeps the plugin separator out of core tool names, and lets plugin tools use it', () => {
+    const pluginShaped = { ...echo, name: `stats${PLUGIN_TOOL_SEPARATOR}top` };
+    assert.throws(() => registryOf([pluginShaped]), /only plugin tool names/);
+    const registry = createToolRegistry(
+      { core: [echo], plugin: [pluginShaped] },
+      watching().guards,
+    );
+    assert.deepEqual(
+      registry.list().map((tool) => tool.name),
+      ['echo', pluginShaped.name],
+    );
+  });
 });
 
 const boom = defineTool({
@@ -176,7 +190,7 @@ describe('what every call passes, whatever the tool', () => {
   it('records a call that ran, with its tool, arguments, caller and outcome', async () => {
     const { guards, records } = watching();
     const call = callAs(['inspect']);
-    await createToolRegistry([echo], guards).call('echo', { word: 'hi' }, call);
+    await createToolRegistry({ core: [echo] }, guards).call('echo', { word: 'hi' }, call);
     assert.deepEqual(records, [
       {
         tool: 'echo',
@@ -192,7 +206,7 @@ describe('what every call passes, whatever the tool', () => {
 
   it('records a refusal for scope, an unknown tool and a tool error as they were answered', async () => {
     const { guards, records } = watching();
-    const registry = createToolRegistry([echo], guards);
+    const registry = createToolRegistry({ core: [echo] }, guards);
     await registry.call('echo', { word: 'hi' }, callAs(['profile']));
     await registry.call('nothing', {}, callAs(['inspect']));
     await registry.call('echo', { times: 9 }, callAs(['inspect']));
@@ -206,7 +220,11 @@ describe('what every call passes, whatever the tool', () => {
 
   it('answers a tool that throws with a tool error, and records why it failed', async () => {
     const { guards, records } = watching();
-    const outcome = await createToolRegistry([boom], guards).call('boom', {}, callAs(['inspect']));
+    const outcome = await createToolRegistry({ core: [boom] }, guards).call(
+      'boom',
+      {},
+      callAs(['inspect']),
+    );
     assert.ok(outcome.kind === 'ran' && !outcome.outcome.ok);
     const message = outcome.kind === 'ran' && !outcome.outcome.ok ? outcome.outcome.message : '';
     assert.match(message, /boom failed/);
@@ -217,9 +235,29 @@ describe('what every call passes, whatever the tool', () => {
     );
   });
 
+  it('answers the call when recording it throws', async (t) => {
+    const warned = t.mock.method(console, 'warn', () => undefined);
+    const guards: ToolGuards = {
+      ...watching().guards,
+      record: () => {
+        throw new Error('the log is full');
+      },
+    };
+    const outcome = await createToolRegistry({ core: [echo] }, guards).call(
+      'echo',
+      { word: 'hi' },
+      callAs(['inspect']),
+    );
+    assert.deepEqual(outcome, {
+      kind: 'ran',
+      outcome: { ok: true, summary: 'hi', structured: { said: ['hi'] } },
+    });
+    assert.match(String(warned.mock.calls[0]?.arguments[0]), /echo.*the log is full/);
+  });
+
   it('counts each call against its token, before anything else is looked at', async () => {
     const { guards, keys } = watching();
-    const registry = createToolRegistry([echo], guards);
+    const registry = createToolRegistry({ core: [echo] }, guards);
     await registry.call('nothing', {}, callAs(['inspect']));
     await registry.call('echo', { word: 'hi' }, callAs(['profile']));
     assert.deepEqual(keys, ['id', 'id']);
@@ -228,7 +266,7 @@ describe('what every call passes, whatever the tool', () => {
   it('refuses a call over the limit without running it, with how long to wait', async () => {
     const { guards, records } = watching({ retryAfter: 42, first: true });
     const before = ran;
-    const outcome = await createToolRegistry([echo], guards).call(
+    const outcome = await createToolRegistry({ core: [echo] }, guards).call(
       'echo',
       { word: 'hi' },
       callAs(['inspect']),
@@ -243,7 +281,7 @@ describe('what every call passes, whatever the tool', () => {
 
   it('records only the first refusal in a window, so a looping client cannot flood the record', async () => {
     const { guards, records } = watching({ retryAfter: 41, first: false });
-    const outcome = await createToolRegistry([echo], guards).call(
+    const outcome = await createToolRegistry({ core: [echo] }, guards).call(
       'echo',
       { word: 'hi' },
       callAs(['inspect']),

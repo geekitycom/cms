@@ -81,7 +81,7 @@ interface Facts {
   readonly clientId?: string | undefined;
   /** The username the request acted as, when that is known. */
   readonly user?: string | undefined;
-  readonly connection?: string | undefined;
+  readonly connectionId?: string | undefined;
   readonly tokenName?: string | undefined;
   readonly carried: readonly CarriedField[];
 }
@@ -300,10 +300,12 @@ export function recordMcpCall(dataDir: string, call: McpCallFacts, at: Date): vo
   }
 }
 
-function connectionFacts(token: StoredToken): Pick<Facts, 'clientId' | 'connection' | 'tokenName'> {
+function connectionFacts(
+  token: StoredToken,
+): Pick<Facts, 'clientId' | 'connectionId' | 'tokenName'> {
   return token.kind === 'created'
-    ? { connection: token.id, tokenName: short(token.name) }
-    : { connection: token.id, clientId: short(token.clientId) };
+    ? { connectionId: token.id, tokenName: short(token.name) }
+    : { connectionId: token.id, clientId: short(token.clientId) };
 }
 
 /**
@@ -471,7 +473,7 @@ export const logTokenRequest = recordActivity(async (c) => {
 /** Who a Micropub request acted as, once the bearer guard let it in. */
 function bearerFacts(
   c: Context<ActivityEnv>,
-): Pick<Facts, 'clientId' | 'user' | 'connection' | 'tokenName'> {
+): Pick<Facts, 'clientId' | 'user' | 'connectionId' | 'tokenName'> {
   const { bearer } = c.var;
   if (bearer === undefined) return {};
   return { ...connectionFacts(bearer.token), user: bearer.user.username };

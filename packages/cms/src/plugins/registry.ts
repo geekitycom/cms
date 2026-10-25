@@ -600,8 +600,10 @@ function register(
 
 const DECLARED_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+export const PLUGIN_TOOL_SEPARATOR = '__';
+
 function pluginToolName(plugin: string, id: string): string {
-  return `${pluginEnvPrefix(plugin).toLowerCase()}__${id.replaceAll('-', '_')}`;
+  return `${pluginEnvPrefix(plugin).toLowerCase()}${PLUGIN_TOOL_SEPARATOR}${id.replaceAll('-', '_')}`;
 }
 
 async function lifecycle(plugin: Plugin, hook: 'start' | 'stop'): Promise<void> {

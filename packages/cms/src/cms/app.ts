@@ -147,7 +147,7 @@ export function createApp(
   // those tokens.
   mountMicropub(app);
   mountMicropubMedia(app);
-  mountMcp(app);
+  mountMcp(app, resolved);
 
   // Federation goes on first. It answers its own paths and falls through on
   // every other, so putting it in front costs the rest of the app nothing and

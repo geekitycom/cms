@@ -14,7 +14,7 @@ import { defineTool } from '../tools.ts';
 import type { ToolSite } from '../tools.ts';
 import { ANY_OBJECT, READ_ONLY } from './schemas.ts';
 
-const TIMEOUT_MS = 10_000;
+const LOOKUP_TIMEOUT_MS = 10_000;
 
 const MAX_BYTES = 256 * 1024;
 
@@ -80,7 +80,7 @@ interface LookupOptions {
   readonly signal: AbortSignal;
   readonly timeoutMs: number;
   readonly maxBytes: number;
-  readonly sign: ((request: Request) => Promise<Request>) | undefined;
+  readonly signObjectFetch: ((request: Request) => Promise<Request>) | undefined;
 }
 
 const HANDLE = /^(?:acct:|@)?([^@\s/]+)@([^@\s/]+)$/;
@@ -127,7 +127,12 @@ export async function lookupRemote(
     objectUrl = target.url.href;
   }
 
-  const answered = await exchange(objectUrl, { ...options, signal, accept: ACTIVITY_ACCEPT });
+  const answered = await exchange(objectUrl, {
+    ...options,
+    signal,
+    accept: ACTIVITY_ACCEPT,
+    sign: options.signObjectFetch,
+  });
   if (!answered.ok) return refuse(objectUrl, answered);
   return { ok: true, webfinger, object: answered.exchange };
 }
@@ -147,7 +152,10 @@ function selfLink(jrd: Record<string, unknown> | null): string | undefined {
 
 async function exchange(
   url: string,
-  options: LookupOptions & { readonly accept: string },
+  options: Omit<LookupOptions, 'signObjectFetch'> & {
+    readonly accept: string;
+    readonly sign: ((request: Request) => Promise<Request>) | undefined;
+  },
 ): Promise<{ readonly ok: true; readonly exchange: Exchange } | Refusal> {
   const answered = await requestPublic(url, {
     lookup: options.lookup,
@@ -285,9 +293,9 @@ export const remoteLookup = defineTool({
     const found = await lookupRemote(target, {
       lookup: site.config.hostLookup,
       signal,
-      timeoutMs: TIMEOUT_MS,
+      timeoutMs: LOOKUP_TIMEOUT_MS,
       maxBytes: MAX_BYTES,
-      sign: signer?.sign,
+      signObjectFetch: signer?.sign,
     });
     if (!found.ok) return { ok: false, message: found.reason };
     const { webfinger, object } = found;

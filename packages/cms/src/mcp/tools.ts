@@ -2,6 +2,7 @@ import type { McpScope, McpToolAnnotations, McpToolOutcome } from '../plugin.ts'
 import type { StoredToken } from '../indieauth/tokens.ts';
 import type { User } from '../site/users.ts';
 import type { GeekityEnv } from '../web/env.ts';
+import { PLUGIN_TOOL_SEPARATOR } from '../plugins/registry.ts';
 import { messageOf } from '../util/errors.ts';
 import type { CallLimit } from './call-limit.ts';
 import { problemsWith } from '../util/json-schema.ts';
@@ -123,7 +124,23 @@ export interface ToolRegistry {
 /** MCP's rule for a tool name. */
 const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/;
 
-export function createToolRegistry(tools: readonly McpTool[], guards: ToolGuards): ToolRegistry {
+export interface RegisteredTools {
+  readonly core: readonly McpTool[];
+  readonly plugin?: readonly McpTool[];
+}
+
+export function createToolRegistry(
+  { core, plugin = [] }: RegisteredTools,
+  guards: ToolGuards,
+): ToolRegistry {
+  for (const tool of core) {
+    if (tool.name.includes(PLUGIN_TOOL_SEPARATOR)) {
+      throw new Error(
+        `"${tool.name}" contains "${PLUGIN_TOOL_SEPARATOR}", which only plugin tool names may use.`,
+      );
+    }
+  }
+  const tools = [...core, ...plugin];
   const byName = new Map<string, McpTool>();
   for (const tool of tools) {
     if (!TOOL_NAME.test(tool.name)) throw new Error(`"${tool.name}" is not an MCP tool name.`);
@@ -150,17 +167,25 @@ export function createToolRegistry(tools: readonly McpTool[], guards: ToolGuards
     }
   }
 
+  function record(entry: ToolCallRecord): void {
+    try {
+      guards.record(entry);
+    } catch (error) {
+      console.warn(`Could not record the ${entry.tool} MCP call: ${messageOf(error)}`);
+    }
+  }
+
   return {
     list: () => tools,
     call: async (name, args, call) => {
       const allowed = guards.limit.take(call.token.id);
       if (allowed.kind === 'refused') {
         const refused = { kind: 'rate-limited', retryAfter: allowed.retryAfter } as const;
-        if (allowed.first) guards.record({ tool: name, args, call, outcome: refused });
+        if (allowed.first) record({ tool: name, args, call, outcome: refused });
         return refused;
       }
       const outcome = await decide(name, args, call);
-      guards.record({ tool: name, args, call, outcome });
+      record({ tool: name, args, call, outcome });
       if (outcome.kind !== 'crashed') return outcome;
       return {
         kind: 'ran',

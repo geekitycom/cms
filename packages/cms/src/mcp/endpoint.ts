@@ -24,7 +24,7 @@ import type { JsonRpcResponse, ServerInfo } from './protocol.ts';
 import { auditToolCall } from './audit.ts';
 import { createCallLimit } from './call-limit.ts';
 import { createToolRegistry } from './tools.ts';
-import type { McpTool, ToolGuards } from './tools.ts';
+import type { McpTool, RegisteredTools, ToolGuards } from './tools.ts';
 import { activePluginTools } from './plugin-tools.ts';
 import { whoami } from './whoami.ts';
 import { createDraft } from './authoring/create.ts';
@@ -66,21 +66,17 @@ export const MCP_CALLS_PER_WINDOW = 60;
 
 export const MCP_CALL_WINDOW_SECONDS = 60;
 
-export function mountMcp(app: Hono<GeekityEnv>): void {
-  let guards: ToolGuards | undefined;
-  function guardsFor(config: ResolvedConfig): ToolGuards {
-    guards ??= {
-      limit: createCallLimit({
-        calls: MCP_CALLS_PER_WINDOW,
-        windowSeconds: MCP_CALL_WINDOW_SECONDS,
-        now: config.now,
-      }),
-      record: (record) => {
-        auditToolCall(config.dataDir, record, config.now());
-      },
-    };
-    return guards;
-  }
+export function mountMcp(app: Hono<GeekityEnv>, config: ResolvedConfig): void {
+  const guards: ToolGuards = {
+    limit: createCallLimit({
+      calls: MCP_CALLS_PER_WINDOW,
+      windowSeconds: MCP_CALL_WINDOW_SECONDS,
+      now: config.now,
+    }),
+    record: (record) => {
+      auditToolCall(config.dataDir, record, config.now());
+    },
+  };
 
   app.post(MCP_PATH, sameOriginOnly, requireMcpToken, async (c) => {
     c.header('cache-control', 'no-store');
@@ -119,7 +115,7 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
 
     const { user, token } = c.var.bearer;
     const answered = await reply(message, {
-      registry: createToolRegistry(toolsFor(c.var), guardsFor(c.var.config)),
+      registry: createToolRegistry(toolsFor(c.var), guards),
       info: serverInfo(c.var.siteAtRequestStart.title),
       call: { user, token, signal: c.req.raw.signal, site: c.var },
     });
@@ -155,7 +151,9 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
         schemes: ['oauth2'],
         resourceMetadata: `${baseUrl}${MCP_RESOURCE_METADATA_PATH}`,
       },
-      tools: toolsFor(c.var).map(({ name, title, description }) => ({ name, title, description })),
+      tools: createToolRegistry(toolsFor(c.var), guards)
+        .list()
+        .map(({ name, title, description }) => ({ name, title, description })),
     });
   });
 }
@@ -164,8 +162,8 @@ function bodyLimit(config: ResolvedConfig): number {
   return base64Length(largestUploadLimit(config)) + UPLOAD_ENVELOPE_BYTES;
 }
 
-function toolsFor(vars: Readonly<GeekityEnv['Variables']>): readonly McpTool[] {
-  return [...CORE_TOOLS, ...activePluginTools(vars)];
+function toolsFor(vars: Readonly<GeekityEnv['Variables']>): RegisteredTools {
+  return { core: CORE_TOOLS, plugin: activePluginTools(vars) };
 }
 
 function serverInfo(title: string): ServerInfo {

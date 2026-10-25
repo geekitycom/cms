@@ -23,7 +23,7 @@ import { findUserById, listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { clientIdentifier, sameClient } from '../util/client-id.ts';
 import { SCOPE_LABELS } from './indieauth-consent.ts';
-import { SITE_SCOPES } from '../indieauth/request.ts';
+import { MICROPUB_SCOPES } from '../indieauth/request.ts';
 import { MCP_SCOPES } from '../plugin.ts';
 import { meForSignIn } from '../indieauth/identity.ts';
 import type { Scope } from '../indieauth/request.ts';
@@ -60,7 +60,7 @@ const TOKEN_RESOURCES = [
     name: 'micropub',
     label: 'Micropub',
     hint: 'Posting apps and scripts, such as the Manual tab of micropub.rocks.',
-    scopes: SITE_SCOPES,
+    scopes: MICROPUB_SCOPES,
     url: (baseUrl: string) => baseUrl,
   },
   {
@@ -311,7 +311,7 @@ function isActivityOf(
   username: string | undefined,
   entry: ActivityEntry,
 ): boolean {
-  if (entry.connection !== undefined) return entry.connection === token.id;
+  if (entry.connectionId !== undefined) return entry.connectionId === token.id;
   return (
     token.kind !== 'created' &&
     entry.clientId !== undefined &&

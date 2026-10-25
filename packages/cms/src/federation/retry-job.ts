@@ -65,12 +65,8 @@ export function failedRetries(services: RetryPlanServices, filter: RetryFilter):
     { objectIds, inboxId: filter.inbox ?? undefined },
     all,
   ).items;
-  const history: Delivery[] =
-    filter.inbox === null
-      ? candidates
-      : [...new Set(candidates.map((row) => row.actorId))].flatMap(
-          (actorId) => admin.searchDeliveries({ objectIds, actorId }, all).items,
-        );
+  const history =
+    filter.inbox === null ? candidates : deliveriesToSameActors(admin, objectIds, candidates);
 
   const newest = new Map<string, { slug: string; row: Delivery }>();
   const newestCreate = new Map<string, Delivery>();
@@ -97,6 +93,17 @@ export function failedRetries(services: RetryPlanServices, filter: RetryFilter):
     else held.push(recipient);
   }
   return [...retries].map(([slug, recipients]) => ({ slug, recipients }));
+}
+
+function deliveriesToSameActors(
+  admin: RetryPlanServices['admin'],
+  objectIds: string[] | undefined,
+  rows: readonly Delivery[],
+): Delivery[] {
+  const actorIds = new Set(rows.map((row) => row.actorId));
+  return [...actorIds].flatMap(
+    (actorId) => admin.searchDeliveries({ objectIds, actorId }, { limit: NO_LIMIT }).items,
+  );
 }
 
 export function retryDeliveriesJob(

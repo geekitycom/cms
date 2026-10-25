@@ -9,6 +9,8 @@ import { createUser } from '../site/users.ts';
 import type { AuthorizationCode } from '../indieauth/grants.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { createToken, issueTokens } from '../indieauth/tokens.ts';
+import { UPLOAD_ENVELOPE_BYTES } from '../media/uploads.ts';
+import { base64Length } from './authoring/upload.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -292,7 +294,7 @@ describe('a client the MCP endpoint refuses', () => {
 
 describe('a request body over the limit', () => {
   const UPLOAD_LIMIT = 3000;
-  const BODY_LIMIT = 4000 + 8192;
+  const BODY_LIMIT = base64Length(UPLOAD_LIMIT) + UPLOAD_ENVELOPE_BYTES;
   const CHUNK = 1024;
   const smallUploads = { uploadMaxBytes: UPLOAD_LIMIT, uploadMediaMaxBytes: UPLOAD_LIMIT };
 

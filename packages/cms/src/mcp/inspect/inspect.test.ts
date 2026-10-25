@@ -14,6 +14,7 @@ import {
   fixtureSite,
   inspectToken,
   POST_ID,
+  POST_ID_WITHOUT_SLASH,
   RELAY,
   rpc,
 } from './__testing__/fixture.ts';
@@ -85,7 +86,7 @@ describe('the inspect tools', () => {
     assert.deepEqual(await types({ type: 'Like' }), ['Like']);
     assert.deepEqual(await types({ actor: BOB }), ['Create']);
     assert.deepEqual(await types({ object: POST_ID }), ['Like']);
-    assert.deepEqual(await types({ inReplyTo: `${BASE}/2026/03/hello` }), ['Create']);
+    assert.deepEqual(await types({ inReplyTo: POST_ID_WITHOUT_SLASH }), ['Create']);
     assert.deepEqual(await types({ recipient: 'nobody' }), []);
     assert.deepEqual(await types({ since: '2026-03-03' }), ['Create']);
     assert.deepEqual(await types({ until: '2026-03-03' }), ['Like']);

@@ -19,7 +19,7 @@ export const SCOPES = [
 /** A scope this site can grant. */
 export type Scope = (typeof SCOPES)[number];
 
-export const SITE_SCOPES = [
+export const MICROPUB_SCOPES = [
   'profile',
   'email',
   'create',
