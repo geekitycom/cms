@@ -20,7 +20,7 @@ import { findUserById, listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { clientIdentifier, sameClient } from '../util/client-id.ts';
 import { SCOPE_LABELS } from './indieauth-consent.ts';
-import { SCOPES } from '../indieauth/request.ts';
+import { SITE_SCOPES } from '../indieauth/request.ts';
 import { meForSignIn } from '../indieauth/identity.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { createToken, lapsesAt, listTokens, revokeConnection } from '../indieauth/tokens.ts';
@@ -119,7 +119,7 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
         ? undefined
         : findUserById(config.dataDir, c.var.session.userId);
     const scopes = form.scopes.filter((scope): scope is Scope =>
-      (SCOPES as readonly string[]).includes(scope),
+      (SITE_SCOPES as readonly string[]).includes(scope),
     );
     const days = TOKEN_LIFETIME_DAYS.find((choice) => String(choice) === form.expires);
     const problems: TokenProblems = {
@@ -209,7 +209,7 @@ function screen(
     createToken: {
       url: CREATE_TOKEN_PATH,
       name: form?.name ?? '',
-      scopes: SCOPES.map((scope) => ({
+      scopes: SITE_SCOPES.map((scope) => ({
         name: scope,
         label: SCOPE_LABELS[scope],
         checked: chosen.has(scope),

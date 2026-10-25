@@ -1,13 +1,51 @@
 import { clientIdentifier, sameClient } from '../util/client-id.ts';
 
 /**
- * The scopes a client may ask for: the profile ones and the
- * Micropub ones a token is issued for.
+ * The scopes a client may ask for: the profile ones, the Micropub ones, and
+ * the ones only MCP tools need. Core fixes the list; a plugin's tool picks
+ * one of these and cannot add its own, so the consent screen is always this
+ * readable list.
  */
-export const SCOPES = ['profile', 'email', 'create', 'update', 'delete', 'media'] as const;
+export const SCOPES = [
+  'profile',
+  'email',
+  'create',
+  'update',
+  'delete',
+  'media',
+  'publish',
+  'inspect',
+  'repair',
+] as const;
 
 /** A scope this site can grant. */
 export type Scope = (typeof SCOPES)[number];
+
+/** The scopes a token bound to the site itself, for Micropub and its media endpoint, can use. */
+export const SITE_SCOPES = [
+  'profile',
+  'email',
+  'create',
+  'update',
+  'delete',
+  'media',
+] as const satisfies readonly Scope[];
+
+/**
+ * The scopes the MCP endpoint's tools may declare. A tool needs exactly one
+ * of them.
+ */
+export const MCP_SCOPES = [
+  'profile',
+  'create',
+  'update',
+  'media',
+  'publish',
+  'inspect',
+  'repair',
+] as const satisfies readonly Scope[];
+
+export type McpScope = (typeof MCP_SCOPES)[number];
 
 export type CodeChallenge =
   { readonly method: 'S256'; readonly value: string } | { readonly method: 'none' };

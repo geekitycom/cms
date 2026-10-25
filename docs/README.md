@@ -34,6 +34,7 @@ CMS is and how to start a site.
 - [Webmentions](webmentions.md). Sending and receiving webmentions, and syndication targets.
 - [Signing in with your own site](indieweb-sign-in.md). Sign in to IndieAuth apps with your own site, and manage the apps.
 - [Micropub](micropub.md). Post, edit and upload from a Micropub app.
+- [MCP](mcp.md). Connect Claude Code or another MCP client to the site, and the scopes its tools need.
 
 ## Extend and theme
 

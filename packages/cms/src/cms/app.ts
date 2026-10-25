@@ -12,6 +12,7 @@ import { mountIndieAuthDiscovery } from '../web/indieauth-discovery.ts';
 import { mountTokenEndpoint, mountTokenInfoEndpoints } from '../web/indieauth-token.ts';
 import { mountMicropub } from '../micropub/endpoint.ts';
 import { mountMicropubMedia } from '../micropub/media.ts';
+import { mountMcp } from '../mcp/endpoint.ts';
 import { pluginFederation } from '../web/plugin-federation.ts';
 import { pluginPageTags } from '../web/page-tags.ts';
 import { mountPluginRoutes, pluginLifecycle } from '../web/plugin-routes.ts';
@@ -145,6 +146,8 @@ export function createApp(
   // those tokens.
   mountMicropub(app);
   mountMicropubMedia(app);
+  // And the MCP endpoint, which takes only tokens bound to it.
+  mountMcp(app);
 
   // Federation goes on first. It answers its own paths and falls through on
   // every other, so putting it in front costs the rest of the app nothing and

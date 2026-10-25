@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import { PACKAGE_VERSION } from '../util/package-version.ts';
 
 import { createFederation, MemoryKvStore } from '@fedify/fedify';
 import type {
@@ -274,7 +274,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
   federation.setNodeInfoDispatcher(NODEINFO_PATH, (context) => {
     const counts = context.data.store.counts();
     return {
-      software: { name: SOFTWARE_NAME, version: packageVersion() },
+      software: { name: SOFTWARE_NAME, version: PACKAGE_VERSION },
       protocols: ['activitypub'],
       // A CMS is not a signup service; the admin makes accounts by hand.
       openRegistrations: false,
@@ -345,11 +345,4 @@ export function lastOutboxCursor(total: number): string {
 function cursorOffset(cursor: string | null): number {
   if (cursor === null || !/^[0-9]+$/.test(cursor)) return 0;
   return Number(cursor);
-}
-
-/** The published version of `@geekity/cms`, which NodeInfo reports. */
-function packageVersion(): string {
-  const require = createRequire(import.meta.url);
-  const manifest = require('../../package.json') as { version?: string };
-  return manifest.version ?? '0.0.0';
 }

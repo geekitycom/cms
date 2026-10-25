@@ -3,7 +3,7 @@ import type { Hono, MiddlewareHandler } from 'hono';
 import type { GeekityEnv } from './env.ts';
 import { parseAuthorPath } from '../content/authors.ts';
 import { requestPath } from './request.ts';
-import { SCOPES } from '../indieauth/request.ts';
+import { MCP_SCOPES, SCOPES, SITE_SCOPES } from '../indieauth/request.ts';
 
 /** Where the authorization server metadata document is published. */
 export const INDIEAUTH_METADATA_PATH = '/_geekity/indieauth/metadata';
@@ -32,11 +32,23 @@ export const MICROPUB_PATH = '/_geekity/micropub';
 /** Where a Micropub client uploads a file before it names it in a post. */
 export const MICROPUB_MEDIA_PATH = '/_geekity/micropub/media';
 
+/** Where an MCP client talks to the site, and the MCP resource's identifier under the base URL. */
+export const MCP_PATH = '/_geekity/mcp';
+
+/** The draft MCP server card, which describes the server before a client connects. */
+export const MCP_SERVER_CARD_PATH = '/.well-known/mcp/server-card.json';
+
 /**
  * RFC 9728's well-known location for the protected resource metadata, which
- * an MCP client reads to learn where to sign in.
+ * a client reads to learn where to sign in.
  */
 export const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource';
+
+/**
+ * The MCP endpoint's own protected resource metadata. RFC 9728 puts the
+ * well-known segment between the host and the resource's path.
+ */
+export const MCP_RESOURCE_METADATA_PATH = `${PROTECTED_RESOURCE_METADATA_PATH}${MCP_PATH}`;
 
 /** RFC 8414 authorization server metadata, as the IndieAuth spec profiles it. */
 export interface AuthorizationServerMetadata {
@@ -101,14 +113,30 @@ export function protectedResourceMetadata(baseUrl: string): ProtectedResourceMet
   return {
     resource: baseUrl,
     authorization_servers: [authorizationServerMetadata(baseUrl).issuer],
-    scopes_supported: SCOPES,
+    scopes_supported: SITE_SCOPES,
     bearer_methods_supported: ['header', 'body'],
   };
 }
 
 /**
+ * The MCP endpoint's protected resource metadata. It is a resource of its
+ * own, so a token issued for it works nowhere else and a Micropub token does
+ * not work here. An MCP client asks for every scope listed, and the person
+ * unticks what they do not want on the consent screen.
+ */
+export function mcpResourceMetadata(baseUrl: string): ProtectedResourceMetadata {
+  return {
+    resource: `${baseUrl}${MCP_PATH}`,
+    authorization_servers: [authorizationServerMetadata(baseUrl).issuer],
+    scopes_supported: MCP_SCOPES,
+    bearer_methods_supported: ['header'],
+  };
+}
+
+/**
  * Mount the authorization server metadata at its own path and at the
- * well-known one, and the protected resource metadata at its well-known one.
+ * well-known one, and the site's and the MCP endpoint's protected resource
+ * metadata at theirs.
  */
 export function mountIndieAuthDiscovery(app: Hono<GeekityEnv>): void {
   for (const pathname of [INDIEAUTH_METADATA_PATH, OAUTH_METADATA_WELL_KNOWN_PATH]) {
@@ -117,6 +145,7 @@ export function mountIndieAuthDiscovery(app: Hono<GeekityEnv>): void {
   app.get(PROTECTED_RESOURCE_METADATA_PATH, (c) =>
     c.json(protectedResourceMetadata(c.var.config.baseUrl)),
   );
+  app.get(MCP_RESOURCE_METADATA_PATH, (c) => c.json(mcpResourceMetadata(c.var.config.baseUrl)));
 }
 
 /**

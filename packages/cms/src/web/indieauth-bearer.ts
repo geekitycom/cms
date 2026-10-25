@@ -20,6 +20,11 @@ export interface Guard {
   readonly audience: Audience | 'authorization-server';
   readonly scopes?: Scopes;
   readonly insufficientScopeStatus?: InsufficientScopeStatus;
+  /**
+   * Where a refused client reads the protected resource metadata, for a
+   * resource server with its own identifier. Defaults to the site's.
+   */
+  readonly resourceMetadataPath?: string;
 }
 
 export type InsufficientScopeStatus = 401 | 403;
@@ -49,18 +54,24 @@ export interface BearerEnv {
 export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
   return async (c, next) => {
     const { config } = c.var;
+    const refuse = (
+      status: 400 | 401 | 403,
+      error: string,
+      description: string,
+      params: Readonly<Record<string, string>>,
+    ): Response => refusal(c, status, error, description, params, guard.resourceMetadataPath);
     const { tokens, unreadableBody } = await presentedTokens(c);
     if (tokens.size > 1) {
       const description = 'The header and the body carry different access tokens.';
-      return refuse(c, 400, 'invalid_request', description, { error: 'invalid_request' });
+      return refuse(400, 'invalid_request', description, { error: 'invalid_request' });
     }
     const [presented] = tokens;
     if (presented === undefined && unreadableBody) {
       const description = 'The form body could not be read, so no access token was found.';
-      return refuse(c, 400, 'invalid_request', description, { error: 'invalid_request' });
+      return refuse(400, 'invalid_request', description, { error: 'invalid_request' });
     }
     if (presented === undefined) {
-      return refuse(c, 401, 'unauthorized', 'An access token is required.', {});
+      return refuse(401, 'unauthorized', 'An access token is required.', {});
     }
 
     const now = config.now();
@@ -71,11 +82,16 @@ export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
     const user = token === undefined ? undefined : findUserById(config.dataDir, token.userId);
     if (token === undefined || user === undefined) {
       const description = 'The access token is unknown, expired, revoked or not for this resource.';
-      return refuse(c, 401, 'invalid_token', description, { error: 'invalid_token' });
+      return refuse(401, 'invalid_token', description, { error: 'invalid_token' });
     }
 
     if (guard.scopes !== undefined && !guard.scopes.some((scope) => token.scopes.includes(scope))) {
-      return insufficientScope(c, guard.scopes, guard.insufficientScopeStatus ?? 403);
+      return insufficientScope(
+        c,
+        guard.scopes,
+        guard.insufficientScopeStatus ?? 403,
+        guard.resourceMetadataPath,
+      );
     }
 
     await recordUse(config.dataDir, token, now);
@@ -93,12 +109,36 @@ export function insufficientScope(
   c: Context<BearerEnv>,
   scopes: Scopes,
   status: InsufficientScopeStatus,
+  resourceMetadataPath?: string,
 ): Response {
   const description = `The access token was not granted the ${scopes.join(' or ')} scope.`;
-  return refuse(c, status, 'insufficient_scope', description, {
-    error: 'insufficient_scope',
-    scope: scopes.join(' '),
-  });
+  return refusal(
+    c,
+    status,
+    'insufficient_scope',
+    description,
+    { error: 'insufficient_scope', scope: scopes.join(' ') },
+    resourceMetadataPath,
+  );
+}
+
+/**
+ * A `WWW-Authenticate: Bearer` challenge with `params`, naming the protected
+ * resource metadata at `resourceMetadataPath` (RFC 9728), the site's own by
+ * default.
+ */
+export function bearerChallenge(
+  baseUrl: string,
+  params: Readonly<Record<string, string>>,
+  resourceMetadataPath = PROTECTED_RESOURCE_METADATA_PATH,
+): string {
+  const challenge = Object.entries({
+    ...params,
+    resource_metadata: `${baseUrl}${resourceMetadataPath}`,
+  })
+    .map(([name, value]) => `${name}="${value}"`)
+    .join(', ');
+  return `Bearer ${challenge}`;
 }
 
 /**
@@ -125,20 +165,15 @@ async function presentedTokens(
   }
 }
 
-function refuse(
+function refusal(
   c: Context<BearerEnv>,
   status: 400 | 401 | 403,
   error: string,
   description: string,
   params: Readonly<Record<string, string>>,
+  resourceMetadataPath: string | undefined,
 ): Response {
-  const challenge = Object.entries({
-    ...params,
-    resource_metadata: `${c.var.config.baseUrl}${PROTECTED_RESOURCE_METADATA_PATH}`,
-  })
-    .map(([name, value]) => `${name}="${value}"`)
-    .join(', ');
-  c.header('www-authenticate', `Bearer ${challenge}`);
+  c.header('www-authenticate', bearerChallenge(c.var.config.baseUrl, params, resourceMetadataPath));
   c.header('cache-control', 'no-store');
   return c.json({ error, error_description: description }, status);
 }

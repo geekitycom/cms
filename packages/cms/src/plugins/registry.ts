@@ -8,12 +8,11 @@
  * the enabled set as an argument rather than holding one.
  */
 
-import { createRequire } from 'node:module';
-
 import semver from 'semver';
 
 import type { DataFileDeclaration } from '../files/data-files.ts';
 import { HOST_API_VERSION } from '../plugin.ts';
+import { PACKAGE_VERSION } from '../util/package-version.ts';
 import type {
   CoreServices,
   Plugin,
@@ -148,8 +147,6 @@ const CORE_SERVICES: Readonly<Record<keyof CoreServices, true>> = {
   '@geekity/cms/engagement': true,
   '@geekity/cms/posts': true,
 };
-const CORE_VERSION = (createRequire(import.meta.url)('../../package.json') as { version: string })
-  .version;
 
 /** npm's rule for a package name, scoped or not. */
 export const PACKAGE_NAME = /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
@@ -236,7 +233,7 @@ export function createPluginRegistry(
     if (cycle !== undefined) return `It is in a dependency cycle: ${cycle.join(' → ')}.`;
     for (const [dependency, range] of Object.entries(entry.peerDependencies ?? {})) {
       const version =
-        dependency === CORE_PACKAGE ? CORE_VERSION : bySource.get(dependency)?.plugin.version;
+        dependency === CORE_PACKAGE ? PACKAGE_VERSION : bySource.get(dependency)?.plugin.version;
       if (version === undefined || semver.satisfies(version, range)) continue;
       return dependency === CORE_PACKAGE
         ? `It needs ${CORE_PACKAGE} ${range}, and this core is ${version}.`

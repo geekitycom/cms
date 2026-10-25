@@ -9,7 +9,7 @@ import { findPathRedirect, findQueryRedirect, redirectLocation } from '../conten
 import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
 import type { GeekityEnv } from './env.ts';
 import { iconSetting } from '../images/icons.ts';
-import { advertiseIdentityEndpoints } from './indieauth-discovery.ts';
+import { advertiseIdentityEndpoints, MCP_SERVER_CARD_PATH } from './indieauth-discovery.ts';
 import { mountNotificationLinks } from './notification-routes.ts';
 import { robotsPolicyOf } from '../site/settings.ts';
 import { mountPingbacks } from './pingback-routes.ts';
@@ -122,11 +122,12 @@ export function mountPublicSite(
       home === undefined
         ? listing(c, { subject: SITE_POSTS, pageNumber: 0 })
         : negotiateDocument(c, home, selectFromAccept(c, DOCUMENT_REPRESENTATIONS));
-    // The home page is where a tool that found the site looks for its index:
-    // a header, so it is found without parsing the page.
+    // The home page is where a tool that found the site looks for its index
+    // and its MCP server: headers, so they are found without parsing the page.
     if (c.var.siteAtRequestStart.llms_txt) {
       response.headers.append('link', LLMS_TXT_LINK);
     }
+    response.headers.append('link', `<${MCP_SERVER_CARD_PATH}>; rel="mcp"`);
     return response;
   });
 

@@ -74,6 +74,25 @@ describe('the connected apps screen', () => {
     assert.match(row, new RegExp(`<time datetime="${quill.token.refreshExpiresAt}">`));
   });
 
+  it('names the MCP scopes a connection holds', async () => {
+    const { cms, agent } = await site();
+    await issueTokens(
+      cms.config.dataDir,
+      {
+        ...QUILL,
+        clientId: 'https://claude.example/client.json',
+        clientName: 'Claude Code',
+        scopes: ['inspect', 'repair', 'publish'],
+        resource: `${BASE}/_geekity/mcp`,
+      },
+      ISSUED,
+    );
+    const row = rowFor(await screen(agent), 'Claude Code');
+    assert.match(row, /Read your site’s federation and delivery records/);
+    assert.match(row, /Resend posts and retry federation deliveries/);
+    assert.match(row, /Publish drafts and change published posts/);
+  });
+
   it('says a connection has not been used yet, and names a client with no name by its URL', async () => {
     const { cms, agent } = await site();
     const { clientName: _, ...nameless } = QUILL;
@@ -319,6 +338,15 @@ describe('creating a token (TASK-230)', () => {
     }
     return found;
   }
+
+  it('offers only the scopes a token bound to the site can use', async () => {
+    const { agent } = await site();
+    const html = await screen(agent);
+    assert.match(html, /<input[^>]*name="scope"[^>]*value="create"/);
+    for (const scope of ['inspect', 'repair', 'publish']) {
+      assert.doesNotMatch(html, new RegExp(`<input[^>]*name="scope"[^>]*value="${scope}"`));
+    }
+  });
 
   it('shows the new token once, with no-store, and lists it by name after', async () => {
     const { cms, agent } = await site();

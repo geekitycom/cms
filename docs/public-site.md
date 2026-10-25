@@ -809,6 +809,8 @@ body cut to 55 words.
 
 > Notes from the field.
 
+Its MCP server is at <https://example.com/_geekity/mcp>, described at <https://example.com/.well-known/mcp/server-card.json>. It needs a token the site's owner approves.
+
 ## Navigation
 
 - [About](https://example.com/about/index.md)
@@ -841,6 +843,10 @@ gets the path as `llmsTxt` while the site serves the file.
 
 While the site serves Gemini, the generated file says so under its title:
 `This site is also a Gemini capsule at <gemini://example.com/>.`
+
+The generated file also names the [MCP](mcp.md) endpoint and its server card.
+The home page sends `Link: </.well-known/mcp/server-card.json>; rel="mcp"`
+whether or not the site serves `/llms.txt`.
 
 To write the file yourself, put it at `content/llms.txt`. The CMS serves it
 as written, in place of the generated one, dated by the file. To serve
