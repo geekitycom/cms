@@ -1,5 +1,5 @@
 {
-  "packages/cms": "0.42.2",
+  "packages/cms": "0.43.0",
   "packages/plugin-wordpress": "0.10.0",
   "packages/plugin-llm": "0.4.1",
   "packages/plugin-post-summary": "0.6.1",

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.43.0](https://github.com/geekitycom/cms/compare/v0.42.2...v0.43.0) (2026-10-24)
+
+
+### Features
+
+* **cms:** nest list items with tab and shift-tab in the editor ([d538425](https://github.com/geekitycom/cms/commit/d53842528a546900d448957aaa0947c8378cc473))
+
+
+### Bug Fixes
+
+* **cms:** keep a failed outcome write from re-sending a delivery ([c967aee](https://github.com/geekitycom/cms/commit/c967aee76952478844596b7d4aa91077af023cb5))
+* **cms:** name a delivery the queue will try again as retrying ([11fab44](https://github.com/geekitycom/cms/commit/11fab444886d45e1cb6c125d9c2be838f1412ea3))
+* **cms:** record relay follow and undo as deliveries ([6b642e8](https://github.com/geekitycom/cms/commit/6b642e873800c73abf6bb233ec3900a34505ba8a))
+* **cms:** settle queued deliveries from the outbox worker ([2b70769](https://github.com/geekitycom/cms/commit/2b707692b16aab120dd5ca8f58b8cedd65cbe6d9))
+
 ## [0.42.2](https://github.com/geekitycom/cms/compare/v0.42.1...v0.42.2) (2026-10-24)
 
 
