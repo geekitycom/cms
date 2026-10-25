@@ -31,6 +31,9 @@ import { followers, quoteApprovals, relays } from './inspect/records.ts';
 import { remoteLookup } from './inspect/remote.ts';
 import { federationStatus } from './inspect/status.ts';
 import { webmentions } from './inspect/webmentions.ts';
+import { refreshActor } from './repair/refresh.ts';
+import { resendPost } from './repair/resend.ts';
+import { retryDeliveries } from './repair/retry.ts';
 
 /** The tools core offers. */
 const CORE_TOOLS: readonly McpTool[] = [
@@ -43,6 +46,9 @@ const CORE_TOOLS: readonly McpTool[] = [
   quoteApprovals,
   webmentions,
   remoteLookup,
+  resendPost,
+  retryDeliveries,
+  refreshActor,
 ];
 
 /** How many tool calls one token may make in {@link MCP_CALL_WINDOW_SECONDS}. */

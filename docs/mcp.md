@@ -75,7 +75,7 @@ add its own. decision-64 records the set.
 | `media`   | Upload media.                                                                  |
 | `publish` | Publish drafts and change posts that are already public.                       |
 | `inspect` | Read the site's federation and delivery records, inbox and followers included. |
-| `repair`  | Resend posts and retry federation deliveries.                                  |
+| `repair`  | Resend posts, retry failed deliveries and refresh remote actors.               |
 
 A tool call whose token lacks the scope gets 403 with
 `WWW-Authenticate: Bearer error="insufficient_scope"`. Its `scope` names the
@@ -95,6 +95,9 @@ them in one sign-in. The body is a JSON-RPC error that names the missing scope.
 | `quote_approvals`   | `inspect` | The quotes of the site's posts that the site approved, from each user's `quotes.json`.                                                                                        |
 | `webmentions`       | `inspect` | The webmentions one post sent, with each endpoint and error, or the webmentions it received.                                                                                  |
 | `remote_lookup`     | `inspect` | Fetches a handle's WebFinger result and the actor it names, or the object at a URL, signed as a local user, with each status, the headers that matter and the body.           |
+| `resend_post`       | `repair`  | Queues the `resend` job for one post, as the Resend button on the federation screen does.                                                                                     |
+| `retry_deliveries`  | `repair`  | Finds the deliveries that failed for a post, at an inbox, or both, and queues a job that sends each post again to those recipients only.                                      |
+| `refresh_actor`     | `repair`  | Fetches a remote actor again and updates each follower record of it with the inbox, shared inbox, name and avatar it publishes now.                                           |
 
 ### The inspect tools
 
@@ -148,6 +151,60 @@ and has these limits:
 The tools cannot show the access log, which is written only to standard
 output, or refused inbox signatures, which are only logged. See
 [Federation](federation.md).
+
+### The repair tools
+
+The `repair` tools fix the common federation problems that the `inspect`
+tools find. They change what the site has sent or stored, so each one is
+annotated with `readOnlyHint` set to false and `openWorldHint` set to true. None
+of them removes anything, so `destructiveHint` is false. Each one is
+annotated `idempotentHint`, because a second call does not add more work:
+
+- A second `resend_post` or `retry_deliveries` call while the first job waits
+  or runs queues nothing. The answer names the job that waits or runs.
+- After a retry job finishes, `retry_deliveries` finds only the deliveries
+  that failed again.
+- A second `refresh_actor` call writes the same records again.
+
+`resend_post` and `retry_deliveries` do not send anything during the call.
+They queue a job on the jobs queue, which the server runs one at a time (see
+[Admin jobs](configuration.md#admin-jobs)), and answer with the job's id and
+state. The deliveries go through the federation queue, which records each
+outcome as it settles. Read the outcomes with `post_federation`, or read the
+job with `federation_status`.
+
+`resend_post` names a post by its slug, its permalink, or any object id it
+was federated under. It queues the same `resend` job, with the same payload,
+as the Resend button on a post's row on the federation screen. The job sends
+the post as it reads now: an `Update` when followers have it, a `Create` when
+it was never announced, and a `Delete` when it is a draft or in the trash.
+The job also sends the post's webmentions again unless `webmentions` is
+false. See [Federation](federation.md) for what a resend sends.
+
+`retry_deliveries` takes a `post`, an `inbox`, or both. It finds each
+recipient whose newest delivery about a post has the status `failed`. A
+delivery that is `queued` or `retrying` is still in the federation queue, so
+the tool skips it. The newest delivery to a recipient counts across every
+inbox the recipient was sent to. So, with `inbox`, a recipient that failed at
+that inbox and was later reached at a new inbox is not retried. The answer
+lists each post and its recipients with the recorded error. The tool then
+queues a `retry-deliveries` job. When the job runs, it reads the failures
+again and sends each post as a resend would, to those recipients only. Each
+recipient gets the post at the inbox its follower record names at that time.
+The job waits 2 seconds between posts, so that many posts to one server do
+not trigger the server's bot protection. Activities that are not about a
+post, such as a profile `Update`, are not retried.
+
+`refresh_actor` takes an actor id. It fetches the actor document, signed as
+the site's first user, and updates every follower record of that actor in
+`followers.json` and in the database. Each record gets the inbox, the shared
+inbox, the name and the avatar that the actor publishes now, and keeps the
+time of the follow. When the site stores a profile for an actor that is not a
+follower, the tool updates that profile too. Run it when deliveries to a
+follower fail because the follower's server moved its inbox. Then run
+`retry_deliveries` to send the posts that failed. A changed key needs no
+refresh: when a signature does not verify with the cached key, Fedify fetches
+the key again.
 
 Enabled plugins add tools of their own. A plugin's tool name starts with the
 plugin's prefix and `__`, such as `geekity_plugin_umami__post_stats` from
