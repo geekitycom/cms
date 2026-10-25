@@ -916,10 +916,12 @@ export type {
   BooleanSchema,
   FromSchema,
   JsonSchema,
+  NullableSchema,
   NumberSchema,
   ObjectSchema,
   StringSchema,
 } from './util/json-schema.ts';
+export { nullable } from './util/json-schema.ts';
 
 /**
  * What a tool tells a client about itself beyond its schemas. Every hint is

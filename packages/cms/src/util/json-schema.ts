@@ -35,25 +35,41 @@ export interface ObjectSchema extends Described {
   readonly additionalProperties?: false;
 }
 
-export type JsonSchema = StringSchema | NumberSchema | BooleanSchema | ArraySchema | ObjectSchema;
+/** A value of the first schema, or `null`. Built with {@link nullable}. */
+export interface NullableSchema extends Described {
+  readonly anyOf: readonly [ValueSchema, { readonly type: 'null' }];
+}
+
+type ValueSchema = StringSchema | NumberSchema | BooleanSchema | ArraySchema | ObjectSchema;
+
+export type JsonSchema = ValueSchema | NullableSchema;
+
+/** `schema`, or `null`. */
+export function nullable<const S extends ValueSchema>(
+  schema: S,
+): { readonly anyOf: readonly [S, { readonly type: 'null' }] } {
+  return { anyOf: [schema, { type: 'null' }] };
+}
 
 /** The value a schema describes. */
-export type FromSchema<S> = S extends {
-  readonly type: 'string';
-  readonly enum: readonly (infer E)[];
-}
-  ? E
-  : S extends { readonly type: 'string' }
-    ? string
-    : S extends { readonly type: 'number' | 'integer' }
-      ? number
-      : S extends { readonly type: 'boolean' }
-        ? boolean
-        : S extends { readonly type: 'array'; readonly items: infer I }
-          ? FromSchema<I>[]
-          : S extends { readonly type: 'object'; readonly properties: infer P }
-            ? ObjectFrom<P, S extends { readonly required: readonly (infer R)[] } ? R : never>
-            : never;
+export type FromSchema<S> = S extends { readonly anyOf: readonly [infer A, unknown] }
+  ? FromSchema<A> | null
+  : S extends {
+        readonly type: 'string';
+        readonly enum: readonly (infer E)[];
+      }
+    ? E
+    : S extends { readonly type: 'string' }
+      ? string
+      : S extends { readonly type: 'number' | 'integer' }
+        ? number
+        : S extends { readonly type: 'boolean' }
+          ? boolean
+          : S extends { readonly type: 'array'; readonly items: infer I }
+            ? FromSchema<I>[]
+            : S extends { readonly type: 'object'; readonly properties: infer P }
+              ? ObjectFrom<P, S extends { readonly required: readonly (infer R)[] } ? R : never>
+              : never;
 
 type ObjectFrom<P, R> = {
   readonly [K in keyof P & R]: FromSchema<P[K]>;
@@ -64,6 +80,7 @@ type ObjectFrom<P, R> = {
 /** What is wrong with `value` as `schema` describes it, one sentence per fault; empty when it fits. */
 export function problemsWith(schema: JsonSchema, value: unknown, name?: string): string[] {
   const label = name ?? 'the arguments';
+  if ('anyOf' in schema) return value === null ? [] : problemsWith(schema.anyOf[0], value, name);
   switch (schema.type) {
     case 'string':
       if (typeof value !== 'string') return [`${label} must be a string.`];

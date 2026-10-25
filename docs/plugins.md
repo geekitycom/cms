@@ -641,8 +641,9 @@ than one. A tool has these fields:
 The schemas use the part of JSON Schema that `@geekity/cms/plugin` types as
 `ObjectSchema`: objects, arrays, strings with an optional `enum`, numbers and
 integers with an optional `minimum` and `maximum`, and booleans, each with an
-optional `description`. Write the schemas `as const`, or inline in the call,
-so `run` is typed from them.
+optional `description`. Wrap a schema in `nullable()`, also from
+`@geekity/cms/plugin`, for a value that may be `null`. Write the schemas
+`as const`, or inline in the call, so `run` is typed from them.
 
 Clients see the tool under a name that starts with the plugin's prefix. The
 prefix is the plugin's environment variable prefix in lower case, then `__`,

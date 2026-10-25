@@ -80,6 +80,7 @@ export function createApp(
     c.set('announce', (change) => content.announce(change));
     c.set('rescan', () => content.sync());
     c.set('delivery', services.delivery);
+    c.set('federation', federation);
     c.set('jobs', services.jobs);
     c.set('relays', services.relays);
     c.set('webmentions', services.webmentions);

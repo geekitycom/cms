@@ -1,16 +1,35 @@
 import type { McpScope, McpToolAnnotations, McpToolOutcome } from '../plugin.ts';
 import type { StoredToken } from '../indieauth/tokens.ts';
 import type { User } from '../site/users.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { messageOf } from '../util/errors.ts';
 import type { CallLimit } from './call-limit.ts';
 import { problemsWith } from '../util/json-schema.ts';
 import type { FromSchema, ObjectSchema } from '../util/json-schema.ts';
 
-/** Who is calling a tool, through which connection. */
+/** The parts of the site a core tool reads and acts through: the request's own variables. */
+export type ToolSite = Readonly<
+  Pick<
+    GeekityEnv['Variables'],
+    | 'admin'
+    | 'store'
+    | 'config'
+    | 'settings'
+    | 'jobs'
+    | 'conversation'
+    | 'replyContexts'
+    | 'actorProfiles'
+    | 'siteAtRequestStart'
+    | 'federation'
+  >
+>;
+
+/** Who is calling a tool, through which connection, on which site. */
 export interface ToolCall {
   readonly user: User;
   readonly token: StoredToken;
   readonly signal: AbortSignal;
+  readonly site: ToolSite;
 }
 
 interface ToolSpec<I extends ObjectSchema, O extends ObjectSchema> {

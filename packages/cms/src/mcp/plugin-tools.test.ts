@@ -150,17 +150,22 @@ async function rpc(
   return { status: response.status, body: (await response.json()) as Record<string, unknown> };
 }
 
+/** The plugin tools in a list of names, after `whoami`, which stands for core's. */
+function pluginAndWhoami(names: readonly string[]): string[] {
+  return names.filter((name) => name === 'whoami' || name.includes('__'));
+}
+
 async function listedNames(cms: Cms, token: string): Promise<string[]> {
   const { body } = await rpc(cms, token, 'tools/list');
   const { tools } = body['result'] as { tools: { name: string }[] };
-  return tools.map((tool) => tool.name);
+  return pluginAndWhoami(tools.map((tool) => tool.name));
 }
 
 async function cardNames(cms: Cms): Promise<string[]> {
   const card = (await (await cms.app.request('/.well-known/mcp/server-card.json')).json()) as {
     tools: { name: string }[];
   };
-  return card.tools.map((tool) => tool.name);
+  return pluginAndWhoami(card.tools.map((tool) => tool.name));
 }
 
 describe('an MCP tool from an enabled plugin', () => {

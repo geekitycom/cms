@@ -25,9 +25,23 @@ import { createToolRegistry } from './tools.ts';
 import type { McpTool, ToolGuards } from './tools.ts';
 import { activePluginTools } from './plugin-tools.ts';
 import { whoami } from './whoami.ts';
+import { inboxSearch } from './inspect/inbox.ts';
+import { postFederation } from './inspect/post.ts';
+import { followers, quoteApprovals, relays } from './inspect/records.ts';
+import { federationStatus } from './inspect/status.ts';
+import { webmentions } from './inspect/webmentions.ts';
 
 /** The tools core offers. */
-const CORE_TOOLS: readonly McpTool[] = [whoami];
+const CORE_TOOLS: readonly McpTool[] = [
+  whoami,
+  federationStatus,
+  inboxSearch,
+  postFederation,
+  followers,
+  relays,
+  quoteApprovals,
+  webmentions,
+];
 
 /** How many tool calls one token may make in {@link MCP_CALL_WINDOW_SECONDS}. */
 export const MCP_CALLS_PER_WINDOW = 60;
@@ -89,7 +103,7 @@ export function mountMcp(app: Hono<GeekityEnv>): void {
     const answered = await reply(message, {
       registry: createToolRegistry(toolsFor(c.var), guardsFor(c.var.config)),
       info: serverInfo(c.var.siteAtRequestStart.title),
-      call: { user, token, signal: c.req.raw.signal },
+      call: { user, token, signal: c.req.raw.signal, site: c.var },
     });
     switch (answered.kind) {
       case 'accepted':

@@ -9,7 +9,7 @@ import type { Scope } from '../indieauth/request.ts';
 import type { StoredToken } from '../indieauth/tokens.ts';
 import type { User } from '../site/users.ts';
 import { createToolRegistry, defineTool, listedTool } from './tools.ts';
-import type { McpTool, ToolCall, ToolCallRecord, ToolGuards } from './tools.ts';
+import type { McpTool, ToolCall, ToolCallRecord, ToolGuards, ToolSite } from './tools.ts';
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -30,7 +30,12 @@ function callAs(scopes: readonly Scope[]): ToolCall {
     accessTokenHash: 'hash',
     expiresAt: '2026-11-25T00:00:00Z',
   };
-  return { user: { id: 1, username: 'ada' } as User, token, signal: new AbortController().signal };
+  return {
+    user: { id: 1, username: 'ada' } as User,
+    token,
+    signal: new AbortController().signal,
+    site: {} as ToolSite,
+  };
 }
 
 let ran = 0;

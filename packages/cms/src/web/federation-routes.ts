@@ -320,13 +320,29 @@ export function webFingerSubject(c: Context<GeekityEnv>, resource: string): User
 
 /** What the dispatchers are handed, off the Hono context. */
 export function contextData(c: Context<GeekityEnv>): FederationContextData {
+  return federationContextData(c.var);
+}
+
+/** What the dispatchers are handed, off a request's variables. */
+export function federationContextData(
+  vars: Pick<
+    GeekityEnv['Variables'],
+    | 'admin'
+    | 'store'
+    | 'config'
+    | 'settings'
+    | 'actorProfiles'
+    | 'siteAtRequestStart'
+    | 'replyContexts'
+  >,
+): FederationContextData {
   return {
-    admin: c.var.admin,
-    store: c.var.store,
-    config: c.var.config,
-    settings: c.var.settings,
-    actorProfiles: c.var.actorProfiles,
-    site: c.var.siteAtRequestStart,
-    cited: (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart),
+    admin: vars.admin,
+    store: vars.store,
+    config: vars.config,
+    settings: vars.settings,
+    actorProfiles: vars.actorProfiles,
+    site: vars.siteAtRequestStart,
+    cited: (url) => vars.replyContexts.read(url, vars.siteAtRequestStart),
   };
 }

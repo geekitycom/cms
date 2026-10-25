@@ -84,9 +84,43 @@ them in one sign-in. The body is a JSON-RPC error that names the missing scope.
 
 ## Tools
 
-| Tool     | Scope     | What it does                                                                     |
-| -------- | --------- | -------------------------------------------------------------------------------- |
-| `whoami` | `profile` | Names the user the connection acts as, its client or token name, and its scopes. |
+| Tool                | Scope     | What it does                                                                                                                                                                  |
+| ------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `whoami`            | `profile` | Names the user the connection acts as, its client or token name, and its scopes.                                                                                              |
+| `federation_status` | `inspect` | Each user's actor with its follower count and key files, relays by state, messages waiting in the federation queue, retrying deliveries, recent failures and the newest jobs. |
+| `inbox_search`      | `inspect` | Searches the inbox log. Each row names the site post it was about, or null when no post has that id. Returns each activity's full JSON with `includeJson`.                    |
+| `post_federation`   | `inspect` | For one post: the object a peer gets when it fetches the post's id, every activity sent about it, and each delivery with its error.                                           |
+| `followers`         | `inspect` | The followers of the site's users, with the inbox and shared inbox each delivery goes to.                                                                                     |
+| `relays`            | `inspect` | The relay subscriptions, their state, and the last delivery to each.                                                                                                          |
+| `quote_approvals`   | `inspect` | The quotes of the site's posts that the site approved, from each user's `quotes.json`.                                                                                        |
+| `webmentions`       | `inspect` | The webmentions one post sent, with each endpoint and error, or the webmentions it received.                                                                                  |
+
+### The inspect tools
+
+The `inspect` tools read what the site recorded and change nothing. Each one
+is annotated `readOnlyHint`, declares an output schema, and answers with
+structured content and a one-line summary. The inbox, the followers and the
+deliveries hold other people's data, so every one of them needs the `inspect`
+scope, and none of them is public.
+
+They share one convention for lists:
+
+- `limit` (1 to 100, 20 by default) and `offset` choose the page.
+- Each answer carries `total`, the number of matches across every page, and
+  `nextOffset`, the offset of the next page or `null` on the last one.
+- `since` and `until` take an ISO 8601 date or instant wherever the records
+  carry a time. `since` includes the instant and `until` excludes it.
+- A filter on an id matches it exactly.
+
+`post_federation` and `webmentions` name a post by its slug, its permalink,
+or any object id it was federated under. `post_federation` builds the object
+with the same code that answers a peer's fetch, so it shows the post as it
+reads now. `peerState` says whether a peer gets the object, a `Tombstone`
+with 410, or 404.
+
+The tools cannot show the access log, which is written only to standard
+output, or refused inbox signatures, which are only logged. See
+[Federation](federation.md).
 
 Enabled plugins add tools of their own. A plugin's tool name starts with the
 plugin's prefix and `__`, such as `geekity_plugin_umami__post_stats` from

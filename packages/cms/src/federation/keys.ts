@@ -117,23 +117,39 @@ export async function loadActorKeyPairs(
  * {@link loadActorKeyPairs}, which throws the same error with the same advice.
  */
 export function assertActorKeysUsable(dataDir: string, identifier: string): void {
-  for (const algorithm of ACTOR_KEY_ALGORITHMS) {
+  for (const key of actorKeyHealth(dataDir, identifier)) {
+    if (key.state === 'unusable') throw unusableKey(key.file, key.cause);
+  }
+}
+
+/**
+ * How one of an actor's key files stands. Absent is not damaged: the first
+ * boot of a new site has no key files at all, and the first actor request
+ * writes them.
+ */
+export type ActorKeyHealth = { readonly algorithm: ActorKeyAlgorithm; readonly file: string } & (
+  { readonly state: 'usable' | 'missing' } | { readonly state: 'unusable'; readonly cause: unknown }
+);
+
+/** Each of one actor's key files, checked as {@link assertActorKeysUsable} checks them. */
+export function actorKeyHealth(dataDir: string, identifier: string): ActorKeyHealth[] {
+  return ACTOR_KEY_ALGORITHMS.map((algorithm) => {
     const file = actorKeyFile(dataDir, identifier, algorithm);
     const contents = readFileIfPresentSync(file);
-    // Absent is not damaged: the first boot of a new site has no key files at
-    // all, and the first actor request writes them.
-    if (contents === undefined) continue;
+    if (contents === undefined) return { algorithm, file, state: 'missing' };
 
     let jwk: unknown;
     try {
       jwk = JSON.parse(contents);
     } catch (error) {
-      throw unusableKey(file, error);
+      return { algorithm, file, state: 'unusable', cause: error };
     }
 
     const problem = jwkProblem(jwk, algorithm);
-    if (problem !== undefined) throw unusableKey(file, new Error(problem));
-  }
+    return problem === undefined
+      ? { algorithm, file, state: 'usable' }
+      : { algorithm, file, state: 'unusable', cause: new Error(problem) };
+  });
 }
 
 /** What is wrong with a parsed key file, or `undefined` when nothing is. */

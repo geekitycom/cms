@@ -2,8 +2,16 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 
-import { allRows, countByStatus, getRow, nullableText, oneOf, readCount } from './rows.ts';
-import type { Row } from './rows.ts';
+import {
+  allRows,
+  countByStatus,
+  getRow,
+  NO_LIMIT,
+  nullableText,
+  oneOf,
+  readCount,
+} from './rows.ts';
+import type { ListPageOptions, Page, Row } from './rows.ts';
 
 /** How one delivery of one activity to one follower ended. */
 export const DELIVERY_STATUSES = ['sent', 'queued', 'retrying', 'failed'] as const;
@@ -73,6 +81,35 @@ export type NewDelivery = Omit<Delivery, 'attemptedAt'> & {
   attemptedAt?: string | undefined;
 };
 
+/** One activity the site sent, and how its deliveries stand. */
+export interface SentActivity {
+  readonly activityId: string;
+  readonly activityType: string;
+  readonly objectId: string;
+  readonly slug: string | null;
+  /** When its newest delivery was attempted. */
+  readonly lastAttemptedAt: string;
+  readonly counts: Record<DeliveryStatus, number>;
+}
+
+/** What {@link DeliveryStore.searchDeliveries} narrows by. Every field given must match. */
+export interface DeliverySearch {
+  /** About any of these objects. */
+  readonly objectIds?: readonly string[] | undefined;
+  readonly activityId?: string | undefined;
+  /** At any of these statuses. */
+  readonly statuses?: readonly DeliveryStatus[] | undefined;
+  readonly inboxId?: string | undefined;
+  readonly actorId?: string | undefined;
+}
+
+const DELIVERY_SEARCH = `
+  WHERE (:objectIds IS NULL OR object_id IN (SELECT value FROM json_each(:objectIds)))
+    AND (:activityId IS NULL OR activity_id = :activityId)
+    AND (:statuses IS NULL OR status IN (SELECT value FROM json_each(:statuses)))
+    AND (:inboxId IS NULL OR inbox_id = :inboxId)
+    AND (:actorId IS NULL OR actor_id = :actorId)`;
+
 export interface DeliveryStore {
   /**
    * Record how one delivery to one follower ended, replacing the previous
@@ -108,6 +145,10 @@ export interface DeliveryStore {
   /** Every object id a `Delete` was ever recorded going out for. */
   listDeletedObjectIds(): string[];
   countFailedDeliveriesSince(since: string): number;
+  /** Every activity sent about any of these objects, newest first. */
+  listSentActivitiesAbout(objectIds: readonly string[]): SentActivity[];
+  /** The outcomes that match, newest attempt first, one page of them. */
+  searchDeliveries(search: DeliverySearch, page?: ListPageOptions): Page<Delivery>;
 }
 
 export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore {
@@ -154,6 +195,28 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     countFailedDeliveriesSince: db.prepare(`
       SELECT COUNT(*) AS count FROM ap_deliveries WHERE status = 'failed' AND attempted_at >= ?
     `),
+    listSentActivitiesAbout: db.prepare(`
+      SELECT activity_id, activity_type, object_id, slug,
+        MAX(attempted_at) AS last_attempted_at,
+        json_group_object(status, count) AS counts
+      FROM (
+        SELECT activity_id, activity_type, object_id, slug, status,
+          MAX(attempted_at) AS attempted_at, COUNT(*) AS count
+        FROM ap_deliveries
+        WHERE object_id IN (SELECT value FROM json_each(?))
+        GROUP BY activity_id, status
+      )
+      GROUP BY activity_id
+      ORDER BY last_attempted_at DESC, activity_id
+    `),
+    searchDeliveries: db.prepare(`
+      SELECT * FROM ap_deliveries ${DELIVERY_SEARCH}
+      ORDER BY attempted_at DESC, rowid DESC
+      LIMIT :limit OFFSET :offset
+    `),
+    countDeliverySearch: db.prepare(
+      `SELECT COUNT(*) AS count FROM ap_deliveries ${DELIVERY_SEARCH}`,
+    ),
   };
   return {
     recordDelivery(delivery) {
@@ -215,6 +278,42 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     countFailedDeliveriesSince(since) {
       return readCount(statements.countFailedDeliveriesSince, since);
     },
+
+    listSentActivitiesAbout(objectIds) {
+      return allRows(statements.listSentActivitiesAbout, toSentActivity, JSON.stringify(objectIds));
+    },
+
+    searchDeliveries(search, page = {}) {
+      const filter = {
+        objectIds: search.objectIds === undefined ? null : JSON.stringify(search.objectIds),
+        activityId: search.activityId ?? null,
+        statuses: search.statuses === undefined ? null : JSON.stringify(search.statuses),
+        inboxId: search.inboxId ?? null,
+        actorId: search.actorId ?? null,
+      };
+      return {
+        total: Number(statements.countDeliverySearch.get(filter)?.['count'] ?? 0),
+        items: statements.searchDeliveries
+          .all({ ...filter, limit: page.limit ?? NO_LIMIT, offset: page.offset ?? 0 })
+          .map(toDelivery),
+      };
+    },
+  };
+}
+
+function toSentActivity(row: Row): SentActivity {
+  const counts = JSON.parse(String(row['counts'])) as Record<string, number>;
+  return {
+    activityId: String(row['activity_id']),
+    activityType: String(row['activity_type']),
+    objectId: String(row['object_id']),
+    slug: nullableText(row['slug']),
+    lastAttemptedAt: String(row['last_attempted_at']),
+    counts: countByStatus(
+      Object.entries(counts).map(([status, count]) => ({ status, count })),
+      DELIVERY_STATUSES,
+      deliveryStatus,
+    ),
   };
 }
 
