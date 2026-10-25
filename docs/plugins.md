@@ -194,7 +194,7 @@ export default definePlugin({
   version: '0.1.0',
   label: 'Hello',
   description: 'Says hello.',
-  hostApi: 3,
+  hostApi: 4,
   requires: {},
   register(host) {
     host.get('/hello', () => new Response('hello'));
@@ -212,6 +212,7 @@ not. It declares what the plugin adds through `host`:
 - editor actions
 - page tags
 - dashboard widgets
+- MCP tools
 - settings
 - one service
 
@@ -232,7 +233,7 @@ with a range:
   "files": ["dist"],
   "geekity": {
     "plugin": true,
-    "hostApi": 3,
+    "hostApi": 4,
     "requires": { "@geekity/plugin-llm": ">=0.2.0 <1.0.0" }
   },
   "peerDependencies": {
@@ -622,6 +623,109 @@ running, is named in a warning on standard error, and its settings are left
 out. If the plugins cannot be loaded at all, for example because two share a
 name, the command says so and works on the core settings.
 
+**MCP tools.** `host.tool(tool)` offers a tool to MCP clients at the site's
+[MCP endpoint](mcp.md) while the plugin is enabled. A plugin may declare more
+than one. A tool has these fields:
+
+| Field          | Value                                                                                                                                                    |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | Lower case words joined by `-`, unique among the plugin's tools.                                                                                         |
+| `title`        | A short name a client may show.                                                                                                                          |
+| `description`  | What the tool does and when to call it. The model reads it to choose a tool.                                                                             |
+| `scope`        | The one scope a token needs to call it: one of `MCP_SCOPES`, exported by `@geekity/cms/plugin`. A read-only tool over the site's data uses `inspect`.    |
+| `annotations`  | `readOnlyHint`, `destructiveHint`, `idempotentHint` and `openWorldHint`, each `true` or `false`. Set `openWorldHint` when the tool asks another service. |
+| `inputSchema`  | A JSON Schema object for the arguments.                                                                                                                  |
+| `outputSchema` | A JSON Schema object for the structured result.                                                                                                          |
+| `run`          | Answers one call. See below.                                                                                                                             |
+
+The schemas use the part of JSON Schema that `@geekity/cms/plugin` types as
+`ObjectSchema`: objects, arrays, strings with an optional `enum`, numbers and
+integers with an optional `minimum` and `maximum`, and booleans, each with an
+optional `description`. Wrap a schema in `nullable()`, also from
+`@geekity/cms/plugin`, for a value that may be `null`. Write the schemas
+`as const`, or inline in the call, so `run` is typed from them.
+
+Clients see the tool under a name that starts with the plugin's prefix. The
+prefix is the plugin's environment variable prefix in lower case, then `__`,
+then the `id` with `_` for each `-`. `post-stats` from `@geekity/plugin-umami`
+is `geekity_plugin_umami__post_stats`. Two installed plugins never share a
+prefix, and no core tool name holds `__`, so tool names cannot collide.
+
+Core checks every call before `run`, and the plugin writes no code for any of
+it:
+
+- The token must hold the tool's `scope`. Without it, the call is refused with
+  403 and an `insufficient_scope` challenge.
+- The arguments must fit `inputSchema`. When they do not, the client gets a
+  tool error that names each fault.
+- The call counts toward the connection's rate limit.
+- The call is recorded in the app activity record, with any secret-named
+  argument hidden.
+
+`run(args, context)` returns a promise of
+`{ ok: true, summary, structured }`, where `summary` is a sentence for a person
+and `structured` fits `outputSchema`, or `{ ok: false, message }`, a message the
+model can act on. A `run` that throws is answered as a failure on the server,
+and the record keeps the reason. `context` has these fields:
+
+- `user`: the site user the connection acts as.
+- `client`: the app's `client_id`, or the name of a token created by hand.
+- `clientName`: what the app called itself, or `undefined`.
+- `signal`: aborts when the client goes away. Pass it to `host.fetch`.
+- `site`: the same `PluginSite` a screen's `render` gets.
+- `timezone`: the site's time zone, such as `Europe/London`.
+
+Reach core and required plugin services with `host.use` inside `run`, as a
+widget does.
+
+A tool with an id that breaks the rule, a duplicate id, or a scope that is not
+one of `MCP_SCOPES` fails the plugin's `register` when the site starts. The
+Plugins screen shows why, and the site still starts. A plugin cannot add a
+scope. When the plugin is disabled, its tools leave `tools/list` and the
+server card, and a call to one is answered as a call to a tool that does not
+exist. They come back when it is enabled. No restart is needed. The server
+reads the list for each request and sends no notice when it changes. A client
+sees the change the next time it lists the tools.
+
+```ts
+register(host) {
+  host.tool({
+    id: 'post-views',
+    title: 'Post views',
+    description: 'Counts the views of one post over the last 30 days.',
+    scope: 'inspect',
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: { path: { type: 'string', description: 'The post permalink.' } },
+      required: ['path'],
+      additionalProperties: false,
+    },
+    outputSchema: {
+      type: 'object',
+      properties: { path: { type: 'string' }, views: { type: 'integer' } },
+      required: ['path', 'views'],
+    },
+    async run({ path }, { signal }) {
+      const response = await host.fetch(
+        `https://stats.example/api/views?path=${encodeURIComponent(path)}`,
+        { signal },
+      );
+      if (!response.ok) {
+        return { ok: false, message: `The stats API answered ${String(response.status)}.` };
+      }
+      const { views } = (await response.json()) as { views: number };
+      return { ok: true, summary: `${path} had ${String(views)} views.`, structured: { path, views } };
+    },
+  });
+},
+```
+
 **Site info.** `await host.siteInfo()` resolves to the site's base URL and its
 title as the settings have it at that moment. It reads the settings, so it
 returns a promise; call it when the plugin handles a request, a command or a
@@ -673,7 +777,8 @@ provides. The core also runs plugins that target an earlier version, back to
 the oldest version it keeps, which is 2. A plugin that targets a newer version,
 or one older than that, is unavailable, with the reason on the Plugins screen.
 Version 3 added page tags and dashboard widgets. A plugin that calls
-`host.pageTags` or `host.widget` targets 3. The peer range of `@geekity/cms` says which releases of core
+`host.pageTags` or `host.widget` targets 3. Version 4 added MCP tools. A
+plugin that calls `host.tool` targets 4. The peer range of `@geekity/cms` says which releases of core
 the package works with. npm checks it for a site that installs with npm. The
 registry checks the copy in `plugin.json` for a folder install. Before 1.0,
 write it as `>=<the core you built against> <1.0.0`, and write the range of a

@@ -1,15 +1,17 @@
-{# /admin/users/apps: the apps that can act as whoever is signed in (TASK-162).
-
-   Only your own connections, each with a Revoke button that names the app,
-   so a screen reader moving between buttons hears which one it is on. #}
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
 {% from "components/alert.njk" import alert %}
-{% from "components/badge.njk" import badge %}
+{% from "components/badge.njk" import badge, status %}
 {% from "components/button.njk" import button %}
 {% from "components/table.njk" import table %}
 
 {% block title %}Connected apps{% endblock %}
+
+{# Tailwind finds classes by reading this file, so each one is written out. #}
+{% set TOKEN_RESOURCE_SHOWS = {
+  micropub: 'group-has-[[name=resource][value=micropub]:checked]/token:grid',
+  mcp: 'group-has-[[name=resource][value=mcp]:checked]/token:grid'
+} %}
 
 {% block content %}
   <h1 class="mb-6 text-2xl font-bold">Connected apps</h1>
@@ -19,8 +21,9 @@
       These apps signed in as you and can act as you, within the permissions
       listed. An app that keeps using its connection stays connected; one left
       unused is disconnected on the date shown. A token you created works
-      until the date shown. Revoking disconnects it now: its next request is
-      refused, and it has to ask you again.
+      until the date shown. Recent activity lists each one's latest sign-ins,
+      posts and MCP tool calls; App activity has them all. Revoking disconnects
+      it now: its next request is refused, and it has to ask you again.
     </p>
 
     {% call table('Connected apps') %}
@@ -31,6 +34,7 @@
           <th scope="col">Connected</th>
           <th scope="col">Last used</th>
           <th scope="col">Expires</th>
+          <th scope="col">Recent activity</th>
           <th scope="col">Actions</th>
         </tr>
       </thead>
@@ -42,6 +46,7 @@
                 <a class="link link-hover font-medium" href="{{ connection.url }}">{{ connection.name }}</a>
               {% else %}
                 <span class="font-medium">{{ connection.name }}</span> {{ badge('Token you created') }}
+                {% if connection.resource %}{{ badge('For ' ~ connection.resource, color='primary', style='soft') }}{% endif %}
               {% endif %}
             </td>
             <td>
@@ -62,6 +67,21 @@
               {% endif %}
             </td>
             <td class="whitespace-nowrap"><time datetime="{{ connection.expires.iso }}">{{ connection.expires.text }}</time></td>
+            <td>
+              {% if connection.recent | length %}
+                <ul>
+                  {% for entry in connection.recent %}
+                    <li class="whitespace-nowrap">
+                      <a class="link link-hover" href="{{ entry.url }}">{{ entry.label }}</a>
+                      {% if entry.failed %}{{ status('failed', 'Refused') }}{% endif %}
+                      <time class="text-xs" datetime="{{ entry.when.iso }}">{{ entry.when.text }}</time>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                None lately
+              {% endif %}
+            </td>
             <td>
               <form method="post" action="{{ revokeUrl }}">
                 <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
@@ -98,33 +118,49 @@
       </div>
     {% endif %}
 
-    {% if createToken.problems.name or createToken.problems.scopes or createToken.problems.expires %}
+    {% if createToken.problems.name or createToken.problems.resource or createToken.problems.scopes or createToken.problems.expires %}
+      {% set chosenResource = createToken.resources | selectattr('chosen') | first %}
       {% call field.summary('Nothing was saved. Fix the fields marked below and try again.') %}
         {{ field.problem('create-token-name', createToken.problems.name) }}
-        {{ field.problem('create-token-scope-profile', createToken.problems.scopes) }}
+        {{ field.problem('create-token-resource', createToken.problems.resource) }}
+        {{ field.problem('create-token-scope-' ~ chosenResource.name ~ '-' ~ chosenResource.scopes[0].name, createToken.problems.scopes) }}
         {{ field.problem('create-token-expires', createToken.problems.expires) }}
       {% endcall %}
     {% endif %}
 
     <p class="mb-2 max-w-prose text-sm">
-      Some tools and scripts cannot sign in, but accept a token you paste in,
-      such as the Manual tab of micropub.rocks. A token acts as you on this
-      site's Micropub endpoint, with only the permissions you tick, until it
-      expires or you revoke it above.
+      Some tools and scripts cannot sign in, but accept a token you paste in.
+      A token acts as you on this site's Micropub endpoint or on its MCP
+      server, whichever you choose, with only the permissions you tick, until
+      it expires or you revoke it above.
     </p>
 
-    <form method="post" action="{{ createToken.url }}">
+    <form class="group/token" method="post" action="{{ createToken.url }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
       {{ field.text('create-token-name', 'name', 'Name', createToken.name,
            error=createToken.problems.name, required=true,
            hint='What will use it, such as Publishing script.') }}
       <fieldset class="fieldset">
-        <legend class="fieldset-legend">It may</legend>
-        {% for scope in createToken.scopes %}
-          {{ field.checkbox('create-token-scope-' ~ scope.name, 'scope', scope.label, checked=scope.checked, value=scope.name,
-               error=(createToken.problems.scopes if loop.first else '')) }}
-        {% endfor %}
+        <legend class="fieldset-legend">Works with</legend>
+        <div class="join flex-wrap">
+          {% for resource in createToken.resources %}
+            <input{% if loop.first %} id="create-token-resource"{% if createToken.problems.resource %} aria-invalid="true" aria-describedby="create-token-resource-error"{% endif %}{% endif %} class="join-item btn btn-sm" type="radio" name="resource" value="{{ resource.name }}" aria-label="{{ resource.label }}"{% if resource.chosen %} checked{% endif %} />
+          {% endfor %}
+        </div>
+        {% if createToken.problems.resource %}
+          <p class="text-sm text-error" id="create-token-resource-error">{{ createToken.problems.resource }}</p>
+        {% endif %}
       </fieldset>
+      {% for resource in createToken.resources %}
+        <fieldset class="fieldset hidden{{ TOKEN_RESOURCE_SHOWS | modifier(resource.name) }}">
+          <legend class="fieldset-legend">With {{ resource.label }}, it may</legend>
+          <p class="label block whitespace-normal">{{ resource.hint }}</p>
+          {% for scope in resource.scopes %}
+            {{ field.checkbox('create-token-scope-' ~ resource.name ~ '-' ~ scope.name, resource.field, scope.label, checked=scope.checked, value=scope.name,
+                 error=(createToken.problems.scopes if loop.first and resource.chosen else '')) }}
+          {% endfor %}
+        </fieldset>
+      {% endfor %}
       {% call field.select('create-token-expires', 'expires', 'Expires after', error=createToken.problems.expires) %}
         {% for expiry in createToken.expiries %}
           <option value="{{ expiry.days }}"{% if expiry.selected %} selected{% endif %}>{% if expiry.days == 365 %}1 year{% else %}{{ expiry.days }} days{% endif %}</option>

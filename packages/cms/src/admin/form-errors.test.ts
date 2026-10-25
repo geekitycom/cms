@@ -73,7 +73,16 @@ const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> =
     {
       createToken: {
         name: '',
-        scopes: [{ name: 'profile', label: 'Profile', checked: false }],
+        resources: [
+          {
+            name: 'micropub',
+            label: 'Micropub',
+            hint: '',
+            chosen: true,
+            field: 'micropub_scope',
+            scopes: [{ name: 'profile', label: 'Profile', checked: false }],
+          },
+        ],
         expiries: [{ days: 30, selected: true }],
         problems: everyProblem,
       },

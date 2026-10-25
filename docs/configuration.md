@@ -431,6 +431,8 @@ own, among others:
   [Location and camera metadata](media.md#location-and-camera-metadata))
 - `resend`, which the federation screen and `geekity resend` queue (see
   [The federation screen](federation.md#the-federation-screen))
+- `retry-deliveries`, which the `retry_deliveries` [MCP tool](mcp.md#the-repair-tools)
+  queues
 - `fetch-font`, which downloads a hosted Google Fonts family again when its
   files are missing (see [Hosted Google Fonts](settings.md#hosted-google-fonts))
 

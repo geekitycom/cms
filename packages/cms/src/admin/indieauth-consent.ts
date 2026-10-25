@@ -35,6 +35,9 @@ export const SCOPE_LABELS: Readonly<Record<Scope, string>> = {
   update: 'Edit your posts',
   delete: 'Delete your posts',
   media: 'Upload media to your site',
+  publish: 'Publish drafts and change published posts',
+  inspect: 'Read your site’s federation and delivery records, inbox and followers included',
+  repair: 'Resend posts and retry federation deliveries',
 };
 
 /**
@@ -213,14 +216,35 @@ async function clientInformation(
 
 /**
  * Whether a client may be sent back to `redirectUri`: always on its own
- * origin, and elsewhere only when its metadata lists that exact URL.
+ * origin, and elsewhere only when its metadata lists that URL. A native app
+ * listening on a loopback address picks its port when it starts, so there the
+ * port is not compared (RFC 8252 section 7.3); Claude Code lists
+ * `http://localhost/callback` and returns to whatever port it got.
  */
 function mayRedirect(clientId: string, redirectUri: string, client: ClientInformation): boolean {
   const target = new URL(redirectUri);
   const sameOrigin =
     (target.protocol === 'https:' || target.protocol === 'http:') &&
     target.origin === new URL(clientId).origin;
-  return sameOrigin || client.redirectUris.includes(redirectUri);
+  return (
+    sameOrigin ||
+    client.redirectUris.some((listed) => listed === redirectUri || sameLoopback(listed, target))
+  );
+}
+
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+function sameLoopback(listed: string, target: URL): boolean {
+  const url = URL.parse(listed);
+  return (
+    url !== null &&
+    url.protocol === 'http:' &&
+    target.protocol === 'http:' &&
+    LOOPBACK_HOSTS.has(url.hostname) &&
+    url.hostname === target.hostname &&
+    url.pathname === target.pathname &&
+    url.search === target.search
+  );
 }
 
 /** `redirectUri` with the answer and the issuer added to its query. */

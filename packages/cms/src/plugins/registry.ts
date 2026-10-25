@@ -8,12 +8,11 @@
  * the enabled set as an argument rather than holding one.
  */
 
-import { createRequire } from 'node:module';
-
 import semver from 'semver';
 
 import type { DataFileDeclaration } from '../files/data-files.ts';
-import { HOST_API_VERSION } from '../plugin.ts';
+import { HOST_API_VERSION, MCP_SCOPES } from '../plugin.ts';
+import { PACKAGE_VERSION } from '../util/package-version.ts';
 import type {
   CoreServices,
   Plugin,
@@ -29,6 +28,7 @@ import type {
   PluginSettings,
   PluginSettingValues,
   PluginSiteInfo,
+  PluginTool,
   PluginWidget,
   UsedService,
 } from '../plugin.ts';
@@ -65,6 +65,11 @@ export interface PluginRoute {
   handler: PluginRouteHandler;
 }
 
+export interface PluginMcpTool {
+  name: string;
+  tool: PluginTool;
+}
+
 /** What a plugin declared in `register`. */
 export interface PluginContributions {
   routes: readonly PluginRoute[];
@@ -79,6 +84,7 @@ export interface PluginContributions {
   pageTags:
     ((context: PluginPageTagsContext) => PluginPageTags | Promise<PluginPageTags>) | undefined;
   widgets: readonly PluginWidget[];
+  tools: readonly PluginMcpTool[];
   dataFiles: readonly DataFileDeclaration[];
 }
 
@@ -148,8 +154,6 @@ const CORE_SERVICES: Readonly<Record<keyof CoreServices, true>> = {
   '@geekity/cms/engagement': true,
   '@geekity/cms/posts': true,
 };
-const CORE_VERSION = (createRequire(import.meta.url)('../../package.json') as { version: string })
-  .version;
 
 /** npm's rule for a package name, scoped or not. */
 export const PACKAGE_NAME = /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
@@ -236,7 +240,7 @@ export function createPluginRegistry(
     if (cycle !== undefined) return `It is in a dependency cycle: ${cycle.join(' → ')}.`;
     for (const [dependency, range] of Object.entries(entry.peerDependencies ?? {})) {
       const version =
-        dependency === CORE_PACKAGE ? CORE_VERSION : bySource.get(dependency)?.plugin.version;
+        dependency === CORE_PACKAGE ? PACKAGE_VERSION : bySource.get(dependency)?.plugin.version;
       if (version === undefined || semver.satisfies(version, range)) continue;
       return dependency === CORE_PACKAGE
         ? `It needs ${CORE_PACKAGE} ${range}, and this core is ${version}.`
@@ -365,6 +369,7 @@ const NOTHING_DECLARED: PluginContributions = {
   editorActions: [],
   pageTags: undefined,
   widgets: [],
+  tools: [],
   dataFiles: [],
 };
 
@@ -427,6 +432,7 @@ function register(
   const commands: PluginCommand[] = [];
   const editorActions: PluginEditorAction[] = [];
   const widgets: PluginWidget[] = [];
+  const tools: PluginMcpTool[] = [];
   let screen: PluginScreen | undefined;
   let pageTags: PluginContributions['pageTags'];
   let renderedSettings: readonly RenderedSetting[] | undefined;
@@ -500,6 +506,25 @@ function register(
       }
       widgets.push(declared);
     },
+    tool(declared) {
+      declaring('an MCP tool');
+      if (!DECLARED_ID.test(declared.id)) {
+        throw new Error(
+          `${JSON.stringify(declared.id)} is not an MCP tool id: use lower case words joined by -.`,
+        );
+      }
+      if (tools.some((entry) => entry.tool.id === declared.id)) {
+        throw new Error(
+          `${name} declares two MCP tools with the id ${JSON.stringify(declared.id)}.`,
+        );
+      }
+      if (!(MCP_SCOPES as readonly string[]).includes(declared.scope)) {
+        throw new Error(
+          `The ${declared.id} tool asks for the scope ${JSON.stringify(declared.scope)}. A plugin’s tool picks one of the scopes core offers: ${MCP_SCOPES.join(', ')}.`,
+        );
+      }
+      tools.push({ name: pluginToolName(name, declared.id), tool: declared });
+    },
     siteInfo: () => options.siteInfo(),
     fetch: (url, init = {}) => pluginFetch(url, init, options),
     provide(value) {
@@ -557,6 +582,7 @@ function register(
         editorActions,
         pageTags,
         widgets,
+        tools,
         dataFiles,
       },
       service,
@@ -573,6 +599,12 @@ function register(
 }
 
 const DECLARED_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export const PLUGIN_TOOL_SEPARATOR = '__';
+
+function pluginToolName(plugin: string, id: string): string {
+  return `${pluginEnvPrefix(plugin).toLowerCase()}${PLUGIN_TOOL_SEPARATOR}${id.replaceAll('-', '_')}`;
+}
 
 async function lifecycle(plugin: Plugin, hook: 'start' | 'stop'): Promise<void> {
   try {

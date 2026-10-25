@@ -1,18 +1,18 @@
-import type { Document } from '../content/document.ts';
-import { formFor } from '../content/document-form.ts';
-import type { EditorForm } from '../content/document-form.ts';
-import { POST_KIND } from '../content/document-kind.ts';
-import type { DocumentKind } from '../content/document-kind.ts';
-import { eventOf } from '../content/event.ts';
-import { reviewOf } from '../content/review.ts';
-import type { KeptProperties } from '../content/kept-properties.ts';
-import { locationToMicropub } from '../content/location.ts';
-import type { PostLocations } from '../content/locations.ts';
-import type { PermalinkFile } from '../content/permalink-file.ts';
-import type { MicropubSite, MicropubType } from '../content/post-fields.ts';
-import { visibilityOf } from '../content/visibility.ts';
-import { createForm, keptPrivately, keptRefusal, propertyName } from './create.ts';
-import type { CreateSite } from './create.ts';
+import type { Document } from './document.ts';
+import { formFor } from './document-form.ts';
+import type { EditorForm } from './document-form.ts';
+import { POST_KIND } from './document-kind.ts';
+import type { DocumentKind } from './document-kind.ts';
+import { eventOf } from './event.ts';
+import { reviewOf } from './review.ts';
+import type { KeptProperties } from './kept-properties.ts';
+import { locationToMicropub } from './location.ts';
+import type { PostLocations } from './locations.ts';
+import type { PermalinkFile } from './permalink-file.ts';
+import type { MicropubSite, MicropubType } from './post-fields.ts';
+import { visibilityOf } from './visibility.ts';
+import { createForm, keptPrivately, keptRefusal, propertyName } from './micropub-create.ts';
+import type { CreateSite } from './micropub-create.ts';
 
 type Updatable = Readonly<Record<string, readonly (keyof EditorForm)[]>>;
 

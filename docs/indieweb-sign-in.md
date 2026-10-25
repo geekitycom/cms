@@ -54,7 +54,10 @@ with your own author URL.
 The site reads the app's details from its `client_id` URL. That URL can be an
 IndieAuth `h-app` page or a JSON client metadata document, such as MCP clients
 publish. The app can send you back only to its own origin or to an address it
-lists in those details. While the site is in maintenance mode, the sign-in
+lists in those details. For an `http` address on `localhost`, `127.0.0.1`, or
+`[::1]`, the port is not compared, as RFC 8252 asks: an app on your own
+computer, such as Claude Code, lists `http://localhost/callback` and listens on
+whatever port is free. While the site is in maintenance mode, the sign-in
 endpoint answers 503, as do the URLs that advertise it.
 
 After you approve, the app posts the code it received back to the same
@@ -81,7 +84,12 @@ The site keeps only a SHA-256 hash of each token, in
 `data/indieauth-tokens.json`. Only the site's own user can read the file. Back
 it up with the rest of `data/`. Deleting `geekity.db` keeps every token.
 Deleting a user revokes every token they hold. A token issued for one resource,
-such as an MCP endpoint, works only there. decision-24 records the rules.
+such as the [MCP endpoint](mcp.md), works only there. decision-24 records the
+rules.
+
+An MCP client can also ask for publish, inspect, and repair, which only MCP
+tools use. The consent screen lists each scope with its own checkbox, so you
+can grant them one by one. [MCP](mcp.md#scopes) lists what each allows.
 
 An app sends its token in an `Authorization: Bearer` header, or in an
 `access_token` form field as Micropub allows. RFC 6750 asks for one or the
@@ -99,7 +107,8 @@ The 401 on Micropub and media follows the
 The 403 elsewhere follows RFC 6750 section 3.1.
 
 Each refusal carries a `WWW-Authenticate: Bearer` header. Its
-`resource_metadata` points at `/.well-known/oauth-protected-resource`. That
+`resource_metadata` points at `/.well-known/oauth-protected-resource`, or at
+`/.well-known/oauth-protected-resource/_geekity/mcp` for the MCP endpoint. That
 RFC 9728 document names the site as its own authorization server and lists the
 scopes, so an MCP client can find where to sign in. The metadata document also
 lists three more endpoints:
@@ -146,6 +155,23 @@ connection:
 
 To reconnect, the app must ask you again through the consent screen. With no
 apps connected, the screen lists the kinds of app that connect here.
+
+## Tokens you create
+
+Some tools and scripts cannot sign in, but accept a token you paste in. Create
+a token at the Create a token form on Users > Connected apps. Give it a name,
+choose what it works with, tick its scopes and choose when it expires: 7, 30 or 90
+days, or a year. The site shows the token once and keeps only its hash.
+
+What it works with decides where the token works:
+
+- Micropub. The token works at the Micropub endpoint and its media endpoint,
+  with the Micropub scopes.
+- MCP. The token works only at the [MCP endpoint](mcp.md), with the scopes its
+  tools use.
+
+A token you create is listed with the badge Token you created and a badge that
+names what it is for. It has a Revoke button like an app's connection.
 
 ## Apps allowed without PKCE
 
@@ -211,6 +237,8 @@ The site records one entry for each request to these endpoints:
 - The Micropub endpoint, with the action or query and the properties the
   request carried.
 - The media endpoint, with the file part's name, type, and size.
+- Each MCP tool call, in a file of its own.
+  [MCP](mcp.md#the-record-of-tool-calls) describes what it keeps.
 
 The list shows the newest request first, with the endpoint, the action, the
 app's `client_id`, the user, and the result. A refused request is marked

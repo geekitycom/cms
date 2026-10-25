@@ -13,7 +13,7 @@ import { after, describe, it } from 'node:test';
 import semver from 'semver';
 
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
-import type { Plugin, PluginFederationMiddleware, PluginHost } from '../plugin.ts';
+import type { Plugin, PluginFederationMiddleware, PluginHost, PluginTool } from '../plugin.ts';
 import { pluginRegistryOptions } from '../__testing__/plugin-registry-options.ts';
 import { createPluginRegistry, DuplicatePluginError } from './registry.ts';
 import type { InstalledPlugin } from './registry.ts';
@@ -34,6 +34,22 @@ function plugin(name: string, requires: Record<string, string> = {}, extra: Part
     ...extra,
   });
 }
+
+const TOOL = {
+  id: 'echo',
+  title: 'Echo',
+  description: 'Says nothing.',
+  scope: 'inspect',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  inputSchema: { type: 'object', properties: {} },
+  outputSchema: { type: 'object', properties: {} },
+  run: () => Promise.resolve({ ok: true, summary: '', structured: {} }),
+} as const satisfies PluginTool;
 
 /** Plugins as the site config hands them over. */
 function fromConfig(...plugins: Plugin[]): InstalledPlugin[] {
@@ -275,6 +291,7 @@ describe('the plugin registry', () => {
       'screen',
       'settings',
       'siteInfo',
+      'tool',
       'use',
       'widget',
     ]);
@@ -388,6 +405,82 @@ describe('the plugin registry', () => {
     assert.match(registry.problem('@acme/plugin-twice') ?? '', /two widgets with the id "visits"/);
     assert.match(registry.problem('@acme/plugin-wide') ?? '', /width "third" is not full or half/);
     assert.match(registry.problem('@acme/plugin-hasty') ?? '', /refreshSeconds -1 is not/);
+  });
+
+  it('names a plugin’s MCP tools after the plugin, so no two plugins and no core tool share a name', () => {
+    const registry = createPluginRegistry(
+      fromConfig(
+        plugin(
+          '@acme/plugin-stats',
+          {},
+          {
+            register(host: PluginHost) {
+              host.tool({ ...TOOL, id: 'post-stats' });
+              host.tool({ ...TOOL, id: 'top' });
+            },
+          },
+        ),
+        plugin('plugin.dots', {}, { register: (host: PluginHost) => host.tool(TOOL) }),
+      ),
+      pluginRegistryOptions(DATA_DIR),
+    );
+    assert.deepEqual(
+      registry.find('@acme/plugin-stats')?.tools.map((tool) => tool.name),
+      ['acme_plugin_stats__post_stats', 'acme_plugin_stats__top'],
+    );
+    assert.deepEqual(
+      registry.find('plugin.dots')?.tools.map((tool) => tool.name),
+      ['plugin_dots__echo'],
+    );
+  });
+
+  it('fails the register of a plugin whose MCP tool asks for a scope core does not offer', () => {
+    const registry = createPluginRegistry(
+      fromConfig(
+        plugin(
+          '@acme/plugin-greedy',
+          {},
+          {
+            register: (host: PluginHost) =>
+              host.tool({ ...TOOL, scope: 'admin' as typeof TOOL.scope }),
+          },
+        ),
+      ),
+      pluginRegistryOptions(DATA_DIR),
+    );
+    assert.equal(
+      registry.problem('@acme/plugin-greedy'),
+      'Its register failed: The echo tool asks for the scope "admin". A plugin’s tool picks one of the scopes core offers: profile, create, update, media, publish, inspect, repair.',
+    );
+    assert.deepEqual(registry.find('@acme/plugin-greedy')?.tools, []);
+  });
+
+  it('fails the register of a plugin whose MCP tool ids are not usable', () => {
+    const registry = createPluginRegistry(
+      fromConfig(
+        plugin(
+          '@acme/plugin-shouting',
+          {},
+          { register: (host: PluginHost) => host.tool({ ...TOOL, id: 'Post_Stats' }) },
+        ),
+        plugin(
+          '@acme/plugin-twice',
+          {},
+          {
+            register(host: PluginHost) {
+              host.tool(TOOL);
+              host.tool(TOOL);
+            },
+          },
+        ),
+      ),
+      pluginRegistryOptions(DATA_DIR),
+    );
+    assert.match(
+      registry.problem('@acme/plugin-shouting') ?? '',
+      /"Post_Stats" is not an MCP tool id: use lower case words joined by -/,
+    );
+    assert.match(registry.problem('@acme/plugin-twice') ?? '', /two MCP tools with the id "echo"/);
   });
 
   it('refuses two packages whose names make one variable prefix, naming both', () => {

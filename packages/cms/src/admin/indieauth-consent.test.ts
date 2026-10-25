@@ -23,6 +23,7 @@ const CONSENT = '/admin/indieauth/consent';
 const APP = 'https://app.example/';
 const NAMELESS = 'https://nameless.example/';
 const MCP = 'https://mcp.example/client.json';
+const PORTLESS = 'https://claude.example/oauth/client-metadata';
 const HEADER = 'https://header.example/';
 const LOGO = 'https://logo.example/';
 const PNG = 'not really a png, but typed as one';
@@ -60,6 +61,14 @@ const PAGES: Record<string, { type: string; body: string; link?: string }> = {
       client_id: MCP,
       client_name: 'Example MCP Client',
       redirect_uris: ['http://127.0.0.1:33418/callback'],
+    }),
+  },
+  [PORTLESS]: {
+    type: 'application/json',
+    body: JSON.stringify({
+      client_id: PORTLESS,
+      client_name: 'Claude Code',
+      redirect_uris: ['http://localhost/callback', 'https://app.example/callback'],
     }),
   },
 };
@@ -356,6 +365,29 @@ describe('approving and denying', () => {
     assert.deepEqual(issued?.['scopes'], ['create', 'update']);
   });
 
+  it('lists each MCP scope on its own line and grants only those left ticked', async () => {
+    const cms = await site();
+    const agent = await signIn(cms);
+    const form = await consent(agent, {
+      scope: 'profile inspect repair publish',
+      resource: `${BASE}/_geekity/mcp`,
+    });
+    for (const [scope, label] of [
+      ['inspect', /Read your site’s federation and delivery records/],
+      ['repair', /Resend posts and retry federation deliveries/],
+      ['publish', /Publish drafts and change published posts/],
+    ] as const) {
+      assert.match(
+        form.html,
+        new RegExp(`<input[^>]*name="scope"[^>]*value="${scope}"[^>]*checked`),
+      );
+      assert.match(form.html, label);
+    }
+    const back = await decide(agent, form, 'approve', ['profile', 'inspect']);
+    const issued = await grant(cms, back.searchParams.get('code') ?? '');
+    assert.deepEqual(issued?.['scopes'], ['profile', 'inspect']);
+  });
+
   it('grants no scope that was not asked for, even when the form says so', async () => {
     const cms = await site();
     const agent = await signIn(cms);
@@ -472,6 +504,26 @@ describe('where a client may be sent back to', () => {
     const response = await agent.get(`${CONSENT}?${query({ client_id: 'https://10.0.0.1/' })}`);
     assert.equal(response.status, 400);
     assert.equal(response.headers.get('location'), null);
+  });
+
+  it('sends a client back to any port on a loopback address it lists, as RFC 8252 asks', async () => {
+    const cms = await site();
+    const agent = await signIn(cms);
+    const { html } = await consent(agent, {
+      client_id: PORTLESS,
+      redirect_uri: 'http://localhost:54007/callback',
+    });
+    assert.match(html, /Claude Code/);
+    for (const redirect of [
+      'http://localhost:54007/elsewhere',
+      'https://app.example:8443/callback',
+      'http://127.0.0.1:54007/callback',
+    ]) {
+      const response = await agent.get(
+        `${CONSENT}?${query({ client_id: PORTLESS, redirect_uri: redirect })}`,
+      );
+      assert.equal(response.status, 400, redirect);
+    }
   });
 
   it('takes a JSON client metadata document, as an MCP client publishes', async () => {

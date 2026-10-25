@@ -1,6 +1,6 @@
 /**
  * Users > Connected apps: the apps that hold a token for whoever is
- * signed in, and the button that cuts one off.
+ * signed in, what each did lately, and the button that cuts one off.
  *
  * Only ever your own connections, because a token acts as the person who
  * approved it. Revoking deletes the connection from `data/indieauth-tokens.json`,
@@ -9,22 +9,27 @@
 
 import type { Context, Hono } from 'hono';
 
+import { activityEntryUrl, activityLabel, freshEntries } from './app-activity.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { CONNECTED_APPS_CHILD, CONNECTED_APPS_PATH } from './users.ts';
 import type { GeekityEnv } from '../web/env.ts';
+import { isFailure } from '../web/indieauth-activity-log.ts';
+import type { ActivityEntry } from '../web/indieauth-activity-log.ts';
 import { editSiteSetting } from './site-setting-edit.ts';
 import { findUserById, listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { clientIdentifier, sameClient } from '../util/client-id.ts';
 import { SCOPE_LABELS } from './indieauth-consent.ts';
-import { SCOPES } from '../indieauth/request.ts';
+import { MICROPUB_SCOPES } from '../indieauth/request.ts';
+import { MCP_SCOPES } from '../plugin.ts';
 import { meForSignIn } from '../indieauth/identity.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { createToken, lapsesAt, listTokens, revokeConnection } from '../indieauth/tokens.ts';
 import type { StoredToken } from '../indieauth/tokens.ts';
+import { MCP_PATH } from '../web/indieauth-discovery.ts';
 
 /** Where a Revoke button posts. */
 export const REVOKE_CONNECTION_PATH = `${CONNECTED_APPS_PATH}/revoke`;
@@ -48,8 +53,36 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const NAME_LIMIT = 100;
 
+const RECENT_ACTIVITY_LIMIT = 5;
+
+const TOKEN_RESOURCES = [
+  {
+    name: 'micropub',
+    label: 'Micropub',
+    hint: 'Posting apps and scripts, such as the Manual tab of micropub.rocks.',
+    scopes: MICROPUB_SCOPES,
+    url: (baseUrl: string) => baseUrl,
+  },
+  {
+    name: 'mcp',
+    label: 'MCP',
+    hint: 'AI assistants and agents, such as Claude Code.',
+    scopes: MCP_SCOPES,
+    url: (baseUrl: string) => `${baseUrl}${MCP_PATH}`,
+  },
+] as const;
+
+type TokenResource = (typeof TOKEN_RESOURCES)[number];
+
+const DEFAULT_TOKEN_RESOURCE: TokenResource = TOKEN_RESOURCES[0];
+
+function scopeField(resource: TokenResource): string {
+  return `${resource.name}_scope`;
+}
+
 interface TokenForm {
   name: string;
+  resource: string;
   scopes: readonly string[];
   expires: string;
 }
@@ -72,22 +105,24 @@ interface RefusedClient {
 export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: AdminRender }): void {
   const { render } = options;
 
-  app.get(CONNECTED_APPS_PATH, (c) => render(c, ADMIN_TEMPLATES.connectedApps, screen(c)));
+  app.get(CONNECTED_APPS_PATH, async (c) =>
+    render(c, ADMIN_TEMPLATES.connectedApps, await screen(c)),
+  );
 
   app.post(ADD_CLIENT_WITHOUT_PKCE_PATH, async (c) => {
     const value = stringOrEmpty((await c.req.parseBody())[CLIENT_FIELD]).trim();
-    const refuse = (problem: string): Response => {
+    const refuse = async (problem: string): Promise<Response> => {
       c.status(400);
-      return render(c, ADMIN_TEMPLATES.connectedApps, screen(c, { value, problem }));
+      return render(c, ADMIN_TEMPLATES.connectedApps, await screen(c, { value, problem }));
     };
-    if (clientIdentifier(value) === undefined) return refuse(NOT_A_CLIENT_ID);
+    if (clientIdentifier(value) === undefined) return await refuse(NOT_A_CLIENT_ID);
     let listed = false;
     const saved = await editSiteSetting(c.var.settings, 'clients_without_pkce', (current) => {
       listed = current.some((id) => sameClient(id, value));
       return listed ? current : [...current, value];
     });
-    if (!saved.ok) return refuse(Object.values(saved.problems).join(' '));
-    if (listed) return refuse(`${value} is already on the list.`);
+    if (!saved.ok) return await refuse(Object.values(saved.problems).join(' '));
+    if (listed) return await refuse(`${value} is already on the list.`);
     flash(c, 'notice', `${value} may now sign in without PKCE.`);
     return c.redirect(CONNECTED_APPS_PATH, 303);
   });
@@ -109,35 +144,44 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
   app.post(CREATE_TOKEN_PATH, async (c) => {
     const { config } = c.var;
     const body = await c.req.parseBody({ all: true });
+    const resourceName = stringOrEmpty(body['resource']);
+    const resource = TOKEN_RESOURCES.find((choice) => choice.name === resourceName);
     const form: TokenForm = {
       name: stringOrEmpty(body['name']).trim(),
-      scopes: [body['scope'] ?? []].flat().map(stringOrEmpty),
+      resource: resourceName,
+      scopes:
+        resource === undefined ? [] : [body[scopeField(resource)] ?? []].flat().map(stringOrEmpty),
       expires: stringOrEmpty(body['expires']),
     };
     const user =
       c.var.session?.userId == null
         ? undefined
         : findUserById(config.dataDir, c.var.session.userId);
-    const scopes = form.scopes.filter((scope): scope is Scope =>
-      (SCOPES as readonly string[]).includes(scope),
-    );
+    const offered: readonly string[] = resource?.scopes ?? [];
+    const scopes = form.scopes.filter((scope): scope is Scope => offered.includes(scope));
     const days = TOKEN_LIFETIME_DAYS.find((choice) => String(choice) === form.expires);
     const problems: TokenProblems = {
       ...(form.name === '' ? { name: 'Give the token a name, so you can tell it apart.' } : {}),
       ...(form.name.length > NAME_LIMIT
         ? { name: `Keep the name to ${NAME_LIMIT} characters.` }
         : {}),
-      ...(scopes.length === 0 || scopes.length < form.scopes.length
+      ...(resource === undefined ? { resource: 'Choose what the token works with.' } : {}),
+      ...(resource !== undefined && (scopes.length === 0 || scopes.length < form.scopes.length)
         ? { scopes: 'Choose at least one thing the token may do.' }
         : {}),
       ...(days === undefined ? { expires: 'Choose when the token expires.' } : {}),
     };
-    if (user === undefined || days === undefined || Object.keys(problems).length > 0) {
+    if (
+      user === undefined ||
+      resource === undefined ||
+      days === undefined ||
+      Object.keys(problems).length > 0
+    ) {
       c.status(400);
       return render(
         c,
         ADMIN_TEMPLATES.connectedApps,
-        screen(c, undefined, { refused: form, problems }),
+        await screen(c, undefined, { refused: form, problems }),
       );
     }
 
@@ -153,12 +197,12 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
         }),
         name: form.name,
         scopes,
-        resource: baseUrl,
+        resource: resource.url(baseUrl),
         lifetimeMs: days * DAY_MS,
       },
       config.now(),
     );
-    return showTokenOnceWithoutStoringIt(c, render, form.name, accessToken);
+    return await showTokenOnceWithoutStoringIt(c, render, form.name, accessToken);
   });
 
   app.post(REVOKE_CONNECTION_PATH, async (c) => {
@@ -177,21 +221,31 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
 const NOT_A_CLIENT_ID =
   'Enter the app’s client_id exactly as it sends it: an http or https URL with a domain name, such as https://ia.net/writer.';
 
-function screen(
+async function screen(
   c: Context<GeekityEnv>,
   refused?: RefusedClient,
   token?: TokenOutcome,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const { config } = c.var;
   const userId = c.var.session?.userId;
+  const username = userId == null ? undefined : findUserById(config.dataDir, userId)?.username;
   const settings = c.var.siteAtRequestStart;
-  const now = config.now().getTime();
+  const now = config.now();
+  const activity = await freshEntries(config.dataDir, now);
   const connections = listTokens(config.dataDir)
-    .filter((stored) => stored.userId === userId && Date.parse(lapsesAt(stored)) > now)
+    .filter((stored) => stored.userId === userId && Date.parse(lapsesAt(stored)) > now.getTime())
     .sort((a, b) => b.issuedAt.localeCompare(a.issuedAt))
-    .map((stored) => row(stored, settings.timezone));
+    .map((stored) => ({
+      ...row(stored, settings.timezone, config.baseUrl),
+      recent: activity
+        .filter((entry) => isActivityOf(stored, username, entry))
+        .slice(0, RECENT_ACTIVITY_LIMIT)
+        .map((entry) => recentRow(entry, settings.timezone)),
+    }));
   const form = token !== undefined && 'refused' in token ? token.refused : undefined;
-  const chosen = new Set(form?.scopes ?? []);
+  const chosenResource =
+    TOKEN_RESOURCES.find((resource) => resource.name === form?.resource) ?? DEFAULT_TOKEN_RESOURCE;
+  const ticked = new Set(form?.scopes ?? []);
   return {
     section: 'users',
     child: CONNECTED_APPS_CHILD,
@@ -209,11 +263,21 @@ function screen(
     createToken: {
       url: CREATE_TOKEN_PATH,
       name: form?.name ?? '',
-      scopes: SCOPES.map((scope) => ({
-        name: scope,
-        label: SCOPE_LABELS[scope],
-        checked: chosen.has(scope),
-      })),
+      resources: TOKEN_RESOURCES.map((resource) => {
+        const chosen = resource === chosenResource;
+        return {
+          name: resource.name,
+          label: resource.label,
+          hint: resource.hint,
+          chosen,
+          field: scopeField(resource),
+          scopes: resource.scopes.map((scope) => ({
+            name: scope,
+            label: SCOPE_LABELS[scope],
+            checked: chosen && ticked.has(scope),
+          })),
+        };
+      }),
       expiries: TOKEN_LIFETIME_DAYS.map((days) => ({
         days,
         selected: String(days) === (form?.expires ?? String(DEFAULT_TOKEN_LIFETIME_DAYS)),
@@ -225,16 +289,43 @@ function screen(
 }
 
 /** One connection as the table shows it. */
-function row(token: StoredToken, timezone: string) {
+function row(token: StoredToken, timezone: string, baseUrl: string) {
   const when = (instant: string) => ({ iso: instant, text: formatInTimezone(instant, timezone) });
   return {
     id: token.id,
     name: clientLabel(token),
     url: token.kind === 'created' ? undefined : token.clientId,
+    resource:
+      token.kind === 'created'
+        ? TOKEN_RESOURCES.find((resource) => resource.url(baseUrl) === token.resource)?.label
+        : undefined,
     scopes: token.scopes.map((scope) => SCOPE_LABELS[scope]),
     issued: when(token.issuedAt),
     lastUsed: token.lastUsedAt === undefined ? undefined : when(token.lastUsedAt),
     expires: when(lapsesAt(token)),
+  };
+}
+
+function isActivityOf(
+  token: StoredToken,
+  username: string | undefined,
+  entry: ActivityEntry,
+): boolean {
+  if (entry.connectionId !== undefined) return entry.connectionId === token.id;
+  return (
+    token.kind !== 'created' &&
+    entry.clientId !== undefined &&
+    entry.user === username &&
+    sameClient(entry.clientId, token.clientId)
+  );
+}
+
+function recentRow(entry: ActivityEntry, timezone: string) {
+  return {
+    url: activityEntryUrl(entry),
+    when: { iso: entry.at, text: formatInTimezone(entry.at, timezone) },
+    label: activityLabel(entry),
+    failed: isFailure(entry),
   };
 }
 
@@ -243,16 +334,16 @@ function clientLabel(token: StoredToken): string {
   return token.clientName ?? token.clientId;
 }
 
-function showTokenOnceWithoutStoringIt(
+async function showTokenOnceWithoutStoringIt(
   c: Context<GeekityEnv>,
   render: AdminRender,
   name: string,
   token: string,
-): Response | Promise<Response> {
+): Promise<Response> {
   c.header('cache-control', 'no-store');
   return render(
     c,
     ADMIN_TEMPLATES.connectedApps,
-    screen(c, undefined, { created: { name, token } }),
+    await screen(c, undefined, { created: { name, token } }),
   );
 }

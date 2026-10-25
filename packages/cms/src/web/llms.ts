@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { escapeLinkText } from '../content/markdown-links.ts';
 import { absoluteUrl } from '../util/url.ts';
+import { MCP_PATH, MCP_SERVER_CARD_PATH } from './indieauth-discovery.ts';
 import { oneLine } from './markdown-page.ts';
 import type { MarkdownUrl } from './markdown-page.ts';
 import { contentEtag, isNotModified } from './negotiate.ts';
@@ -78,6 +79,7 @@ export function llmsTxt(index: LlmsIndex, baseUrl: string, markdownUrl: Markdown
     ...(index.capsule === undefined
       ? []
       : [`This site is also a Gemini capsule at <${index.capsule}>.`]),
+    `Its MCP server is at <${baseUrl}${MCP_PATH}>, described at <${baseUrl}${MCP_SERVER_CARD_PATH}>. It needs a token the site's owner approves.`,
     ...section('Navigation', index.navigation, link),
     ...section('Pages', index.pages, link),
     ...section('Posts', index.posts, link),

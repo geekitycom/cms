@@ -124,6 +124,7 @@ export interface RequestPublicOptions {
   readonly body?: string;
   readonly userAgent?: string | undefined;
   readonly allowed?: ((url: URL) => boolean) | undefined;
+  readonly sign?: ((request: Request) => Promise<Request>) | undefined;
 }
 
 export interface PublicAnswer {
@@ -158,7 +159,10 @@ export async function requestPublic(
 
       const response = await fetch(url, {
         method,
-        headers,
+        headers:
+          options.sign === undefined
+            ? headers
+            : (await options.sign(new Request(url, { method, headers, body }))).headers,
         body,
         redirect: 'manual',
         signal: options.signal,
@@ -206,11 +210,11 @@ export function webUrl(value: string): URL | undefined {
 }
 
 /**
- * A response body no bigger than the limit. A bigger one is `undefined` when
- * refused, or its first `maxBytes` when truncated.
+ * A response or request body no bigger than the limit. A bigger one is
+ * `undefined` when refused, or its first `maxBytes` when truncated.
  */
-async function readWithin(
-  response: Response,
+export async function readWithin(
+  response: Pick<Response, 'headers' | 'body'>,
   maxBytes: number,
   overflow: 'refuse' | 'truncate',
 ): Promise<{ body: Uint8Array; truncated: boolean } | undefined> {

@@ -1,8 +1,9 @@
 /**
  * Users > App activity: the recent requests apps made to the
- * IndieAuth and Micropub endpoints, newest first, failures marked, and one
- * request in full. Where a site owner looks when an app will not sign in or
- * post. Any signed-in admin may read it, as with the other admin screens.
+ * IndieAuth and Micropub endpoints and the MCP tools agents called, newest
+ * first, failures marked, and one in full. Where a site owner looks when an
+ * app will not sign in or post, or to see what an agent did. Any signed-in
+ * admin may read it, as with the other admin screens.
  */
 import type { Hono } from 'hono';
 
@@ -24,7 +25,16 @@ const ENDPOINT_LABELS: Readonly<Record<ActivityEndpoint, string>> = {
   token: 'Token',
   micropub: 'Micropub',
   media: 'Media',
+  mcp: 'MCP',
 };
+
+export function activityEntryUrl(entry: ActivityEntry): string {
+  return `${APP_ACTIVITY_PATH}/${entry.id}`;
+}
+
+export function activityLabel(entry: ActivityEntry): string {
+  return `${ENDPOINT_LABELS[entry.endpoint]} ${entry.action}`;
+}
 
 /** The query that narrows the list to failures. */
 const FAILURES_QUERY = 'show=failures';
@@ -72,7 +82,7 @@ export function mountAppActivity(app: Hono<GeekityEnv>, options: { render: Admin
   });
 }
 
-async function freshEntries(dataDir: string, now: Date): Promise<ActivityEntry[]> {
+export async function freshEntries(dataDir: string, now: Date): Promise<ActivityEntry[]> {
   return (await readActivityLog(dataDir)).filter((entry) => isFresh(entry, now));
 }
 
@@ -80,11 +90,11 @@ async function freshEntries(dataDir: string, now: Date): Promise<ActivityEntry[]
 function row(entry: ActivityEntry, timezone: string) {
   const failed = isFailure(entry);
   return {
-    url: `${APP_ACTIVITY_PATH}/${entry.id}`,
+    url: activityEntryUrl(entry),
     when: { iso: entry.at, text: formatInTimezone(entry.at, timezone) },
     endpoint: ENDPOINT_LABELS[entry.endpoint],
     action: entry.action,
-    app: entry.clientId,
+    app: entry.clientId ?? entry.tokenName,
     user: entry.user,
     status: entry.status,
     failed,

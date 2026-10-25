@@ -1,13 +1,32 @@
 import { clientIdentifier, sameClient } from '../util/client-id.ts';
 
 /**
- * The scopes a client may ask for: the profile ones and the
- * Micropub ones a token is issued for.
+ * The scopes a client may ask for: the profile ones, the Micropub ones, and
+ * the ones only MCP tools need.
  */
-export const SCOPES = ['profile', 'email', 'create', 'update', 'delete', 'media'] as const;
+export const SCOPES = [
+  'profile',
+  'email',
+  'create',
+  'update',
+  'delete',
+  'media',
+  'publish',
+  'inspect',
+  'repair',
+] as const;
 
 /** A scope this site can grant. */
 export type Scope = (typeof SCOPES)[number];
+
+export const MICROPUB_SCOPES = [
+  'profile',
+  'email',
+  'create',
+  'update',
+  'delete',
+  'media',
+] as const satisfies readonly Scope[];
 
 export type CodeChallenge =
   { readonly method: 'S256'; readonly value: string } | { readonly method: 'none' };

@@ -18,6 +18,7 @@ import type {
 import type { SiteRecords } from '../content/write.ts';
 import type { DocumentChange, SyncResult } from '../content/sync.ts';
 import type { DeliveryService } from '../federation/delivery.ts';
+import type { SiteFederation } from '../federation/federation.ts';
 import type { JobQueue } from '../jobs/types.ts';
 import type { ActivityNote } from './indieauth-activity-log.ts';
 import type { IndieAuthState } from '../indieauth/grants.ts';
@@ -122,6 +123,7 @@ export interface GeekityEnv {
      * away from any request.
      */
     delivery: DeliveryService;
+    federation: SiteFederation;
     jobs: JobQueue;
     /**
      * The site's relay subscriptions (FEP-ae0c), so a save of the settings can

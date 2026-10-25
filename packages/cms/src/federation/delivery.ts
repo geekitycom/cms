@@ -78,6 +78,11 @@ export interface DeliveryReport {
   readonly held: boolean;
 }
 
+export interface ResendRecipients {
+  readonly actors: ReadonlySet<string>;
+  readonly missedAnnouncement: boolean;
+}
+
 /** Where a delivery service reports what it could not do. `console` will do. */
 export interface DeliveryLogger {
   warn(message: string): void;
@@ -145,8 +150,11 @@ export interface DeliveryService {
    * or the post is one nobody outside the site has ever been told about and is
    * not published now, so there is neither a copy to withdraw nor anything to
    * announce.
+   *
+   * Recipients in `to` that missed the announcement are sent it again rather
+   * than an `Update`, which a peer drops for a post it never stored.
    */
-  resend(slug: string): Promise<DeliveryReport | undefined>;
+  resend(slug: string, to?: ResendRecipients): Promise<DeliveryReport | undefined>;
   /**
    * Bring the followers' copies of the posts that cite a page up to date with
    * its newly stored context: an `Update` for each served, announced post
@@ -250,6 +258,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     activity: Activity,
     about: Document,
     also: readonly DeliveryTarget[] = [],
+    to?: ReadonlySet<string>,
   ): Promise<DeliveryReport> {
     const activityId = activity.id?.href;
     if (activityId === undefined) {
@@ -266,7 +275,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         slug: about.slug,
       },
       also,
-      { relays: visibilityOf(about) === 'public' },
+      { relays: visibilityOf(about) === 'public', to },
     );
   }
 
@@ -296,6 +305,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     context: Context<FederationContextData>,
     document: Document,
     shape: Shape,
+    to?: ReadonlySet<string>,
   ): Promise<DeliveryReport> {
     if (shape.kind === 'object') {
       const id = await claimObjectId(config.contentDir, postObjectId(document, config.baseUrl));
@@ -304,9 +314,16 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         postCreateActivity(context, document, shape.replyTo),
         document,
         { ...shape, id },
+        to,
       );
     }
-    return await send(context, shape.citing.activity, document, citedAuthor(shape.citing.author));
+    return await send(
+      context,
+      shape.citing.activity,
+      document,
+      citedAuthor(shape.citing.author),
+      to,
+    );
   }
 
   /** Take a post back: a `Delete` of its object, or an `Undo` of its `Like` or `Announce`. */
@@ -314,6 +331,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     context: Context<FederationContextData>,
     document: Document,
     shape: Shape,
+    to?: ReadonlySet<string>,
   ): Promise<DeliveryReport> {
     const deleted = store.now().toISOString();
     if (shape.kind === 'object') {
@@ -327,6 +345,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         postDeleteActivity(context, document, deleted),
         document,
         postTargets(document, shape),
+        to,
       );
     }
     return await send(
@@ -334,6 +353,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       undoActivity(shape.citing.activity, deleted),
       document,
       citedAuthor(shape.citing.author),
+      to,
     );
   }
 
@@ -353,12 +373,14 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     document: Document,
     shape: ObjectShape,
     revision?: string,
+    to?: ReadonlySet<string>,
   ): Promise<DeliveryReport> {
     return await sendAndRecordObject(
       context,
       postUpdateActivity(context, document, revision, shape.replyTo),
       document,
       shape,
+      to,
     );
   }
 
@@ -371,8 +393,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     activity: Activity,
     document: Document,
     shape: ObjectShape,
+    to?: ReadonlySet<string>,
   ): Promise<DeliveryReport> {
-    const report = await send(context, activity, document, postTargets(document, shape));
+    const report = await send(context, activity, document, postTargets(document, shape), to);
     const object = await activity.getObject();
     if (object !== null) sentThisProcess.set(shape.id, await fingerprint(object));
     return report;
@@ -398,10 +421,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     activity: Activity,
     about: ActivityAbout,
     also: readonly DeliveryTarget[] = [],
-    { relays = true }: { relays?: boolean } = {},
+    { relays = true, to }: { relays?: boolean; to?: ReadonlySet<string> | undefined } = {},
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
-    const targets = fanOutTargets(deliveryTargets(admin, sender.username, { relays }), also);
+    const targets = fanOutTargets(deliveryTargets(admin, sender.username, { relays }), also).filter(
+      (target) => to === undefined || target.actorIds.some((actor) => to.has(actor)),
+    );
     const held =
       targets.length > 0 &&
       (await holdOutbound(settings, config, {
@@ -551,7 +576,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         });
     },
 
-    async resend(slug) {
+    async resend(slug, to) {
       const document = postBySlug(store, slug);
       if (document === undefined) return undefined;
 
@@ -568,7 +593,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
           // A draft, a trashed post, or one re-dated into the future: every
           // one of them is gone as far as a follower is concerned, and the
           // file still carries the id their copy is filed under.
-          return await withdraw(context, document, await shapeOf(context, document));
+          return await withdraw(context, document, await shapeOf(context, document), to?.actors);
         }
 
         requireSender(context, document);
@@ -576,15 +601,20 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         const shape = await shapeOf(context, stamped);
         // A like or a repost is sent again as it is: its id is one a peer
         // that already holds it recognises, and one that missed it does not.
-        if (!announced || shape.kind === 'citing' || wasDeleted(shape.id)) {
-          return await announce(context, stamped, shape);
+        if (
+          !announced ||
+          to?.missedAnnouncement === true ||
+          shape.kind === 'citing' ||
+          wasDeleted(shape.id)
+        ) {
+          return await announce(context, stamped, shape, to?.actors);
         }
 
         // The moment rather than the content hash, which is what a save uses:
         // the point of a resend is that the followers hear about a revision
         // they have already been sent and ignored, or never received at all,
         // and an activity id a peer has seen is one it is entitled to drop.
-        return await revise(context, stamped, shape, store.now().toISOString());
+        return await revise(context, stamped, shape, store.now().toISOString(), to?.actors);
       });
     },
 
@@ -685,7 +715,10 @@ export function deliveryTargets(
  * standing in front of a trashed one — and it is the right fallback because a
  * post that was never announced is not one a resend has anything to say about.
  */
-function postBySlug(store: DocumentLookup & CatalogReader, slug: string): Document | undefined {
+export function postBySlug(
+  store: DocumentLookup & CatalogReader,
+  slug: string,
+): Document | undefined {
   const direct = store.getBySlug(slug);
   if (direct?.type === 'post') return direct;
   return store.listFederated().find((document) => document.slug === slug);

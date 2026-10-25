@@ -3,7 +3,7 @@ import { jobName } from '../jobs/types.ts';
 import type { JobDefinition, Json } from '../jobs/types.ts';
 import { isRecord } from '../util/guards.ts';
 import type { WebmentionService } from '../webmention/service.ts';
-import type { DeliveryService } from './delivery.ts';
+import type { DeliveryReport, DeliveryService } from './delivery.ts';
 
 export type ResendPayload = {
   readonly slugs: readonly string[] | 'all';
@@ -61,17 +61,7 @@ export function resendJob(services: ResendJobServices): JobDefinition<ResendPayl
         context.signal.throwIfAborted();
         const report = await services.delivery.resend(slug);
         const links = payload.webmentions ? await services.webmentions.send(slug) : undefined;
-        const activity: ResendActivity | null =
-          report === undefined
-            ? null
-            : {
-                activityType: report.activityType,
-                heldByDevMode: report.held,
-                inboxes: report.deliveries.length,
-                reached: countOf(report.deliveries, 'sent'),
-                queued: countOf(report.deliveries, 'queued'),
-                failed: countOf(report.deliveries, 'failed'),
-              };
+        const activity = report === undefined ? null : resendActivity(report);
         const webmentions: ResendWebmentions | null =
           links === undefined || links.sent.length === 0
             ? null
@@ -90,6 +80,17 @@ export function resendJob(services: ResendJobServices): JobDefinition<ResendPayl
       }
       return { posts };
     },
+  };
+}
+
+export function resendActivity(report: DeliveryReport): ResendActivity {
+  return {
+    activityType: report.activityType,
+    heldByDevMode: report.held,
+    inboxes: report.deliveries.length,
+    reached: countOf(report.deliveries, 'sent'),
+    queued: countOf(report.deliveries, 'queued'),
+    failed: countOf(report.deliveries, 'failed'),
   };
 }
 

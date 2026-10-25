@@ -46,6 +46,7 @@ import { settleImageVariants } from '../images/variants.ts';
 import { stripMetadataJob } from '../content/metadata/strip-job.ts';
 import { siteExportJob } from '../export/export-job.ts';
 import { resendJob } from '../federation/resend-job.ts';
+import { retryDeliveriesJob } from '../federation/retry-job.ts';
 import { JOBS, dataPath } from '../files/data-files.ts';
 import { createFileRecords } from '../jobs/file-records.ts';
 import { createInProcessTransport } from '../jobs/in-process.ts';
@@ -424,6 +425,7 @@ export function createServices({
     jobs: [
       stripMetadataJob(resolved.contentDir),
       resendJob({ store, delivery, webmentions }),
+      retryDeliveriesJob({ store, admin, config: resolved, delivery }),
       siteExportJob({ config: resolved, settings, plugins }, resolved.now),
       fontFetchJob(fonts),
       ...(resolved.jobs.definitions ?? []),

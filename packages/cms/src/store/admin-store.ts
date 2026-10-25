@@ -50,11 +50,19 @@ export type {
 } from './comments.ts';
 export type { ConversationWrite } from './conversation.ts';
 export { DELIVERY_STATUSES } from './deliveries.ts';
-export type { Delivery, DeliveryOutcome, DeliveryStatus, NewDelivery } from './deliveries.ts';
+export type {
+  Delivery,
+  DeliveryOutcome,
+  DeliverySearch,
+  DeliveryStatus,
+  NewDelivery,
+  SentActivity,
+} from './deliveries.ts';
 export type { Follower, NewFollower } from './followers.ts';
 export type {
   InboxActivity,
   InboxInteraction,
+  InboxSearch,
   InteractionCount,
   LatestInteraction,
   NewInboxActivity,
@@ -62,7 +70,7 @@ export type {
 export type { ActorProfile, StoredActorProfile } from './profiles.ts';
 export { RELAY_STATES } from './relays.ts';
 export type { NewRelay, Relay, RelayState } from './relays.ts';
-export type { ListPageOptions } from './rows.ts';
+export type { ListPageOptions, Page } from './rows.ts';
 export { openAdminDatabase } from './schema.ts';
 export { SESSION_ID_BYTES } from './sessions.ts';
 export type { CreateSessionInput, FlashKind, FlashMessage, Session } from './sessions.ts';

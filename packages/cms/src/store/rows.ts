@@ -5,6 +5,12 @@ export interface ListPageOptions {
   offset?: number | undefined;
 }
 
+/** One page of a search, and how many rows match it on every page. */
+export interface Page<T> {
+  readonly total: number;
+  readonly items: T[];
+}
+
 /**
  * What a `LIMIT` means when the caller named none. SQLite reads a negative
  * limit as "every row", which is what an unpaged list asks for.

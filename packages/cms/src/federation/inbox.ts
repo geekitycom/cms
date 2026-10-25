@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Context, InboxContext, SenderKeyPair } from '@fedify/fedify';
+import type { Context, DocumentLoader, InboxContext, SenderKeyPair } from '@fedify/fedify';
 import {
   Accept,
   Activity,
@@ -55,7 +55,7 @@ export async function handleFollow(context: SiteInboxContext, follow: Follow): P
 
   const actor = await follow.getActor(dereference(context));
   if (actor === null) return;
-  const follower = await followerFrom(context, actor);
+  const follower = await followerFrom(actor, dereference(context));
   if (follower === undefined) return;
 
   await addFollower(recordsOf(context), followed.username, follower);
@@ -368,11 +368,11 @@ function recordsOf(context: SiteInboxContext): FederationRecords {
  * both are the minimum ActivityPub asks of an actor.
  */
 export async function followerFrom(
-  context: SiteInboxContext,
   actor: Actor,
+  loaders: { documentLoader: DocumentLoader; contextLoader: DocumentLoader },
 ): Promise<Omit<NewFollower, 'username'> | undefined> {
   if (actor.inboxId === null) return undefined;
-  const profile = await profileFrom(actor, dereference(context));
+  const profile = await profileFrom(actor, loaders);
   if (profile === undefined) return undefined;
 
   return {

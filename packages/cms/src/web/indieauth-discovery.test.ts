@@ -84,6 +84,9 @@ describe('the authorization server metadata', () => {
         'update',
         'delete',
         'media',
+        'publish',
+        'inspect',
+        'repair',
       ]);
       assert.deepEqual(metadata['grant_types_supported'], ['authorization_code', 'refresh_token']);
       assert.deepEqual(metadata['response_types_supported'], ['code']);

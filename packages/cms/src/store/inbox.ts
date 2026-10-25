@@ -6,7 +6,7 @@ import { repliesKey } from '../content/guids.ts';
 import { REPLY_ACTIVITY_TYPE, replyIdOf, replyTargetOf } from './inbox-replies.ts';
 import type { ConversationWrite } from './conversation.ts';
 import { allRows, getRow, inTransaction, NO_LIMIT, nullableText, readCount } from './rows.ts';
-import type { ListPageOptions, Row } from './rows.ts';
+import type { ListPageOptions, Page, Row } from './rows.ts';
 
 /**
  * Which rows of the inbox log are replies: a `Create` that named something it
@@ -134,6 +134,32 @@ const INTERACTION_KINDS: Readonly<Record<string, InboxInteraction['kind']>> = {
   [REPLY_ACTIVITY_TYPE]: 'reply',
 };
 
+/** What {@link InboxStore.searchInboxActivities} narrows by. Every field given must match. */
+export interface InboxSearch {
+  readonly id?: number | undefined;
+  readonly activityId?: string | undefined;
+  readonly type?: string | undefined;
+  readonly actor?: string | undefined;
+  readonly object?: string | undefined;
+  readonly inReplyTo?: string | undefined;
+  readonly recipient?: string | undefined;
+  /** Received at or after this instant. */
+  readonly since?: string | undefined;
+  /** Received before this instant. */
+  readonly until?: string | undefined;
+}
+
+const INBOX_SEARCH = `
+  WHERE (:id IS NULL OR id = :id)
+    AND (:activityId IS NULL OR activity_id = :activityId)
+    AND (:type IS NULL OR activity_type = :type)
+    AND (:actor IS NULL OR actor_id = :actor)
+    AND (:object IS NULL OR object_id = :object)
+    AND (:inReplyTo IS NULL OR in_reply_to = :inReplyTo)
+    AND (:recipient IS NULL OR recipient = :recipient)
+    AND (:since IS NULL OR received_at >= :since)
+    AND (:until IS NULL OR received_at < :until)`;
+
 export interface InboxStore {
   /** How many activities the inbound log holds. */
   countInboxActivities(): number;
@@ -159,6 +185,8 @@ export interface InboxStore {
    * machines holding the same files.
    */
   replaceInboxActivities(activities: readonly NewInboxActivity[]): void;
+  /** The logged activities that match, newest first, one page of them. */
+  searchInboxActivities(search: InboxSearch, page?: ListPageOptions): Page<InboxActivity>;
   /** How many logged activities are replies to anything at all. */
   countReplies(): number;
   /** Every logged reply, newest first, optionally one page of them. */
@@ -225,6 +253,12 @@ export function openInboxStore(
         json = excluded.json
       RETURNING *
     `),
+    searchInboxActivities: db.prepare(`
+      SELECT * FROM ap_inbox ${INBOX_SEARCH}
+      ORDER BY received_at DESC, id DESC
+      LIMIT :limit OFFSET :offset
+    `),
+    countInboxSearch: db.prepare(`SELECT COUNT(*) AS count FROM ap_inbox ${INBOX_SEARCH}`),
     countReplies: db.prepare(`SELECT COUNT(*) AS count FROM ap_inbox WHERE ${IS_REPLY}`),
     listReplies: db.prepare(`
       SELECT * FROM ap_inbox WHERE ${IS_REPLY}
@@ -316,6 +350,26 @@ export function openInboxStore(
           );
         }
       });
+    },
+
+    searchInboxActivities(search, page = {}) {
+      const filter = {
+        id: search.id ?? null,
+        activityId: search.activityId ?? null,
+        type: search.type ?? null,
+        actor: search.actor ?? null,
+        object: search.object ?? null,
+        inReplyTo: search.inReplyTo ?? null,
+        recipient: search.recipient ?? null,
+        since: search.since ?? null,
+        until: search.until ?? null,
+      };
+      return {
+        total: Number(statements.countInboxSearch.get(filter)?.['count'] ?? 0),
+        items: statements.searchInboxActivities
+          .all({ ...filter, limit: page.limit ?? NO_LIMIT, offset: page.offset ?? 0 })
+          .map(toInboxActivity),
+      };
     },
 
     countReplies() {

@@ -1,6 +1,7 @@
 import { STRIP_METADATA_JOB } from '../content/metadata/strip-job.ts';
 import { SITE_EXPORT_JOB_NAME } from '../export/site-export.ts';
 import { RESEND_JOB } from '../federation/resend-job.ts';
+import { RETRY_DELIVERIES_JOB } from '../federation/retry-job.ts';
 import type { JobStatus } from '../jobs/types.ts';
 import type { PluginScreenCell } from '../plugin.ts';
 import { countRetryingDeliveries } from '../store/queue-database.ts';
@@ -16,6 +17,7 @@ const LONG_RUNNING_MS = 60 * 60 * 1000;
 const JOB_PANELS: Readonly<Record<string, { readonly label: string; readonly href: string }>> = {
   [STRIP_METADATA_JOB.name]: { label: 'Metadata sweep', href: STRIP_METADATA_PANEL },
   [RESEND_JOB.name]: { label: 'Resend', href: RESEND_PANEL },
+  [RETRY_DELIVERIES_JOB.name]: { label: 'Retry deliveries', href: DELIVERY_PANEL },
   [SITE_EXPORT_JOB_NAME]: { label: 'Site export', href: EXPORT_PATH },
 };
 

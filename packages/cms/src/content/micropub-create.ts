@@ -1,16 +1,16 @@
-import { blankForm } from '../content/document-form.ts';
-import type { EditorForm } from '../content/document-form.ts';
-import { POST_KIND } from '../content/document-kind.ts';
-import type { DocumentKind } from '../content/document-kind.ts';
-import type { KeptProperties } from '../content/kept-properties.ts';
-import { checkinFromMicropub, locationFromMicropub, postLocation } from '../content/location.ts';
-import type { PostLocation } from '../content/location.ts';
-import { locationForm } from '../content/location-form.ts';
-import type { MicropubRequest, MicropubType } from '../content/post-fields.ts';
-import { isVisibility } from '../content/visibility.ts';
-import { normalizeBody } from '../content/writer.ts';
-import type { SyndicationTarget } from '../content/syndicate-to.ts';
-import { cleanMarkdown, markdownFromHtml } from '../content/html-to-markdown.ts';
+import { blankForm } from './document-form.ts';
+import type { EditorForm } from './document-form.ts';
+import { POST_KIND } from './document-kind.ts';
+import type { DocumentKind } from './document-kind.ts';
+import type { KeptProperties } from './kept-properties.ts';
+import { checkinFromMicropub, locationFromMicropub, postLocation } from './location.ts';
+import type { PostLocation } from './location.ts';
+import { locationForm } from './location-form.ts';
+import type { MicropubRequest, MicropubType } from './post-fields.ts';
+import { isVisibility } from './visibility.ts';
+import { normalizeBody } from './writer.ts';
+import type { SyndicationTarget } from './syndicate-to.ts';
+import { cleanMarkdown, markdownFromHtml } from './html-to-markdown.ts';
 
 /**
  * A Micropub create, whichever way it was encoded: the one

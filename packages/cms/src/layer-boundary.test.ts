@@ -55,7 +55,7 @@ const LAYERS: readonly Layer[] = [
   { name: 'supervisor', units: ['supervisor/'] },
   { name: 'public site', units: ['web/'] },
   { name: 'admin', units: ['admin/'] },
-  { name: 'endpoints and middleware', units: ['micropub/', 'access-log.ts', 'drain.ts'] },
+  { name: 'endpoints and middleware', units: ['micropub/', 'mcp/', 'access-log.ts', 'drain.ts'] },
   { name: 'publish pings', units: ['notify.ts', 'indexnow.ts'] },
   { name: 'composition root', units: ['cms/'] },
   {
