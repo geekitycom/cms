@@ -5,6 +5,7 @@ import { nullable } from '../../util/json-schema.ts';
 import { defineTool } from '../tools.ts';
 import type { ToolSite } from '../tools.ts';
 import {
+  counted,
   instants,
   PAGE_INPUT,
   PAGE_OUTPUT,
@@ -16,7 +17,7 @@ import {
 import { ANY_OBJECT, READ_ONLY } from './schemas.ts';
 
 /** Resolve one of the site's own object ids to the post behind it, as the federation screen does. */
-export function postResolver(site: ToolSite): (objectId: string | null) => LocalPost | null {
+function postResolver(site: ToolSite): (objectId: string | null) => LocalPost | null {
   return localPosts(
     site.store,
     site.config.baseUrl,
@@ -139,7 +140,13 @@ export const inboxSearch = defineTool({
     }));
     return Promise.resolve({
       ok: true,
-      summary: `${String(page.total)} logged ${page.total === 1 ? 'activity matches' : 'activities match'}; showing ${String(activities.length)} from ${String(at.offset)}.`,
+      summary: counted(
+        page.total,
+        'logged activity matches',
+        'logged activities match',
+        activities.length,
+        at.offset,
+      ),
       structured: { ...pageFields(page, at), activities },
     });
   },

@@ -6,8 +6,8 @@ import { absoluteUrl } from '../../util/url.ts';
 import { documentSiteFrom } from '../../web/document-site.ts';
 import { POST_INPUT } from '../inspect/post.ts';
 import { ANY_OBJECT } from '../inspect/schemas.ts';
-import { defineTool } from '../tools.ts';
-import { isRefused, ownPost, POST_WRITTEN, refused, sourceSite, unsaved } from './shared.ts';
+import { defineTool, isRefused, refused } from '../tools.ts';
+import { ownPost, POST_WRITTEN, sourceSite, unsaved } from './shared.ts';
 
 export const updatePost = defineTool({
   name: 'update_post',

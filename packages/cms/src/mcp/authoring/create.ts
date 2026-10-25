@@ -4,10 +4,10 @@ import { createForm, fromJson, propertyName } from '../../content/micropub-creat
 import { absoluteUrl } from '../../util/url.ts';
 import { documentSiteFrom } from '../../web/document-site.ts';
 import { ANY_OBJECT } from '../inspect/schemas.ts';
-import { defineTool } from '../tools.ts';
-import { POST_WRITTEN, refused } from './shared.ts';
+import { defineTool, refused } from '../tools.ts';
+import { POST_WRITTEN } from './shared.ts';
 
-export const MICROPUB_PROPERTIES = {
+const MICROPUB_PROPERTIES = {
   ...ANY_OBJECT,
   description:
     'Microformats2 properties as Micropub JSON has them, each a list of values: {"content": ["Hello"], "category": ["a", "b"]}. Any property the site’s Micropub endpoint takes, such as name, content, summary, category, in-reply-to, like-of, repost-of, bookmark-of, photo, rsvp, location, published, visibility and mp-slug.',

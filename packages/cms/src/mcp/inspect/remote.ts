@@ -4,6 +4,7 @@ import { userForAuthor } from '../../content/authors.ts';
 import { senderKeyPairs } from '../../federation/actor.ts';
 import { listUsers, primaryUser } from '../../site/users.ts';
 import { messageOf } from '../../util/errors.ts';
+import { isRecord } from '../../util/guards.ts';
 import { nullable } from '../../util/json-schema.ts';
 import type { FromSchema } from '../../util/json-schema.ts';
 import type { HostLookup } from '../../util/public-address.ts';
@@ -145,8 +146,8 @@ function selfLink(jrd: Record<string, unknown> | null): string | undefined {
   const links = jrd?.['links'];
   if (!Array.isArray(links)) return undefined;
   for (const link of links as unknown[]) {
-    if (typeof link !== 'object' || link === null) continue;
-    const { rel, type, href } = link as Record<string, unknown>;
+    if (!isRecord(link)) continue;
+    const { rel, type, href } = link;
     if (rel === 'self' && typeof type === 'string' && ACTIVITY_TYPE.test(type)) {
       if (typeof href === 'string') return href;
     }
@@ -194,9 +195,7 @@ async function exchange(
 function asObject(body: string): Record<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(body);
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
+    return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
   }

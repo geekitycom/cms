@@ -1,4 +1,5 @@
 import type { McpScope, McpToolOutcome } from '../plugin.ts';
+import { isRecord } from '../util/guards.ts';
 import { listedTool } from './tools.ts';
 import type { ToolCall, ToolRegistry } from './tools.ts';
 
@@ -187,10 +188,6 @@ function malformed(text: string): McpReply {
     kind: 'malformed',
     message: failure(null, { code: JSON_RPC_ERRORS.invalidRequest, message: text }),
   };
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isRequestId(value: unknown): value is RequestId {

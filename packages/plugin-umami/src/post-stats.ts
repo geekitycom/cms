@@ -129,10 +129,6 @@ function counts(totals: UmamiTotals) {
 /** The path a reader's browser sent Umami, from a path or a full URL; `undefined` for neither. */
 function pathOf(asked: string): string | undefined {
   if (asked.startsWith('/')) return asked.split(/[?#]/)[0];
-  try {
-    const url = new URL(asked);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.pathname : undefined;
-  } catch {
-    return undefined;
-  }
+  const url = URL.parse(asked);
+  return url?.protocol === 'http:' || url?.protocol === 'https:' ? url.pathname : undefined;
 }

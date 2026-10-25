@@ -3,6 +3,7 @@
  * enough to check arguments against without a validator library, and typed
  * so a tool's `run` is handed exactly the shape its schema promises.
  */
+import { isRecord } from './guards.ts';
 
 interface Described {
   readonly description?: string;
@@ -116,15 +117,12 @@ function numberProblems(schema: NumberSchema, value: unknown, name: string): str
 }
 
 function objectProblems(schema: ObjectSchema, value: unknown, name: string | undefined): string[] {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return [`${name ?? 'the arguments'} must be an object.`];
-  }
-  const fields = value as Readonly<Record<string, unknown>>;
+  if (!isRecord(value)) return [`${name ?? 'the arguments'} must be an object.`];
   const labelOf = (key: string): string => (name === undefined ? key : `${name}.${key}`);
   const missing = (schema.required ?? [])
-    .filter((key) => fields[key] === undefined)
+    .filter((key) => value[key] === undefined)
     .map((key) => `${labelOf(key)} is required.`);
-  const present = Object.entries(fields).flatMap(([key, field]) => {
+  const present = Object.entries(value).flatMap(([key, field]) => {
     if (Object.hasOwn(schema.properties, key)) {
       return problemsWith(schema.properties[key] as JsonSchema, field, labelOf(key));
     }

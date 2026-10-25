@@ -45,6 +45,16 @@ export interface ScopeShortfall {
 
 type ToolAnswer<O> = McpToolOutcome<O> | ScopeShortfall;
 
+export type Refused = Extract<McpToolOutcome<never>, { ok: false }>;
+
+export function refused(message: string): Refused {
+  return { ok: false, message };
+}
+
+export function isRefused<T extends object>(found: T | Refused): found is Refused {
+  return 'ok' in found;
+}
+
 interface ToolSpec<I extends ObjectSchema, O extends ObjectSchema> {
   readonly name: string;
   readonly title: string;

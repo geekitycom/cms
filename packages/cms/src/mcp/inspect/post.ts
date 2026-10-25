@@ -1,5 +1,6 @@
 import type { Document } from '../../content/document.ts';
 import { postObjectId } from '../../content/guids.ts';
+import { permalinkOfObjectId } from '../../content/permalinks.ts';
 import { postLabel } from '../../content/post-type.ts';
 import { isFederatedDocument, isGone } from '../../content/served.ts';
 import { isTrashedPath } from '../../content/store.ts';
@@ -15,8 +16,8 @@ import { DELIVERY_STATUSES } from '../../store/deliveries.ts';
 import { nullable } from '../../util/json-schema.ts';
 import { absoluteUrl } from '../../util/url.ts';
 import { federationContextData } from '../../web/federation-routes.ts';
-import { defineTool } from '../tools.ts';
-import type { ToolSite } from '../tools.ts';
+import { defineTool, isRefused, refused } from '../tools.ts';
+import type { Refused, ToolSite } from '../tools.ts';
 import { PAGE_INPUT, PAGE_OUTPUT, PAGE_REQUIRED, pageAt, pageFields } from './paging.ts';
 import { ANY_OBJECT, DELIVERY, READ_ONLY, STATUS_COUNTS } from './schemas.ts';
 
@@ -25,22 +26,22 @@ export const POST_INPUT = {
   description: 'The post: its slug, its permalink, or any object id it was federated under.',
 } as const;
 
-/** The post a slug, a permalink or an object id names, trashed ones included. */
-export function findPost(site: ToolSite, reference: string): Document | undefined {
-  let url: URL | undefined;
-  try {
-    url = new URL(reference);
-  } catch {
-    url = undefined;
-  }
+/**
+ * The post a slug, a permalink or an object id names, trashed ones included,
+ * or the refusal an agent is told when none does.
+ */
+export function findPost(site: ToolSite, reference: string): Document | Refused {
+  const url = URL.parse(reference);
+  const permalink =
+    url === null
+      ? undefined
+      : permalinkOfObjectId(`${url.origin}${url.pathname}`, site.config.baseUrl);
   const found =
-    url === undefined
+    url === null
       ? site.store.getBySlug(reference)
       : (site.store.getByStoredObjectId(naturalObjectId(reference)) ??
-        (url.origin === new URL(site.config.baseUrl).origin
-          ? site.store.getByPermalink(decodeURIComponent(url.pathname))
-          : undefined));
-  return found?.type === 'post' ? found : undefined;
+        (permalink === undefined ? undefined : site.store.getByPermalink(permalink)));
+  return found?.type === 'post' ? found : refused(`No post answers to ${reference}.`);
 }
 
 type PeerView =
@@ -148,9 +149,7 @@ export const postFederation = defineTool({
   },
   run: async (args, { site }) => {
     const document = findPost(site, args.post);
-    if (document === undefined) {
-      return { ok: false, message: `No post answers to ${args.post}.` };
-    }
+    if (isRefused(document)) return document;
     const { baseUrl, contentDir } = site.config;
     const record = readObjectIds(contentDir);
     const natural = postObjectId(document, baseUrl);

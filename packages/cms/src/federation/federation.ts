@@ -1,5 +1,3 @@
-import { PACKAGE_VERSION } from '../util/package-version.ts';
-
 import { createFederation, MemoryKvStore } from '@fedify/fedify';
 import type {
   Context,
@@ -11,6 +9,7 @@ import type {
 import { Create, type Object as APObject, QuoteAuthorization } from '@fedify/vocab';
 
 import type { AdminStore } from '../store/admin-store.ts';
+import { PACKAGE_VERSION } from '../util/package-version.ts';
 import type { JsonLdDocument } from '../plugin.ts';
 import type { FederationOverrides, ResolvedConfig } from '../config.ts';
 import type { SiteSettings } from '../site/settings.ts';

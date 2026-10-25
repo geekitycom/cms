@@ -1,3 +1,4 @@
+import { READ_ONLY } from './inspect/schemas.ts';
 import { callingClient, defineTool } from './tools.ts';
 
 /** Who the connection acts as, through which client, with which scopes. */
@@ -7,12 +8,7 @@ export const whoami = defineTool({
   description:
     'Names the site user this connection acts as, the client or token it was issued to, and the scopes it was granted.',
   scope: 'profile',
-  annotations: {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
+  annotations: READ_ONLY,
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   outputSchema: {
     type: 'object',

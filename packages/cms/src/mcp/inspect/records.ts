@@ -6,6 +6,7 @@ import { RELAY_STATES } from '../../store/relays.ts';
 import { nullable } from '../../util/json-schema.ts';
 import { defineTool } from '../tools.ts';
 import {
+  counted,
   instants,
   PAGE_INPUT,
   PAGE_OUTPUT,
@@ -17,10 +18,6 @@ import {
   within,
 } from './paging.ts';
 import { READ_ONLY } from './schemas.ts';
-
-function counted(total: number, noun: string, plural: string, shown: number, offset: number) {
-  return `${String(total)} ${total === 1 ? noun : plural}; showing ${String(shown)} from ${String(offset)}.`;
-}
 
 export const followers = defineTool({
   name: 'followers',

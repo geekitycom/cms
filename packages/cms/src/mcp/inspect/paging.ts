@@ -54,6 +54,17 @@ export function pageFields<T>(
   return { total: page.total, nextOffset: next < page.total ? next : null };
 }
 
+/** A page's summary: how many match, and which of them it shows. */
+export function counted(
+  total: number,
+  noun: string,
+  plural: string,
+  shown: number,
+  offset: number,
+): string {
+  return `${String(total)} ${total === 1 ? noun : plural}; showing ${String(shown)} from ${String(offset)}.`;
+}
+
 /** One page of records already in memory. */
 export function pageOfList<T>(items: readonly T[], at: PageAt): Page<T> {
   return { total: items.length, items: items.slice(at.offset, at.offset + at.limit) };

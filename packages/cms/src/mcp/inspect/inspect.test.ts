@@ -158,6 +158,10 @@ describe('the inspect tools', () => {
 
     const missing = await call(cms, token, 'post_federation', { post: 'nope' });
     assert.equal(missing.isError, true);
+
+    const malformed = `${BASE}/2026/03/%E0%A4%A/`;
+    const unmatched = await call(cms, token, 'post_federation', { post: malformed });
+    assert.equal(unmatched.text, `No post answers to ${malformed}.`);
   });
 
   it('query followers, relays, quote approvals and webmentions with the same filters and paging', async () => {

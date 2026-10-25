@@ -2,8 +2,8 @@ import { micropubType, sourceProperties } from '../../content/micropub-update.ts
 import { absoluteUrl } from '../../util/url.ts';
 import { POST_INPUT } from '../inspect/post.ts';
 import { ANY_OBJECT, READ_ONLY } from '../inspect/schemas.ts';
-import { defineTool } from '../tools.ts';
-import { isRefused, ownPost, sourceSite } from './shared.ts';
+import { defineTool, isRefused } from '../tools.ts';
+import { ownPost, sourceSite } from './shared.ts';
 
 export const getPostSource = defineTool({
   name: 'get_post_source',

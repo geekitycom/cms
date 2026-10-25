@@ -6,6 +6,7 @@ import { siteLoaders } from '../../federation/site-loaders.ts';
 import { messageOf } from '../../util/errors.ts';
 import { nullable } from '../../util/json-schema.ts';
 import { federationContextData } from '../../web/federation-routes.ts';
+import { webUrl } from '../../webmention/fetch-public.ts';
 import { defineTool } from '../tools.ts';
 import { REPAIR } from './schemas.ts';
 
@@ -59,7 +60,7 @@ export const refreshActor = defineTool({
   run: async (args, { site, signal }) => {
     const { admin, config } = site;
     const actorId = args.actor;
-    if (!/^https?:\/\//.test(actorId) || !URL.canParse(actorId)) {
+    if (webUrl(actorId) === undefined) {
       return { ok: false, message: 'actor must be an http or https URL.' };
     }
 

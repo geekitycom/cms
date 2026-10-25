@@ -2,7 +2,7 @@ import { DELIVERY_STATUSES } from '../../store/deliveries.ts';
 import { nullable } from '../../util/json-schema.ts';
 import type { McpToolAnnotations } from '../../plugin.ts';
 
-/** Every inspect tool reads what the site recorded and changes nothing. */
+/** A tool that reads what the site recorded and changes nothing, as every inspect tool does. */
 export const READ_ONLY: McpToolAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -10,13 +10,21 @@ export const READ_ONLY: McpToolAnnotations = {
   openWorldHint: false,
 };
 
+/** An object with one integer, a count, for each of `values`. */
+export function countsOf<const V extends readonly [string, ...string[]]>(values: V) {
+  return {
+    type: 'object',
+    properties: Object.fromEntries(values.map((value) => [value, { type: 'integer' }])) as Record<
+      V[number],
+      { readonly type: 'integer' }
+    >,
+    required: values,
+  } as const;
+}
+
 export const STATUS_COUNTS = {
-  type: 'object',
+  ...countsOf(DELIVERY_STATUSES),
   description: 'How many recipients stand at each delivery status.',
-  properties: Object.fromEntries(
-    DELIVERY_STATUSES.map((status) => [status, { type: 'integer' }]),
-  ) as Record<(typeof DELIVERY_STATUSES)[number], { readonly type: 'integer' }>,
-  required: DELIVERY_STATUSES,
 } as const;
 
 /** One recorded outcome of one activity sent to one recipient, as the store keeps it. */

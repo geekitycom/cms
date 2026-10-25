@@ -4,17 +4,11 @@ import { keptProperties } from '../../content/kept-properties.ts';
 import { postLocations } from '../../content/locations.ts';
 import type { WriteOutcome } from '../../content/write.ts';
 import type { SourceSite } from '../../content/micropub-update.ts';
-import type { McpToolOutcome } from '../../plugin.ts';
 import { listUsers } from '../../site/users.ts';
 import type { User } from '../../site/users.ts';
 import { findPost } from '../inspect/post.ts';
-import type { ToolSite } from '../tools.ts';
-
-type Refused = Extract<McpToolOutcome<never>, { ok: false }>;
-
-export function refused(message: string): Refused {
-  return { ok: false, message };
-}
+import { isRefused, refused } from '../tools.ts';
+import type { Refused, ToolSite } from '../tools.ts';
 
 /**
  * The post a reference names, when `user` may change it. A post attributed
@@ -23,16 +17,12 @@ export function refused(message: string): Refused {
  */
 export function ownPost(site: ToolSite, user: User, reference: string): Document | Refused {
   const document = findPost(site, reference);
-  if (document === undefined) return refused(`No post answers to ${reference}.`);
+  if (isRefused(document)) return document;
   const author = userForAuthor(listUsers(site.config.dataDir), document.author);
   if (author !== undefined && author.id !== user.id) {
     return refused(`${reference} is not your post.`);
   }
   return document;
-}
-
-export function isRefused(found: Document | Refused): found is Refused {
-  return 'ok' in found;
 }
 
 /** What Micropub's source and update read a post's properties against. */

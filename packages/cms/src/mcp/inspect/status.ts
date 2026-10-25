@@ -8,7 +8,7 @@ import { countRetryingDeliveries, countWaitingMessages } from '../../store/queue
 import { messageOf } from '../../util/errors.ts';
 import { nullable } from '../../util/json-schema.ts';
 import { defineTool } from '../tools.ts';
-import { DELIVERY, READ_ONLY } from './schemas.ts';
+import { countsOf, DELIVERY, READ_ONLY } from './schemas.ts';
 
 const RECENT = 10;
 
@@ -67,13 +67,7 @@ export const federationStatus = defineTool({
           required: ['username', 'handle', 'actorId', 'followerCount', 'keys'],
         },
       },
-      relays: {
-        type: 'object',
-        properties: Object.fromEntries(
-          RELAY_STATES.map((state) => [state, { type: 'integer' }]),
-        ) as Record<(typeof RELAY_STATES)[number], { readonly type: 'integer' }>,
-        required: RELAY_STATES,
-      },
+      relays: countsOf(RELAY_STATES),
       queue: {
         type: 'object',
         properties: {

@@ -1,5 +1,5 @@
 import { RESEND_JOB } from '../../federation/resend-job.ts';
-import { defineTool } from '../tools.ts';
+import { defineTool, isRefused } from '../tools.ts';
 import { findPost, POST_INPUT } from '../inspect/post.ts';
 import { JOB, QUEUED, queuedJob, REPAIR } from './schemas.ts';
 
@@ -29,7 +29,7 @@ export const resendPost = defineTool({
   },
   run: async (args, { site }) => {
     const document = findPost(site, args.post);
-    if (document === undefined) return { ok: false, message: `No post answers to ${args.post}.` };
+    if (isRefused(document)) return document;
     const { slug } = document;
     const outcome = queuedJob(
       await site.jobs.enqueueUnlessActive(RESEND_JOB, {

@@ -17,10 +17,7 @@ import type { ResendActivity } from './resend-job.ts';
 /** Which failed deliveries to retry: those of one post, those to one inbox, or both at once. */
 export type RetryFilter =
   | { readonly slug: string; readonly inbox: string | null }
-  | {
-      readonly slug: null;
-      readonly inbox: string;
-    };
+  | { readonly slug: null; readonly inbox: string };
 
 export type RetryRecipient = {
   readonly actorId: string;

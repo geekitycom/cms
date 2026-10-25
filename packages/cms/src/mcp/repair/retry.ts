@@ -1,7 +1,7 @@
 import { failedRetries, RETRY_DELIVERIES_JOB } from '../../federation/retry-job.ts';
 import type { RetryFilter } from '../../federation/retry-job.ts';
 import { nullable } from '../../util/json-schema.ts';
-import { defineTool } from '../tools.ts';
+import { defineTool, isRefused } from '../tools.ts';
 import { findPost, POST_INPUT } from '../inspect/post.ts';
 import { JOB, QUEUED, queuedJob, REPAIR } from './schemas.ts';
 
@@ -63,7 +63,7 @@ export const retryDeliveries = defineTool({
     let filter: RetryFilter;
     if (args.post !== undefined) {
       const document = findPost(site, args.post);
-      if (document === undefined) return { ok: false, message: `No post answers to ${args.post}.` };
+      if (isRefused(document)) return document;
       filter = { slug: document.slug, inbox: args.inbox ?? null };
     } else if (args.inbox !== undefined) {
       filter = { slug: null, inbox: args.inbox };

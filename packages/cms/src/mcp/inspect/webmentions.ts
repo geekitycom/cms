@@ -1,7 +1,7 @@
 import { COMMENT_KINDS, COMMENT_STATUSES } from '../../store/comments.ts';
 import { WEBMENTION_SEND_STATUSES } from '../../store/webmentions.ts';
 import { nullable } from '../../util/json-schema.ts';
-import { defineTool } from '../tools.ts';
+import { defineTool, isRefused } from '../tools.ts';
 import {
   instants,
   PAGE_INPUT,
@@ -94,9 +94,7 @@ export const webmentions = defineTool({
       });
     }
     const document = findPost(site, args.post);
-    if (document === undefined) {
-      return Promise.resolve({ ok: false, message: `No post answers to ${args.post}.` });
-    }
+    if (isRefused(document)) return Promise.resolve(document);
     const at = pageAt(args);
     const wanted = (status: string, time: string) =>
       (args.status === undefined || status === args.status) && within(time, range);

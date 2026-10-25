@@ -6,8 +6,8 @@ import { writeDocument } from '../../content/write.ts';
 import { absoluteUrl } from '../../util/url.ts';
 import { documentSiteFrom } from '../../web/document-site.ts';
 import { POST_INPUT } from '../inspect/post.ts';
-import { defineTool } from '../tools.ts';
-import { isRefused, ownPost, refused, unsaved } from './shared.ts';
+import { defineTool, isRefused, refused } from '../tools.ts';
+import { ownPost, unsaved } from './shared.ts';
 
 export const publishPost = defineTool({
   name: 'publish_post',

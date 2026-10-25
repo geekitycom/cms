@@ -8,8 +8,7 @@ import {
 } from '../../media/uploads.ts';
 import { nullable } from '../../util/json-schema.ts';
 import { absoluteUrl } from '../../util/url.ts';
-import { defineTool } from '../tools.ts';
-import { refused } from './shared.ts';
+import { defineTool, refused } from '../tools.ts';
 
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
