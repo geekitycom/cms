@@ -25,6 +25,11 @@ import { createToolRegistry } from './tools.ts';
 import type { McpTool, ToolGuards } from './tools.ts';
 import { activePluginTools } from './plugin-tools.ts';
 import { whoami } from './whoami.ts';
+import { createDraft } from './authoring/create.ts';
+import { publishPost } from './authoring/publish.ts';
+import { getPostSource } from './authoring/source.ts';
+import { updatePost } from './authoring/update.ts';
+import { uploadMedia } from './authoring/upload.ts';
 import { inboxSearch } from './inspect/inbox.ts';
 import { postFederation } from './inspect/post.ts';
 import { followers, quoteApprovals, relays } from './inspect/records.ts';
@@ -49,6 +54,11 @@ const CORE_TOOLS: readonly McpTool[] = [
   resendPost,
   retryDeliveries,
   refreshActor,
+  createDraft,
+  getPostSource,
+  updatePost,
+  publishPost,
+  uploadMedia,
 ];
 
 /** How many tool calls one token may make in {@link MCP_CALL_WINDOW_SECONDS}. */

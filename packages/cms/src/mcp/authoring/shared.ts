@@ -1,0 +1,64 @@
+import { userForAuthor } from '../../content/authors.ts';
+import type { Document } from '../../content/document.ts';
+import { keptProperties } from '../../content/kept-properties.ts';
+import { postLocations } from '../../content/locations.ts';
+import type { WriteOutcome } from '../../content/write.ts';
+import type { SourceSite } from '../../content/micropub-update.ts';
+import type { McpToolOutcome } from '../../plugin.ts';
+import { listUsers } from '../../site/users.ts';
+import type { User } from '../../site/users.ts';
+import { findPost } from '../inspect/post.ts';
+import type { ToolSite } from '../tools.ts';
+
+type Refused = Extract<McpToolOutcome<never>, { ok: false }>;
+
+export function refused(message: string): Refused {
+  return { ok: false, message };
+}
+
+/**
+ * The post a reference names, when `user` may change it. A post attributed
+ * to another user is theirs; one attributed to nobody the site knows is
+ * anybody's, as it is in the editor and over Micropub.
+ */
+export function ownPost(site: ToolSite, user: User, reference: string): Document | Refused {
+  const document = findPost(site, reference);
+  if (document === undefined) return refused(`No post answers to ${reference}.`);
+  const author = userForAuthor(listUsers(site.config.dataDir), document.author);
+  if (author !== undefined && author.id !== user.id) {
+    return refused(`${reference} is not your post.`);
+  }
+  return document;
+}
+
+export function isRefused(found: Document | Refused): found is Refused {
+  return 'ok' in found;
+}
+
+/** What Micropub's source and update read a post's properties against. */
+export function sourceSite(site: ToolSite): SourceSite {
+  return {
+    baseUrl: site.config.baseUrl,
+    targets: site.siteRecords.syndicationTargets(),
+    locations: postLocations(site.config.dataDir),
+    kept: keptProperties(site.config.dataDir),
+  };
+}
+
+/** A write that did not save, as the message the agent is told. */
+export function unsaved(
+  written: Exclude<WriteOutcome, { outcome: 'saved' }>,
+  slug: string,
+): Refused {
+  return written.outcome === 'refused'
+    ? refused(written.message)
+    : refused(
+        `${slug} changed since it was read. Read it again with get_post_source and update from what it holds now.`,
+      );
+}
+
+export const POST_WRITTEN = {
+  url: { type: 'string', description: 'The post’s address.' },
+  slug: { type: 'string' },
+  draft: { type: 'boolean' },
+} as const;

@@ -21,6 +21,9 @@ export type ToolSite = Readonly<
     | 'actorProfiles'
     | 'siteAtRequestStart'
     | 'federation'
+    | 'siteRecords'
+    | 'announce'
+    | 'learnHandles'
   >
 >;
 
@@ -32,6 +35,16 @@ export interface ToolCall {
   readonly site: ToolSite;
 }
 
+/**
+ * A core tool's answer when this call needs a scope beyond the tool's own,
+ * which the token lacks: refused as a call without the tool's scope is.
+ */
+export interface ScopeShortfall {
+  readonly needsScope: McpScope;
+}
+
+type ToolAnswer<O> = McpToolOutcome<O> | ScopeShortfall;
+
 interface ToolSpec<I extends ObjectSchema, O extends ObjectSchema> {
   readonly name: string;
   readonly title: string;
@@ -41,12 +54,12 @@ interface ToolSpec<I extends ObjectSchema, O extends ObjectSchema> {
   readonly annotations: McpToolAnnotations;
   readonly inputSchema: I;
   readonly outputSchema: O;
-  readonly run: (args: FromSchema<I>, call: ToolCall) => Promise<McpToolOutcome<FromSchema<O>>>;
+  readonly run: (args: FromSchema<I>, call: ToolCall) => Promise<ToolAnswer<FromSchema<O>>>;
 }
 
 /** A tool as the registry holds it, its argument types erased once they are checked. */
 export interface McpTool extends Omit<ToolSpec<ObjectSchema, ObjectSchema>, 'run'> {
-  readonly run: (args: unknown, call: ToolCall) => Promise<McpToolOutcome<unknown>>;
+  readonly run: (args: unknown, call: ToolCall) => Promise<ToolAnswer<unknown>>;
 }
 
 /** The app a connection was issued to: its `client_id` and name, or a hand-made token's name. */
@@ -138,7 +151,9 @@ export function createToolRegistry(tools: readonly McpTool[], guards: ToolGuards
       return { kind: 'insufficient-scope', scope: tool.scope };
     }
     try {
-      return { kind: 'ran', outcome: await tool.run(args, call) };
+      const answer = await tool.run(args, call);
+      if ('needsScope' in answer) return { kind: 'insufficient-scope', scope: answer.needsScope };
+      return { kind: 'ran', outcome: answer };
     } catch (error) {
       return { kind: 'crashed', reason: messageOf(error) };
     }

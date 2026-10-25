@@ -39,10 +39,15 @@ import { absoluteUrl } from '../util/url.ts';
 import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
 import { userForAuthor } from '../content/authors.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
-import { createForm, fromForm, fromJson } from './create.ts';
-import type { CreatedForm, CreateRequest, Property } from './create.ts';
-import { micropubType, parseChanges, sourceProperties, updateForm } from './update.ts';
-import type { Change } from './update.ts';
+import { createForm, fromForm, fromJson } from '../content/micropub-create.ts';
+import type { CreatedForm, CreateRequest, Property } from '../content/micropub-create.ts';
+import {
+  micropubType,
+  parseChanges,
+  sourceProperties,
+  updateForm,
+} from '../content/micropub-update.ts';
+import type { Change } from '../content/micropub-update.ts';
 
 const ANY_TYPE: readonly Property[] = [
   'content',

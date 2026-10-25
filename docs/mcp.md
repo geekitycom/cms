@@ -70,8 +70,8 @@ add its own. decision-64 records the set.
 | Scope     | What it allows                                                                 |
 | --------- | ------------------------------------------------------------------------------ |
 | `profile` | Your name, URL and photo. `whoami` needs it.                                   |
-| `create`  | Create posts as you.                                                           |
-| `update`  | Edit your posts.                                                               |
+| `create`  | Create drafts as you.                                                          |
+| `update`  | Read and edit your posts. Editing a published post also needs `publish`.       |
 | `media`   | Upload media.                                                                  |
 | `publish` | Publish drafts and change posts that are already public.                       |
 | `inspect` | Read the site's federation and delivery records, inbox and followers included. |
@@ -98,6 +98,11 @@ them in one sign-in. The body is a JSON-RPC error that names the missing scope.
 | `resend_post`       | `repair`  | Queues the `resend` job for one post, as the Resend button on the federation screen does.                                                                                     |
 | `retry_deliveries`  | `repair`  | Finds the deliveries that failed for a post, at an inbox, or both, and queues a job that sends each post again to those recipients only.                                      |
 | `refresh_actor`     | `repair`  | Fetches a remote actor again and updates each follower record of it with the inbox, shared inbox, name and avatar it publishes now.                                           |
+| `create_draft`      | `create`  | Writes a new post as a draft through the Micropub create path, for any kind Micropub covers. Never publishes, federates or sends webmentions.                                 |
+| `get_post_source`   | `update`  | One of your posts as Micropub `q=source` answers it: its type and properties, and the `hash` that `update_post` needs.                                                        |
+| `update_post`       | `update`  | Changes named properties of one of your posts, as a Micropub update does. A published post also needs `publish`.                                                              |
+| `publish_post`      | `publish` | Publishes one of your drafts as the editor's Publish button does: it goes public, federates a `Create` and sends its webmentions.                                             |
+| `upload_media`      | `media`   | Stores a base64-encoded file in the media library with its alt text, and answers its address.                                                                                 |
 
 ### The inspect tools
 
@@ -205,6 +210,50 @@ follower fail because the follower's server moved its inbox. Then run
 `retry_deliveries` to send the posts that failed. A changed key needs no
 refresh: when a signature does not verify with the cached key, Fedify fetches
 the key again.
+
+### The authoring tools
+
+The authoring tools write posts through the same code as Micropub and the
+editor, so a post from an agent is the same file that a Micropub client or
+the editor writes, and it federates the same way. Posts use the Micropub
+property mapping: `properties` holds each microformats2 property as a list of
+values, such as `{"content": ["Hello"], "category": ["a", "b"]}`. Every kind
+of post that Micropub takes works, including notes, articles, photos,
+replies, likes, reposts, bookmarks, RSVPs, events and reviews. A tool acts
+only on posts that are yours or that name no author the site knows, as
+Micropub does.
+
+An agent that reads untrusted pages can be steered by prompt injection. So
+`create_draft` always writes a draft, and making a post public needs the
+`publish` scope, which you grant on the consent screen as its own box:
+
+- `create_draft` takes an optional `type` (`h-entry` unless given, or
+  `h-event` or `h-review`) and `properties`. It refuses a `post-status`
+  other than `draft`. A draft is not served, federated or mentioned.
+- `get_post_source` answers what Micropub `q=source` answers for the post,
+  and the post's `hash`.
+- `update_post` takes the post, the `hash` from `get_post_source`, and the
+  changes: `replace` and `add` as Micropub has them, `delete` as a list of
+  property names to take away, and `deleteValues` for values to take out of
+  a property. Every other property stays as it is. When the post changed
+  after it was read, the tool writes nothing and answers with an error. Read
+  the post again and retry. Changing a published post publishes: the post is
+  stamped updated, federates an `Update` and sends webmentions. Setting
+  `post-status` to `published` publishes a draft. Either one needs the
+  `publish` scope as well as `update`, and is refused with 403 and an
+  `insufficient_scope` challenge without it.
+- `publish_post` publishes a draft as it reads now. It is annotated with
+  `destructiveHint` set to true, because the post becomes public and goes to
+  your followers. A post that is already published is left as it is.
+- `upload_media` takes a `filename`, whose extension says what the file is,
+  the file's bytes as base64 in `data`, and optional `alt` text. The media
+  library's rules apply, as for the admin's uploads and the Micropub media
+  endpoint: the allowed types, the size limits and the removal of location
+  data. The answer is the file's address, to use as a `photo` value or in a
+  post's content.
+
+Words written through these tools do not count toward anyone's writing
+goal. See [Writing goals](writing-goals.md#what-counts-as-writing).
 
 Enabled plugins add tools of their own. A plugin's tool name starts with the
 plugin's prefix and `__`, such as `geekity_plugin_umami__post_stats` from
