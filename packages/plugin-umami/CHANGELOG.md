@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/geekitycom/cms/compare/plugin-umami-v0.5.0...plugin-umami-v0.6.0) (2026-10-25)
+
+
+### Features
+
+* **plugin-umami:** add a post stats MCP tool ([68d9e16](https://github.com/geekitycom/cms/commit/68d9e16e4e604fd9f4be36e939ba77bea6fcb416))
+
 ## [0.5.0](https://github.com/geekitycom/cms/compare/plugin-umami-v0.4.0...plugin-umami-v0.5.0) (2026-10-23)
 
 

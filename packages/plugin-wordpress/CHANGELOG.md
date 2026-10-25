@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.10.0...plugin-wordpress-v0.11.0) (2026-10-25)
+
+
+### Features
+
+* **cms:** record every MCP tool call and limit calls per token ([14760cf](https://github.com/geekitycom/cms/commit/14760cf169594225c2fe9c7ec31c8c8dd9e54c32))
+
 ## [0.10.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.9.0...plugin-wordpress-v0.10.0) (2026-10-23)
 
 
