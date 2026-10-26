@@ -1,11 +1,11 @@
 ---
 id: TASK-519
 title: Reload drains for 60-80 s, refusing writes the whole time
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-26T02:09:00Z'
-updated_date: '2026-10-26T02:56:00Z'
+updated_date: '2026-10-26T03:08:00Z'
 labels:
   - supervisor
   - plugins
@@ -53,6 +53,8 @@ End to end, geekity serve on the scratch site, reload asked over the control soc
 - after, profile sweep in flight (mid-WebFinger to a hanging server): 0.44 s, no warning.
 - after, outbox delivery in flight to a hanging inbox: 10.5 s, with 'Draining: the federation queue had not finished after 10 s, so the reload goes on without it.' Fedify's delivery fetch takes no signal, so this one is capped rather than aborted.
 Full suite: pnpm build, test (cms 7679 pass), test:11ty, typecheck, lint, format:check all pass.
+
+Review: the bounded wait now lives in drainServices, which takes the read-only switch and runs it itself, so leaving a service behind cannot be separated from cutting off its writes. AC#2 accepted with the 10 s cap for a Fedify delivery that cannot be aborted; sweeps drain in under 1 s. Prod confirmation waits on release + deploy to andrewshell.org.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
