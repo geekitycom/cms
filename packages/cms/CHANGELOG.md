@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.45.0](https://github.com/geekitycom/cms/compare/v0.44.0...v0.45.0) (2026-10-26)
+
+
+### Features
+
+* **cms:** register oauth clients dynamically for claude.ai connectors ([da74ea3](https://github.com/geekitycom/cms/commit/da74ea35addce7cd9e4ba5e6f28541a2be6ef259))
+
+
+### Bug Fixes
+
+* **cms:** stop background sweeps when a reload drains, and cap each service's wait ([cbafee6](https://github.com/geekitycom/cms/commit/cbafee6e136a6aab54ce4526ce27dd64fc8869a8))
+
 ## [0.44.0](https://github.com/geekitycom/cms/compare/v0.43.0...v0.44.0) (2026-10-25)
 
 
