@@ -24,7 +24,7 @@
 
     <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
       <dt class="font-semibold">App</dt>
-      <dd class="break-all">{{ client.name }}{% if client.named %} <span class="text-sm">({{ client.id }})</span>{% endif %}</dd>
+      <dd class="break-all">{{ client.name }}{% if client.registered %} <span class="text-sm">(registered here by the app itself; its name is not checked)</span>{% elif client.named %} <span class="text-sm">({{ client.id }})</span>{% endif %}</dd>
       <dt class="font-semibold">Sends you back to</dt>
       <dd class="break-all">{{ redirectHost }}</dd>
       <dt class="font-semibold">Signs you in as</dt>

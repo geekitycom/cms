@@ -16,7 +16,9 @@ import {
 import { fetchClientInformation, fetchClientLogo } from '../indieauth/client.ts';
 import type { ClientInformation } from '../indieauth/client.ts';
 import { AUTHORIZATION_PATH, authorizationServerMetadata } from '../web/indieauth-discovery.ts';
+import { registeredClientsUrl } from '../web/indieauth-registration.ts';
 import { meForSignIn } from '../indieauth/identity.ts';
+import { registeredClient } from '../indieauth/registration.ts';
 import { profileResponse, redeemCode, redemptionForm } from '../indieauth/redeem.ts';
 import { parseAuthorizationRequest } from '../indieauth/request.ts';
 import type { Scope } from '../indieauth/request.ts';
@@ -102,8 +104,9 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
     );
     if (parsed.kind === 'unredirectable') return refuse(c, parsed.message);
     const { clientId, redirectUri } = parsed.kind === 'valid' ? parsed.request : parsed;
-    const client = await clientInformation(c, clientId);
-    if (!mayRedirect(clientId, redirectUri, client)) {
+    const known = await clientInformation(c, clientId);
+    const { client } = known;
+    if (!mayRedirect(redirectUri, known)) {
       return refuse(
         c,
         'The app asked to send you back to an address it has not published as its own.',
@@ -136,6 +139,7 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
       ...(client.name === undefined ? {} : { clientName: client.name }),
     });
     const redirect = new URL(redirectUri);
+    const redirectHost = redirect.host === '' ? redirect.protocol : redirect.host;
     const logo =
       client.logo === undefined
         ? undefined
@@ -146,12 +150,13 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
       consentUrl: CONSENT_PATH,
       pending,
       client: {
-        name: client.name ?? clientId,
+        name: client.name ?? (known.kind === 'registered' ? redirectHost : clientId),
         id: clientId,
         named: client.name !== undefined,
+        registered: known.kind === 'registered',
         logo,
       },
-      redirectHost: redirect.host === '' ? redirect.protocol : redirect.host,
+      redirectHost,
       loopback: redirect.hostname !== '' && isPrivateHost(redirect.hostname),
       identity: me,
       withoutPkce,
@@ -203,32 +208,46 @@ function signedInUser(c: Context<GeekityEnv>): User | undefined {
   return userId == null ? undefined : findUserById(c.var.config.dataDir, userId);
 }
 
-/** What the client says about itself, or nothing when it could not be read. */
-async function clientInformation(
-  c: Context<GeekityEnv>,
-  clientId: string,
-): Promise<ClientInformation> {
+/**
+ * A client that registered here, whose id is an address on this site it does
+ * not own, or one that publishes its metadata at its own client_id URL.
+ */
+type KnownClient =
+  | { readonly kind: 'registered'; readonly client: ClientInformation }
+  | { readonly kind: 'published'; readonly client: ClientInformation; readonly origin: string };
+
+/**
+ * A registered client_id is read from its own path rather than fetched: the
+ * site fetching itself fails behind many proxies and container networks.
+ */
+async function clientInformation(c: Context<GeekityEnv>, clientId: string): Promise<KnownClient> {
+  const registered = registeredClient(clientId, registeredClientsUrl(c.var.config.baseUrl));
+  if (registered !== undefined) return { kind: 'registered', client: registered };
+  const origin = new URL(clientId).origin;
   const fetched = await fetchClientInformation(clientId, { lookup: c.var.config.hostLookup });
-  if (fetched.ok) return fetched.client;
+  if (fetched.ok) return { kind: 'published', client: fetched.client, origin };
   console.warn(`Could not read IndieAuth client ${clientId}: ${fetched.reason}`);
-  return { redirectUris: [] };
+  return { kind: 'published', client: { redirectUris: [] }, origin };
 }
 
 /**
- * Whether a client may be sent back to `redirectUri`: always on its own
- * origin, and elsewhere only when its metadata lists that URL. A native app
- * listening on a loopback address picks its port when it starts, so there the
- * port is not compared (RFC 8252 section 7.3); Claude Code lists
- * `http://localhost/callback` and returns to whatever port it got.
+ * Whether a client may be sent back to `redirectUri`: on its own origin when
+ * it publishes its metadata there, and elsewhere only when its metadata lists
+ * that URL. A native app listening on a loopback address picks its port when it
+ * starts, so there the port is not compared (RFC 8252 section 7.3); Claude
+ * Code lists `http://localhost/callback` and returns to whatever port it got.
  */
-function mayRedirect(clientId: string, redirectUri: string, client: ClientInformation): boolean {
+function mayRedirect(redirectUri: string, known: KnownClient): boolean {
   const target = new URL(redirectUri);
   const sameOrigin =
+    known.kind === 'published' &&
     (target.protocol === 'https:' || target.protocol === 'http:') &&
-    target.origin === new URL(clientId).origin;
+    target.origin === known.origin;
   return (
     sameOrigin ||
-    client.redirectUris.some((listed) => listed === redirectUri || sameLoopback(listed, target))
+    known.client.redirectUris.some(
+      (listed) => listed === redirectUri || sameLoopback(listed, target),
+    )
   );
 }
 

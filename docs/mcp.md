@@ -9,7 +9,7 @@ the site's consent screen, or create one in the admin.
 
 A client connects in one of two ways. It signs in through the site's consent
 screen and gets a token for the scopes you approve, or it sends a token you
-create in the admin. The steps below use Claude Code.
+create in the admin. The steps below use Claude Code and claude.ai.
 [Other MCP clients](#other-mcp-clients) lists what any other client needs.
 
 ### Connect Claude Code by signing in
@@ -55,6 +55,25 @@ claude mcp add --transport http my-site https://example.com/_geekity/mcp \
 The token is listed on Connected apps with the badge For MCP. Revoke it there
 to cut the agent off.
 
+### Connect claude.ai
+
+claude.ai connects from Anthropic's servers, so the site must be reachable
+from the internet at its base URL.
+
+1. In claude.ai, open Settings > Connectors and choose **Add custom
+   connector**.
+2. Enter a name, and the URL `https://example.com/_geekity/mcp`. Leave the
+   OAuth Client ID and OAuth Client Secret under Advanced settings blank.
+   claude.ai registers itself with the site, as
+   [Client registration](#client-registration) describes.
+3. Choose **Add**, then **Connect**. claude.ai opens the site's consent
+   screen. Sign in to the admin if you are not signed in.
+4. Untick each scope you do not want claude.ai to have, and choose
+   **Approve**.
+
+The connection is listed on Users > Connected apps under the name claude.ai
+registered with. Revoke it there to cut claude.ai off.
+
 ### Check the connection
 
 Run `claude mcp list`. The site shows as `Connected` once Claude Code holds a
@@ -76,10 +95,9 @@ needs:
   discovery in [How a client finds where to sign in](#how-a-client-finds-where-to-sign-in),
   or you give it a token you create, sent as `Authorization: Bearer <token>`.
 
-A client that signs in must name itself with a client metadata document URL
-and use S256 PKCE. The site has no dynamic client registration, so a client
-that can only register itself cannot sign in. Give that client a token you
-create.
+A client that signs in must use S256 PKCE. It names itself with a client
+metadata document URL, or registers itself first, as
+[Client registration](#client-registration) describes.
 
 Many clients read servers from JSON in the shape of Claude Code's
 `.mcp.json`. For a token you create:
@@ -108,11 +126,39 @@ names the MCP endpoint as the resource, the site as its authorization server,
 and the scopes the tools use.
 
 The client signs in at the site's IndieAuth server, which
-[Signing in with your own site](indieweb-sign-in.md) describes. The server has
-no dynamic client registration. A client names itself by the URL of its client
-metadata document, which the authorization server metadata advertises with
-`client_id_metadata_document_supported`. Every client must use an S256 PKCE
-challenge.
+[Signing in with your own site](indieweb-sign-in.md) describes. A client
+names itself by the URL of its client metadata document, which the
+authorization server metadata advertises with
+`client_id_metadata_document_supported`, or by a client_id it registers.
+Every client must use an S256 PKCE challenge.
+
+### Client registration
+
+A client with no client metadata document of its own, such as claude.ai,
+registers by RFC 7591 dynamic client registration. The authorization server
+metadata names the endpoint as `registration_endpoint`,
+`/_geekity/indieauth/register`. The client posts its metadata as JSON:
+
+- `redirect_uris` is required. It lists one to five addresses. Each is an
+  `https` URL, or an `http` URL on `localhost`, `127.0.0.1`, or `[::1]`, with
+  no fragment.
+- `client_name`, `client_uri`, and `logo_uri` are optional. The consent screen
+  shows the name and the logo.
+- `grant_types`, if sent, must include `authorization_code`.
+  `response_types`, if sent, must be `["code"]`.
+
+The answer is 201 with a `client_id`, the registered metadata, and
+`token_endpoint_auth_method` `none`. No client gets a secret. A request the
+endpoint refuses gets 400 with `invalid_redirect_uri` or
+`invalid_client_metadata`.
+
+The site stores nothing for a registration. The `client_id` is a URL under
+`/_geekity/indieauth/clients/` whose path holds the registered metadata, and
+a GET of that URL answers the client metadata document. A registered client
+can be sent back only to an address in its `redirect_uris`, never to another
+address on the site. The consent screen shows the name the client registered,
+notes that the app registered that name itself, and shows the host it sends
+you back to.
 
 ## Which tokens the endpoint takes
 

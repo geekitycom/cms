@@ -1,9 +1,11 @@
 ---
 id: TASK-520
 title: Dynamic client registration so claude.ai connectors can sign in
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-10-26T02:14:00Z'
+updated_date: '2026-10-26T02:32:00Z'
 labels:
   - indieauth
   - mcp
@@ -23,10 +25,37 @@ Adding https://shll.me/_geekity/mcp as a custom connector in claude.ai fails wit
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The authorization server metadata advertises a registration_endpoint
-- [ ] #2 A POST of RFC 7591 client metadata with https (or loopback http) redirect_uris returns 201 with a client_id URL on the site, token_endpoint_auth_method none, and the registered metadata; a bad request returns 400 with an RFC 7591 error code (invalid_redirect_uri or invalid_client_metadata)
-- [ ] #3 An authorization request with a registered client_id shows the consent screen with the registered client_name and returns only to a registered redirect_uri; any other redirect_uri is refused, including other addresses on the site itself
-- [ ] #4 The code from a registered client redeems at the token endpoint for an MCP token, and the MCP endpoint accepts it
-- [ ] #5 Registration keeps no per-client state on disk, so repeated registrations cannot fill the data directory
-- [ ] #6 docs/mcp.md explains connecting claude.ai by URL alone, and stops saying the site has no dynamic client registration
+- [x] #1 The authorization server metadata advertises a registration_endpoint
+- [x] #2 A POST of RFC 7591 client metadata with https (or loopback http) redirect_uris returns 201 with a client_id URL on the site, token_endpoint_auth_method none, and the registered metadata; a bad request returns 400 with an RFC 7591 error code (invalid_redirect_uri or invalid_client_metadata)
+- [x] #3 An authorization request with a registered client_id shows the consent screen with the registered client_name and returns only to a registered redirect_uri; any other redirect_uri is refused, including other addresses on the site itself
+- [x] #4 The code from a registered client redeems at the token endpoint for an MCP token, and the MCP endpoint accepts it
+- [x] #5 Registration keeps no per-client state on disk, so repeated registrations cannot fill the data directory
+- [x] #6 docs/mcp.md explains connecting claude.ai by URL alone, and stops saying the site has no dynamic client registration
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Stateless registration: POST /_geekity/indieauth/register validates RFC 7591 metadata and returns client_id = <site>/_geekity/indieauth/clients/<base64url JSON of client_name, client_uri, logo_uri, redirect_uris>; nothing stored.
+2. GET on that client_id URL serves the JSON client metadata document, so the id is a real CIMD.
+3. The consent screen decodes registered client_ids locally instead of fetching its own site, and for them allows only listed redirect_uris (no same-origin allowance).
+4. Advertise registration_endpoint in authorization server metadata.
+5. Tests at the HTTP surface: register, consent, redeem, MCP call; refusals.
+6. docs/mcp.md: connecting claude.ai by URL.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built on branch dynamic-client-registration (da74ea35 feat, ff006f71 docs).
+
+- indieauth/registration.ts holds the pure parse/encode/decode. The client_id is `{base}/_geekity/indieauth/clients/<base64url JSON of client_name, client_uri, logo_uri, redirect_uris>`. Decoding re-runs the registration validator, since anyone can hand-craft an id; open registration makes that equivalent to registering. Caps: 5 redirect_uris, 512 chars per URI, 100 chars for client_name, 16 KiB request body.
+- web/indieauth-registration.ts mounts POST /_geekity/indieauth/register (201 / 400 invalid_redirect_uri | invalid_client_metadata, no-store, auth method always answered none) and GET on each client_id (the JSON client metadata document, 404 when the path does not decode). Behind the maintenance gate like the token endpoint; no CSRF or CORS applies outside /admin.
+- Consent: an id under the clients prefix is decoded locally, never fetched, and gets no same-origin redirect allowance. One that fails to decode has no redirect_uris, so it is refused. With no client_name the app is named by its redirect host. The screen says the app registered its name itself, and does not show the id URL.
+- registration_endpoint is in the authorization server metadata.
+- Token endpoint needed no change. The e2e test redeems, refreshes and calls whoami over MCP with the registered id.
+- docs/mcp.md: Connect claude.ai and Client registration sections; indieweb-sign-in.md links to it.
+- Tests: web/indieauth-registration.test.ts (26). Full cms suite 7698/7698.
+
+Review pass: the consent screen models a client as registered or published (KnownClient union), so only a published client gets the same-origin redirect allowance. Renamed registeredClientId to encodeClientId and PUBLIC_CLIENT to PKCE_ONLY_CLIENT. Full cms suite 7698/7698, typecheck and lint clean. Left Done until a live claude.ai connector signs in on shll.me after deploy.
+<!-- SECTION:NOTES:END -->
