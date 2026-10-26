@@ -1,11 +1,11 @@
 ---
 id: TASK-520
 title: Dynamic client registration so claude.ai connectors can sign in
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-26T02:14:00Z'
-updated_date: '2026-10-26T02:32:00Z'
+updated_date: '2026-10-26T13:51:00Z'
 labels:
   - indieauth
   - mcp
@@ -58,4 +58,12 @@ Built on branch dynamic-client-registration (da74ea35 feat, ff006f71 docs).
 - Tests: web/indieauth-registration.test.ts (26). Full cms suite 7698/7698.
 
 Review pass: the consent screen models a client as registered or published (KnownClient union), so only a published client gets the same-origin redirect allowance. Renamed registeredClientId to encodeClientId and PUBLIC_CLIENT to PKCE_ONLY_CLIENT. Full cms suite 7698/7698, typecheck and lint clean. Left Done until a live claude.ai connector signs in on shll.me after deploy.
+
+Live check 2026-10-26 on shll.me: registration_endpoint advertised; POST register with https://claude.ai/api/mcp/auth_callback -> 201; http://evil.example redirect -> 400; owner confirmed the claude.ai connector connects.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added stateless RFC 7591 dynamic client registration so claude.ai custom connectors can sign in by MCP URL alone. POST /_geekity/indieauth/register returns a client_id under /_geekity/indieauth/clients/ that encodes the registered metadata as base64url, with nothing stored; a GET on it serves the client metadata document; the authorization server metadata advertises registration_endpoint. The consent screen decodes registered ids locally and returns them only to their listed redirect_uris (no same-origin allowance, since their origin is the site). Docs cover connecting claude.ai. Verified by tests (register, consent, token, refresh, MCP whoami; full suite 7698/7698) and live on shll.me after deploy: metadata advertises the endpoint, a registration with claude.ai's callback returns 201, a plain-http non-loopback redirect is refused 400, and the owner added shll.me as a claude.ai connector successfully. Merged in PR #254. Not changed: a non-registered client_id elsewhere on the site's own origin still gets the same-origin redirect allowance.
+<!-- SECTION:FINAL_SUMMARY:END -->
