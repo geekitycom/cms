@@ -1,7 +1,6 @@
 export type Ending = 'drain' | 'close';
 
 export interface Service {
-  /** What a drain calls it when it will not wait for it any longer. */
   readonly name: string;
   start?(): void | Promise<void>;
   stop?(ending: Ending): void | Promise<void>;
@@ -9,11 +8,6 @@ export interface Service {
   release?(): void;
 }
 
-/**
- * How long a drain waits for any one service to stop or settle. A service it
- * gives up on is cut off by the read-only switch that follows, as a request
- * write past the write gate's wait is, so the next worker still writes alone.
- */
 export const DRAIN_PATIENCE_MS = 10_000;
 
 export interface EndOptions {
@@ -25,20 +19,28 @@ export async function startServices(services: readonly Service[]): Promise<void>
   for (const service of services) await service.start?.();
 }
 
-export async function endServices(
+/**
+ * End the services for a reload, waiting at most the patience for each, then
+ * `cutOff` the writes. A service left behind is still running, so the cut-off
+ * is what keeps it from writing beside the next worker.
+ */
+export async function drainServices(
   services: readonly Service[],
-  ending: Ending,
+  cutOff: () => void,
   options: EndOptions = {},
 ): Promise<void> {
-  const end = async (service: Service, work: void | Promise<void>): Promise<void> => {
-    if (ending === 'close') {
-      await work;
-      return;
-    }
-    await withPatience(service.name, work, options);
-  };
-  for (const service of services.toReversed()) await end(service, service.stop?.(ending));
-  for (const service of services) await end(service, service.settled?.(ending));
+  for (const service of services.toReversed()) {
+    await withPatience(service.name, service.stop?.('drain'), options);
+  }
+  for (const service of services) {
+    await withPatience(service.name, service.settled?.('drain'), options);
+  }
+  cutOff();
+}
+
+export async function closeServices(services: readonly Service[]): Promise<void> {
+  for (const service of services.toReversed()) await service.stop?.('close');
+  for (const service of services) await service.settled?.('close');
 }
 
 export function releaseServices(services: readonly Service[]): void {

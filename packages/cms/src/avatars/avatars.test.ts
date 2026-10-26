@@ -62,9 +62,7 @@ const lookup: HostLookup = (hostname) => {
 const requested: string[] = [];
 /** What each URL answers; anything missing is a 404. */
 let web: Record<string, () => Response> = {};
-/** URLs that answer nothing until the request is aborted. */
 let hanging = new Set<string>();
-/** Told each time a hanging URL is asked for. */
 let heardHanging: (() => void) | undefined;
 
 const original = globalThis.fetch;

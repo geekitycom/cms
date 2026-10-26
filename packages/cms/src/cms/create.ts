@@ -46,7 +46,7 @@ import { ensureSiteGeminiCertificate, geminiHost } from '../gemini/site-certific
 import { effectiveBaseUrl } from '../site/settings.ts';
 import { createApp } from './app.ts';
 import { boot } from './boot.ts';
-import { endServices, releaseServices, startServices } from './lifecycle.ts';
+import { closeServices, drainServices, releaseServices, startServices } from './lifecycle.ts';
 import { createServices } from './services.ts';
 
 /** A running (or runnable) CMS instance. */
@@ -473,10 +473,11 @@ export function createCms(
 
     async drain(onWritesInFlight) {
       await writes.refuse(onWritesInFlight);
-      await endServices(lifecycle, 'drain');
-      store.setReadOnly(true);
-      admin.setReadOnly(true);
-      releaseFiles ??= refuseWritesUnder([resolved.dataDir, resolved.contentDir]);
+      await drainServices(lifecycle, () => {
+        store.setReadOnly(true);
+        admin.setReadOnly(true);
+        releaseFiles ??= refuseWritesUnder([resolved.dataDir, resolved.contentDir]);
+      });
     },
 
     async resume() {
@@ -497,7 +498,7 @@ export function createCms(
       unwatchGemini?.();
       unwatchGemini = undefined;
       const closingGemini = changeGemini(stopGemini);
-      await endServices(lifecycle, 'close');
+      await closeServices(lifecycle);
       releaseServices(lifecycle);
 
       if (running !== undefined) await (handingOver ?? closeServer(running, false));

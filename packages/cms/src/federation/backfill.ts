@@ -255,7 +255,6 @@ export interface ReplyBackfill {
   sweep(): Promise<void>;
   /** Sweep now and then every {@link BACKFILL_SWEEP_MS}. Safe twice. */
   start(): void;
-  /** Stop the timer and end the sweep in flight. Safe before starting and safe twice. */
   stop(): void;
   /** Resolve once the sweep in flight has finished. */
   settled(): Promise<void>;

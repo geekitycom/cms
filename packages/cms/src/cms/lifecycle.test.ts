@@ -6,7 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
-import { endServices } from './lifecycle.ts';
+import { closeServices, drainServices } from './lifecycle.ts';
 
 const temporaryDirs: string[] = [];
 const started: Cms[] = [];
@@ -139,7 +139,7 @@ describe('a service that does not finish', () => {
     const warnings: string[] = [];
     const settled: string[] = [];
 
-    await endServices(
+    await drainServices(
       [
         neverSettles('actor profiles'),
         {
@@ -150,11 +150,11 @@ describe('a service that does not finish', () => {
           },
         },
       ],
-      'drain',
+      () => settled.push('cut off'),
       { patienceMs: 20, warn: (line) => warnings.push(line) },
     );
 
-    assert.deepEqual(settled, ['mail']);
+    assert.deepEqual(settled, ['mail', 'cut off']);
     assert.equal(warnings.length, 1);
     assert.match(warnings[0] ?? '', /actor profiles/);
   });
@@ -162,33 +162,28 @@ describe('a service that does not finish', () => {
   it('is named and left behind by a drain when its stop does not return', async () => {
     const warnings: string[] = [];
 
-    await endServices(
+    await drainServices(
       [{ name: 'plugins', stop: () => new Promise<void>(() => undefined) }],
-      'drain',
+      () => undefined,
       { patienceMs: 20, warn: (line) => warnings.push(line) },
     );
 
     assert.match(warnings[0] ?? '', /plugins/);
   });
 
-  it('is waited for by a close, which names nothing', async () => {
-    const warnings: string[] = [];
+  it('is waited for by a close', async () => {
     let release = (): void => undefined;
     let ended = false;
 
-    const ending = endServices(
-      [
-        {
-          name: 'mail',
-          settled: () =>
-            new Promise<void>((resolve) => {
-              release = resolve;
-            }),
-        },
-      ],
-      'close',
-      { patienceMs: 0, warn: (line) => warnings.push(line) },
-    ).then(() => {
+    const ending = closeServices([
+      {
+        name: 'mail',
+        settled: () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      },
+    ]).then(() => {
       ended = true;
     });
     for (let wait = 0; wait < 10; wait += 1) await tick();
@@ -196,7 +191,6 @@ describe('a service that does not finish', () => {
     assert.equal(ended, false, 'close went on before the service settled');
     release();
     await ending;
-    assert.deepEqual(warnings, []);
   });
 });
 

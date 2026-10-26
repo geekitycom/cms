@@ -464,7 +464,6 @@ describe('an inbox log from before profiles were kept (AC #7)', () => {
   });
 });
 
-/** Resolve once `settling` does, or fail the test if it has not within a second. */
 function settles(settling: Promise<void>): Promise<void> {
   return nextEvent(
     'settled',
@@ -475,7 +474,6 @@ function settles(settling: Promise<void>): Promise<void> {
   );
 }
 
-/** A load that answers nothing until it is aborted, and says who it was asked for. */
 function hangingLoad() {
   const asked: string[] = [];
   let heard: ((actorId: string) => void) | undefined;

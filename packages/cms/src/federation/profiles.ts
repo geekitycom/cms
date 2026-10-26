@@ -38,10 +38,6 @@ export const PROFILE_RETRY_MS = 60 * 60 * 1000;
 /** How often the sweep runs. */
 export const PROFILE_SWEEP_MS = 6 * 60 * 60 * 1000;
 
-/**
- * Read one actor's profile, or `undefined` when there is no actor to read.
- * Gives up when `signal` aborts.
- */
 export type ActorProfileLoader = (
   actorId: string,
   signal: AbortSignal,
@@ -103,7 +99,6 @@ export interface ActorProfileService {
   sweep(): Promise<void>;
   /** Sweep now and then every {@link PROFILE_SWEEP_MS}. Safe twice. */
   start(): void;
-  /** Stop the timer and end the sweep and fetches in flight. Safe before starting and safe twice. */
   stop(): void;
   /** Resolve once every fetch and sweep in flight has finished. */
   settled(): Promise<void>;
