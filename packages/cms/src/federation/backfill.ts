@@ -99,7 +99,7 @@ export type RepliesRead =
     };
 
 /** Read one note's replies. */
-export type RepliesLoader = (noteId: string) => Promise<RepliesRead>;
+export type RepliesLoader = (noteId: string, signal: AbortSignal) => Promise<RepliesRead>;
 
 /** How many posts the sweep asks the index for at a time, newest first. */
 const POSTS_PAGE = 50;
@@ -119,10 +119,13 @@ const GONE = new Set([404, 410]);
 export function signedRepliesLoader(
   contextOf: () => Promise<Context<FederationContextData>>,
 ): RepliesLoader {
-  return async (noteId) => {
+  return async (noteId, signal) => {
     const context = await contextOf();
     const site = new URL(context.data.config.baseUrl).origin;
-    const signed = await siteLoaders(context, AbortSignal.timeout(BACKFILL_TIMEOUT_MS));
+    const signed = await siteLoaders(
+      context,
+      AbortSignal.any([signal, AbortSignal.timeout(BACKFILL_TIMEOUT_MS)]),
+    );
     const documentLoader: DocumentLoader = (url, options) =>
       new URL(url).origin === site
         ? Promise.reject(new Error(`${url} is this site's own`))
@@ -252,7 +255,7 @@ export interface ReplyBackfill {
   sweep(): Promise<void>;
   /** Sweep now and then every {@link BACKFILL_SWEEP_MS}. Safe twice. */
   start(): void;
-  /** Stop the timer. Safe before starting and safe twice. */
+  /** Stop the timer and end the sweep in flight. Safe before starting and safe twice. */
   stop(): void;
   /** Resolve once the sweep in flight has finished. */
   settled(): Promise<void>;
@@ -271,10 +274,13 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
 
   const sweeps = createSerialQueue();
   let handle: unknown;
+  let untilStopped = new AbortController();
 
   async function sweepOnce(): Promise<void> {
+    const { signal } = untilStopped;
     const site = await settings.values(SITE);
     for (const post of recentPosts()) {
+      if (signal.aborted) return;
       const now = config.now();
       const key = `${BACKFILL_STATE_PREFIX}${post.permalink}`;
       const last = Date.parse(admin.getState(key) ?? '');
@@ -283,7 +289,7 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
       // again on every sweep.
       admin.setState(key, now.toISOString());
 
-      await backfill(level(conversation.thread(post, site).replies));
+      await backfill(level(conversation.thread(post, site).replies), signal);
     }
   }
 
@@ -304,14 +310,18 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
     }
   }
 
-  async function backfill(queue: { id: string; depth: number }[]): Promise<void> {
+  async function backfill(
+    queue: { id: string; depth: number }[],
+    signal: AbortSignal,
+  ): Promise<void> {
     for (let parent = queue.shift(); parent !== undefined; parent = queue.shift()) {
       let found: RepliesRead;
       try {
-        found = await load(parent.id);
+        found = await load(parent.id, signal);
       } catch (thrown) {
         found = { kind: 'failed', reason: messageOf(thrown) };
       }
+      if (signal.aborted) return;
 
       if (found.kind === 'failed') {
         logger.warn(`Could not read the replies to ${parent.id}: ${found.reason}`);
@@ -383,6 +393,7 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
 
     start() {
       if (handle !== undefined) return;
+      if (untilStopped.signal.aborted) untilStopped = new AbortController();
       void this.sweep();
       handle = timers.set(() => void this.sweep(), BACKFILL_SWEEP_MS);
     },
@@ -390,6 +401,7 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
     stop() {
       if (handle !== undefined) timers.clear(handle);
       handle = undefined;
+      untilStopped.abort();
     },
 
     async settled() {

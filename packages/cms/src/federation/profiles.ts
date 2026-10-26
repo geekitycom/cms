@@ -38,8 +38,14 @@ export const PROFILE_RETRY_MS = 60 * 60 * 1000;
 /** How often the sweep runs. */
 export const PROFILE_SWEEP_MS = 6 * 60 * 60 * 1000;
 
-/** Read one actor's profile, or `undefined` when there is no actor to read. */
-export type ActorProfileLoader = (actorId: string) => Promise<ActorProfile | undefined>;
+/**
+ * Read one actor's profile, or `undefined` when there is no actor to read.
+ * Gives up when `signal` aborts.
+ */
+export type ActorProfileLoader = (
+  actorId: string,
+  signal: AbortSignal,
+) => Promise<ActorProfile | undefined>;
 
 /**
  * The site's {@link ActorProfileLoader}: a GET of the actor document, signed
@@ -54,10 +60,10 @@ export type ActorProfileLoader = (actorId: string) => Promise<ActorProfile | und
 export function signedProfileLoader(
   contextOf: () => Promise<Context<FederationContextData>>,
 ): ActorProfileLoader {
-  return async (actorId) => {
+  return async (actorId, signal) => {
     const context = await contextOf();
-    const loaders = await siteLoaders(context);
-    const found = await context.lookupObject(actorId, loaders);
+    const loaders = await siteLoaders(context, signal);
+    const found = await context.lookupObject(actorId, { ...loaders, signal });
     return isActor(found) ? await profileFrom(found, loaders) : undefined;
   };
 }
@@ -97,7 +103,7 @@ export interface ActorProfileService {
   sweep(): Promise<void>;
   /** Sweep now and then every {@link PROFILE_SWEEP_MS}. Safe twice. */
   start(): void;
-  /** Stop the timer. Safe before starting and safe twice. */
+  /** Stop the timer and end the sweep and fetches in flight. Safe before starting and safe twice. */
   stop(): void;
   /** Resolve once every fetch and sweep in flight has finished. */
   settled(): Promise<void>;
@@ -116,6 +122,7 @@ export function createActorProfileService(
   const failedAt = new Map<string, number>();
   const sweeps = createSerialQueue();
   let handle: unknown;
+  let untilStopped = new AbortController();
 
   const now = (): number => config.now().getTime();
 
@@ -129,18 +136,19 @@ export function createActorProfileService(
     const running = inFlight.get(actorId);
     if (running !== undefined) return running;
 
-    const started = fetchInto(actorId).finally(() => inFlight.delete(actorId));
+    const started = fetchInto(actorId, untilStopped.signal).finally(() => inFlight.delete(actorId));
     inFlight.set(actorId, started);
     return started;
   }
 
-  async function fetchInto(actorId: string): Promise<void> {
+  async function fetchInto(actorId: string, signal: AbortSignal): Promise<void> {
     let profile: ActorProfile | undefined;
     try {
-      profile = await load(actorId);
+      profile = await load(actorId, signal);
     } catch (thrown) {
-      logger.warn(`Could not read the actor ${actorId}: ${messageOf(thrown)}`);
+      if (!signal.aborted) logger.warn(`Could not read the actor ${actorId}: ${messageOf(thrown)}`);
     }
+    if (signal.aborted) return;
     if (profile === undefined) {
       failedAt.set(actorId, now());
       return;
@@ -156,8 +164,10 @@ export function createActorProfileService(
   }
 
   async function sweepOnce(): Promise<void> {
+    const { signal } = untilStopped;
     const due = admin.listActorsToProfile(new Date(now() - PROFILE_MAX_AGE_MS).toISOString());
     for (const actorId of due) {
+      if (signal.aborted) return;
       if (failedRecently(actorId)) continue;
       await refresh(actorId);
     }
@@ -179,6 +189,7 @@ export function createActorProfileService(
 
     start() {
       if (handle !== undefined) return;
+      if (untilStopped.signal.aborted) untilStopped = new AbortController();
       void this.sweep();
       handle = timers.set(() => void this.sweep(), PROFILE_SWEEP_MS);
     },
@@ -186,6 +197,7 @@ export function createActorProfileService(
     stop() {
       if (handle !== undefined) timers.clear(handle);
       handle = undefined;
+      untilStopped.abort();
     },
 
     async settled() {

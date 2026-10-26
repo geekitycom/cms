@@ -15,6 +15,7 @@ import { after, afterEach, before, describe, it } from 'node:test';
 import sharp from 'sharp';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
+import { nextEvent } from '../__testing__/wait.ts';
 import { AVATARS, dataFolder } from '../files/data-files.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../util/public-address.ts';
@@ -61,12 +62,24 @@ const lookup: HostLookup = (hostname) => {
 const requested: string[] = [];
 /** What each URL answers; anything missing is a 404. */
 let web: Record<string, () => Response> = {};
+/** URLs that answer nothing until the request is aborted. */
+let hanging = new Set<string>();
+/** Told each time a hanging URL is asked for. */
+let heardHanging: (() => void) | undefined;
 
 const original = globalThis.fetch;
 before(() => {
   globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(input, init);
     requested.push(request.url);
+    if (hanging.has(request.url)) {
+      heardHanging?.();
+      return new Promise<Response>((_, reject) => {
+        request.signal.addEventListener('abort', () => reject(new Error('aborted')), {
+          once: true,
+        });
+      });
+    }
     return Promise.resolve(web[request.url]?.() ?? new Response('missing', { status: 404 }));
   }) as typeof fetch;
 });
@@ -79,6 +92,7 @@ after(async () => {
 afterEach(() => {
   requested.length = 0;
   web = {};
+  hanging = new Set();
 });
 
 /** A picture of one colour, `width` by `height`, in `format`. */
@@ -427,3 +441,34 @@ describe('the cache (AC #4)', () => {
 function cachedFileFor(source: string): string {
   return `${createHash('sha256').update(source).digest('hex')}.webp`;
 }
+
+describe('stopping the sweep', () => {
+  it('ends the sweep in flight without marking the picture it cut off as failed', async () => {
+    const { cms, dataDir } = await site();
+    hanging = new Set([ADA_ICON, GRACE_PHOTO, IDLE_ICON]);
+
+    const asking = nextEvent('an avatar fetch', (done) => {
+      heardHanging = done;
+      return () => {
+        heardHanging = undefined;
+      };
+    });
+    cms.avatars.start();
+    await asking;
+    cms.avatars.stop();
+
+    await nextEvent(
+      'settled',
+      (done, fail) => {
+        cms.avatars.settled().then(done, fail);
+      },
+      1000,
+    );
+    assert.equal(requested.length, 1, 'no other picture was asked for');
+    const cached = await readdir(dataFolder(dataDir, AVATARS)).catch(() => []);
+    assert.deepEqual(
+      cached.filter((name) => name.endsWith('.failed')),
+      [],
+    );
+  });
+});

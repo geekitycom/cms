@@ -144,7 +144,7 @@ export interface AvatarService {
   sweep(): Promise<void>;
   /** Sweep now and then every {@link AVATAR_SWEEP_MS}. Safe twice. */
   start(): void;
-  /** Stop the timer. Safe before starting and safe twice. */
+  /** Stop the timer and end the sweep and fetches in flight. Safe before starting and safe twice. */
   stop(): void;
   /** Resolve once every fetch and sweep in flight has finished. */
   settled(): Promise<void>;
@@ -162,6 +162,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
   const inFlight = new Map<string, Promise<boolean>>();
   const sweeps = createSerialQueue();
   let handle: unknown;
+  let untilStopped = new AbortController();
 
   const imageName = (source: string): string => `${hashOf(source)}.webp`;
   const failedName = (source: string): string => `${hashOf(source)}.failed`;
@@ -180,13 +181,14 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
     const running = inFlight.get(source);
     if (running !== undefined) return running;
 
-    const started = fetchInto(source).finally(() => inFlight.delete(source));
+    const started = fetchInto(source, untilStopped.signal).finally(() => inFlight.delete(source));
     inFlight.set(source, started);
     return started;
   }
 
-  async function fetchInto(source: string): Promise<boolean> {
-    const shrunk = await fetchAvatar(source, config);
+  async function fetchInto(source: string, signal: AbortSignal): Promise<boolean> {
+    const shrunk = await fetchAvatar(source, config, signal);
+    if (signal.aborted) return false;
     if (!shrunk.ok) {
       logger.warn(`Could not fetch the avatar at ${source}: ${shrunk.reason}`);
       await touch(avatarFile(failedName(source)), config.now());
@@ -202,10 +204,12 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
   }
 
   async function sweepOnce(): Promise<void> {
+    const { signal } = untilStopped;
     const sources = admin.listAvatarSources();
     const keep = new Set<string>();
 
     for (const source of sources) {
+      if (signal.aborted) return;
       keep.add(imageName(source));
       keep.add(failedName(source));
       if (webUrl(source) === undefined) continue;
@@ -259,6 +263,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
 
     start() {
       if (handle !== undefined) return;
+      if (untilStopped.signal.aborted) untilStopped = new AbortController();
       void this.sweep();
       handle = timers.set(() => void this.sweep(), AVATAR_SWEEP_MS);
     },
@@ -266,6 +271,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
     stop() {
       if (handle !== undefined) timers.clear(handle);
       handle = undefined;
+      untilStopped.abort();
     },
 
     async settled() {
@@ -289,10 +295,11 @@ type AvatarFetch =
 async function fetchAvatar(
   source: string,
   config: Pick<ResolvedConfig, 'hostLookup'>,
+  signal: AbortSignal,
 ): Promise<AvatarFetch> {
   const fetched = await fetchPublic(source, {
     lookup: config.hostLookup,
-    signal: AbortSignal.timeout(AVATAR_FETCH_TIMEOUT_MS),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(AVATAR_FETCH_TIMEOUT_MS)]),
     maxBytes: AVATAR_MAX_BYTES,
     accept: 'image/avif, image/webp, image/png, image/jpeg, image/gif;q=0.8',
     contentType: { pattern: ACCEPTED_TYPES, name: 'a JPEG, PNG, GIF, WebP or AVIF picture' },
