@@ -104,8 +104,9 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
     );
     if (parsed.kind === 'unredirectable') return refuse(c, parsed.message);
     const { clientId, redirectUri } = parsed.kind === 'valid' ? parsed.request : parsed;
-    const { client, registered } = await clientInformation(c, clientId);
-    if (!mayRedirect(clientId, redirectUri, client, registered)) {
+    const known = await clientInformation(c, clientId);
+    const { client } = known;
+    if (!mayRedirect(redirectUri, known)) {
       return refuse(
         c,
         'The app asked to send you back to an address it has not published as its own.',
@@ -149,13 +150,10 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
       consentUrl: CONSENT_PATH,
       pending,
       client: {
-        // A registered client's id is an address on this site, so naming the
-        // app by it would read as the site itself; where it returns to is the
-        // one thing about it that is checked.
-        name: client.name ?? (registered ? redirectHost : clientId),
+        name: client.name ?? (known.kind === 'registered' ? redirectHost : clientId),
         id: clientId,
         named: client.name !== undefined,
-        registered,
+        registered: known.kind === 'registered',
         logo,
       },
       redirectHost,
@@ -211,46 +209,45 @@ function signedInUser(c: Context<GeekityEnv>): User | undefined {
 }
 
 /**
- * What the client says about itself, or nothing when it could not be read,
- * and whether it registered here. A registered client_id is read from its own
- * path rather than fetched: the site fetching itself fails behind many
- * proxies and container networks.
+ * A client that registered here, whose id is an address on this site it does
+ * not own, or one that publishes its metadata at its own client_id URL.
  */
-async function clientInformation(
-  c: Context<GeekityEnv>,
-  clientId: string,
-): Promise<{ client: ClientInformation; registered: boolean }> {
+type KnownClient =
+  | { readonly kind: 'registered'; readonly client: ClientInformation }
+  | { readonly kind: 'published'; readonly client: ClientInformation; readonly origin: string };
+
+/**
+ * A registered client_id is read from its own path rather than fetched: the
+ * site fetching itself fails behind many proxies and container networks.
+ */
+async function clientInformation(c: Context<GeekityEnv>, clientId: string): Promise<KnownClient> {
   const registered = registeredClient(clientId, registeredClientsUrl(c.var.config.baseUrl));
-  if (registered !== undefined) return { client: registered, registered: true };
+  if (registered !== undefined) return { kind: 'registered', client: registered };
+  const origin = new URL(clientId).origin;
   const fetched = await fetchClientInformation(clientId, { lookup: c.var.config.hostLookup });
-  if (fetched.ok) return { client: fetched.client, registered: false };
+  if (fetched.ok) return { kind: 'published', client: fetched.client, origin };
   console.warn(`Could not read IndieAuth client ${clientId}: ${fetched.reason}`);
-  return { client: { redirectUris: [] }, registered: false };
+  return { kind: 'published', client: { redirectUris: [] }, origin };
 }
 
 /**
- * Whether a client may be sent back to `redirectUri`: always on its own
- * origin, and elsewhere only when its metadata lists that URL. A registered
- * client's origin is this site's, which it does not own, so it is held to its
- * list alone. A native app
- * listening on a loopback address picks its port when it starts, so there the
- * port is not compared (RFC 8252 section 7.3); Claude Code lists
- * `http://localhost/callback` and returns to whatever port it got.
+ * Whether a client may be sent back to `redirectUri`: on its own origin when
+ * it publishes its metadata there, and elsewhere only when its metadata lists
+ * that URL. A native app listening on a loopback address picks its port when it
+ * starts, so there the port is not compared (RFC 8252 section 7.3); Claude
+ * Code lists `http://localhost/callback` and returns to whatever port it got.
  */
-function mayRedirect(
-  clientId: string,
-  redirectUri: string,
-  client: ClientInformation,
-  registered: boolean,
-): boolean {
+function mayRedirect(redirectUri: string, known: KnownClient): boolean {
   const target = new URL(redirectUri);
   const sameOrigin =
-    !registered &&
+    known.kind === 'published' &&
     (target.protocol === 'https:' || target.protocol === 'http:') &&
-    target.origin === new URL(clientId).origin;
+    target.origin === known.origin;
   return (
     sameOrigin ||
-    client.redirectUris.some((listed) => listed === redirectUri || sameLoopback(listed, target))
+    known.client.redirectUris.some(
+      (listed) => listed === redirectUri || sameLoopback(listed, target),
+    )
   );
 }
 

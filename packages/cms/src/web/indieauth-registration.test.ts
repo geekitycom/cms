@@ -1,8 +1,3 @@
-/**
- * Dynamic client registration: a client such as claude.ai registers itself
- * with no metadata document of its own to host, signs the person in through
- * the consent screen, and reaches the MCP endpoint with the token it gets.
- */
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
@@ -66,8 +61,7 @@ async function register(
   };
 }
 
-/** What claude.ai sends when it adds a custom connector. */
-const CLAUDE = {
+const CLAUDE_AI_REGISTRATION = {
   client_name: 'Claude',
   redirect_uris: [CALLBACK],
   grant_types: ['authorization_code', 'refresh_token'],
@@ -76,7 +70,7 @@ const CLAUDE = {
   scope: 'inspect',
 };
 
-async function registeredId(cms: Cms, metadata: unknown = CLAUDE): Promise<string> {
+async function registeredId(cms: Cms, metadata: unknown = CLAUDE_AI_REGISTRATION): Promise<string> {
   const { status, body } = await register(cms, metadata);
   assert.equal(status, 201, JSON.stringify(body));
   assert.equal(typeof body['client_id'], 'string');
@@ -96,7 +90,6 @@ function authorizationQuery(clientId: string, changes: Record<string, string> = 
   }).toString();
 }
 
-/** Every file under `dir` with its contents, to tell whether anything was written. */
 async function snapshot(dir: string): Promise<Record<string, string>> {
   const files: Record<string, string> = {};
   for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
@@ -111,7 +104,7 @@ describe('registering a client', () => {
   it('answers 201 with a client_id on the site and the metadata it registered', async () => {
     const cms = await site();
     const { status, headers, body } = await register(cms, {
-      ...CLAUDE,
+      ...CLAUDE_AI_REGISTRATION,
       client_uri: 'https://claude.example/',
       logo_uri: 'https://claude.example/logo.png',
       token_endpoint_auth_method: 'client_secret_post',
@@ -210,7 +203,7 @@ describe('registering a client', () => {
     const cms = await site();
     const before = await snapshot(cms.config.dataDir);
     for (let i = 0; i < 20; i += 1) {
-      await registeredId(cms, { ...CLAUDE, client_name: `Claude ${String(i)}` });
+      await registeredId(cms, { ...CLAUDE_AI_REGISTRATION, client_name: `Claude ${String(i)}` });
     }
     assert.deepEqual(await snapshot(cms.config.dataDir), before);
   });

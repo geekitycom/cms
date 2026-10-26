@@ -21,10 +21,8 @@ export const TOKEN_PATH = '/_geekity/indieauth/token';
 /** Where a resource server asks what a token is good for. */
 export const INTROSPECTION_PATH = '/_geekity/indieauth/introspect';
 
-/** Where a client registers itself, by RFC 7591 dynamic client registration. */
 export const REGISTRATION_PATH = '/_geekity/indieauth/register';
 
-/** Where the client_ids registration hands out live, each one's metadata in its path. */
 export const REGISTERED_CLIENTS_PATH = '/_geekity/indieauth/clients/';
 
 /** Where a client hands a token back to end it. */
