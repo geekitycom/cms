@@ -9,6 +9,7 @@ import type { GeekityEnv } from '../web/env.ts';
 import { mountFederation } from '../web/federation-routes.ts';
 import { mountAuthorizationEndpoint } from '../admin/indieauth-consent.ts';
 import { mountIndieAuthDiscovery } from '../web/indieauth-discovery.ts';
+import { mountClientRegistration } from '../web/indieauth-registration.ts';
 import { mountTokenEndpoint, mountTokenInfoEndpoints } from '../web/indieauth-token.ts';
 import { mountMicropub } from '../micropub/endpoint.ts';
 import { mountMicropubMedia } from '../micropub/media.ts';
@@ -135,11 +136,12 @@ export function createApp(
   // public site can claim either path as a permalink.
   mountWellKnown(app);
 
-  // IndieAuth's authorization server metadata, the endpoint that
-  // starts a sign-in, the one that issues tokens and
-  // the ones that answer for a token once issued, here for the
+  // IndieAuth's authorization server metadata, the endpoint a client
+  // registers at, the one that starts a sign-in, the one that issues tokens
+  // and the ones that answer for a token once issued, here for the
   // reason the well-known files are.
   mountIndieAuthDiscovery(app);
+  mountClientRegistration(app);
   mountAuthorizationEndpoint(app);
   mountTokenEndpoint(app);
   mountTokenInfoEndpoints(app);

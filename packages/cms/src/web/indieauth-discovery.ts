@@ -21,6 +21,12 @@ export const TOKEN_PATH = '/_geekity/indieauth/token';
 /** Where a resource server asks what a token is good for. */
 export const INTROSPECTION_PATH = '/_geekity/indieauth/introspect';
 
+/** Where a client registers itself, by RFC 7591 dynamic client registration. */
+export const REGISTRATION_PATH = '/_geekity/indieauth/register';
+
+/** Where the client_ids registration hands out live, each one's metadata in its path. */
+export const REGISTERED_CLIENTS_PATH = '/_geekity/indieauth/clients/';
+
 /** Where a client hands a token back to end it. */
 export const REVOCATION_PATH = '/_geekity/indieauth/revoke';
 
@@ -57,6 +63,7 @@ export interface AuthorizationServerMetadata {
   introspection_endpoint: string;
   revocation_endpoint: string;
   userinfo_endpoint: string;
+  registration_endpoint: string;
   response_types_supported: readonly string[];
   grant_types_supported: readonly string[];
   code_challenge_methods_supported: readonly string[];
@@ -86,6 +93,7 @@ export function authorizationServerMetadata(baseUrl: string): AuthorizationServe
     introspection_endpoint: `${baseUrl}${INTROSPECTION_PATH}`,
     revocation_endpoint: `${baseUrl}${REVOCATION_PATH}`,
     userinfo_endpoint: `${baseUrl}${USERINFO_PATH}`,
+    registration_endpoint: `${baseUrl}${REGISTRATION_PATH}`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
