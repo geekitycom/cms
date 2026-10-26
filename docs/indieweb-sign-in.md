@@ -57,7 +57,11 @@ publish. The app can send you back only to its own origin or to an address it
 lists in those details. For an `http` address on `localhost`, `127.0.0.1`, or
 `[::1]`, the port is not compared, as RFC 8252 asks: an app on your own
 computer, such as Claude Code, lists `http://localhost/callback` and listens on
-whatever port is free. While the site is in maintenance mode, the sign-in
+whatever port is free. An app with no `client_id` URL of its own can register
+one at `/_geekity/indieauth/register`, as
+[MCP client registration](mcp.md#client-registration) describes. A registered
+app can be sent back only to the addresses it registered. While the site is
+in maintenance mode, the sign-in
 endpoint answers 503, as do the URLs that advertise it.
 
 After you approve, the app posts the code it received back to the same
