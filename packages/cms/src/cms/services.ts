@@ -483,6 +483,7 @@ export function createServices({
     // The index is brought up to date before the first request, so a site
     // never serves a stale document, and the watcher takes over from there.
     {
+      name: 'the content index',
       start: async () => {
         await content.start();
       },
@@ -491,6 +492,7 @@ export function createServices({
     // After the scan, because the catch-up reads the index: a post whose
     // date passed while nothing was running is published here, once.
     {
+      name: 'the scheduler',
       start: () => scheduler.start(),
       stop: () => {
         scheduler.stop();
@@ -500,15 +502,17 @@ export function createServices({
     // After the scan, so a job reads an index that is up to date. Settled
     // before delivery, so what a job queued there is waited for after it.
     {
+      name: 'the job queue',
       start: () => jobs.start(),
       stop: () => {
         jobs.stop();
       },
       settled: () => jobs.close(),
     },
-    { settled: () => delivery.settled() },
-    { settled: () => relays.settled() },
+    { name: 'federation delivery', settled: () => delivery.settled() },
+    { name: 'relays', settled: () => relays.settled() },
     {
+      name: 'the federation queue',
       start: async () => {
         if (federationQueue === undefined) return;
         if (federationQueue.kind === 'pausing') federationQueue.resume();
@@ -526,21 +530,23 @@ export function createServices({
         federationQueue?.close();
       },
     },
-    { settled: () => webmentions.settled() },
+    { name: 'webmentions', settled: () => webmentions.settled() },
     {
+      name: 'reply contexts',
       start: () => {
         replyContexts.catchUp();
       },
       settled: () => replyContexts.settled(),
     },
-    avatars,
-    { settled: () => fonts.settled() },
-    actorProfiles,
-    replyBackfill,
-    retention,
-    digests,
-    { settled: () => notifier.settled() },
+    sweeping('avatars', avatars),
+    { name: 'fonts', settled: () => fonts.settled() },
+    sweeping('actor profiles', actorProfiles),
+    sweeping('reply backfill', replyBackfill),
+    sweeping('the retention sweep', retention),
+    sweeping('digests', digests),
+    { name: 'feed pings', settled: () => notifier.settled() },
     {
+      name: 'IndexNow',
       // What was gathered and not yet sent is dropped rather than sent on the
       // way down; a batch already going out finishes.
       settled: (ending) => {
@@ -549,16 +555,17 @@ export function createServices({
       },
     },
     {
+      name: 'plugins',
       start: () => plugins.reconcile(readEnabledPlugins(resolved.contentDir)),
       stop: (ending) => stopPlugins(plugins, ending),
     },
-    { settled: () => replyNotices.settled() },
-    { settled: () => notifications.settled() },
-    { settled: () => mail.settled() },
+    { name: 'reply notices', settled: () => replyNotices.settled() },
+    { name: 'notifications', settled: () => notifications.settled() },
+    { name: 'mail', settled: () => mail.settled() },
     // A page render derives an upload's variants in the background; the
     // encode finishes before the directories it writes into can be removed.
-    { settled: () => settleImageVariants(resolved) },
-    { settled: () => activityLogSettled(resolved.dataDir) },
+    { name: 'image variants', settled: () => settleImageVariants(resolved) },
+    { name: 'the activity log', settled: () => activityLogSettled(resolved.dataDir) },
   ];
 
   return {
@@ -590,6 +597,22 @@ export function createServices({
     indieauth: createIndieAuthState(resolved.now),
     jobs,
     lifecycle,
+  };
+}
+
+function sweeping(
+  name: string,
+  service: { start(): void; stop(): void; settled(): Promise<void> },
+): Service {
+  return {
+    name,
+    start: () => {
+      service.start();
+    },
+    stop: () => {
+      service.stop();
+    },
+    settled: () => service.settled(),
   };
 }
 

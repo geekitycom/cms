@@ -18,6 +18,7 @@ import { CryptographicKey, Endpoints, Image, Like, Person } from '@fedify/vocab'
 import sharp from 'sharp';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
+import { nextEvent } from '../__testing__/wait.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 import { discardDatabase } from '../cache.ts';
@@ -460,5 +461,76 @@ describe('an inbox log from before profiles were kept (AC #7)', () => {
     await cms.actorProfiles.settled();
     cms.actorProfiles.stop();
     assert.ok(!requested.includes(NICO), 'a second start fetches nothing it already has');
+  });
+});
+
+function settles(settling: Promise<void>): Promise<void> {
+  return nextEvent(
+    'settled',
+    (done, fail) => {
+      settling.then(done, fail);
+    },
+    1000,
+  );
+}
+
+function hangingLoad() {
+  const asked: string[] = [];
+  let heard: ((actorId: string) => void) | undefined;
+  return {
+    asked,
+    nextAsk: () =>
+      nextEvent<string>('a profile load', (done) => {
+        heard = done;
+      }),
+    load: (actorId: string, signal: AbortSignal): Promise<ActorProfile | undefined> => {
+      asked.push(actorId);
+      heard?.(actorId);
+      return new Promise((_, reject) => {
+        signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      });
+    },
+  };
+}
+
+describe('stopping the sweep', () => {
+  it('ends the sweep in flight: the fetch under way is aborted and nobody else is asked', async () => {
+    const { cms } = await site(likeLine(NICO, 1) + likeLine(SILENT, 2));
+    const loads = hangingLoad();
+    const service = createActorProfileService({
+      admin: cms.admin,
+      config: cms.config,
+      load: loads.load,
+      logger: { warn: () => undefined },
+    });
+
+    const asking = loads.nextAsk();
+    service.start();
+    await asking;
+    service.stop();
+
+    await settles(service.settled());
+    assert.equal(loads.asked.length, 1, 'the next actor was not asked');
+  });
+
+  it('does not count a fetch it cut off as a failure, so a restart asks again', async () => {
+    const { cms } = await site(likeLine(NICO, 1));
+    const loads = hangingLoad();
+    const service = createActorProfileService({
+      admin: cms.admin,
+      config: cms.config,
+      load: loads.load,
+      logger: { warn: () => undefined },
+    });
+
+    for (let run = 0; run < 2; run += 1) {
+      const asking = loads.nextAsk();
+      service.start();
+      await asking;
+      service.stop();
+      await settles(service.settled());
+    }
+
+    assert.deepEqual(loads.asked, [NICO, NICO]);
   });
 });

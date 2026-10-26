@@ -15,6 +15,7 @@ import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
+import { nextEvent } from '../__testing__/wait.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { discardDatabase } from '../cache.ts';
 import type { Cms } from '../index.ts';
@@ -770,5 +771,50 @@ describe('a fediverse comment imported from another site (TASK-336 AC #10)', () 
       likes.map((like) => like.id).sort(),
       [IMPORTED_LIKE, `${CAROL}#likes/1`].sort(),
     );
+  });
+});
+
+describe('stopping the sweep', () => {
+  it('ends the sweep in flight: the read under way is aborted and no other reply is read', async () => {
+    const { cms, contentDir } = await site(deliveredLine(A, ADA, POST) + deliveredLine(B, BOB, A));
+    const asked: string[] = [];
+    let heard: (() => void) | undefined;
+    const backfill = createReplyBackfill({
+      admin: cms.admin,
+      store: cms.store,
+      conversation: createConversation({
+        admin: cms.admin,
+        store: cms.store,
+        contentDir,
+        baseUrl: BASE_URL,
+        users: () => [],
+      }),
+      config: cms.config,
+      settings: cms.settings,
+      load: (noteId, signal) => {
+        asked.push(noteId);
+        heard?.();
+        return new Promise((_, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        });
+      },
+      logger: { warn: () => undefined },
+    });
+
+    const asking = nextEvent('a replies read', (done) => {
+      heard = done;
+    });
+    backfill.start();
+    await asking;
+    backfill.stop();
+
+    await nextEvent(
+      'settled',
+      (done, fail) => {
+        backfill.settled().then(done, fail);
+      },
+      1000,
+    );
+    assert.deepEqual(asked, [A]);
   });
 });
