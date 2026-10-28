@@ -8,7 +8,14 @@ import { resolveConfig } from '../config.ts';
 import { HCAPTCHA } from '../settings/hcaptcha.ts';
 import { createSettingsRegistry } from '../settings/registry.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
-import { HCAPTCHA_VERIFY_URL, verifyHcaptchaPair } from './hcaptcha.ts';
+import {
+  createHcaptchaChallenge,
+  HCAPTCHA_RESPONSE_FIELD,
+  HCAPTCHA_SCRIPT_URL,
+  HCAPTCHA_VERIFY_URL,
+  verifyHcaptchaPair,
+} from './hcaptcha.ts';
+import type { ChallengeAttempt } from '../forms/challenge.ts';
 
 /**
  * The hCaptcha pair check, against a stub of siteverify.
@@ -171,5 +178,186 @@ describe('checking an hCaptcha site key and secret', () => {
     assert.equal(await check(settings, stubbed), 'valid');
     assert.equal(calls[0]?.fields['secret'], 'env-secret');
     assert.equal(calls[0]?.fields['sitekey'], 'env-site-key');
+  });
+});
+
+/** One contact submission's answer, from a known address. */
+function attempt(token: string): ChallengeAttempt {
+  return { token, address: '203.0.113.9', type: 'contact-form' };
+}
+
+/** A challenge over `settings` that warns into `warnings`. */
+function challengeOver(
+  settings: SettingsRegistry,
+  fetch: typeof globalThis.fetch,
+  warnings: string[] = [],
+): ReturnType<typeof createHcaptchaChallenge> {
+  return createHcaptchaChallenge({
+    settings,
+    fetch,
+    logger: {
+      warn: (message) => {
+        warnings.push(message);
+      },
+    },
+  });
+}
+
+describe('the hCaptcha form challenge', () => {
+  it('verifies a token with the secret, the token, the site key and the address (AC #2)', async () => {
+    const { fetch: stubbed, calls } = stub(() => Response.json({ success: true }));
+    const challenge = challengeOver(await paired('the-site-key', '0xthe-secret'), stubbed);
+
+    assert.equal(await challenge.verify(attempt('a-solved-token')), 'pass');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.url, HCAPTCHA_VERIFY_URL);
+    assert.equal(calls[0]?.method, 'POST');
+    assert.deepEqual(calls[0]?.fields, {
+      secret: '0xthe-secret',
+      response: 'a-solved-token',
+      sitekey: 'the-site-key',
+      remoteip: '203.0.113.9',
+    });
+  });
+
+  it('leaves the address out when the site could not tell where a request came from', async () => {
+    const { fetch: stubbed, calls } = stub(() => Response.json({ success: true }));
+    const challenge = challengeOver(await paired(), stubbed);
+
+    await challenge.verify({ token: 'a-solved-token', address: undefined, type: 'comment' });
+    assert.equal(calls[0]?.fields['remoteip'], undefined);
+  });
+
+  it('fails a submission with no token without asking anybody (AC #3)', async () => {
+    const { fetch: stubbed, calls } = stub(() => Response.json({ success: true }));
+    const challenge = challengeOver(await paired(), stubbed);
+
+    assert.equal(await challenge.verify(attempt('')), 'fail');
+    assert.equal(await challenge.verify(attempt('   ')), 'fail');
+    assert.equal(calls.length, 0);
+  });
+
+  it('fails a token hCaptcha rejects (AC #3)', async () => {
+    const { fetch: stubbed } = stub(() => refused('invalid-input-response'));
+    const challenge = challengeOver(await paired(), stubbed);
+
+    assert.equal(await challenge.verify(attempt('a-forged-token')), 'fail');
+  });
+
+  it('has no opinion when hCaptcha errors, times out or answers nonsense (AC #4)', async () => {
+    const thrown = stub(() => {
+      throw new TypeError('fetch failed');
+    });
+    const timedOut = stub(() => {
+      throw new DOMException('The operation timed out.', 'TimeoutError');
+    });
+    const failed = stub(() => new Response('oh dear', { status: 503 }));
+    const garbled = stub(() => new Response('<html>', { status: 200 }));
+
+    for (const { fetch: stubbed } of [thrown, timedOut, failed, garbled]) {
+      const warnings: string[] = [];
+      const challenge = challengeOver(await paired(), stubbed, warnings);
+      assert.equal(await challenge.verify(attempt('a-solved-token')), 'unknown');
+      assert.equal(warnings.length, 1, 'whoever runs the site can see it stopped working');
+    }
+  });
+
+  it('gives up on an hCaptcha that does not answer in time (AC #4)', async () => {
+    const hanging = (async (_input: string | URL | Request, init?: RequestInit) => {
+      await new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(init.signal?.reason as Error);
+        });
+      });
+      return Response.json({ success: true });
+    }) as typeof fetch;
+    const challenge = createHcaptchaChallenge({
+      settings: await paired(),
+      fetch: hanging,
+      timeoutMs: 5,
+      logger: { warn: () => undefined },
+    });
+
+    assert.equal(await challenge.verify(attempt('a-solved-token')), 'unknown');
+  });
+
+  it('has no opinion when hCaptcha says the pair itself is wrong', async () => {
+    const { fetch: stubbed } = stub(() => refused('invalid-input-secret'));
+    const warnings: string[] = [];
+    const challenge = challengeOver(await paired(), stubbed, warnings);
+
+    assert.equal(await challenge.verify(attempt('a-solved-token')), 'unknown');
+    assert.equal(warnings.length, 1);
+  });
+
+  it('is off, asks nothing and draws nothing while either value is empty (AC #1)', async () => {
+    const { fetch: stubbed, calls } = stub(() => Response.json({ success: true }));
+
+    const none = challengeOver(await unpaired(), stubbed);
+    assert.equal(await none.widget(), undefined);
+    assert.equal(await none.verify(attempt('')), 'unknown');
+
+    const half = await unpaired();
+    await half.set('hcaptcha', new Map([['site_key', 'only-a-site-key']]), 'admin');
+    const halfChallenge = challengeOver(half, stubbed);
+    assert.equal(await halfChallenge.widget(), undefined);
+    assert.equal(await halfChallenge.verify(attempt('a-solved-token')), 'unknown');
+
+    assert.equal(calls.length, 0);
+  });
+
+  it('is off while the stored pair is one hCaptcha refused', async () => {
+    const { fetch: stubbed, calls } = stub(() => Response.json({ success: true }));
+    const settings = await paired();
+    await settings.set('hcaptcha', new Map([['status', 'invalid']]), 'admin');
+    const challenge = challengeOver(settings, stubbed);
+
+    assert.equal(await challenge.widget(), undefined);
+    assert.equal(await challenge.verify(attempt('')), 'unknown');
+    assert.equal(calls.length, 0);
+  });
+
+  it('describes the widget a theme draws while it is on', async () => {
+    const { fetch: stubbed } = stub(() => Response.json({ success: true }));
+    const challenge = challengeOver(await paired('the-site-key'), stubbed);
+
+    assert.equal(challenge.field, HCAPTCHA_RESPONSE_FIELD);
+    assert.equal(HCAPTCHA_RESPONSE_FIELD, 'h-captcha-response');
+    assert.deepEqual(await challenge.widget(), {
+      provider: 'hcaptcha',
+      siteKey: 'the-site-key',
+      scriptUrl: HCAPTCHA_SCRIPT_URL,
+      field: 'h-captcha-response',
+    });
+  });
+
+  it('reads the pair on every call, so a change needs no restart (AC #8)', async () => {
+    const { fetch: stubbed, calls } = stub(() => Response.json({ success: true }));
+    const settings = await unpaired();
+    const challenge = challengeOver(settings, stubbed);
+
+    assert.equal(await challenge.verify(attempt('')), 'unknown');
+
+    await settings.set(
+      'hcaptcha',
+      new Map([
+        ['site_key', 'the-site-key'],
+        ['secret', '0xthe-secret'],
+      ]),
+      'admin',
+    );
+    assert.equal(await challenge.verify(attempt('')), 'fail');
+    assert.equal(await challenge.verify(attempt('a-solved-token')), 'pass');
+
+    await settings.set(
+      'hcaptcha',
+      new Map([
+        ['site_key', ''],
+        ['secret', ''],
+      ]),
+      'admin',
+    );
+    assert.equal(await challenge.verify(attempt('')), 'unknown');
+    assert.equal(calls.length, 1);
   });
 });

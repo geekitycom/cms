@@ -6,6 +6,7 @@ import { webmentionKey } from '../content/guids.ts';
 import { addComment, deleteComment, updateComment } from './records.ts';
 import type { CommentRecords } from './records.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms/checker.ts';
+import type { ChallengeVerdict } from '../forms/challenge.ts';
 
 /**
  * The one door into a post's comments.
@@ -67,6 +68,11 @@ export interface IntakeCommentOptions {
   baseUrl: string;
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
+  /**
+   * What the form's challenge said, for a stranger's form. Absent is no
+   * opinion, which is what every other origin has.
+   */
+  challenge?: ChallengeVerdict | undefined;
   /** Who to tell, when there is anybody to tell. */
   notices?: CommentNotices | undefined;
   /** Where the submission came from, **unhashed**. Only the checker sees it. */
@@ -120,6 +126,9 @@ export type CommentIntakeOutcome =
  * | `ham`     | Approved.                            | The moderator's decision stands.     |
  * | `unknown` | Where the site would have put it.    | The moderator's decision stands.     |
  *
+ * A form comment whose challenge failed is filed as spam whatever the checker
+ * said, unless it said `discard`, which still throws it away.
+ *
  * A source re-sending its webmention must not take an approved mention back
  * into the queue, and must not quietly let a spam one out. A checker that has
  * changed its mind to `spam` is the one thing that moves it, because that is a
@@ -154,7 +163,7 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
     return { kind: 'discarded', removed: true };
   }
 
-  const status = statusFor(verdict, proposed.status, held);
+  const status = options.challenge === 'fail' ? 'spam' : statusFor(verdict, proposed.status, held);
 
   if (held !== undefined) {
     // Its id, its post and its source never move: that is what makes it the

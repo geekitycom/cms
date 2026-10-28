@@ -6,6 +6,8 @@ import {
   trapped,
 } from '../forms/protection.ts';
 import type { CommentChecker } from '../forms/checker.ts';
+import { askChallenge } from '../forms/challenge.ts';
+import type { FormChallenge } from '../forms/challenge.ts';
 import type { PostComment } from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
@@ -26,7 +28,11 @@ import type { CommentRecords } from './records.ts';
  * third is the same limiter the login form uses, over the commenter's address,
  * so one machine cannot post a hundred comments while a moderator sleeps.
  *
- * What survives all three is handed to {@link intakeComment}, which is where
+ * What survives all three is asked about by the {@link FormChallenge}, such as
+ * hCaptcha, when the site has one. A comment with no answer, or a wrong one, is
+ * not refused but filed as spam, so the form still works with JavaScript off.
+ *
+ * Then it is handed to {@link intakeComment}, which is where
  * every comment on this site is written whatever proposed it: the checker, the
  * verdict-to-status rule, the file, the index and the notice all live there, so
  * a form submission and a webmention cannot be treated by two sets of rules.
@@ -189,6 +195,10 @@ export interface SubmitCommentOptions {
   baseUrl: string;
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
+  /** The challenge, when the site has one. */
+  challenge?: FormChallenge | undefined;
+  /** What the challenge's widget put in its field, or empty when nothing did. */
+  challengeToken?: string | undefined;
   /** Who to tell about what lands, handed straight to the intake. */
   notices?: CommentNotices | undefined;
   /** Where the request came from, as far as the site can tell. */
@@ -244,6 +254,12 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
   const wait = throttle.retryAfter(keys);
   if (wait !== undefined) return refused({ kind: 'rate-limited', retryAfter: wait });
 
+  const challenged = await askChallenge(options.challenge, {
+    token: options.challengeToken ?? '',
+    address: options.address,
+    type: 'comment',
+  });
+
   const markdown = form.body.trim();
   const author = {
     name: form.name.trim(),
@@ -280,6 +296,7 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     dataDir: options.dataDir,
     baseUrl: options.baseUrl,
     checker: options.checker,
+    challenge: challenged,
     notices: options.notices,
     address: options.address,
     userAgent: options.userAgent,

@@ -163,6 +163,9 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `listUsers`          | function | Every user, by name, without password hashes.                                                               |
 | `SITE`               | constant | The `site` settings namespace, for `cms.settings.values(SITE)` and `cms.settings.get(SITE.title)`.          |
 | `setUserProfile`     | function | Write a user's profile, replacing whatever was there.                                                       |
+| `ChallengeAttempt`   | type     | One submission's answer to a `FormChallenge`, and what is known about who sent it.                          |
+| `ChallengeVerdict`   | type     | What a form challenge can say: `pass`, `fail` (filed as spam) or `unknown`.                                 |
+| `ChallengeWidget`    | type     | What a theme draws a form challenge from: the provider, the site key, the script URL and the field.         |
 | `CommentAuthor`      | type     | Who wrote a comment, as much as the site knows.                                                             |
 | `CommentChecker`     | type     | A third-party opinion on comments: the one seam anything like Akismet plugs into.                           |
 | `CommentContent`     | type     | What a comment says, in both the forms the site keeps.                                                      |
@@ -183,6 +186,7 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `CreateUserInput`    | type     | What `createUser` is given.                                                                                 |
 | `Delivery`           | type     | How one attempt to deliver one activity to one recipient ended, and what the activity was.                  |
 | `DeliveryStatus`     | type     | One of `DELIVERY_STATUSES`.                                                                                 |
+| `FormChallenge`      | type     | A challenge a stranger answers before a public form is sent: the seam hCaptcha plugs into.                  |
 | `PostComment`        | type     | A `CommentRecord` with the post it is on.                                                                   |
 | `ProfileLink`        | type     | One thing a profile points at: somewhere else this person is.                                               |
 | `Relay`              | type     | The site's subscription to one relay.                                                                       |

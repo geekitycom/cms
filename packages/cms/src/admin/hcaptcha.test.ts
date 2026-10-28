@@ -188,6 +188,7 @@ describe('hCaptcha on the Discussion settings screen', () => {
     assert.equal(pairFile(dataDir)?.['site_key'], 'not-a-site-key');
     assert.equal(pairFile(dataDir)?.['status'], 'invalid');
     assert.match(screen, /hCaptcha refused/);
+    assert.match(screen, /no form is challenged until/, 'a refused pair turns the challenge off');
   });
 
   it('still saves a pair it could not check, and says that instead (AC #4)', async () => {

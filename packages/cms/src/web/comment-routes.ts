@@ -23,6 +23,7 @@ import {
 import type { CommentForm, CommentRefusal, CommentThrottle } from '../comments/submission.ts';
 import { commenterOf } from '../comments/viewer.ts';
 import { stringOrEmpty } from '../util/forms.ts';
+import { challengeTokenOf } from '../forms/challenge.ts';
 import { documentSite } from './document-site.ts';
 import type { GeekityEnv } from './env.ts';
 import { CROSS_SITE_REFUSAL, crossSiteWrite, csrfTokenMatches } from './session.ts';
@@ -127,6 +128,10 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       dataDir: config.dataDir,
       baseUrl: config.baseUrl,
       checker: config.commentChecker,
+      // Only a stranger is challenged: somebody signed in took the branch
+      // above, and a session is better evidence than any widget.
+      challenge: config.formChallenge,
+      challengeToken: challengeTokenOf(body, config.formChallenge),
       // Who hears about what lands is the intake's to decide, and neither
       // message is awaited: the reader is redirected now and they go out
       // behind them.

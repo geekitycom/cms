@@ -6,6 +6,7 @@ import type { Document } from '../content/document.ts';
 import { isServed } from '../content/served.ts';
 import type { GeekityEnv } from './env.ts';
 import { stringOrEmpty } from '../util/forms.ts';
+import { challengeTokenOf } from '../forms/challenge.ts';
 import { sendContactMessage } from '../contact/delivery.ts';
 import {
   CONTACT_ANCHOR,
@@ -78,6 +79,8 @@ export function mountContact(app: Hono<GeekityEnv>): void {
       baseUrl: config.baseUrl,
       // The same checker comments go through, told this is a contact form.
       checker: config.commentChecker,
+      challenge: config.formChallenge,
+      challengeToken: challengeTokenOf(body, config.formChallenge),
       address: clientAddress(c, config),
       userAgent: c.req.header('user-agent'),
       referrer: c.req.header('referer'),

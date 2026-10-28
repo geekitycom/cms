@@ -308,7 +308,7 @@ function pairSentence(status: HcaptchaPairStatus | undefined): string {
     case 'valid':
       return 'Saved. hCaptcha took the site key; the first form a visitor sends proves the secret.';
     case 'invalid':
-      return 'Saved, but hCaptcha refused the site key or the secret, so the forms are challenged with a pair that cannot pass.';
+      return 'Saved, but hCaptcha refused the site key or the secret, so no form is challenged until they are put right.';
     case 'unchecked':
       return 'Saved, but hCaptcha could not be reached to check the pair. Check it again to try.';
     case undefined:
@@ -363,7 +363,7 @@ export async function hcaptchaPanel(settings: SettingsRegistry): Promise<Record<
       hcaptcha.status === 'valid'
         ? 'hCaptcha took the site key when it was last checked. It checks the secret only against a solved challenge, so the first form a visitor sends is what proves it.'
         : hcaptcha.status === 'invalid'
-          ? 'hCaptcha refused the site key or the secret the last time they were checked.'
+          ? 'hCaptcha refused the site key or the secret the last time they were checked, so no form is challenged until they are put right.'
           : 'hCaptcha could not be reached the last time the pair was checked. Check it again to try.',
   };
 }

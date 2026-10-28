@@ -135,6 +135,9 @@ export type {
   UserProfile,
 } from './admin/index.ts';
 export type {
+  ChallengeAttempt,
+  ChallengeVerdict,
+  ChallengeWidget,
   CommentChecker,
   CommentFormContext,
   CommentNotices,
@@ -144,6 +147,7 @@ export type {
   CommentSubmission,
   CommentVerdict,
   CommentViewer,
+  FormChallenge,
   SubmissionType,
 } from './comments/index.ts';
 export { CONTACT_FIELDS, CONTACT_POST_PATH } from './contact/index.ts';
