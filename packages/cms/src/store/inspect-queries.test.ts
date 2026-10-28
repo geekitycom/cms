@@ -186,19 +186,19 @@ describe('searching the delivery outcomes', () => {
           'Update',
           POST,
           '2026-03-02T00:00:00.000Z',
-          { sent: 0, queued: 0, retrying: 1, failed: 0 },
+          { sent: 0, queued: 0, retrying: 1, failed: 0, unknown: 0 },
         ],
         [
           'Create',
           POST,
           '2026-03-01T00:00:00.000Z',
-          { sent: 1, queued: 0, retrying: 0, failed: 1 },
+          { sent: 1, queued: 0, retrying: 0, failed: 1, unknown: 0 },
         ],
         [
           'Delete',
           OLD_ID,
           '2026-02-01T00:00:00.000Z',
-          { sent: 1, queued: 0, retrying: 0, failed: 0 },
+          { sent: 1, queued: 0, retrying: 0, failed: 0, unknown: 0 },
         ],
       ],
     );

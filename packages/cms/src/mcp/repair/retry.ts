@@ -9,7 +9,7 @@ export const retryDeliveries = defineTool({
   name: 'retry_deliveries',
   title: 'Retry failed deliveries',
   description:
-    'Find the recipients whose newest delivery of a post failed, for one post, for one inbox, or both, and queue a job that sends each post again, as it reads now, to those recipients alone, at the inbox each uses now. A recipient whose Create failed is sent the Create; the rest are sent an Update. Posts go one at a time with a pause between. Returns what will be retried and the queued job; outcomes appear in post_federation as the queue settles them.',
+    'Find the recipients whose newest delivery of a post failed or has an unknown outcome, for one post, for one inbox, or both, and queue a job that sends each post again, as it reads now, to those recipients alone, at the inbox each uses now. A recipient whose Create failed is sent the Create; the rest are sent an Update. Posts go one at a time with a pause between. Returns what will be retried and the queued job; outcomes appear in post_federation as the queue settles them.',
   scope: 'repair',
   annotations: REPAIR,
   inputSchema: {
@@ -18,7 +18,7 @@ export const retryDeliveries = defineTool({
       post: { ...POST_INPUT, description: `${POST_INPUT.description} Give this, inbox, or both.` },
       inbox: {
         type: 'string',
-        description: 'Only deliveries that failed at this inbox, often a shared one.',
+        description: 'Only deliveries to this inbox, often a shared one.',
       },
     },
     additionalProperties: false,

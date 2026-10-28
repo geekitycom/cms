@@ -460,6 +460,20 @@ describe('per-post delivery status', () => {
     assert.match(html, /<button type="submit"[^>]*>Resend<\/button>/, 'and it can be sent again');
   });
 
+  it('counts a delivery whose outcome was never seen apart from the sent ones', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
+    await publishPost(agent, cms);
+    const [sent] = cms.admin.searchDeliveries({}).items;
+    assert.ok(sent !== undefined);
+    cms.admin.recordDelivery({ ...sent, status: 'unknown' });
+
+    const html = await federationScreen(agent);
+
+    assert.match(html, /<td>0, 1 outcome unknown<\/td>/);
+  });
+
   it('lists a post in the trash, which is a copy the followers still hold', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);

@@ -307,8 +307,9 @@ the same table as a save:
 to withdraw.
 
 A retry sends what each recipient missed. The `retry_deliveries`
-[MCP tool](mcp.md) passes `resend` the recipients whose newest delivery failed,
-in two groups. A recipient whose newest `Create` for the post failed never
+[MCP tool](mcp.md) passes `resend` the recipients whose newest delivery failed
+or has an unknown outcome, in two groups. A recipient whose newest `Create` for
+the post failed, or has an unknown outcome, may never have
 stored the post, and Mastodon drops an `Update` of a status it does not hold,
 so that group is sent the `Create` again, built from the post as it reads now,
 under the `Create` id the other followers already have. The other group is sent
@@ -331,15 +332,30 @@ A status is one of:
 - `retrying`: its last attempt failed, and the queue will try again. The error
   says why the attempt failed, including the status code the inbox answered
   with.
+  When the inbox answered with an HTML page, such as a Cloudflare challenge,
+  the error keeps the status line and the page's title and drops the rest of
+  the markup. A plain-text or JSON body is kept as it came.
 - `failed`: Fedify gave up, with the error. Fedify gives up on an inbox that
   answers `404` or `410`, and on any other failure once its retry policy runs
   out. A send that throws before it reaches the queue is also `failed`.
+- `unknown`: the row said `queued` or `retrying`, but the queue holds no
+  message for it, so nobody saw how it ended. Versions before 0.43.0 never
+  updated a `queued` row, so most of their rows end up here. A queue that loses
+  messages leaves the same thing behind.
 
 The site writes a `queued` row before it hands an activity to the queue. The
 queue worker then writes the outcome of each attempt to that row. A site that
 runs with `federation.queue: null` sends while the request runs, so it writes
 `sent` or `failed` once the send returns. A delivery that dev mode holds before
 it is queued is not recorded.
+
+When the server starts, before it sends anything, it marks as `unknown` each
+`queued` or `retrying` row that has no message in `data/queue.sqlite`. A site
+with `federation.queue: null` has no queue, so all of those rows become
+`unknown`. When the site supplies its own queue, the server cannot read it and
+leaves the rows as they are. The federation screen counts `unknown` rows in
+the Sent column, for example `0, 3 outcome unknown`. `retry_deliveries` sends
+them again, like failed ones.
 
 One capability is not supported: tombstoning a post whose file is deleted, as
 opposed to trashed. With no file, there is nothing to build the `Tombstone`

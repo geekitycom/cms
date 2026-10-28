@@ -135,7 +135,7 @@ describe('the inspect tools', () => {
 
     assert.deepEqual(
       rows(answer, 'activities').map((sent) => [sent['activityType'], sent['counts']]),
-      [['Create', { sent: 1, queued: 0, retrying: 0, failed: 1 }]],
+      [['Create', { sent: 1, queued: 0, retrying: 0, failed: 1, unknown: 0 }]],
     );
     assert.deepEqual(
       rows(answer, 'deliveries').map((row) => [row['inboxId'], row['status'], row['error']]),

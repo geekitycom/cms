@@ -1007,6 +1007,7 @@ describe('the delivery outcome cache', () => {
       queued: 0,
       retrying: 0,
       failed: 0,
+      unknown: 0,
     });
   });
 
@@ -1071,6 +1072,7 @@ describe('the delivery outcome cache', () => {
       queued: 0,
       retrying: 0,
       failed: 1,
+      unknown: 0,
     });
   });
 
@@ -1085,6 +1087,7 @@ describe('the delivery outcome cache', () => {
       queued: 0,
       retrying: 0,
       failed: 0,
+      unknown: 0,
     });
     assert.equal(admin.listDeliveries(ACTIVITY_ID)[0]?.error, null);
   });
@@ -1108,6 +1111,141 @@ describe('the delivery outcome cache', () => {
       undefined,
       'and nothing about a post it was never asked about',
     );
+  });
+  describe('an error that carries the page the inbox answered with', () => {
+    const CLOUDFLARE = [
+      `Failed to send activity ${ACTIVITY_ID} to https://remote.example/inbox (403 Forbidden):`,
+      '<!DOCTYPE html>',
+      '<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->',
+      '<head>',
+      '<title>Attention Required! | Cloudflare</title>',
+      '<style>body{margin:0;padding:0}</style>',
+      '<script>if (!navigator.cookieEnabled) {}</script>',
+    ].join('\n');
+    const SHORT = `Failed to send activity ${ACTIVITY_ID} to https://remote.example/inbox (403 Forbidden):\nAn HTML page titled "Attention Required! | Cloudflare".`;
+
+    it('keeps the status line and the page title, recorded or settled', async () => {
+      const admin = await store();
+      admin.recordDelivery(outcome({ status: 'failed', error: CLOUDFLARE }));
+      assert.equal(admin.listDeliveries(ACTIVITY_ID)[0]?.error, SHORT);
+
+      admin.settleDeliveries({
+        activityId: ACTIVITY_ID,
+        inbox: 'https://remote.example/inbox',
+        status: 'retrying',
+        error: CLOUDFLARE.replace('Cloudflare</title>', 'Cloudflare &amp; co</title>'),
+      });
+      assert.equal(
+        admin.listDeliveries(ACTIVITY_ID)[0]?.error,
+        SHORT.replace('Cloudflare".', 'Cloudflare & co".'),
+      );
+    });
+
+    it('shortens a page an older version stored whole', async () => {
+      const dataDir = await temporaryDir();
+      const admin = openAdminStore({ dataDir });
+      openStores.push(admin);
+      admin.recordDelivery(outcome({ status: 'failed', error: 'placeholder' }));
+      const db = new DatabaseSync(path.join(dataDir, 'geekity.db'));
+      db.prepare('UPDATE ap_deliveries SET error = ?').run(CLOUDFLARE);
+      db.close();
+
+      assert.equal(admin.listDeliveries(ACTIVITY_ID)[0]?.error, SHORT);
+      assert.equal(admin.searchDeliveries({}).items[0]?.error, SHORT);
+    });
+
+    it('says only that it was a page when the page has no title', async () => {
+      const admin = await store();
+      admin.recordDelivery(
+        outcome({
+          status: 'failed',
+          error: 'Failed (502 Bad Gateway):\n<html><body>Down</body></html>',
+        }),
+      );
+      assert.equal(
+        admin.listDeliveries(ACTIVITY_ID)[0]?.error,
+        'Failed (502 Bad Gateway):\nAn HTML page.',
+      );
+    });
+
+    it('leaves a plain-text or JSON body as it came', async () => {
+      const admin = await store();
+      const json = 'Failed (401 Unauthorized):\n{"error":"public key not found"}';
+      admin.recordDelivery(outcome({ status: 'failed', error: json }));
+      assert.equal(admin.listDeliveries(ACTIVITY_ID)[0]?.error, json);
+    });
+  });
+
+  describe('rows the queue no longer holds', () => {
+    const BEFORE = '2026-06-01T00:00:00.000Z';
+    const WAITING_INBOX = 'https://waiting.example/inbox';
+
+    function unsettled(inboxId: string, status: 'queued' | 'retrying', attemptedAt: string) {
+      return outcome({
+        actorId: inboxId.replace('/inbox', '/users/ada'),
+        inboxId,
+        status,
+        error: status === 'retrying' ? 'Their instance answered 503.' : null,
+        attemptedAt,
+      });
+    }
+
+    it('reads as unknown when no message for them waits, keeping the error and the time', async () => {
+      const admin = await store();
+      admin.recordDelivery(
+        unsettled('https://stale.example/inbox', 'queued', '2026-03-01T00:00:00.000Z'),
+      );
+      admin.recordDelivery(
+        unsettled('https://gave-up.example/inbox', 'retrying', '2026-03-02T00:00:00.000Z'),
+      );
+      admin.recordDelivery(unsettled(WAITING_INBOX, 'queued', '2026-03-03T00:00:00.000Z'));
+      admin.recordDelivery(
+        unsettled('https://later.example/inbox', 'queued', '2026-07-01T00:00:00.000Z'),
+      );
+
+      admin.markUnsettledDeliveriesUnknown({
+        before: BEFORE,
+        waiting: [{ activityId: ACTIVITY_ID, inbox: WAITING_INBOX }],
+      });
+
+      assert.deepEqual(
+        admin
+          .listDeliveries(ACTIVITY_ID)
+          .map((row) => [row.inboxId, row.status, row.error, row.attemptedAt]),
+        [
+          [
+            'https://gave-up.example/inbox',
+            'unknown',
+            'Their instance answered 503.',
+            '2026-03-02T00:00:00.000Z',
+          ],
+          ['https://later.example/inbox', 'queued', null, '2026-07-01T00:00:00.000Z'],
+          ['https://stale.example/inbox', 'unknown', null, '2026-03-01T00:00:00.000Z'],
+          [WAITING_INBOX, 'queued', null, '2026-03-03T00:00:00.000Z'],
+        ],
+      );
+    });
+
+    it('leaves settled rows as they are', async () => {
+      const admin = await store();
+      admin.recordDelivery(outcome({ attemptedAt: '2026-03-01T00:00:00.000Z' }));
+      admin.recordDelivery(
+        outcome({
+          actorId: 'https://broken.example/users/nobody',
+          inboxId: 'https://broken.example/inbox',
+          status: 'failed',
+          error: 'Gone.',
+          attemptedAt: '2026-03-01T00:00:00.000Z',
+        }),
+      );
+
+      admin.markUnsettledDeliveriesUnknown({ before: BEFORE, waiting: [] });
+
+      assert.deepEqual(
+        admin.listDeliveries(ACTIVITY_ID).map((row) => row.status),
+        ['failed', 'sent'],
+      );
+    });
   });
 });
 

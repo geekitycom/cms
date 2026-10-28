@@ -120,6 +120,24 @@ describe('which deliveries a retry sends again', () => {
     );
   });
 
+  it('retries a recipient whose newest outcome was never seen, and sends the Create when that was the Create', () => {
+    const site = services([
+      row('one', 'carol', INBOX, 'unknown', '2026-03-01T00:00:00Z', 'Create'),
+      row('one', 'dave', INBOX, 'unknown', '2026-03-02T00:00:00Z'),
+      row('one', 'dave', INBOX, 'sent', '2026-03-01T00:00:00Z', 'Create'),
+      row('one', 'erin', INBOX, 'queued', '2026-03-02T00:00:00Z'),
+    ]);
+
+    const [retry] = failedRetries(site, { slug: null, inbox: INBOX });
+    assert.deepEqual(
+      retry?.recipients.map((one) => [one.actorId.split('/').at(-1), one.missedAnnouncement]),
+      [
+        ['dave', false],
+        ['carol', true],
+      ],
+    );
+  });
+
   it('leaves out an activity about no post, such as a profile Update', () => {
     const site = services([
       { ...row('one', 'carol', INBOX, 'failed', '2026-03-01T00:00:00Z'), slug: null },

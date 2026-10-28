@@ -5,7 +5,7 @@ import type { CatalogReader, DocumentLookup } from '../content/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { jobName } from '../jobs/types.ts';
 import type { JobDefinition, Json } from '../jobs/types.ts';
-import type { AdminStore, Delivery } from '../store/admin-store.ts';
+import type { AdminStore, Delivery, DeliveryStatus } from '../store/admin-store.ts';
 import { NO_LIMIT } from '../store/rows.ts';
 import { isRecord } from '../util/guards.ts';
 import { postBySlug } from './delivery.ts';
@@ -34,6 +34,8 @@ export type RetryReport = {
     readonly activity: ResendActivity | null;
   }[];
 };
+
+const RETRIED: ReadonlySet<DeliveryStatus> = new Set(['failed', 'unknown']);
 
 export const RETRY_DELIVERIES_JOB = jobName<RetryFilter, RetryReport>('retry-deliveries');
 
@@ -80,13 +82,14 @@ export function failedRetries(services: RetryPlanServices, filter: RetryFilter):
 
   const retries = new Map<string, RetryRecipient[]>();
   for (const [key, { slug, row }] of newest) {
-    if (row.status !== 'failed') continue;
+    if (!RETRIED.has(row.status)) continue;
+    const create = newestCreate.get(key);
     if (filter.inbox !== null && row.inboxId !== filter.inbox) continue;
     const recipient = {
       actorId: row.actorId,
       inboxId: row.inboxId,
       error: row.error,
-      missedAnnouncement: newestCreate.get(key)?.status === 'failed',
+      missedAnnouncement: create !== undefined && RETRIED.has(create.status),
     };
     const held = retries.get(slug);
     if (held === undefined) retries.set(slug, [recipient]);

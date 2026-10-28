@@ -2,6 +2,7 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 import { QUEUE, dataPath } from '../files/data-files.ts';
+import type { WaitingDelivery } from './deliveries.ts';
 
 export const FEDERATION_QUEUE_TABLE = 'federation_messages';
 
@@ -43,19 +44,53 @@ export function countRetryingDeliveries(dataDir: string, since: string): number 
   );
 }
 
+/**
+ * Each delivery a message in the queue still carries: an outbox message's
+ * inbox, and every inbox a fanout has yet to split into outbox messages.
+ */
+export function listWaitingDeliveries(dataDir: string): WaitingDelivery[] {
+  return readQueue(dataDir, [], (db) =>
+    db
+      .prepare(
+        `SELECT json_extract(message, '$.activityId') AS activity_id,
+                json_extract(message, '$.inbox') AS inbox
+           FROM ${FEDERATION_QUEUE_TABLE}
+          WHERE json_extract(message, '$.type') = 'outbox'
+         UNION ALL
+         SELECT json_extract(queued.message, '$.activityId'), inboxes.key
+           FROM ${FEDERATION_QUEUE_TABLE} AS queued,
+                json_each(queued.message, '$.inboxes') AS inboxes
+          WHERE json_extract(queued.message, '$.type') = 'fanout'`,
+      )
+      .all()
+      .flatMap((row) => {
+        const activityId = row['activity_id'];
+        const inbox = row['inbox'];
+        return typeof activityId === 'string' && typeof inbox === 'string'
+          ? [{ activityId, inbox }]
+          : [];
+      }),
+  );
+}
+
 function countMessages(dataDir: string, where: string, values: readonly string[]): number {
+  return readQueue(dataDir, 0, (db) => {
+    const row = db
+      .prepare(`SELECT count(*) AS waiting FROM ${FEDERATION_QUEUE_TABLE} ${where}`)
+      .get(...values);
+    return Number(row?.['waiting'] ?? 0);
+  });
+}
+
+function readQueue<T>(dataDir: string, empty: T, read: (db: DatabaseSync) => T): T {
   const file = queueFile(dataDir);
-  if (!existsSync(file)) return 0;
+  if (!existsSync(file)) return empty;
   const db = new DatabaseSync(file, { readOnly: true, timeout: BUSY_TIMEOUT_MS });
   try {
     const table = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
       .get(FEDERATION_QUEUE_TABLE);
-    if (table === undefined) return 0;
-    const row = db
-      .prepare(`SELECT count(*) AS waiting FROM ${FEDERATION_QUEUE_TABLE} ${where}`)
-      .get(...values);
-    return Number(row?.['waiting'] ?? 0);
+    return table === undefined ? empty : read(db);
   } finally {
     db.close();
   }
