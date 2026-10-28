@@ -17,13 +17,6 @@ import {
 } from './hcaptcha.ts';
 import type { ChallengeAttempt } from '../forms/challenge.ts';
 
-/**
- * The hCaptcha pair check, against a stub of siteverify.
- *
- * Nothing here reaches the network: every test hands the module a `fetch` of
- * its own and reads the request it was given.
- */
-
 const dirs: string[] = [];
 
 after(async () => {
@@ -87,7 +80,6 @@ function stub(reply: (call: Call) => Response | Promise<Response>): {
   return { fetch: impl, calls };
 }
 
-/** What siteverify answers a token it cannot use, with the error codes given. */
 function refused(...codes: string[]): Response {
   return Response.json({ success: false, 'error-codes': codes });
 }
@@ -181,12 +173,10 @@ describe('checking an hCaptcha site key and secret', () => {
   });
 });
 
-/** One contact submission's answer, from a known address. */
 function attempt(token: string): ChallengeAttempt {
   return { token, address: '203.0.113.9', type: 'contact-form' };
 }
 
-/** A challenge over `settings` that warns into `warnings`. */
 function challengeOver(
   settings: SettingsRegistry,
   fetch: typeof globalThis.fetch,

@@ -132,8 +132,6 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       dataDir: config.dataDir,
       baseUrl: config.baseUrl,
       checker: config.commentChecker,
-      // Only a stranger is challenged: somebody signed in took the branch
-      // above, and a session is better evidence than any widget.
       challenge: config.formChallenge,
       challengeToken: challengeTokenOf(body, config.formChallenge),
       // Who hears about what lands is the intake's to decide, and neither

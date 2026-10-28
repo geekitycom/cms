@@ -19,14 +19,6 @@ import { HCAPTCHA_RESPONSE_FIELD, HCAPTCHA_SCRIPT_URL } from './hcaptcha.ts';
 import { commentFormFor, drawnFor } from './page-form.ts';
 import { COMMENT_FIELDS } from './submission.ts';
 
-/**
- * The hCaptcha widget as a theme sees it: what the form contexts carry, what
- * the default theme draws from them, and the script that draws the widget.
- *
- * Nothing here reaches hCaptcha. The pages are rendered by the app, and the
- * script is run against a stand-in for the browser.
- */
-
 const box = sandbox();
 
 after(async () => {
@@ -112,7 +104,6 @@ describe('the form contexts and a challenge (AC #1)', () => {
   });
 });
 
-/** A CMS over one post and one contact page, with a pair stored unless asked not to. */
 async function site(options: { paired?: boolean; status?: string } = {}): Promise<Cms> {
   const contentDir = await box.dir('geekity-hcaptcha-theme-content-');
   const dataDir = await box.dir('geekity-hcaptcha-theme-data-');
@@ -155,7 +146,6 @@ async function refused(cms: Cms, url: string, fields: Record<string, string>): P
   return await response.text();
 }
 
-/** Every `<script>` that runs on a page, as its `src`. */
 function scriptSources(page: string): string[] {
   return [...page.matchAll(/<script\b([^>]*)>/g)]
     .map((match) => match[1] ?? '')
@@ -163,7 +153,6 @@ function scriptSources(page: string): string[] {
     .map((attributes) => /src="([^"]*)"/.exec(attributes)?.[1] ?? '(inline)');
 }
 
-/** What the default theme draws for a challenged form, as the test reads it. */
 function drawnWidget(page: string): { group: string; widget: string } | undefined {
   const group = /<div class="form-challenge"[\s\S]*?<\/span>\s*<\/div>/.exec(page)?.[0];
   const widget = /<div class="h-captcha"[^>]*>/.exec(page)?.[0];
@@ -175,7 +164,6 @@ function assertChallenged(page: string, submit: string): void {
   assert.ok(drawn !== undefined, `the widget is drawn: ${page}`);
   assert.match(drawn.widget, /data-sitekey="the-site-key"/);
 
-  // Labelled, and in the form ahead of the button that sends it.
   const label = /aria-labelledby="([^"]+)"/.exec(drawn.group)?.[1];
   assert.ok(label !== undefined, 'the group names its label');
   assert.match(drawn.group, new RegExp(`id="${label}"[^>]*>[^<]+<`), 'the label is visible text');
@@ -183,7 +171,6 @@ function assertChallenged(page: string, submit: string): void {
   assert.ok(form.includes(drawn.widget), 'the widget is inside the form');
   assert.ok(form.indexOf(drawn.widget) < form.indexOf(submit), 'and before the submit button');
 
-  // With no JavaScript there is no widget, and the form says what happens then.
   assert.match(drawn.group, /manual check/);
 
   const scripts = scriptSources(page);
@@ -269,13 +256,10 @@ describe('the default theme draws the widget (AC #2, #4, #5)', () => {
 const SCRIPT = fileURLToPath(new URL('../../themes/default/static/hcaptcha.js', import.meta.url));
 
 interface Drawn {
-  /** The script the page was given, by its URL. */
   loaded: URL | undefined;
-  /** What each widget was rendered with, once hCaptcha has loaded. */
   rendered: { element: unknown; params: Record<string, unknown> }[];
 }
 
-/** Run the theme's script against a stand-in page, and let hCaptcha "load". */
 async function runScript(page: {
   mode?: string;
   lang?: string;

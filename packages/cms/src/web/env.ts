@@ -67,8 +67,7 @@ export interface GeekityEnv {
     mailConfigured: boolean;
     /**
      * What the site's form challenge draws on this request's forms, or
-     * `undefined` while none is on. Read once per request, beside the mail
-     * check, so a pair saved on the settings screen is on the next page.
+     * `undefined` while none is on. Read once per request.
      */
     challengeWidget: ChallengeWidget | undefined;
     siteAtRequestStart: SiteSettings;

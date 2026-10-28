@@ -365,19 +365,6 @@
     <script src="{{ "highlight.js" | asset }}" defer></script>
     {% endif %}
     {% endblock %}
-    {#
-      The script that draws the site's form challenge, on a page whose forms
-      carry one: a stranger's comment form or a contact form, while a site key
-      is stored. A signed-in form never carries it, and a site without one
-      gets nothing here.
-
-      It is `static/hcaptcha.js`, served from this site. That script loads
-      hCaptcha's own, from `data-script`, only once it finds a widget a form
-      drew, so a page whose form draws none never asks hCaptcha for anything.
-      Outside the `scripts` block, so a site that overrides that block for a
-      highlighter of its own keeps its forms working; not in the editor's
-      preview, which draws no form anybody posts.
-    #}
     {% set formChallenge = commentForm.challenge or (contactForm.challenge if not contactNotice) %}
     {% if formChallenge and formChallenge.provider == "hcaptcha" and not editorPreview %}
     <script src="{{ "hcaptcha.js" | asset }}" data-script="{{ formChallenge.scriptUrl }}" defer></script>

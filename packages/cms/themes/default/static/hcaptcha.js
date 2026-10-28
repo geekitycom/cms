@@ -1,17 +1,3 @@
-/*
- * Draws the hCaptcha widget a public form carries, in the page's colour mode
- * and language.
- *
- * The shell loads this, deferred, only on a page whose forms carry the
- * challenge. It finds every `div.h-captcha` with a site key, and only then
- * loads hCaptcha's script from the URL in its own `data-script`, asking for
- * explicit rendering so each widget is drawn here with the right theme.
- *
- * hCaptcha's widget is light or dark. The site's mode is `data-mode` on
- * `<html>`: `light` and `dark` are what they say, and anything else, or a
- * theme with no modes, follows the visitor's `prefers-color-scheme`. The
- * language is `<html lang>`.
- */
 (function () {
   var widgets = document.querySelectorAll('.h-captcha[data-sitekey]');
   var source = document.currentScript && document.currentScript.dataset.script;

@@ -10,8 +10,7 @@ import { commentPolicyOf, commentsOpen } from './policy.ts';
 
 /**
  * The same form drawn for whoever is filling it in: the short one when the
- * site knows them, and the stranger's one, with the site's challenge on it
- * when there is one, when it does not.
+ * site knows them, and the stranger's one when it does not.
  */
 export function drawnFor(
   form: CommentFormContext,
@@ -81,7 +80,6 @@ export function commentFormFor(options: {
   notifiable?: boolean | undefined;
   /** Who the request's session says is reading, when it says anybody. */
   viewer?: CommentViewer | undefined;
-  /** The site's form challenge for this request, when one is on. */
   challenge?: ChallengeWidget | undefined;
 }): CommentFormContext | undefined {
   if (!commentsOpen(options.document, commentPolicyOf(options.site), options.now)) return undefined;

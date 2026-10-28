@@ -12,12 +12,6 @@ export const HCAPTCHA_FILE = declareDataFile({
   lost: 'The hCaptcha site key and secret, typed in again on Settings > Discussion.',
 });
 
-/**
- * The hCaptcha site key and secret the public forms are challenged with.
- *
- * The site key is not a secret: it is printed into every page that draws the
- * widget. The secret is, and it never leaves the server except to hCaptcha.
- */
 export const HCAPTCHA = declareNamespace({
   namespace: 'hcaptcha',
   storage: { kind: 'file', under: 'data', file: HCAPTCHA_FILE },

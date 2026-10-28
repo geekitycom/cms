@@ -18,15 +18,6 @@ import {
   HCAPTCHA_VERIFY,
 } from './settings-discussion.ts';
 
-/**
- * The hCaptcha site key and secret on Settings > Discussion.
- *
- * siteverify is a stub here: what is under test is that the pair is checked
- * when it is saved, that it lands in `data/` at 0600 and nowhere near
- * `site.json`, that the secret is never printed back, and that a pair the
- * environment sets is shown as set elsewhere.
- */
-
 const SETTINGS_PATH = DISCUSSION_SETTINGS.path;
 const SITE_KEY = '10000000-ffff-ffff-ffff-000000000001';
 const SECRET = '0xstored-secret-q7z9';
@@ -34,9 +25,7 @@ const NOW = new Date('2026-10-28T12:00:00.000Z');
 
 const box = sandbox();
 
-/** The form fields of every siteverify call the stub saw. */
 let verified: Record<string, string>[] = [];
-/** The error codes the stub answers with, or `undefined` for a machine offline. */
 let answer: string[] | undefined;
 
 const restoreFetch = stubSiteverify();
@@ -90,7 +79,6 @@ async function admin(): Promise<{ cms: Cms; agent: Browser; contentDir: string; 
   return { cms, agent: await signedIn(cms), contentDir, dataDir };
 }
 
-/** Submit the hCaptcha form on the settings screen, and read the screen after. */
 async function submit(
   agent: Browser,
   fields: Record<string, string>,

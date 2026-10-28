@@ -174,7 +174,6 @@ export function contactValuesOf(form: ContactForm): ContactFormContext['values']
 export function contactFormFor(options: {
   document: Document;
   now: Date;
-  /** The site's form challenge for this request, when one is on. */
   challenge?: ChallengeWidget | undefined;
 }): ContactFormContext | undefined {
   if (!contactOpen(options.document)) return undefined;

@@ -2,8 +2,8 @@
  * Discussion: what the site takes back from the people reading it.
  *
  * WordPress's own name for the comment settings. Webmentions are here because
- * one arriving is a comment by another road, and the spam checker and the form
- * challenge are here because they are what decide whether either is shown.
+ * one arriving is a comment by another road, and the spam checker is here
+ * because it is what decides whether either is shown.
  */
 
 import type { Context, Hono } from 'hono';
@@ -44,26 +44,16 @@ export const AKISMET_REMOVE = 'remove';
 
 export const AKISMET_VERIFY = 'verify';
 
-/**
- * Where the hCaptcha form and its Remove and Check buttons post.
- *
- * Its own endpoint for the reason the Akismet key has one: the site key and
- * the secret are the `hcaptcha` namespace in `data/hcaptcha.json`, not fields
- * of `site.json`.
- */
 export const HCAPTCHA_PATH = `${SETTINGS_PATH}/hcaptcha`;
 
-/** The fields those forms submit. */
 export const HCAPTCHA_FIELDS = {
   siteKey: 'hcaptcha_site_key',
   secret: 'hcaptcha_secret',
   action: 'action',
 } as const;
 
-/** The {@link HCAPTCHA_FIELDS.action} that forgets the site key and the secret. */
 export const HCAPTCHA_REMOVE = 'remove';
 
-/** The {@link HCAPTCHA_FIELDS.action} that checks the pair in effect again. */
 export const HCAPTCHA_VERIFY = 'verify';
 
 /** The Discussion settings page. */
@@ -216,19 +206,6 @@ export async function akismetPanel(settings: SettingsRegistry): Promise<Record<s
   };
 }
 
-/**
- * The hCaptcha site key and secret: one form saves them, a second forgets
- * them, a third checks them again.
- *
- * A blank secret keeps the stored one, as a blank SMTP password does: the
- * form never prints the secret back, so a blank box has to mean "unchanged"
- * or nobody could correct the site key without pasting the secret again. The
- * site key is printed back, because every page with a challenge prints it.
- *
- * The pair is checked with siteverify after it is stored, and a pair hCaptcha
- * refuses is stored all the same, as an Akismet key is: the screen says so,
- * and nothing that was pasted is thrown away.
- */
 function mountHcaptcha(app: Hono<GeekityEnv>): void {
   const here = DISCUSSION_SETTINGS.path;
 
@@ -271,13 +248,6 @@ function mountHcaptcha(app: Hono<GeekityEnv>): void {
   });
 }
 
-/**
- * What the hCaptcha form asks to store, or the sentence that says why not.
- *
- * A value the environment sets is left out unless something was typed for it,
- * so the registry can refuse that in its own words; the form shows no box for
- * one, so only a hand-made request gets that far.
- */
 async function submittedPair(
   settings: SettingsRegistry,
   body: Record<string, unknown>,
@@ -316,14 +286,6 @@ function pairSentence(status: HcaptchaPairStatus | undefined): string {
   }
 }
 
-/**
- * What the page says about hCaptcha: connected, refused, unchecked, half set,
- * or off.
- *
- * The site key is shown whole, because every page with a challenge prints it.
- * The secret is never shown, not even its last characters: the screen says
- * only whether one is there, and which variable sets it when one does.
- */
 export async function hcaptchaPanel(settings: SettingsRegistry): Promise<Record<string, unknown>> {
   const hcaptcha = await settings.values(HCAPTCHA);
   const setBy = await setElsewhere(settings, HCAPTCHA, ['site_key', 'secret']);
@@ -368,7 +330,6 @@ export async function hcaptchaPanel(settings: SettingsRegistry): Promise<Record<
   };
 }
 
-/** Whether `data/hcaptcha.json` holds a value Remove would forget. */
 async function storedPair(
   settings: SettingsRegistry,
   setBy: Readonly<Record<string, string>>,

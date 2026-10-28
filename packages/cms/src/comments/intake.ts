@@ -68,10 +68,6 @@ export interface IntakeCommentOptions {
   baseUrl: string;
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
-  /**
-   * What the form's challenge said, for a stranger's form. Absent is no
-   * opinion, which is what every other origin has.
-   */
   challenge?: ChallengeVerdict | undefined;
   /** Who to tell, when there is anybody to tell. */
   notices?: CommentNotices | undefined;
@@ -125,9 +121,6 @@ export type CommentIntakeOutcome =
  * | `spam`    | Filed as spam.                       | Filed as spam.                       |
  * | `ham`     | Approved.                            | The moderator's decision stands.     |
  * | `unknown` | Where the site would have put it.    | The moderator's decision stands.     |
- *
- * A form comment whose challenge failed is filed as spam whatever the checker
- * said, unless it said `discard`, which still throws it away.
  *
  * A source re-sending its webmention must not take an approved mention back
  * into the queue, and must not quietly let a spam one out. A checker that has

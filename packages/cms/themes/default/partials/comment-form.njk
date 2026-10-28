@@ -20,10 +20,7 @@
   hidden CSRF token instead, because this form posts under somebody's name.
   A theme that replaces this partial has to draw both.
 
-  It works with JavaScript switched off. With the site's form challenge on,
-  `commentForm.challenge` is set for a stranger and the widget is drawn ahead of
-  the submit button by `partials/form-challenge.njk`; the shell loads its
-  script. A site without one gets no script here at all.
+  It works with JavaScript switched off.
 #}
 {%- import "partials/form-challenge.njk" as challenge %}
 <section class="comment-respond" id="respond">

@@ -551,10 +551,6 @@ export interface ResolvedConfig {
   readonly commentChecker: CommentChecker | undefined;
   /**
    * The form challenge, when the site named one.
-   *
-   * `undefined` as this leaves {@link resolveConfig}; the boot's config has the
-   * hCaptcha challenge here when the site named none, and with no pair stored
-   * that one asks nothing of anybody.
    */
   readonly formChallenge: FormChallenge | undefined;
   /** Mail overrides, empty when the site named none. */

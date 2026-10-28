@@ -27,10 +27,7 @@ import type { ContactMessage } from './records.ts';
  * 3. **The per-address rate limit**, the same limiter the login form and the
  *    comment form use, so one machine cannot send a hundred messages while
  *    nobody is looking.
- * 4. **{@link FormChallenge}**, such as hCaptcha. A message with no answer,
- *    or a wrong one, is kept as spam rather than refused, so the form still
- *    works with JavaScript off.
- * 5. **{@link CommentChecker}**, the one seam a third-party service plugs
+ * 4. **{@link CommentChecker}**, the one seam a third-party service plugs
  *    into, told this is a `contact-form` rather than a comment.
  *
  * Then the file, and only then the mail. The order is the point: a message is
@@ -86,9 +83,7 @@ export interface SubmitContactMessageOptions {
   baseUrl: string;
   /** The checker, when the site has one. */
   checker?: CommentChecker | undefined;
-  /** The challenge, when the site has one. */
   challenge?: FormChallenge | undefined;
-  /** What the challenge's widget put in its field, or empty when nothing did. */
   challengeToken?: string | undefined;
   /** Where the request came from, as far as the site can tell. */
   address?: string | undefined;
@@ -149,8 +144,6 @@ export async function submitContactMessage(
     type: 'contact-form',
   });
 
-  // The checker is asked even about a message the challenge failed, so what
-  // it calls `discard` is thrown away rather than piling up on the spam list.
   const verdict = await ask(options, proposed, now);
   if (verdict === 'discard') {
     // Counted against the address even so: a machine sending rubbish should
@@ -159,10 +152,9 @@ export async function submitContactMessage(
     return refused({ kind: 'discarded' });
   }
 
-  // A message a checker called spam, or one the challenge failed, is stored
-  // all the same, on a list of its own. A false positive on a contact form is
-  // somebody's message vanishing, which is a worse failure than a spam list to
-  // glance at.
+  // A message a checker called spam is stored all the same, on a list of its
+  // own. A false positive on a contact form is somebody's message vanishing,
+  // which is a worse failure than a spam list to glance at.
   const message = await addContactMessage(options.dataDir, {
     ...proposed,
     status: verdict === 'spam' || challenged === 'fail' ? 'spam' : 'received',

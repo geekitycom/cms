@@ -187,10 +187,6 @@
     {% endif %}
   {% endcall %}
 
-  {# hCaptcha is its own set of forms for the reason Akismet is: the site key
-     and the secret are the hcaptcha settings in data/hcaptcha.json. The site
-     key is printed back, since every challenged page prints it; the secret
-     never is, and a blank secret box keeps the stored one. #}
   {% call card(title='hCaptcha') %}
     <p>
       {% if hcaptchaState == 'valid' %}

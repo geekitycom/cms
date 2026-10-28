@@ -18,16 +18,6 @@ import { HCAPTCHA_RESPONSE_FIELD } from './hcaptcha.ts';
 import { commentsFile } from './records.ts';
 import { COMMENT_FIELDS } from './submission.ts';
 
-/**
- * hCaptcha where it actually runs: a whole CMS with no challenge in its
- * config, a pair in `data/`, and the contact form and the comment form posted
- * through the app.
- *
- * The web is a stub. Every call siteverify would have been sent is recorded
- * here and answered with whatever the test asked for, so nothing reaches the
- * network and what was sent can be read back.
- */
-
 const box = sandbox();
 
 const BASE_URL = 'https://blog.example';
@@ -54,12 +44,10 @@ Write to me.
 
 const ADMIN = { username: 'ada', password: 'correct horse battery', email: 'ada@example.com' };
 
-/** How the stubbed siteverify answers. */
 type Answer = 'pass' | 'reject' | 'unreachable';
 
 let answer: Answer = 'pass';
 let siteverify: Record<string, string>[] = [];
-/** Pages the make-believe web serves, for the webmention case. */
 const pages = new Map<string, string>();
 
 const restoreFetch = stubTheWeb();
@@ -111,13 +99,11 @@ function stubTheWeb(): () => void {
 interface Site {
   cms: Cms;
   provider: MemoryMailProvider;
-  /** What the configured checker was asked about, in order. */
   checked: CommentSubmission[];
   contentDir: string;
   dataDir: string;
 }
 
-/** A CMS over one post and one contact page, optionally with a pair stored. */
 async function site(
   options: { paired?: boolean; verdict?: CommentVerdict; config?: GeekityConfig } = {},
 ): Promise<Site> {
@@ -154,7 +140,6 @@ async function site(
   return { cms, provider, checked, contentDir, dataDir };
 }
 
-/** Store a pair the way the settings screen does, or clear it with two empties. */
 async function pair(
   dirs: { contentDir: string; dataDir: string },
   siteKey: string,
@@ -170,7 +155,6 @@ async function pair(
   );
 }
 
-/** A token field to add to a submission, or nothing for none at all. */
 function token(value: string | undefined): Record<string, string> {
   return value === undefined ? {} : { [HCAPTCHA_RESPONSE_FIELD]: value };
 }
@@ -189,7 +173,6 @@ async function post(target: Site, url: string, fields: Record<string, string>): 
   return response;
 }
 
-/** Send the contact form, with the token given. */
 async function contact(target: Site, value: string | undefined): Promise<Response> {
   return await post(target, CONTACT_POST_PATH, {
     [CONTACT_FIELDS.page]: 'contact',
@@ -203,7 +186,6 @@ async function contact(target: Site, value: string | undefined): Promise<Respons
   });
 }
 
-/** Post a stranger's comment, with the token given. */
 async function comment(target: Site, value: string | undefined): Promise<Response> {
   return await post(target, COMMENT_POST_PATH, {
     [COMMENT_FIELDS.post]: 'hello-world',
@@ -228,15 +210,11 @@ async function storedComments(target: Site): Promise<Record<string, unknown>[]> 
   return (JSON.parse(raw) as { comments?: Record<string, unknown>[] }).comments ?? [];
 }
 
-/** One form, as the cases below drive it. */
 interface FormUnderTest {
   name: string;
   send(target: Site, value: string | undefined): Promise<Response>;
-  /** The statuses of what is stored, oldest first. */
   statuses(target: Site): Promise<unknown[]>;
-  /** What a submission that nothing judged is stored as. */
   normal: string;
-  /** The `type` the challenge and the checker are told. */
   type: string;
 }
 

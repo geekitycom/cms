@@ -1,18 +1,3 @@
-{#
-  The site's form challenge, drawn inside a public form ahead of its submit
-  button: `widget(contactForm.challenge, "contact", "message")`.
-
-  It is only ever handed a challenge for a stranger, and only while one is on,
-  so a form that calls it with nothing draws nothing. The default theme knows
-  how to draw hCaptcha: an empty `div.h-captcha` with the site key, which
-  `static/hcaptcha.js` fills once the page has loaded. The shell loads that
-  script whenever a drawn form carries the challenge, so a form that draws
-  this needs no script of its own.
-
-  The widget is an iframe hCaptcha draws, reached with Tab like any field. The
-  group around it is labelled, and says what happens when it never appears:
-  the form still sends, and what it sends waits for somebody to look at it.
-#}
 {% macro widget(challenge, prefix, noun) %}
 {% if challenge and challenge.provider == "hcaptcha" %}
 <div class="form-challenge" role="group" aria-labelledby="{{ prefix }}-challenge-label" aria-describedby="{{ prefix }}-challenge-hint">

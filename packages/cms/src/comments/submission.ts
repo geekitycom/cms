@@ -28,11 +28,7 @@ import type { CommentRecords } from './records.ts';
  * third is the same limiter the login form uses, over the commenter's address,
  * so one machine cannot post a hundred comments while a moderator sleeps.
  *
- * What survives all three is asked about by the {@link FormChallenge}, such as
- * hCaptcha, when the site has one. A comment with no answer, or a wrong one, is
- * not refused but filed as spam, so the form still works with JavaScript off.
- *
- * Then it is handed to {@link intakeComment}, which is where
+ * What survives all three is handed to {@link intakeComment}, which is where
  * every comment on this site is written whatever proposed it: the checker, the
  * verdict-to-status rule, the file, the index and the notice all live there, so
  * a form submission and a webmention cannot be treated by two sets of rules.
@@ -195,9 +191,7 @@ export interface SubmitCommentOptions {
   baseUrl: string;
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
-  /** The challenge, when the site has one. */
   challenge?: FormChallenge | undefined;
-  /** What the challenge's widget put in its field, or empty when nothing did. */
   challengeToken?: string | undefined;
   /** Who to tell about what lands, handed straight to the intake. */
   notices?: CommentNotices | undefined;

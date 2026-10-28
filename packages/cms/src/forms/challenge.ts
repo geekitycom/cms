@@ -27,8 +27,7 @@ export interface FormChallenge {
    * What a theme needs to draw the widget, or `undefined` while the challenge
    * is off.
    *
-   * Asked per render rather than once, because whether it is on is a setting
-   * the admin can change while the site runs.
+   * Asked per render: the admin can turn it on or off while the site runs.
    */
   widget(): Promise<ChallengeWidget | undefined>;
   /** What the challenge says about one submission's answer. */
@@ -71,8 +70,7 @@ export type ChallengeVerdict = 'pass' | 'fail' | 'unknown';
 /**
  * Ask a challenge about one submission, when the site has one.
  *
- * A challenge that throws is no opinion, as a checker that throws is: a
- * service having a bad afternoon must never stop a site taking messages.
+ * A challenge that throws is no opinion.
  */
 export async function askChallenge(
   challenge: FormChallenge | undefined,
@@ -101,9 +99,7 @@ export function challengeTokenOf(
  * What a challenge's widget is for this request, or `undefined` while it is
  * off.
  *
- * Asked once per request, before anything is drawn, because a template is
- * drawn synchronously. A widget that throws is off: a challenge that cannot
- * say how to draw itself must not stop a page being served.
+ * A widget that throws is off.
  */
 export async function challengeWidgetOf(
   challenge: FormChallenge | undefined,
@@ -119,10 +115,7 @@ export async function challengeWidgetOf(
   }
 }
 
-/**
- * The same form with a challenge's widget on it, or untouched while there is
- * none, so a theme asks `{% if commentForm.challenge %}` and nothing else.
- */
+/** The same form with a challenge's widget on it, or untouched while there is none. */
 export function withChallenge<Form extends { challenge?: ChallengeWidget | undefined }>(
   form: Form,
   widget: ChallengeWidget | undefined,

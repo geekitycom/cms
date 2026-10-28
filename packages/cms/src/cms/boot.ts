@@ -155,9 +155,6 @@ function withFormDefences(resolved: ResolvedConfig, settings: SettingsRegistry):
         // the settings screen reaches Akismet without a restart either.
         language: () => settings.get(SITE.language),
       }),
-    // hCaptcha, on the same terms: a config that names a challenge wins, and
-    // the one built here reads its site key and secret on every call, so with
-    // neither stored it draws nothing and asks nothing.
     formChallenge: resolved.formChallenge ?? createHcaptchaChallenge({ settings }),
   });
 }

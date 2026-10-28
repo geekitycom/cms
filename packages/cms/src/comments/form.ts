@@ -63,8 +63,7 @@ export interface CommentFormContext {
    * What the theme draws the site's form challenge from, and absent while
    * there is none.
    *
-   * Only ever on a stranger's form: somebody signed in is not challenged, for
-   * the reason they skip the honeypot. A theme that draws no widget from it
+   * Only ever on a stranger's form. A theme that draws no widget from it
    * still has a working form, but every stranger's comment from it is filed as
    * spam.
    */

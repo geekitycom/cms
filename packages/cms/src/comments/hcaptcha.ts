@@ -10,43 +10,19 @@ import type { ChangedBy, SettingsRegistry } from '../settings/types.ts';
 import { messageOf } from '../util/errors.ts';
 import { isRecord } from '../util/guards.ts';
 
-/**
- * hCaptcha: the pair check the settings screen runs, and the
- * {@link FormChallenge} this package ships.
- *
- * The site key and the secret are the `hcaptcha` settings namespace, kept in
- * `data/hcaptcha.json` at mode `0600` or set by `GEEKITY_HCAPTCHA__*`. Both are
- * read on every call, so a pair saved on the settings screen is the one the
- * next call uses, and a pair removed turns the challenge off at once.
- */
-
-/** Where a token is checked, and the only endpoint this speaks to. */
 export const HCAPTCHA_VERIFY_URL = 'https://api.hcaptcha.com/siteverify';
 
-/** How long hCaptcha has to answer before the call is abandoned. */
 export const HCAPTCHA_TIMEOUT_MS = 10_000;
 
-/**
- * The field hCaptcha's widget puts its answer in.
- *
- * The widget names it itself, so this is the name the server reads rather
- * than one a theme could choose.
- */
+/** hCaptcha's widget names this field itself; a theme cannot choose it. */
 export const HCAPTCHA_RESPONSE_FIELD = 'h-captcha-response';
 
-/** The script that draws the widget. */
 export const HCAPTCHA_SCRIPT_URL = 'https://js.hcaptcha.com/1/api.js';
 
-/**
- * The token sent when there is no solved challenge to send.
- *
- * hCaptcha refuses it, as it should; what matters is what else it says.
- */
+/** hCaptcha refuses this token; the pair check reads the other codes it sends back. */
 const PLACEHOLDER_TOKEN = 'geekity-pair-check';
 
 /**
- * The error codes that are about the pair rather than the token.
- *
  * hCaptcha reads the token first and stops there for most mistakes, so a
  * secret that is wrong but well formed usually comes back as nothing more
  * than `invalid-input-response`. A malformed site key it does name, and the
@@ -59,26 +35,14 @@ const PAIR_ERRORS: ReadonlySet<string> = new Set([
   'sitekey-secret-mismatch',
 ]);
 
-/** What {@link verifyHcaptchaPair} needs. */
 export interface VerifyHcaptchaPairOptions {
   settings: SettingsRegistry;
   at: Date;
   by: ChangedBy;
-  /** The HTTP client. Defaults to the global `fetch`; a test hands in its own. */
   fetch?: typeof fetch | undefined;
-  /** How long to wait. */
   timeoutMs?: number | undefined;
 }
 
-/**
- * Ask siteverify about the stored site key and secret, and store what it said.
- *
- * `valid` means hCaptcha found nothing wrong with the pair that it can find
- * without a solved challenge; the first real submission is what proves the
- * secret. `invalid` means it named the site key or the secret as the problem,
- * and `unchecked` that it could not be asked. Nothing is asked, and `undefined`
- * comes back, while either value is empty.
- */
 export async function verifyHcaptchaPair(
   options: VerifyHcaptchaPairOptions,
 ): Promise<HcaptchaPairStatus | undefined> {
@@ -111,36 +75,13 @@ async function askAboutPair(
   return namesThePair(answer.codes) ? 'invalid' : 'valid';
 }
 
-/** What {@link createHcaptchaChallenge} needs. */
 export interface HcaptchaChallengeOptions {
   settings: SettingsRegistry;
-  /** The HTTP client. Defaults to the global `fetch`; a test hands in its own. */
   fetch?: typeof fetch | undefined;
-  /** How long hCaptcha has to answer. */
   timeoutMs?: number | undefined;
-  /** Where a failure is reported. Defaults to the console. */
   logger?: { warn(message: string): void } | undefined;
 }
 
-/**
- * The {@link FormChallenge} that asks hCaptcha.
- *
- * Built whether or not the site has a pair: while the site key or the secret
- * is empty, or the stored pair is one hCaptcha refused, it draws nothing and
- * has no opinion, which is what lets a pair saved on the settings screen start
- * challenging the very next form. A refused pair is off rather than on because
- * a widget drawn with a bad site key never produces a token, and every
- * stranger's submission would be filed as spam.
- *
- * With a pair, a submission with no token fails without a call, and one with a
- * token is checked against siteverify. hCaptcha saying no is a failure; hCaptcha
- * not answering, or saying the problem is the pair rather than the token, is no
- * opinion, and is logged so whoever runs the site can see it.
- *
- * The call is not held in dev mode. It decides what happens to something the
- * site has already been sent, as the Akismet check does, and sends nothing
- * about the site anywhere.
- */
 export function createHcaptchaChallenge(options: HcaptchaChallengeOptions): FormChallenge {
   const warn = (message: string): void => {
     (options.logger ?? console).warn(message);
@@ -198,11 +139,9 @@ export function createHcaptchaChallenge(options: HcaptchaChallengeOptions): Form
   };
 }
 
-/** What siteverify said, or that it said nothing usable. */
 type SiteverifyAnswer =
   { kind: 'answered'; success: boolean; codes: string[] } | { kind: 'unanswered'; reason: string };
 
-/** One POST to siteverify, and nothing in it that can throw. */
 async function siteverify(
   fields: Record<string, string>,
   fetcher: typeof fetch | undefined,
