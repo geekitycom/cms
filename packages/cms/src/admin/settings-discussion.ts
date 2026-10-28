@@ -207,45 +207,61 @@ export async function akismetPanel(settings: SettingsRegistry): Promise<Record<s
 }
 
 function mountHcaptcha(app: Hono<GeekityEnv>): void {
-  const here = DISCUSSION_SETTINGS.path;
-
   app.post(HCAPTCHA_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const { settings } = c.var;
-    const action = stringOrEmpty(body[HCAPTCHA_FIELDS.action]);
-
-    if (action === HCAPTCHA_REMOVE) {
-      await forgetStored(settings, HCAPTCHA, 'admin');
-      const elsewhere = await setElsewhere(settings, HCAPTCHA, ['site_key', 'secret']);
-      flash(
-        c,
-        'notice',
-        Object.keys(elsewhere).length === 0
-          ? 'The hCaptcha site key and secret are gone. No form is challenged any more.'
-          : `The stored hCaptcha values are gone. ${Object.entries(elsewhere)
-              .map(([key, source]) => `${source} still sets hcaptcha.${key}.`)
-              .join(' ')}`,
-      );
-      return c.redirect(here, 303);
+    switch (stringOrEmpty(body[HCAPTCHA_FIELDS.action])) {
+      case HCAPTCHA_REMOVE:
+        return removeHcaptcha(c);
+      case HCAPTCHA_VERIFY:
+        return recheckHcaptcha(c);
+      default:
+        return saveHcaptcha(c, body);
     }
-
-    if (action !== HCAPTCHA_VERIFY) {
-      const changes = await submittedPair(settings, body);
-      if (typeof changes === 'string') {
-        flash(c, 'error', changes);
-        return c.redirect(here, 303);
-      }
-      const saved = await settings.set('hcaptcha', changes, 'admin');
-      if (!saved.ok) {
-        flash(c, 'error', `${Object.values(saved.problems).join(' ')} Nothing was saved.`);
-        return c.redirect(here, 303);
-      }
-    }
-
-    const status = await verifyHcaptchaPair({ settings, at: c.var.config.now(), by: 'admin' });
-    flash(c, status === 'valid' ? 'notice' : 'error', pairSentence(status));
-    return c.redirect(here, 303);
   });
+}
+
+async function removeHcaptcha(c: Context<GeekityEnv>): Promise<Response> {
+  const { settings } = c.var;
+  await forgetStored(settings, HCAPTCHA, 'admin');
+  const elsewhere = await setElsewhere(settings, HCAPTCHA, ['site_key', 'secret']);
+  flash(
+    c,
+    'notice',
+    Object.keys(elsewhere).length === 0
+      ? 'The hCaptcha site key and secret are gone. No form is challenged any more.'
+      : `The stored hCaptcha values are gone. ${Object.entries(elsewhere)
+          .map(([key, source]) => `${source} still sets hcaptcha.${key}.`)
+          .join(' ')}`,
+  );
+  return c.redirect(DISCUSSION_SETTINGS.path, 303);
+}
+
+async function saveHcaptcha(
+  c: Context<GeekityEnv>,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const { settings } = c.var;
+  const changes = await submittedPair(settings, body);
+  if (typeof changes === 'string') {
+    flash(c, 'error', changes);
+    return c.redirect(DISCUSSION_SETTINGS.path, 303);
+  }
+  const saved = await settings.set('hcaptcha', changes, 'admin');
+  if (!saved.ok) {
+    flash(c, 'error', `${Object.values(saved.problems).join(' ')} Nothing was saved.`);
+    return c.redirect(DISCUSSION_SETTINGS.path, 303);
+  }
+  return recheckHcaptcha(c);
+}
+
+async function recheckHcaptcha(c: Context<GeekityEnv>): Promise<Response> {
+  const status = await verifyHcaptchaPair({
+    settings: c.var.settings,
+    at: c.var.config.now(),
+    by: 'admin',
+  });
+  flash(c, status === 'valid' ? 'notice' : 'error', pairSentence(status));
+  return c.redirect(DISCUSSION_SETTINGS.path, 303);
 }
 
 async function submittedPair(

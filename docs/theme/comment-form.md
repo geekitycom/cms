@@ -81,10 +81,12 @@ draws, and it is reached with Tab like any other field.
 
 The page shell loads the script. `layouts/base.njk` adds
 `<script src="/theme/hcaptcha.js" data-script="…" defer>` at the end of the
-body when a stranger's comment form or a contact form on the page carries an
-hCaptcha challenge. The tag is outside the `scripts` block, so a site that
-overrides that block keeps it. `hcaptcha.js` looks for `div.h-captcha` elements
-with a `data-sitekey`. When it finds one, it loads hCaptcha's script from
+body when `pageChallenge`, the challenge the page's forms draw, is an
+hCaptcha one. The server sets `pageChallenge` from a stranger's comment form,
+else from a contact form that is still shown, so a site's own shell can test
+that one key rather than both forms. The tag is outside the `scripts` block,
+so a site that overrides that block keeps it. `hcaptcha.js` looks for
+`div.h-captcha` elements with a `data-sitekey`. When it finds one, it loads hCaptcha's script from
 `data-script` with `render=explicit`, `hl` set to the page's `<html lang>`,
 and an `onload` callback that draws each widget. The widget is drawn dark
 when `<html data-mode>` is `dark`, light when it is `light`, and in the

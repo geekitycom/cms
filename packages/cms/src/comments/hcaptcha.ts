@@ -87,7 +87,7 @@ export function createHcaptchaChallenge(options: HcaptchaChallengeOptions): Form
     (options.logger ?? console).warn(message);
   };
 
-  async function pair(): Promise<{ siteKey: string; secret: string } | undefined> {
+  async function usablePair(): Promise<{ siteKey: string; secret: string } | undefined> {
     const { site_key: siteKey, secret, status } = await options.settings.values(HCAPTCHA);
     if (siteKey === '' || secret === '' || status === 'invalid') return undefined;
     return { siteKey, secret };
@@ -97,7 +97,7 @@ export function createHcaptchaChallenge(options: HcaptchaChallengeOptions): Form
     field: HCAPTCHA_RESPONSE_FIELD,
 
     async widget(): Promise<ChallengeWidget | undefined> {
-      const held = await pair();
+      const held = await usablePair();
       if (held === undefined) return undefined;
       return {
         provider: 'hcaptcha',
@@ -108,7 +108,7 @@ export function createHcaptchaChallenge(options: HcaptchaChallengeOptions): Form
     },
 
     async verify(attempt: ChallengeAttempt): Promise<ChallengeVerdict> {
-      const held = await pair();
+      const held = await usablePair();
       if (held === undefined) return 'unknown';
 
       const token = attempt.token.trim();
