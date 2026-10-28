@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { KvStore, MessageQueue } from '@fedify/fedify';
 
 import type { CommentChecker } from './forms/checker.ts';
+import type { FormChallenge } from './forms/challenge.ts';
 import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './files/upload-types.ts';
 import { systemClock } from './util/clock.ts';
 import type { Clock } from './util/clock.ts';
@@ -386,6 +387,21 @@ export interface GeekityConfig {
    */
   commentChecker?: CommentChecker;
   /**
+   * The challenge a stranger answers before the contact form or the comment
+   * form is sent, such as a CAPTCHA.
+   *
+   * Asked about every stranger's submission that gets past the honeypot, the
+   * form's age and the rate limit, before {@link commentChecker}. A `fail` files
+   * the submission as spam rather than refusing it, and `unknown` is no
+   * opinion. A signed-in commenter, a webmention and a moderator's reply are
+   * never asked.
+   *
+   * Naming one here wins outright over the hCaptcha challenge the package
+   * ships, which `createCms` builds only when this is not set, and which does
+   * nothing until a site key and a secret are stored on Settings > Discussion.
+   */
+  formChallenge?: FormChallenge;
+  /**
    * How the site sends email. Every field has a default; see
    * {@link MailOverrides}.
    */
@@ -533,6 +549,10 @@ export interface ResolvedConfig {
    * `data/akismet.json` that one sends nothing anywhere.
    */
   readonly commentChecker: CommentChecker | undefined;
+  /**
+   * The form challenge, when the site named one.
+   */
+  readonly formChallenge: FormChallenge | undefined;
   /** Mail overrides, empty when the site named none. */
   readonly mail: MailOverrides;
   /** IndexNow overrides, empty when the site named none. */
@@ -685,6 +705,7 @@ export function resolveConfig(
     onDocumentChange: config.onDocumentChange,
     onPublish: config.onPublish,
     commentChecker: config.commentChecker,
+    formChallenge: config.formChallenge,
     mail: config.mail ?? {},
     indexNow: config.indexNow ?? {},
     now: config.now ?? systemClock,

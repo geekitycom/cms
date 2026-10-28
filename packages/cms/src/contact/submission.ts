@@ -1,5 +1,7 @@
 import type { PostComment } from '../store/admin-store.ts';
 import type { CommentChecker, CommentVerdict } from '../forms/checker.ts';
+import { askChallenge } from '../forms/challenge.ts';
+import type { ChallengeVerdict, FormChallenge } from '../forms/challenge.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import { formTimingRefusal, hashClientAddress, trapped } from '../forms/protection.ts';
@@ -81,6 +83,8 @@ export interface SubmitContactMessageOptions {
   baseUrl: string;
   /** The checker, when the site has one. */
   checker?: CommentChecker | undefined;
+  challenge?: FormChallenge | undefined;
+  challengeToken?: string | undefined;
   /** Where the request came from, as far as the site can tell. */
   address?: string | undefined;
   /** The `User-Agent` header, for the checker. */
@@ -134,8 +138,15 @@ export async function submitContactMessage(
     addressHash: hashClientAddress(options.dataDir, options.address),
   };
 
+  const challenged = await askChallenge(options.challenge, {
+    token: options.challengeToken ?? '',
+    address: options.address,
+    type: 'contact-form',
+  });
+
   const verdict = await ask(options, proposed, now);
-  if (verdict === 'discard') {
+  const status = contactStatusFor(verdict, challenged);
+  if (status === 'discard') {
     // Counted against the address even so: a machine sending rubbish should
     // not get unlimited free attempts because the rubbish was recognised.
     throttle.fail(keys);
@@ -147,11 +158,20 @@ export async function submitContactMessage(
   // which is a worse failure than a spam list to glance at.
   const message = await addContactMessage(options.dataDir, {
     ...proposed,
-    status: verdict === 'spam' ? 'spam' : 'received',
+    status,
   });
 
   throttle.fail(keys);
   return { kind: 'stored', message };
+}
+
+function contactStatusFor(
+  verdict: CommentVerdict,
+  challenge: ChallengeVerdict,
+): 'discard' | 'spam' | 'received' {
+  if (verdict === 'discard') return 'discard';
+  if (verdict === 'spam' || challenge === 'fail') return 'spam';
+  return 'received';
 }
 
 /** Ask the checker, if there is one, and treat a broken one as no opinion. */

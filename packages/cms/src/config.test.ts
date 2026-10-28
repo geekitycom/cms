@@ -758,6 +758,7 @@ describe('what the environment and config may say', () => {
       onDocumentChange: undefined,
       onPublish: undefined,
       commentChecker: undefined,
+      formChallenge: undefined,
       mail: {},
       indexNow: {},
       now: systemClock,

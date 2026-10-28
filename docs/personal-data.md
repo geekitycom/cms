@@ -38,10 +38,14 @@ the classes.
 | Micropub properties a post was sent that the site does not understand, such as an RSVP                                 | `data/kept-properties.json`, mode `0600`, keyed by permalink  | kept        | Kept until an update deletes them. Never published.                                                                                                      |
 | Client addresses in the access log                                                                                     | stdout, and whatever collects it                              | not a file  | Only with `accessLogAddress` on. The collector keeps them.                                                                                               |
 
-Two outside services see personal data when the site owner turns them on:
+Three outside services see personal data when the site owner turns them on:
 
 - Akismet receives a commenter's or sender's address, user agent, referrer,
   name, email, website and words.
+- hCaptcha receives what a visitor's browser sends it on a page with the
+  contact form or a stranger's comment form: the address, user agent, page
+  language and the widget's interaction and device signals. On submission the
+  server sends it the token and the address.
 - The mail provider receives every address a message goes to.
 
 ## Site exports
@@ -74,7 +78,7 @@ old archives once they are no longer needed.
 the footer. The page:
 
 - Says in plain language what the table above says.
-- Marks the contact form, reply emails and Akismet as optional.
+- Marks the contact form, reply emails, Akismet and hCaptcha as optional.
 - Quotes the retention periods a new site starts with.
 
 The page is a starting point based on what the software does. It is not legal

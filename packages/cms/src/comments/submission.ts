@@ -6,6 +6,8 @@ import {
   trapped,
 } from '../forms/protection.ts';
 import type { CommentChecker } from '../forms/checker.ts';
+import { askChallenge } from '../forms/challenge.ts';
+import type { FormChallenge } from '../forms/challenge.ts';
 import type { PostComment } from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
@@ -189,6 +191,8 @@ export interface SubmitCommentOptions {
   baseUrl: string;
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
+  challenge?: FormChallenge | undefined;
+  challengeToken?: string | undefined;
   /** Who to tell about what lands, handed straight to the intake. */
   notices?: CommentNotices | undefined;
   /** Where the request came from, as far as the site can tell. */
@@ -244,6 +248,12 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
   const wait = throttle.retryAfter(keys);
   if (wait !== undefined) return refused({ kind: 'rate-limited', retryAfter: wait });
 
+  const challenged = await askChallenge(options.challenge, {
+    token: options.challengeToken ?? '',
+    address: options.address,
+    type: 'comment',
+  });
+
   const markdown = form.body.trim();
   const author = {
     name: form.name.trim(),
@@ -280,6 +290,7 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     dataDir: options.dataDir,
     baseUrl: options.baseUrl,
     checker: options.checker,
+    challenge: challenged,
     notices: options.notices,
     address: options.address,
     userAgent: options.userAgent,

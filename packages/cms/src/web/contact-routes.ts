@@ -6,6 +6,7 @@ import type { Document } from '../content/document.ts';
 import { isServed } from '../content/served.ts';
 import type { GeekityEnv } from './env.ts';
 import { stringOrEmpty } from '../util/forms.ts';
+import { challengeTokenOf, withChallenge } from '../forms/challenge.ts';
 import { sendContactMessage } from '../contact/delivery.ts';
 import {
   CONTACT_ANCHOR,
@@ -78,6 +79,8 @@ export function mountContact(app: Hono<GeekityEnv>): void {
       baseUrl: config.baseUrl,
       // The same checker comments go through, told this is a contact form.
       checker: config.commentChecker,
+      challenge: config.formChallenge,
+      challengeToken: challengeTokenOf(body, config.formChallenge),
       address: clientAddress(c, config),
       userAgent: c.req.header('user-agent'),
       referrer: c.req.header('referer'),
@@ -146,7 +149,8 @@ function page(
   form: ContactFormContext,
 ): Response {
   c.status(status);
-  return c.html(c.var.renderer.renderDocument(document, { contactForm: form }));
+  const challenged = withChallenge(form, c.var.challengeWidget);
+  return c.html(c.var.renderer.renderDocument(document, { contactForm: challenged }));
 }
 
 /** The per-field messages a refusal carries, if it carries any. */

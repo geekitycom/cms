@@ -244,6 +244,32 @@ describe('geekity settings', () => {
     assert.doesNotMatch(got.stdout, /env-held-secret/);
   });
 
+  it('sets the hCaptcha site key in the clear and the secret as (set), never printing the secret', async () => {
+    const directory = await temporaryDir('geekity-settings-cli-');
+
+    const siteKey = await runCli(
+      ['settings', 'set', 'hcaptcha.site_key', '10000000-ffff-ffff-ffff-000000000001'],
+      directory,
+    );
+    assert.equal(siteKey.code, 0, siteKey.stderr);
+    const secret = await runCli(['settings', 'set', 'hcaptcha.secret', '0xcli-secret'], directory);
+    assert.equal(secret.code, 0, secret.stderr);
+    assert.doesNotMatch(secret.stdout, /0xcli-secret/);
+
+    const listed = await runCli(['settings', 'list', 'hcaptcha'], directory);
+    assert.equal(listed.code, 0, listed.stderr);
+    assert.match(
+      lineOf(listed.stdout, 'hcaptcha.site_key'),
+      /^hcaptcha\.site_key 10000000-ffff-ffff-ffff-000000000001 file /,
+    );
+    assert.match(lineOf(listed.stdout, 'hcaptcha.secret'), /^hcaptcha\.secret \(set\) file /);
+    assert.doesNotMatch(listed.stdout, /0xcli-secret/);
+    assert.deepEqual(await readJson(path.join(directory, 'data', 'hcaptcha.json')), {
+      site_key: '10000000-ffff-ffff-ffff-000000000001',
+      secret: '0xcli-secret',
+    });
+  });
+
   it('refuses a value that does not parse, an unknown setting and a missing verb, writing nothing', async () => {
     const directory = await temporaryDir('geekity-settings-cli-');
 

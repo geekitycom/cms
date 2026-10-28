@@ -365,6 +365,9 @@
     <script src="{{ "highlight.js" | asset }}" defer></script>
     {% endif %}
     {% endblock %}
+    {% if pageChallenge.provider == "hcaptcha" and not editorPreview %}
+    <script src="{{ "hcaptcha.js" | asset }}" data-script="{{ pageChallenge.scriptUrl }}" defer></script>
+    {% endif %}
     {% if not editorPreview %}{{ pluginTags.bodyEnd }}{% include "partials/body-end.njk" %}{% endif %}
   </body>
 </html>

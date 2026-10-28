@@ -1,0 +1,9 @@
+{% macro widget(challenge, prefix, noun) %}
+{% if challenge and challenge.provider == "hcaptcha" %}
+<div class="form-challenge" role="group" aria-labelledby="{{ prefix }}-challenge-label" aria-describedby="{{ prefix }}-challenge-hint">
+  <span class="form-challenge-label" id="{{ prefix }}-challenge-label">Spam check</span>
+  <div class="h-captcha" data-sitekey="{{ challenge.siteKey }}"></div>
+  <span class="{{ prefix }}-hint" id="{{ prefix }}-challenge-hint">Run by hCaptcha. If it does not appear, or JavaScript is off, your {{ noun }} is still sent but may need a manual check.</span>
+</div>
+{% endif %}
+{% endmacro %}

@@ -451,6 +451,10 @@ describe('registering a plugin namespace', () => {
       'akismet.status',
       'akismet.checked_at',
       'tmdb.key',
+      'hcaptcha.site_key',
+      'hcaptcha.secret',
+      'hcaptcha.status',
+      'hcaptcha.checked_at',
     ];
     assert.deepEqual(named(), [...core, '@acme/plugin-llm.api_key']);
     registry.unregister('@acme/plugin-llm');
@@ -532,6 +536,7 @@ describe('registering a plugin namespace', () => {
         ['mail.json', 'credential'],
         ['akismet.json', 'credential'],
         ['tmdb.json', 'credential'],
+        ['hcaptcha.json', 'credential'],
         ['plugins/@acme/plugin-llm/settings.json', 'kept'],
         ['plugins/@acme/plugin-llm/secrets.json', 'credential'],
       ],

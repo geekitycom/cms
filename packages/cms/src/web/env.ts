@@ -4,6 +4,7 @@ import type { FontStore } from '../fonts/index.ts';
 import type { SignedInAccount } from '../comments/viewer.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import type { ChallengeWidget } from '../forms/challenge.ts';
 import type {
   ArchiveReader,
   BacklinkReader,
@@ -64,6 +65,11 @@ export interface GeekityEnv {
     devMode: boolean;
     /** Whether the site can send mail, read once per request (see `MailService.configured`). */
     mailConfigured: boolean;
+    /**
+     * What the site's form challenge draws on this request's forms, or
+     * `undefined` while none is on. Read once per request.
+     */
+    challengeWidget: ChallengeWidget | undefined;
     siteAtRequestStart: SiteSettings;
     store: RequestIndex;
     /** Users and sessions, the part of the database that is not derived. */

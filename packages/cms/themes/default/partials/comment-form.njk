@@ -20,8 +20,9 @@
   hidden CSRF token instead, because this form posts under somebody's name.
   A theme that replaces this partial has to draw both.
 
-  It works with JavaScript switched off, and there is no script on it.
+  It works with JavaScript switched off.
 #}
+{%- import "partials/form-challenge.njk" as challenge %}
 <section class="comment-respond" id="respond">
   <h2 class="comment-reply-title">Leave a comment</h2>
   {#- A site that takes webmentions says so here, where somebody deciding how
@@ -166,6 +167,8 @@
       <label for="comment-notify">Email me when somebody replies to this</label>
     </p>
     {% endif %}
+
+    {{ challenge.widget(commentForm.challenge, "comment", "comment") }}
 
     <p class="form-submit">
       <button type="submit">Post comment</button>

@@ -20,6 +20,7 @@ import {
 import { frontPageSlugs } from '../theme/site-data.ts';
 import type { SiteDataSource } from '../theme/site-data.ts';
 import type { CreateRendererOptions } from './render.ts';
+import { requestChallenge } from './render-scope.ts';
 
 export interface PageSourcesOptions {
   readonly config: ResolvedConfig;
@@ -70,8 +71,10 @@ export function pageSources({
         now: config.now(),
         viewer,
         notifiable,
+        challenge: requestChallenge(),
       }),
-    contactForm: (document) => contactFormFor({ document, now: config.now() }),
+    contactForm: (document) =>
+      contactFormFor({ document, now: config.now(), challenge: requestChallenge() }),
     neighbours: (document) => store.neighbours(document),
     backlinks: (document) =>
       store.listBacklinks(document, {

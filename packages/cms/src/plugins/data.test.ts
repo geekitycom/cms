@@ -114,6 +114,7 @@ describe('Cms.dataFiles', () => {
 
     assert.equal(classOf('queue.sqlite'), 'pending');
     assert.equal(classOf('akismet.json'), 'credential');
+    assert.equal(classOf('hcaptcha.json'), 'credential');
     assert.equal(classOf('plugins/@acme/plugin-kept/records.json'), 'kept');
     assert.equal(classOf('plugins/@acme/plugin-kept/secrets.json'), 'credential');
     assert.equal(classOf('plugins/@acme/plugin-kept/stray.json'), undefined);

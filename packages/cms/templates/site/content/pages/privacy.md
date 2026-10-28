@@ -79,6 +79,19 @@ receives your IP address, your browser's user agent, the page you came from,
 your name, email address and website, and what you wrote. Akismet's own privacy
 policy covers what it does with them.
 
+## Spam checking with hCaptcha (optional)
+
+Only if the owner turns it on, the contact form and the comment form carry a
+spam check from hCaptcha, a service run by Intuition Machines. On a page with
+one of those forms, your browser loads hCaptcha's script and widget from
+hCaptcha's servers. hCaptcha receives what your browser sends it: your IP
+address, your browser's user agent, the page's language, and signals about your
+device and how you use the widget. When you send the form, the site sends
+hCaptcha the widget's answer and your IP address. If you are signed in to
+comment, the comment form has no check and your browser loads nothing from
+hCaptcha. [hCaptcha's privacy policy](https://www.hcaptcha.com/privacy) covers
+what it does with them.
+
 ## Replies from other sites
 
 **Webmentions.** When another site links to a post here and sends a

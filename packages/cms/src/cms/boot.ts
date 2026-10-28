@@ -12,6 +12,7 @@ import { autosaveCopies } from '../autosave/index.ts';
 import { databaseFile, rebuildingIfOutdated } from '../cache.ts';
 import {
   createAkismetChecker,
+  createHcaptchaChallenge,
   migrateCommentEmails,
   migrateCommentKeys,
   rebuildCommentIndexes,
@@ -70,7 +71,7 @@ export function boot(
     },
   });
 
-  const resolved = withCommentChecker(configured, settings);
+  const resolved = withFormDefences(configured, settings);
   let plugins: PluginRegistry;
   try {
     plugins = sitePluginRegistry(resolved, folderPlugins ?? [], settings);
@@ -134,7 +135,7 @@ export function boot(
   return { resolved, plugins, store, admin, commentRecords, settings };
 }
 
-function withCommentChecker(resolved: ResolvedConfig, settings: SettingsRegistry): ResolvedConfig {
+function withFormDefences(resolved: ResolvedConfig, settings: SettingsRegistry): ResolvedConfig {
   return Object.freeze({
     ...resolved,
     // Akismet, when the site has not named a checker of its own. A
@@ -154,6 +155,7 @@ function withCommentChecker(resolved: ResolvedConfig, settings: SettingsRegistry
         // the settings screen reaches Akismet without a restart either.
         language: () => settings.get(SITE.language),
       }),
+    formChallenge: resolved.formChallenge ?? createHcaptchaChallenge({ settings }),
   });
 }
 

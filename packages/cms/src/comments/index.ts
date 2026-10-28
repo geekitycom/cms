@@ -7,6 +7,15 @@ export {
 } from './akismet.ts';
 export type { AkismetCheckerOptions, VerifyAkismetKeyOptions } from './akismet.ts';
 export {
+  createHcaptchaChallenge,
+  HCAPTCHA_RESPONSE_FIELD,
+  HCAPTCHA_SCRIPT_URL,
+  HCAPTCHA_TIMEOUT_MS,
+  HCAPTCHA_VERIFY_URL,
+  verifyHcaptchaPair,
+} from './hcaptcha.ts';
+export type { HcaptchaChallengeOptions, VerifyHcaptchaPairOptions } from './hcaptcha.ts';
+export {
   blankValues,
   COMMENT_NOTICE_PARAM,
   COMMENT_NOTICES,
@@ -75,6 +84,12 @@ export type {
   SubmissionType,
   CommentVerdict,
 } from '../forms/checker.ts';
+export type {
+  ChallengeAttempt,
+  ChallengeVerdict,
+  ChallengeWidget,
+  FormChallenge,
+} from '../forms/challenge.ts';
 export type {
   CommentForm,
   CommentOutcome,

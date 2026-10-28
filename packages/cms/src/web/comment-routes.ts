@@ -23,6 +23,7 @@ import {
 import type { CommentForm, CommentRefusal, CommentThrottle } from '../comments/submission.ts';
 import { commenterOf } from '../comments/viewer.ts';
 import { stringOrEmpty } from '../util/forms.ts';
+import { challengeTokenOf } from '../forms/challenge.ts';
 import { documentSite } from './document-site.ts';
 import type { GeekityEnv } from './env.ts';
 import { CROSS_SITE_REFUSAL, crossSiteWrite, csrfTokenMatches } from './session.ts';
@@ -93,7 +94,11 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       // themselves that it is. Saying so is more honest than pretending the
       // URL is wrong, and a closed post is a state rather than a mistake.
       return page(c, document, 403, viewer, {
-        ...drawnFor(refilledCommentForm(document, valuesOf(form), {}, now), viewer),
+        ...drawnFor(
+          refilledCommentForm(document, valuesOf(form), {}, now),
+          viewer,
+          c.var.challengeWidget,
+        ),
         error: 'This post is not taking comments any more.',
       });
     }
@@ -127,6 +132,8 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       dataDir: config.dataDir,
       baseUrl: config.baseUrl,
       checker: config.commentChecker,
+      challenge: config.formChallenge,
+      challengeToken: challengeTokenOf(body, config.formChallenge),
       // Who hears about what lands is the intake's to decide, and neither
       // message is awaited: the reader is redirected now and they go out
       // behind them.
@@ -175,7 +182,11 @@ function refusedPage(
   if (refusal.kind === 'rate-limited') {
     c.header('Retry-After', String(refusal.retryAfter));
     return page(c, document, 429, viewer, {
-      ...drawnFor(refilledCommentForm(document, valuesOf(form), {}, now), viewer),
+      ...drawnFor(
+        refilledCommentForm(document, valuesOf(form), {}, now),
+        viewer,
+        c.var.challengeWidget,
+      ),
       error: 'That is a lot of comments in a short time. Try again in a few minutes.',
     });
   }
@@ -188,7 +199,11 @@ function refusedPage(
         : undefined;
 
   return page(c, document, 400, viewer, {
-    ...drawnFor(refilledCommentForm(document, valuesOf(form), problemsOf(refusal), now), viewer),
+    ...drawnFor(
+      refilledCommentForm(document, valuesOf(form), problemsOf(refusal), now),
+      viewer,
+      c.var.challengeWidget,
+    ),
     ...(message === undefined ? {} : { error: message }),
   });
 }

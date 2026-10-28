@@ -224,7 +224,8 @@ is empty or contains a line break. There is no environment variable for these.
 A policy that limits scripts must allow whatever the site's theme adds to every
 page. For the Umami and Google Analytics snippets,
 [Adding to every page](theme/adding-to-every-page.md) lists the directives each
-one needs.
+one needs. For hCaptcha on the contact and comment forms, see
+[hCaptcha](configuration.md#hcaptcha).
 
 Every response under `/admin`, including static files and redirects, gets three
 stricter values instead, whatever `securityHeaders` says:

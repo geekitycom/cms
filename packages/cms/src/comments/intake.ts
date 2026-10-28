@@ -6,6 +6,7 @@ import { webmentionKey } from '../content/guids.ts';
 import { addComment, deleteComment, updateComment } from './records.ts';
 import type { CommentRecords } from './records.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms/checker.ts';
+import type { ChallengeVerdict } from '../forms/challenge.ts';
 
 /**
  * The one door into a post's comments.
@@ -67,6 +68,7 @@ export interface IntakeCommentOptions {
   baseUrl: string;
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
+  challenge?: ChallengeVerdict | undefined;
   /** Who to tell, when there is anybody to tell. */
   notices?: CommentNotices | undefined;
   /** Where the submission came from, **unhashed**. Only the checker sees it. */
@@ -154,7 +156,7 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
     return { kind: 'discarded', removed: true };
   }
 
-  const status = statusFor(verdict, proposed.status, held);
+  const status = options.challenge === 'fail' ? 'spam' : statusFor(verdict, proposed.status, held);
 
   if (held !== undefined) {
     // Its id, its post and its source never move: that is what makes it the

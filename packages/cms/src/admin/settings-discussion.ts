@@ -9,8 +9,11 @@
 import type { Context, Hono } from 'hono';
 
 import { verifyAkismetKey } from '../comments/akismet.ts';
+import { verifyHcaptchaPair } from '../comments/hcaptcha.ts';
 import { AKISMET } from '../settings/akismet.ts';
 import type { AkismetKeyStatus } from '../settings/akismet.ts';
+import { HCAPTCHA } from '../settings/hcaptcha.ts';
+import type { HcaptchaPairStatus } from '../settings/hcaptcha.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
@@ -41,6 +44,18 @@ export const AKISMET_REMOVE = 'remove';
 
 export const AKISMET_VERIFY = 'verify';
 
+export const HCAPTCHA_PATH = `${SETTINGS_PATH}/hcaptcha`;
+
+export const HCAPTCHA_FIELDS = {
+  siteKey: 'hcaptcha_site_key',
+  secret: 'hcaptcha_secret',
+  action: 'action',
+} as const;
+
+export const HCAPTCHA_REMOVE = 'remove';
+
+export const HCAPTCHA_VERIFY = 'verify';
+
 /** The Discussion settings page. */
 export const DISCUSSION_SETTINGS: SettingsPage = {
   child: 'discussion',
@@ -59,9 +74,15 @@ export const DISCUSSION_SETTINGS: SettingsPage = {
     'contact_message_retention_days',
   ],
 
-  panels: (c) => akismetPanel(c.var.settings),
+  panels: async (c) => ({
+    ...(await akismetPanel(c.var.settings)),
+    ...(await hcaptchaPanel(c.var.settings)),
+  }),
 
-  endpoints: mountAkismet,
+  endpoints: (app, options) => {
+    mountAkismet(app, options);
+    mountHcaptcha(app);
+  },
 };
 
 /**
@@ -183,4 +204,156 @@ export async function akismetPanel(settings: SettingsRegistry): Promise<Record<s
           ? 'Akismet does not recognise this key, so nothing it says is believed and every comment queues as it would without one.'
           : 'Akismet could not be reached the last time this key was checked. Check it again to try.',
   };
+}
+
+function mountHcaptcha(app: Hono<GeekityEnv>): void {
+  app.post(HCAPTCHA_PATH, async (c) => {
+    const body = await c.req.parseBody();
+    switch (stringOrEmpty(body[HCAPTCHA_FIELDS.action])) {
+      case HCAPTCHA_REMOVE:
+        return removeHcaptcha(c);
+      case HCAPTCHA_VERIFY:
+        return recheckHcaptcha(c);
+      default:
+        return saveHcaptcha(c, body);
+    }
+  });
+}
+
+async function removeHcaptcha(c: Context<GeekityEnv>): Promise<Response> {
+  const { settings } = c.var;
+  await forgetStored(settings, HCAPTCHA, 'admin');
+  const elsewhere = await setElsewhere(settings, HCAPTCHA, ['site_key', 'secret']);
+  flash(
+    c,
+    'notice',
+    Object.keys(elsewhere).length === 0
+      ? 'The hCaptcha site key and secret are gone. No form is challenged any more.'
+      : `The stored hCaptcha values are gone. ${Object.entries(elsewhere)
+          .map(([key, source]) => `${source} still sets hcaptcha.${key}.`)
+          .join(' ')}`,
+  );
+  return c.redirect(DISCUSSION_SETTINGS.path, 303);
+}
+
+async function saveHcaptcha(
+  c: Context<GeekityEnv>,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const { settings } = c.var;
+  const changes = await submittedPair(settings, body);
+  if (typeof changes === 'string') {
+    flash(c, 'error', changes);
+    return c.redirect(DISCUSSION_SETTINGS.path, 303);
+  }
+  const saved = await settings.set('hcaptcha', changes, 'admin');
+  if (!saved.ok) {
+    flash(c, 'error', `${Object.values(saved.problems).join(' ')} Nothing was saved.`);
+    return c.redirect(DISCUSSION_SETTINGS.path, 303);
+  }
+  return recheckHcaptcha(c);
+}
+
+async function recheckHcaptcha(c: Context<GeekityEnv>): Promise<Response> {
+  const status = await verifyHcaptchaPair({
+    settings: c.var.settings,
+    at: c.var.config.now(),
+    by: 'admin',
+  });
+  flash(c, status === 'valid' ? 'notice' : 'error', pairSentence(status));
+  return c.redirect(DISCUSSION_SETTINGS.path, 303);
+}
+
+async function submittedPair(
+  settings: SettingsRegistry,
+  body: Record<string, unknown>,
+): Promise<Map<string, unknown> | string> {
+  const elsewhere = await setElsewhere(settings, HCAPTCHA);
+  const siteKey = stringOrEmpty(body[HCAPTCHA_FIELDS.siteKey]).trim();
+  const secret = stringOrEmpty(body[HCAPTCHA_FIELDS.secret]).trim();
+  const changes = new Map<string, unknown>([
+    ['status', 'unchecked'],
+    ['checked_at', ''],
+  ]);
+
+  if (siteKey !== '') changes.set('site_key', siteKey);
+  else if (elsewhere['site_key'] === undefined) {
+    return 'An hCaptcha site key cannot be empty. Use Remove to turn hCaptcha off.';
+  }
+
+  if (secret !== '') changes.set('secret', secret);
+  else if ((await settings.get(HCAPTCHA.secret)) === '') {
+    return 'An hCaptcha secret cannot be empty. Paste the secret from the hCaptcha dashboard.';
+  }
+
+  return changes;
+}
+
+function pairSentence(status: HcaptchaPairStatus | undefined): string {
+  switch (status) {
+    case 'valid':
+      return 'Saved. hCaptcha took the site key; the first form a visitor sends proves the secret.';
+    case 'invalid':
+      return 'Saved, but hCaptcha refused the site key or the secret, so no form is challenged until they are put right.';
+    case 'unchecked':
+      return 'Saved, but hCaptcha could not be reached to check the pair. Check it again to try.';
+    case undefined:
+      return 'There is no hCaptcha site key and secret to check.';
+  }
+}
+
+export async function hcaptchaPanel(settings: SettingsRegistry): Promise<Record<string, unknown>> {
+  const hcaptcha = await settings.values(HCAPTCHA);
+  const setBy = await setElsewhere(settings, HCAPTCHA, ['site_key', 'secret']);
+  const siteKeyPresent = hcaptcha.site_key !== '';
+  const secretPresent = hcaptcha.secret !== '';
+  const stored = await storedPair(settings, setBy);
+  const forms = {
+    hcaptchaUrl: HCAPTCHA_PATH,
+    hcaptchaFields: HCAPTCHA_FIELDS,
+    hcaptchaRemove: HCAPTCHA_REMOVE,
+    hcaptchaVerify: HCAPTCHA_VERIFY,
+    hcaptchaSiteKey: hcaptcha.site_key,
+    hcaptchaSiteKeySetBy: setBy['site_key'],
+    hcaptchaSecretSetBy: setBy['secret'],
+    hcaptchaSecretPresent: secretPresent,
+    hcaptchaStored: stored,
+  };
+
+  if (!siteKeyPresent || !secretPresent) {
+    const half = siteKeyPresent || secretPresent;
+    return {
+      ...forms,
+      hcaptchaPresent: false,
+      hcaptchaState: half ? 'incomplete' : 'none',
+      hcaptchaHint: half
+        ? 'Not on yet: a challenge needs both a site key and a secret.'
+        : 'Not connected: no site key and secret, so no form is challenged.',
+    };
+  }
+
+  return {
+    ...forms,
+    hcaptchaPresent: true,
+    hcaptchaState: hcaptcha.status,
+    hcaptchaCheckedAt: hcaptcha.checked_at,
+    hcaptchaHint:
+      hcaptcha.status === 'valid'
+        ? 'hCaptcha took the site key when it was last checked. It checks the secret only against a solved challenge, so the first form a visitor sends is what proves it.'
+        : hcaptcha.status === 'invalid'
+          ? 'hCaptcha refused the site key or the secret the last time they were checked, so no form is challenged until they are put right.'
+          : 'hCaptcha could not be reached the last time the pair was checked. Check it again to try.',
+  };
+}
+
+async function storedPair(
+  settings: SettingsRegistry,
+  setBy: Readonly<Record<string, string>>,
+): Promise<boolean> {
+  for (const ref of [HCAPTCHA.site_key, HCAPTCHA.secret]) {
+    if (setBy[ref.key] !== undefined) continue;
+    const { stored } = await settings.resolve(ref);
+    if (stored !== undefined && stored !== '') return true;
+  }
+  return false;
 }

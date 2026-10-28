@@ -60,6 +60,7 @@ directory. Absolute directories are used as given.
 | `federation`       | `{}`                                                 | —                            | Federation stores and guards. See [Federation](federation.md).                                                                                                                                                                                                                                                           |
 | `jobs`             | `{}`                                                 | —                            | The admin job queue's transport and record store, and jobs the site adds. See [Admin jobs](#admin-jobs).                                                                                                                                                                                                                 |
 | `commentChecker`   | Akismet                                              | —                            | The site's own spam checker. It takes precedence over the `akismet.key` setting. See [Akismet](comments.md#akismet).                                                                                                                                                                                                     |
+| `formChallenge`    | hCaptcha                                             | —                            | The challenge a stranger answers before the contact form or the comment form is sent. It takes precedence over the `hcaptcha` site key and secret. A missing or failed answer files the submission as spam.                                                                                                              |
 | `mail`             | `{}`                                                 | —                            | Mail provider, retries, backoff and logger. See [Email](email.md).                                                                                                                                                                                                                                                       |
 | `plugins`          | `[]`                                                 | —                            | The installed plugins. The `plugins` key of `site.json`, set under Admin > Plugins, picks which ones run. Each setting of a plugin takes an environment variable. See [Plugin settings](#plugin-settings).                                                                                                               |
 
@@ -245,6 +246,50 @@ gemtext carries `<link rel="alternate" type="text/gemini">` with its
 gemini:// URL, its Markdown ends with a `Gemini` section linking the same URL,
 and the generated `/llms.txt` names the capsule. A gemini:// URL has the host
 of the base URL in effect and `geminiPort`, left out when it is 1965.
+
+## hCaptcha
+
+The hCaptcha site key and secret are runtime settings, not config fields. They
+are kept in `data/hcaptcha.json` at mode `0600`, set on Settings > Discussion,
+and can come from the environment instead:
+
+| Setting             | Variable                     | What it is                                                      |
+| ------------------- | ---------------------------- | --------------------------------------------------------------- |
+| `hcaptcha.site_key` | `GEEKITY_HCAPTCHA__SITE_KEY` | The site key, printed in every page that shows the challenge.   |
+| `hcaptcha.secret`   | `GEEKITY_HCAPTCHA__SECRET`   | The secret that checks a token with hCaptcha. A secret setting. |
+
+A set variable takes precedence over the file. Settings > Discussion then shows
+the value as set by that variable, with no box to change it. Both values are
+read on every call, so a change to the file takes effect without a restart. A
+change to a variable needs one, as every variable does. See
+[hCaptcha](comments.md#hcaptcha).
+
+The public site sends no content policy by default, so hCaptcha needs no
+change to the headers. A site that sets its own `Content-Security-Policy`
+through [`securityHeaders`](security.md#security-headers) must allow
+`https://hcaptcha.com` and `https://*.hcaptcha.com` in `script-src`,
+`frame-src`, `style-src` and `connect-src`. These are the origins
+[hCaptcha's documentation](https://docs.hcaptcha.com/#content-security-policy-settings)
+asks for. Name the wildcard rather than single hosts: hCaptcha serves its
+assets from subdomains that change. The theme's `/theme/hcaptcha.js` is on the
+site's own origin, and the default theme adds no inline script, so the policy
+needs no nonce or hash for it. The `siteverify` call is made by the server and
+is not covered by the policy.
+
+```ts
+export default defineConfig({
+  securityHeaders: {
+    'Content-Security-Policy': [
+      "default-src 'self'",
+      "script-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
+      "frame-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
+      "style-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
+      "connect-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
+      "frame-ancestors 'self'",
+    ].join('; '),
+  },
+});
+```
 
 ## Plugin settings
 

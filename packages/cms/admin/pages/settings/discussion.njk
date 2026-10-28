@@ -186,4 +186,82 @@
       </form>
     {% endif %}
   {% endcall %}
+
+  {% call card(title='hCaptcha') %}
+    <p>
+      {% if hcaptchaState == 'valid' %}
+        {{ status('connected', 'Connected') }} Site key <code>{{ hcaptchaSiteKey }}</code>, checked {{ hcaptchaCheckedAt }}.
+      {% elif hcaptchaState == 'invalid' %}
+        {{ status('rejected', 'Refused') }} hCaptcha refused site key <code>{{ hcaptchaSiteKey }}</code> or its secret, checked {{ hcaptchaCheckedAt }}.
+      {% elif hcaptchaState == 'unchecked' %}
+        {{ status('unreachable', 'Not checked') }} hCaptcha could not be reached to check site key <code>{{ hcaptchaSiteKey }}</code>.
+      {% elif hcaptchaState == 'incomplete' %}
+        {{ status('missing', 'Incomplete') }} {% if hcaptchaSiteKey %}There is a site key but no secret.{% else %}There is a secret but no site key.{% endif %}
+      {% else %}
+        {{ status('disconnected', 'Not connected') }} This site has no hCaptcha site key and secret.
+      {% endif %}
+    </p>
+    <p class="text-sm">{{ hcaptchaHint }}</p>
+
+    {% if hcaptchaSiteKeySetBy %}
+      <p class="text-sm">The site key is set by <code>{{ hcaptchaSiteKeySetBy }}</code> and cannot be changed here.</p>
+    {% endif %}
+    {% if hcaptchaSecretSetBy %}
+      <p class="text-sm">The secret is set by <code>{{ hcaptchaSecretSetBy }}</code> and cannot be changed here.</p>
+    {% endif %}
+
+    {% if not (hcaptchaSiteKeySetBy and hcaptchaSecretSetBy) %}
+      <form method="post" action="{{ hcaptchaUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        {% if not hcaptchaSiteKeySetBy %}
+          {{ field.text('settings-hcaptcha-site-key', hcaptchaFields.siteKey, 'Site key',
+               hcaptchaSiteKey, autocomplete='off', spellcheck='false',
+               hint='Printed in every page that shows the challenge, so it is not a secret.') }}
+        {% endif %}
+        {% if not hcaptchaSecretSetBy %}
+          {% if hcaptchaSecretPresent %}
+            {% set hcaptchaSecretPlaceholder = 'Leave blank to keep the stored secret' %}
+          {% else %}
+            {% set hcaptchaSecretPlaceholder = 'Paste your secret' %}
+          {% endif %}
+          {{ field.password('settings-hcaptcha-secret', hcaptchaFields.secret, 'Secret',
+               autocomplete='off', spellcheck='false', placeholder=hcaptchaSecretPlaceholder) }}
+        {% endif %}
+        <div class="mt-2">
+          {{ button('Save hCaptcha', type='submit', color='primary') }}
+        </div>
+      </form>
+    {% endif %}
+
+    {% if hcaptchaPresent %}
+      <form method="post" action="{{ hcaptchaUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ hcaptchaFields.action }}" value="{{ hcaptchaVerify }}" />
+        <div class="mt-2">{{ button('Check with hCaptcha', type='submit') }}</div>
+      </form>
+    {% endif %}
+
+    <p class="text-sm">
+      A site key and a secret from
+      <a class="link" href="https://dashboard.hcaptcha.com/">the hCaptcha dashboard</a>
+      put a challenge on the contact form and on the comment form as a visitor
+      who is not signed in sees it. They are checked with hCaptcha when they
+      are saved and kept in <code>data/hcaptcha.json</code>, never in
+      <code>site.json</code>. A deployment can set them instead with
+      <code>GEEKITY_HCAPTCHA__SITE_KEY</code> and
+      <code>GEEKITY_HCAPTCHA__SECRET</code>. Without a solved challenge
+      hCaptcha checks only the site key, so a wrong secret shows up when the
+      first visitor's form is checked.
+    </p>
+
+    {% if hcaptchaStored %}
+      <form method="post" action="{{ hcaptchaUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ hcaptchaFields.action }}" value="{{ hcaptchaRemove }}" />
+        {% call cardActions() %}
+          {{ button('Remove hCaptcha', type='submit', color='error', style='ghost') }}
+        {% endcall %}
+      </form>
+    {% endif %}
+  {% endcall %}
 {% endblock %}

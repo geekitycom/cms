@@ -134,11 +134,17 @@ sent it, whatever these settings say.
 
 The server holds a comment for a moderator unless the same **name and email**
 had a comment approved before. WordPress uses the same rule. Before that check,
-a submission must pass three defences:
+a stranger's submission meets these defences, in order:
 
 - a honeypot field
 - a minimum time between rendering the form and submitting it
 - a per-address rate limit
+- the form challenge, if the site has one. A comment with no answer, or one
+  the challenge rejects, is filed as spam and nobody is told. See
+  [hCaptcha](#hcaptcha).
+- the comment checker, if the site has one. See [Akismet](#akismet).
+
+A signed-in commenter is not challenged.
 
 Comments render from Markdown with raw HTML off, images not embedded and every
 link marked `rel="nofollow ugc"`.
@@ -401,6 +407,71 @@ server posts `submit-spam` or `submit-ham` with the same fields, minus
 `user_ip`, `user_agent` and `referrer`. A stored comment keeps only a salted
 hash of the IP address.
 
+### hCaptcha
+
+hCaptcha is off until a site has both a site key and a secret. They are the
+`hcaptcha.site_key` and `hcaptcha.secret`
+[runtime settings](settings.md#runtime-settings), kept in `data/hcaptcha.json`
+at mode `0600` and never in `content/_data/site.json`. The secret is a secret
+setting. The site key is not, because every page that shows the challenge
+prints it. The same file holds `hcaptcha.status` and `hcaptcha.checked_at`, the
+result of the last check and when it was made.
+
+A deployment can set either value in the environment instead, as
+`GEEKITY_HCAPTCHA__SITE_KEY` and `GEEKITY_HCAPTCHA__SECRET`. A value set there
+is in effect whatever the file holds. The panel says which variable sets it,
+offers no box to type over it, and refuses a value saved over it.
+
+To turn it on, paste the site key and the secret from the
+[hCaptcha dashboard](https://dashboard.hcaptcha.com/) into **hCaptcha** on
+`/admin/settings/discussion`. The server stores them and then checks the pair
+with hCaptcha's `siteverify`, sending the secret, the site key and a
+placeholder token. Without a solved challenge, `siteverify` checks the site key
+but not the secret, so a wrong secret shows up only when the first visitor's
+form is checked. A pair that fails the check is stored all the same. The panel
+then shows one of these:
+
+- Connected: hCaptcha raised nothing against the site key
+- Refused: hCaptcha named the site key or the secret, with `invalid-sitekey`,
+  `invalid-input-secret`, `missing-input-secret` or `sitekey-secret-mismatch`
+- Not checked: hCaptcha could not be reached, answered with an error status or
+  did not answer in ten seconds
+- Incomplete: only one of the two values is set
+- Not connected
+
+The panel shows the site key and never the secret, not even part of it.
+Leaving the secret box blank keeps the stored secret, so the site key can be
+corrected without pasting the secret again. **Check with hCaptcha** checks the
+pair in effect again, which is how values from the environment are checked.
+**Remove hCaptcha** forgets both stored values.
+
+The server reads both values on every call, so a pair saved or removed on that
+screen takes effect without a restart.
+
+While a pair is stored and hCaptcha has not refused it, the contact form and a
+stranger's comment form carry the widget, and the server checks each
+submission's `h-captcha-response` token with `siteverify`. It sends the token,
+the site key, the secret and the visitor's IP address as `remoteip`. The check
+comes after the honeypot, the form's age and the rate limit, and before the
+comment checker.
+
+| The challenge says                                                        | What happens                                                             |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Passed                                                                    | The submission goes on as if there were no challenge.                    |
+| No token, or hCaptcha rejects the token                                   | Filed as spam, and nobody is told. A checker's `discard` still drops it. |
+| hCaptcha names the site key or the secret, a non-200, a timeout, no route | No opinion: the same as no challenge. The failure is logged.             |
+
+A visitor with JavaScript off sends no token, so their comment or message
+lands on a spam list, not in the queue or the inbox. A pair that a check on
+Settings > Discussion marked Refused turns the challenge off, because a widget
+drawn with a bad site key never produces a token. Signed-in commenters,
+webmentions, fediverse replies and moderator replies are never challenged.
+Dev mode does not hold the `siteverify` call.
+
+A site can set a challenge of its own as `formChallenge` in its config, which
+takes precedence over the stored pair. See
+[Configuration](configuration.md).
+
 ## The contact form
 
 A page with `contact: true` in its front matter renders a contact form under its
@@ -409,7 +480,9 @@ offers it as a **Contact form** checkbox. The key works wherever it is written,
 so a theme that includes `partials/contact-form.njk` in its post layout gets a
 form there too.
 
-The form has no script and works with JavaScript off. It posts to
+Without hCaptcha, the form has no script and works with JavaScript off. With
+hCaptcha on, the page loads hCaptcha's script, and a message sent with
+JavaScript off is still stored, on the Spam list. The form posts to
 `/_geekity/contact`. When the server stores a message, it redirects back to the
 page with `?contact=sent`, which shows a thank-you in place of the form. A
 refresh does not send the message twice.
@@ -465,18 +538,20 @@ comments and messages, and the visitor's IP address is never stored.
 
 ### The defences in front of it
 
-A message passes the same four defences as a comment, from the same modules, so
-the two public forms always follow the same rules.
+A message passes the same five defences as a stranger's comment, in this order,
+from the same modules, so the two public forms always follow the same rules.
 
 | Defence             | What it refuses                                                                                                   |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | The honeypot        | A hidden field a person never fills in. A submission that filled it gets the thank-you and is dropped in silence. |
 | The form's age      | Submitted under three seconds after the page loaded, or from a form rendered more than a day ago.                 |
 | The rate limit      | Five messages per address per ten minutes, on the same limiter the login form uses. The sixth is a 429.           |
+| The challenge       | The `formChallenge` seam. With an hCaptcha pair stored, that is [hCaptcha](#hcaptcha). It refuses nothing itself. |
 | The comment checker | The `commentChecker` seam, told `comment_type: contact-form`. With an Akismet key stored, that is Akismet.        |
 
-A checker's `discard` stores nothing. Its `spam` **stores the message** on the
-Spam list of the Messages screen, and sends no email. Why: a false positive on
+A checker's `discard` stores nothing. Its `spam`, or a missing or failed
+challenge answer, **stores the message** on the Spam list of the Messages
+screen, and sends no email. Why: a false positive on
 a contact form loses someone's message, which is worse than a spam list to
 check. If a checker is down or throws, the server treats it as no opinion and
 stores the message as it would with no checker.

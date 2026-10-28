@@ -1,4 +1,6 @@
 import type { Document } from '../content/document.ts';
+import { withChallenge } from '../forms/challenge.ts';
+import type { ChallengeWidget } from '../forms/challenge.ts';
 import type { AdminStore } from '../store/admin-store.ts';
 import { visibleReply } from './conversation.ts';
 import type { Conversation } from './conversation.ts';
@@ -13,8 +15,9 @@ import { commentPolicyOf, commentsOpen } from './policy.ts';
 export function drawnFor(
   form: CommentFormContext,
   viewer: CommentViewer | undefined,
+  challenge?: ChallengeWidget,
 ): CommentFormContext {
-  return viewer === undefined ? form : signedInCommentForm(form, viewer);
+  return viewer === undefined ? withChallenge(form, challenge) : signedInCommentForm(form, viewer);
 }
 
 /**
@@ -77,9 +80,10 @@ export function commentFormFor(options: {
   notifiable?: boolean | undefined;
   /** Who the request's session says is reading, when it says anybody. */
   viewer?: CommentViewer | undefined;
+  challenge?: ChallengeWidget | undefined;
 }): CommentFormContext | undefined {
   if (!commentsOpen(options.document, commentPolicyOf(options.site), options.now)) return undefined;
 
   const form = commentForm(options.document, options.now, options.notifiable ?? false);
-  return drawnFor(form, options.viewer);
+  return drawnFor(form, options.viewer, options.challenge);
 }

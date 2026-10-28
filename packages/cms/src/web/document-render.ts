@@ -6,9 +6,11 @@ import { activityStreamsId } from '../content/permalinks.ts';
 import { isServed } from '../content/served.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { currentObjectId, readObjectIds } from '../federation/object-ids.ts';
+import type { ChallengeWidget } from '../forms/challenge.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
 import { authorContext } from '../site/authors.ts';
 import type { SiteSettings } from '../site/settings.ts';
+import { isRecord } from '../util/guards.ts';
 import { pingbackEndpointFor } from '../webmention/pingback.ts';
 import { webmentionEndpointFor } from '../webmention/endpoint.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
@@ -90,7 +92,7 @@ function documentPageContext(
   const either = options.neighbours?.(document) ?? {};
   const shared = options.location?.(document, settings);
 
-  return {
+  const drawn: Record<string, unknown> = {
     ...context,
     ...(writer === undefined ? {} : { siteAuthor: writer }),
     ...neighbourContext('previous', either.previous, citedPage),
@@ -111,6 +113,20 @@ function documentPageContext(
     ...(visibilityOf(document) === 'unlisted' ? { noindex: true } : {}),
     ...extra,
   };
+  const challenge = pageChallengeOf(drawn);
+  return challenge === undefined ? drawn : { ...drawn, pageChallenge: challenge };
+}
+
+function pageChallengeOf(context: Record<string, unknown>): ChallengeWidget | undefined {
+  const contactFormShown = context['contactNotice'] === undefined;
+  return (
+    challengeOf(context['commentForm']) ??
+    (contactFormShown ? challengeOf(context['contactForm']) : undefined)
+  );
+}
+
+function challengeOf(form: unknown): ChallengeWidget | undefined {
+  return isRecord(form) ? (form['challenge'] as ChallengeWidget | undefined) : undefined;
 }
 
 function objectIdOf({ config }: RenderDeps, document: Document, now: Date): string | undefined {

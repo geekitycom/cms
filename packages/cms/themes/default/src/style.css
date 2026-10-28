@@ -1486,6 +1486,15 @@
     @apply flex items-center gap-2;
   }
 
+  /* hCaptcha's checkbox is 78px tall; holding it keeps the button from jumping. */
+  .form-challenge-label {
+    @apply mb-1 block font-sans text-sm;
+  }
+
+  .form-challenge .h-captcha {
+    min-block-size: 78px;
+  }
+
   .comment-check label {
     @apply mb-0;
   }

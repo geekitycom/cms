@@ -64,6 +64,7 @@ A document, which is one post, one page or one entry of a listing, adds:
 | `webmention`                                | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.                                                                                 |
 | `noindex`                                   | `true` on an unlisted or unpublished page, which the base layout prints as a robots `noindex` meta. Else absent.                                                                             |
 | `conversation`                              | The replies, likes and boosts under the post. Only when there are any. See [The conversation](conversation.md).                                                                              |
+| `pageChallenge`                             | The challenge a form on the page draws: a stranger's comment form's, else a shown contact form's. Absent with none. See [The form challenge](comment-form.md#the-form-challenge).            |
 | everything else                             | Any front matter key the CMS does not model is on the context under its own name.                                                                                                            |
 
 A listing, which is the home page, a tag archive, a category archive or an
