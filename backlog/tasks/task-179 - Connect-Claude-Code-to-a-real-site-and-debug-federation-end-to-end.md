@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: 2026-09-29 02:14
-updated_date: '2026-10-25T17:28:00Z'
+updated_date: '2026-10-28T12:14:00Z'
 labels:
   - mcp
   - federation
@@ -33,10 +33,10 @@ The point of the milestone: the owner adds their blog to Claude Code and uses it
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 Claude Code is connected to the deployed site by OAuth and by a personal token, and the steps are in docs/
-- [ ] #2 A real federation question is answered from the tools alone, and the transcript summary is noted on the task
-- [ ] #3 A post is drafted by the agent, reviewed, and published through the tools
+- [x] #2 A real federation question is answered from the tools alone, and the transcript summary is noted on the task
+- [x] #3 A post is drafted by the agent, reviewed, and published through the tools
 - [ ] #4 The plugin-umami tool answers a stats question for a real post
-- [ ] #5 Anything that was awkward becomes a follow-up task
+- [x] #5 Anything that was awkward becomes a follow-up task
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -68,4 +68,16 @@ What remains, all on shll.me after the branch is deployed (deploys need the owne
 3. AC#3: have the agent draft a post, review it, and publish it through the tools.
 4. AC#4: call geekity_plugin_umami__post_stats for a real post.
 5. AC#5: file a follow-up task for anything awkward.
+
+2026-10-28, live run on shll.me through the claude.ai connector (OAuth via stateless dynamic client registration, TASK-520). whoami: user a, client Claude, all seven scopes. claude mcp list in Claude Code shows claude.ai Shll.me Connected at https://shll.me/_geekity/mcp.
+
+AC#2, the federation question: does @andrewshell@me.dm, the only follower, get shll.me's posts, and why does hello-world show a failed Update? Tools only: federation_status (14 days) listed one failure, an Update of hello-world to https://me.dm/inbox on 2026-09-29, 403 with a Cloudflare 'Attention Required' page; queue empty, no retrying. followers: one follower, me.dm, shared inbox https://me.dm/inbox. post_federation hello-world filtered to that inbox: four Updates, one failed (the 403) and three still queued (2026-09-20, 10-08, 10-09). remote_lookup @andrewshell@me.dm, signed as a: WebFinger 200 and actor 200 through Cloudflare, so the block was transient and me.dm accepts signed requests from shll.me now. inbox_search by that actor: Follow, Likes, an Announce, QuoteRequests and Deletes arriving through 2026-10-03, so traffic flows both ways. Answer: the follower is reachable; the 403 was a one-off Cloudflare challenge; the three queued rows predate TASK-516 and will never settle (filed TASK-521). The new post below delivered its Create to me.dm as sent within a second, which confirms current deliveries settle.
+
+AC#3: create_draft written-over-mcp (name, content, categories geekity and mcp, mp-slug); get_post_source read it back as a draft; on review the endpoint path and tool names were made code with update_post using the hash; publish_post published it at https://shll.me/2026/10/written-over-mcp/; post_federation showed the Create sent to https://me.dm/inbox.
+
+AC#5: filed TASK-521 (pre-settlement queued delivery rows read as waiting forever) and TASK-522 (HTML error pages stored whole in delivery errors).
+
+Still open:
+- AC#1, the personal-token half and the claude mcp add OAuth path against shll.me: the token needs the owner on /admin/users/apps (no CLI creates one), and claude mcp login needs the owner's browser consent. Steps are in docs/mcp.md.
+- AC#4: shll.me has no geekity_plugin_umami__post_stats tool: plugin-umami is not installed there (plugins: post-summary, tag-suggest, wordpress, llm). It needs plugin-umami installed and pointed at an Umami site on shll.me, or the check run against andrewshell.org.
 <!-- SECTION:NOTES:END -->
