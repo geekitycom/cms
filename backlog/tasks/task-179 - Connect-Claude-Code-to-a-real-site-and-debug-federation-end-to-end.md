@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: 2026-09-29 02:14
-updated_date: '2026-10-28T12:14:00Z'
+updated_date: '2026-10-28T12:35:00Z'
 labels:
   - mcp
   - federation
@@ -35,7 +35,7 @@ The point of the milestone: the owner adds their blog to Claude Code and uses it
 - [ ] #1 Claude Code is connected to the deployed site by OAuth and by a personal token, and the steps are in docs/
 - [x] #2 A real federation question is answered from the tools alone, and the transcript summary is noted on the task
 - [x] #3 A post is drafted by the agent, reviewed, and published through the tools
-- [ ] #4 The plugin-umami tool answers a stats question for a real post
+- [x] #4 The plugin-umami tool answers a stats question for a real post
 - [x] #5 Anything that was awkward becomes a follow-up task
 <!-- AC:END -->
 
@@ -80,4 +80,6 @@ AC#5: filed TASK-521 (pre-settlement queued delivery rows read as waiting foreve
 Still open:
 - AC#1, the personal-token half and the claude mcp add OAuth path against shll.me: the token needs the owner on /admin/users/apps (no CLI creates one), and claude mcp login needs the owner's browser consent. Steps are in docs/mcp.md.
 - AC#4: shll.me has no geekity_plugin_umami__post_stats tool: plugin-umami is not installed there (plugins: post-summary, tag-suggest, wordpress, llm). It needs plugin-umami installed and pointed at an Umami site on shll.me, or the check run against andrewshell.org.
+
+2026-10-28, AC#4: plugin-umami is now on shll.me and the claude.ai Shll.me connector lists geekity_plugin_umami__post_stats. Called it for the post published in AC#3, path /2026/10/written-over-mcp/, days 7: answered 2026-10-22 to 2026-10-28 with the title 'Written and published over MCP', 0 views, 0 visitors, 0 visits, the previous span 0, no referrers. A 30-day call for / also answered all zeros. The zeros are real data, not a wiring fault: the client throws unauthorized on a 401/403 and not-found when the account cannot see the website ID, and neither happened. The published page carries the Umami Cloud tracker (cloud.umami.is/script.js, data-website-id 8257032a-..., data-domains shll.me, data-do-not-track true), so visits from now on will be counted. Only AC#1 remains open.
 <!-- SECTION:NOTES:END -->
