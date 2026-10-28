@@ -313,6 +313,18 @@ describe('the starter privacy page', () => {
     assert.match(text, /The contact form \(optional\)/);
     assert.match(text, /Spam checking with Akismet \(optional\)/);
     assert.match(text, /Akismet, a spam-checking service run by Automattic/);
+    assert.match(text, /Spam checking with hCaptcha \(optional\)/);
+  });
+
+  it('says what hCaptcha receives and links its privacy policy', async () => {
+    const parent = await temporaryDir('geekity-seed-privacy-hcaptcha-');
+    const initialised = await initSite({ directory: 'from-init', cwd: parent });
+    const cms = await serving(path.join(initialised.directory, 'content'));
+    const html = await (await cms.app.request('/privacy/')).text();
+    assert.match(html, /<a href="https:\/\/www\.hcaptcha\.com\/privacy">/);
+    const text = await privacyText();
+    assert.match(text, /hCaptcha receives[^.]*IP address/);
+    assert.match(text, /signed in[^.]*nothing from hCaptcha/i);
   });
 
   it('quotes the retention periods a new site starts with, and says to keep them in step', async () => {

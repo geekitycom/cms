@@ -264,6 +264,33 @@ read on every call, so a change to the file takes effect without a restart. A
 change to a variable needs one, as every variable does. See
 [hCaptcha](comments.md#hcaptcha).
 
+The public site sends no content policy by default, so hCaptcha needs no
+change to the headers. A site that sets its own `Content-Security-Policy`
+through [`securityHeaders`](security.md#security-headers) must allow
+`https://hcaptcha.com` and `https://*.hcaptcha.com` in `script-src`,
+`frame-src`, `style-src` and `connect-src`. These are the origins
+[hCaptcha's documentation](https://docs.hcaptcha.com/#content-security-policy-settings)
+asks for. Name the wildcard rather than single hosts: hCaptcha serves its
+assets from subdomains that change. The theme's `/theme/hcaptcha.js` is on the
+site's own origin, and the default theme adds no inline script, so the policy
+needs no nonce or hash for it. The `siteverify` call is made by the server and
+is not covered by the policy.
+
+```ts
+export default defineConfig({
+  securityHeaders: {
+    'Content-Security-Policy': [
+      "default-src 'self'",
+      "script-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
+      "frame-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
+      "style-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
+      "connect-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
+      "frame-ancestors 'self'",
+    ].join('; '),
+  },
+});
+```
+
 ## Plugin settings
 
 A plugin's settings are kept in its folder under `data/plugins/`:
