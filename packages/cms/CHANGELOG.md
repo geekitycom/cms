@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.46.0](https://github.com/geekitycom/cms/compare/v0.45.0...v0.46.0) (2026-10-28)
+
+
+### Features
+
+* **cms:** draw the hCaptcha widget on the contact and comment forms in the default theme ([a962eae](https://github.com/geekitycom/cms/commit/a962eaea03c753f6ca248115332d9743d65e4005))
+* **cms:** store and check an hCaptcha site key and secret on Settings &gt; Discussion ([6cdd6d3](https://github.com/geekitycom/cms/commit/6cdd6d3b05e88d3801e27959ad094a0746f63606))
+* **cms:** tell visitors and site owners what hCaptcha sees and which origins it needs ([85764a8](https://github.com/geekitycom/cms/commit/85764a80c8142f2b1721a56b9a2697100bd60127))
+* **cms:** verify an hCaptcha token on the contact and comment forms behind a form challenge seam ([379feeb](https://github.com/geekitycom/cms/commit/379feeb0108ca4869c436314af4c48e5dca7264f))
+
+
+### Bug Fixes
+
+* **cms:** keep only the title of an HTML page in a delivery error ([df26ebb](https://github.com/geekitycom/cms/commit/df26ebb6cc3c271615d031fb42e1d2f9239bb3dd))
+* **cms:** read deliveries the queue no longer holds as unknown ([8964d5d](https://github.com/geekitycom/cms/commit/8964d5d5f78ed3b5d72c441d562facb3913b0810))
+
 ## [0.45.0](https://github.com/geekitycom/cms/compare/v0.44.0...v0.45.0) (2026-10-26)
 
 

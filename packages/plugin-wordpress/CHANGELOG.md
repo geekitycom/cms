@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.11.0...plugin-wordpress-v0.12.0) (2026-10-28)
+
+
+### Features
+
+* **cms:** store and check an hCaptcha site key and secret on Settings &gt; Discussion ([6cdd6d3](https://github.com/geekitycom/cms/commit/6cdd6d3b05e88d3801e27959ad094a0746f63606))
+
 ## [0.11.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.10.0...plugin-wordpress-v0.11.0) (2026-10-25)
 
 
