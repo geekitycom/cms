@@ -7,6 +7,7 @@ export const CORE_NAMESPACES = [
   'mail',
   'akismet',
   'tmdb',
+  'hcaptcha',
 ] as const;
 
 function upperSnake(text: string): string {

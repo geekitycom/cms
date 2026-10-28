@@ -6,6 +6,8 @@ export {
   verifyAkismetKey,
 } from './akismet.ts';
 export type { AkismetCheckerOptions, VerifyAkismetKeyOptions } from './akismet.ts';
+export { HCAPTCHA_TIMEOUT_MS, HCAPTCHA_VERIFY_URL, verifyHcaptchaPair } from './hcaptcha.ts';
+export type { VerifyHcaptchaPairOptions } from './hcaptcha.ts';
 export {
   blankValues,
   COMMENT_NOTICE_PARAM,

@@ -202,8 +202,8 @@ exported. `geekity export --list` prints each pattern that `data/` can hold,
 its class and what is lost without it. It writes nothing.
 
 A `credential` file holds an API key or a login that is typed in again from
-another service: `mail.json`, `akismet.json`, `tmdb.json` and each plugin's
-`secrets.json`. These files are in the archive only with
+another service: `mail.json`, `akismet.json`, `tmdb.json`, `hcaptcha.json`
+and each plugin's `secrets.json`. These files are in the archive only with
 `--with-credentials`. Credentials set in the environment are not in a file, so
 they are never exported.
 

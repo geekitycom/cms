@@ -97,6 +97,7 @@ const WORDS: Record<RemainingScreen, readonly string[]> = {
     'Akismet does not recognise this key',
     'Replace key',
     'Remove key',
+    'Save hCaptcha',
   ],
   settingsEmail: [
     'Security contact',
@@ -355,7 +356,7 @@ describe('the remaining screens', async () => {
 
     it('draws each settings panel as a card', () => {
       assert.deepEqual(titles('settingsPermalinks'), ['Archive redirects']);
-      assert.deepEqual(titles('settingsDiscussion'), ['Spam checking']);
+      assert.deepEqual(titles('settingsDiscussion'), ['Spam checking', 'hCaptcha']);
       assert.deepEqual(titles('settingsEmail'), ['Mail credentials']);
     });
 

@@ -203,6 +203,11 @@ export {
   AKISMET_REMOVE,
   akismetPanel,
   DISCUSSION_SETTINGS,
+  HCAPTCHA_FIELDS,
+  HCAPTCHA_PATH,
+  HCAPTCHA_REMOVE,
+  HCAPTCHA_VERIFY,
+  hcaptchaPanel,
 } from './settings-discussion.ts';
 export {
   EMAIL_SETTINGS,

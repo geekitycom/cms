@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { resolveConfig } from '../config.ts';
 import { AKISMET } from './akismet.ts';
+import { HCAPTCHA } from './hcaptcha.ts';
 import { MAIL } from './mail.ts';
 import { createSettingsRegistry } from './registry.ts';
 
@@ -205,6 +206,58 @@ describe('the akismet namespace', () => {
     });
     assert.equal(await registry.get(AKISMET.key), 'env-key-9876');
     const refused = await registry.set('akismet', changes({ key: 'typed' }), 'admin');
+    assert.equal(refused.ok, false);
+  });
+});
+
+describe('the hcaptcha namespace', () => {
+  it('is no site key and no secret until something is written', async () => {
+    const { registry } = await site();
+    assert.deepEqual(await registry.values(HCAPTCHA), {
+      site_key: '',
+      secret: '',
+      status: 'unchecked',
+      checked_at: '',
+    });
+  });
+
+  it('keeps the site key and the secret in data/hcaptcha.json at 0600', async () => {
+    const { registry, dataDir } = await site();
+
+    await registry.set(
+      'hcaptcha',
+      changes({ site_key: '10000000-ffff-ffff-ffff-000000000001', secret: '0xsecret' }),
+      'admin',
+    );
+
+    assert.deepEqual(await fileOf(dataDir, 'hcaptcha.json'), {
+      site_key: '10000000-ffff-ffff-ffff-000000000001',
+      secret: '0xsecret',
+    });
+    assert.equal(await modeOf(dataDir, 'hcaptcha.json'), 0o600);
+  });
+
+  it('holds the secret as a secret and the site key, which the page prints, as not one', () => {
+    assert.equal(HCAPTCHA.secret.declaration.secret, true);
+    assert.notEqual(HCAPTCHA.site_key.declaration.secret, true);
+  });
+
+  it('puts both values from the environment in effect and refuses to store one over them', async () => {
+    const { registry } = await site({
+      GEEKITY_HCAPTCHA__SITE_KEY: 'env-site-key',
+      GEEKITY_HCAPTCHA__SECRET: 'env-secret',
+    });
+
+    assert.deepEqual((await registry.resolve(HCAPTCHA.site_key)).source, {
+      tier: 'env',
+      variable: 'GEEKITY_HCAPTCHA__SITE_KEY',
+    });
+    assert.deepEqual((await registry.resolve(HCAPTCHA.secret)).source, {
+      tier: 'env',
+      variable: 'GEEKITY_HCAPTCHA__SECRET',
+    });
+    assert.equal(await registry.get(HCAPTCHA.secret), 'env-secret');
+    const refused = await registry.set('hcaptcha', changes({ secret: 'typed' }), 'admin');
     assert.equal(refused.ok, false);
   });
 });

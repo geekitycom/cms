@@ -131,8 +131,8 @@ Options:
                    geekity-<host>-<time>.tar.gz in the working directory.
   --with-credentials
                    With export: include the API keys and logins kept in
-                   data/ (mail.json, akismet.json, tmdb.json, each plugin's
-                   secrets).
+                   data/ (mail.json, akismet.json, tmdb.json, hcaptcha.json,
+                   each plugin's secrets).
   --without-content
                    With export: leave content/ out.
   --list           With export: print each file data/ may hold, its class

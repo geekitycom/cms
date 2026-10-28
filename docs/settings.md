@@ -3,14 +3,14 @@
 `/admin/settings` holds the values that belong to the site, not to a post. It
 has six pages under the Settings menu:
 
-| Page           | What it holds                                                                                                                                                                                 |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **General**    | Title, tagline, author, base URL, time zone, language, the locale for dates and counts when it differs from the language, site icon, whether the header shows it, and license.                |
-| **Reading**    | What the homepage displays, posts per page, and the notify server the feeds advertise.                                                                                                        |
-| **Permalinks** | The tag and category archive bases, and the archive redirects already recorded.                                                                                                               |
-| **Discussion** | Comments, which types take them by default, and when they close, webmentions sent and received, the Akismet key, and how long commenter emails, address hashes and contact messages are kept. |
-| **Email**      | How the site sends mail, where a message written to the site goes, and the security contact.                                                                                                  |
-| **Privacy**    | What the site shares about where a post was written, and every later privacy choice.                                                                                                          |
+| Page           | What it holds                                                                                                                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **General**    | Title, tagline, author, base URL, time zone, language, the locale for dates and counts when it differs from the language, site icon, whether the header shows it, and license.                                                  |
+| **Reading**    | What the homepage displays, posts per page, and the notify server the feeds advertise.                                                                                                                                          |
+| **Permalinks** | The tag and category archive bases, and the archive redirects already recorded.                                                                                                                                                 |
+| **Discussion** | Comments, which types take them by default, and when they close, webmentions sent and received, the Akismet key, the hCaptcha site key and secret, and how long commenter emails, address hashes and contact messages are kept. |
+| **Email**      | How the site sends mail, where a message written to the site goes, and the security contact.                                                                                                                                    |
+| **Privacy**    | What the site shares about where a post was written, and every later privacy choice.                                                                                                                                            |
 
 Federation has a seventh page of the same kind at `/admin/federation/settings`.
 It sits under the Federation section, not under Settings, because the relays
@@ -137,12 +137,13 @@ that the setting was not applied.
 
 ## Credentials
 
-Two groups of values on the settings screens are not in `site.json`: the
-Akismet key and the mail credential. Both are credentials. They are the `mail`
-and `akismet` [runtime settings](#runtime-settings), kept under `data/` at mode
-`0600`. Each has its own pair of forms, save and remove, so a mistyped key
-cannot lose an edit to the title. See [Akismet](comments.md#akismet) and
-[Email](email.md).
+Three groups of values on the settings screens are not in `site.json`: the
+Akismet key, the hCaptcha site key and secret, and the mail credential. All are
+credentials. They are the `akismet`, `hcaptcha` and `mail`
+[runtime settings](#runtime-settings), kept under `data/` at mode `0600`. Each
+has its own pair of forms, save and remove, so a mistyped key cannot lose an
+edit to the title. See [Akismet](comments.md#akismet),
+[hCaptcha](comments.md#hcaptcha) and [Email](email.md).
 
 How the site sends email is a setting. The key or password that makes it work
 is not.
@@ -156,13 +157,15 @@ is not.
   Email page.
 
 A deployment can set any of them in the environment instead, as
-`GEEKITY_MAIL__BREVO_API_KEY`, `GEEKITY_MAIL__SMTP_PASSWORD` or
-`GEEKITY_AKISMET__KEY`. A value set there is in effect, the page says which
+`GEEKITY_MAIL__BREVO_API_KEY`, `GEEKITY_MAIL__SMTP_PASSWORD`,
+`GEEKITY_AKISMET__KEY` or `GEEKITY_HCAPTCHA__SECRET`. A value set there is in effect, the page says which
 variable sets it, and the page refuses to store a value over it.
 
-The page never prints either secret back. The panel shows the last four
-characters of a stored key, and the host and user of the SMTP connection.
-Leaving a secret blank keeps the stored one.
+The page never prints a secret back. The panel shows the last four characters
+of a stored API key, the host and user of the SMTP connection, and the whole
+hCaptcha site key, which is not a secret. It shows nothing of the hCaptcha
+secret. Leaving a mail password or the hCaptcha secret blank keeps the stored
+one.
 
 A **Send test email** button sends a message through the whole chain and
 reports the provider's response. With no configuration, nothing is sent, and
@@ -717,21 +720,25 @@ the admin's settings pages do not hold them. They are kept in one settings
 registry (decision-53). Each setting is named `namespace.key`, and each
 namespace keeps its values in one file under `data/`:
 
-| Setting              | File                    | What it does                                                                                               |
-| -------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `maintenance.on`     | `data/maintenance.json` | Answer 503 to the public site, feeds and inboxes. See [Maintenance mode](public-site.md#maintenance-mode). |
-| `maintenance.until`  | `data/maintenance.json` | When the site is expected back, as an instant. Sent as `Retry-After`.                                      |
-| `dev_mode.on`        | `data/dev-mode.json`    | Hold every outbound side effect. See [Dev mode](deploying.md#dev-mode).                                    |
-| `mail.brevo_api_key` | `data/mail.json`        | Brevo's API key. Secret. See [Email](email.md).                                                            |
-| `mail.smtp_host`     | `data/mail.json`        | The SMTP server. Empty means no server.                                                                    |
-| `mail.smtp_port`     | `data/mail.json`        | The SMTP port, 587 by default. 465 needs `mail.smtp_secure` true, and 587 needs it false.                  |
-| `mail.smtp_secure`   | `data/mail.json`        | Whether the SMTP connection is TLS from the first byte.                                                    |
-| `mail.smtp_user`     | `data/mail.json`        | The SMTP username.                                                                                         |
-| `mail.smtp_password` | `data/mail.json`        | The SMTP password. Secret.                                                                                 |
-| `akismet.key`        | `data/akismet.json`     | The Akismet API key. Secret. See [Akismet](comments.md#akismet).                                           |
-| `akismet.status`     | `data/akismet.json`     | What Akismet said about the key when it was last checked: `valid`, `invalid` or `unchecked`.               |
-| `akismet.checked_at` | `data/akismet.json`     | When the key was last checked.                                                                             |
-| `tmdb.key`           | `data/tmdb.json`        | The TMDb API key or read access token that Look up uses. Secret. See [Look up](admin.md#look-up).          |
+| Setting               | File                    | What it does                                                                                               |
+| --------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `maintenance.on`      | `data/maintenance.json` | Answer 503 to the public site, feeds and inboxes. See [Maintenance mode](public-site.md#maintenance-mode). |
+| `maintenance.until`   | `data/maintenance.json` | When the site is expected back, as an instant. Sent as `Retry-After`.                                      |
+| `dev_mode.on`         | `data/dev-mode.json`    | Hold every outbound side effect. See [Dev mode](deploying.md#dev-mode).                                    |
+| `mail.brevo_api_key`  | `data/mail.json`        | Brevo's API key. Secret. See [Email](email.md).                                                            |
+| `mail.smtp_host`      | `data/mail.json`        | The SMTP server. Empty means no server.                                                                    |
+| `mail.smtp_port`      | `data/mail.json`        | The SMTP port, 587 by default. 465 needs `mail.smtp_secure` true, and 587 needs it false.                  |
+| `mail.smtp_secure`    | `data/mail.json`        | Whether the SMTP connection is TLS from the first byte.                                                    |
+| `mail.smtp_user`      | `data/mail.json`        | The SMTP username.                                                                                         |
+| `mail.smtp_password`  | `data/mail.json`        | The SMTP password. Secret.                                                                                 |
+| `akismet.key`         | `data/akismet.json`     | The Akismet API key. Secret. See [Akismet](comments.md#akismet).                                           |
+| `akismet.status`      | `data/akismet.json`     | What Akismet said about the key when it was last checked: `valid`, `invalid` or `unchecked`.               |
+| `akismet.checked_at`  | `data/akismet.json`     | When the key was last checked.                                                                             |
+| `tmdb.key`            | `data/tmdb.json`        | The TMDb API key or read access token that Look up uses. Secret. See [Look up](admin.md#look-up).          |
+| `hcaptcha.site_key`   | `data/hcaptcha.json`    | The hCaptcha site key. Not secret: the page prints it. See [hCaptcha](comments.md#hcaptcha).               |
+| `hcaptcha.secret`     | `data/hcaptcha.json`    | The hCaptcha secret. Secret.                                                                               |
+| `hcaptcha.status`     | `data/hcaptcha.json`    | What hCaptcha said about the pair when it was last checked: `valid`, `invalid` or `unchecked`.             |
+| `hcaptcha.checked_at` | `data/hcaptcha.json`    | When the pair was last checked.                                                                            |
 
 The value in effect is the first of these that is set:
 
@@ -758,7 +765,7 @@ overridden by `GEEKITY_BASE_URL` and the config's `baseUrl` (see
 
 Tools > Maintenance and Tools > Dev mode in the admin are the switches for
 the first three settings. The Email, Discussion and General settings pages
-save the `mail`, `akismet` and `tmdb` settings.
+save the `mail`, `akismet`, `hcaptcha` and `tmdb` settings.
 `data/mail.json` and `data/akismet.json` written by a version before the
 registry are read in their old shape and stored in the new one on the next
 save. `geekity settings` reads and writes every one of them:

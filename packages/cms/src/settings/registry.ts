@@ -10,6 +10,7 @@ import type { DataClass, DataFileDeclaration } from '../files/data-files.ts';
 import { isRecord } from '../util/guards.ts';
 import { AKISMET } from './akismet.ts';
 import { DEV_MODE } from './dev-mode.ts';
+import { HCAPTCHA } from './hcaptcha.ts';
 import { MAIL } from './mail.ts';
 import { MAINTENANCE } from './maintenance.ts';
 import { TMDB } from './tmdb.ts';
@@ -28,7 +29,7 @@ import type {
   ValuesOf,
 } from './types.ts';
 
-const CORE: readonly DeclaredNamespace[] = [MAINTENANCE, DEV_MODE, MAIL, AKISMET, TMDB];
+const CORE: readonly DeclaredNamespace[] = [MAINTENANCE, DEV_MODE, MAIL, AKISMET, TMDB, HCAPTCHA];
 
 export interface CreateSettingsRegistryOptions {
   readonly config: ResolvedConfig;

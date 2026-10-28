@@ -246,6 +246,23 @@ gemini:// URL, its Markdown ends with a `Gemini` section linking the same URL,
 and the generated `/llms.txt` names the capsule. A gemini:// URL has the host
 of the base URL in effect and `geminiPort`, left out when it is 1965.
 
+## hCaptcha
+
+The hCaptcha site key and secret are runtime settings, not config fields. They
+are kept in `data/hcaptcha.json` at mode `0600`, set on Settings > Discussion,
+and can come from the environment instead:
+
+| Setting             | Variable                     | What it is                                                      |
+| ------------------- | ---------------------------- | --------------------------------------------------------------- |
+| `hcaptcha.site_key` | `GEEKITY_HCAPTCHA__SITE_KEY` | The site key, printed in every page that shows the challenge.   |
+| `hcaptcha.secret`   | `GEEKITY_HCAPTCHA__SECRET`   | The secret that checks a token with hCaptcha. A secret setting. |
+
+A set variable takes precedence over the file. Settings > Discussion then shows
+the value as set by that variable, with no box to change it. Both values are
+read on every call, so a change to the file takes effect without a restart. A
+change to a variable needs one, as every variable does. See
+[hCaptcha](comments.md#hcaptcha).
+
 ## Plugin settings
 
 A plugin's settings are kept in its folder under `data/plugins/`:

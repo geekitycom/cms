@@ -401,6 +401,47 @@ server posts `submit-spam` or `submit-ham` with the same fields, minus
 `user_ip`, `user_agent` and `referrer`. A stored comment keeps only a salted
 hash of the IP address.
 
+### hCaptcha
+
+hCaptcha is off until a site has both a site key and a secret. They are the
+`hcaptcha.site_key` and `hcaptcha.secret`
+[runtime settings](settings.md#runtime-settings), kept in `data/hcaptcha.json`
+at mode `0600` and never in `content/_data/site.json`. The secret is a secret
+setting. The site key is not, because every page that shows the challenge
+prints it. The same file holds `hcaptcha.status` and `hcaptcha.checked_at`, the
+result of the last check and when it was made.
+
+A deployment can set either value in the environment instead, as
+`GEEKITY_HCAPTCHA__SITE_KEY` and `GEEKITY_HCAPTCHA__SECRET`. A value set there
+is in effect whatever the file holds. The panel says which variable sets it,
+offers no box to type over it, and refuses a value saved over it.
+
+To turn it on, paste the site key and the secret from the
+[hCaptcha dashboard](https://dashboard.hcaptcha.com/) into **hCaptcha** on
+`/admin/settings/discussion`. The server stores them and then checks the pair
+with hCaptcha's `siteverify`, sending the secret, the site key and a
+placeholder token. Without a solved challenge, `siteverify` checks the site key
+but not the secret, so a wrong secret shows up only when the first visitor's
+form is checked. A pair that fails the check is stored all the same. The panel
+then shows one of these:
+
+- Connected: hCaptcha raised nothing against the site key
+- Refused: hCaptcha named the site key or the secret, with `invalid-sitekey`,
+  `invalid-input-secret`, `missing-input-secret` or `sitekey-secret-mismatch`
+- Not checked: hCaptcha could not be reached, answered with an error status or
+  did not answer in ten seconds
+- Incomplete: only one of the two values is set
+- Not connected
+
+The panel shows the site key and never the secret, not even part of it.
+Leaving the secret box blank keeps the stored secret, so the site key can be
+corrected without pasting the secret again. **Check with hCaptcha** checks the
+pair in effect again, which is how values from the environment are checked.
+**Remove hCaptcha** forgets both stored values.
+
+The server reads both values on every call, so a pair saved or removed on that
+screen takes effect without a restart.
+
 ## The contact form
 
 A page with `contact: true` in its front matter renders a contact form under its
