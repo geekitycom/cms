@@ -256,7 +256,7 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
         delivery.actorId,
         delivery.inboxId,
         delivery.status,
-        shortError(delivery.error),
+        withHtmlPageAsTitle(delivery.error),
         delivery.attemptedAt ?? clock().toISOString(),
       );
       if (recorded === undefined) {
@@ -270,7 +270,7 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     settleDeliveries(outcome) {
       statements.settleDeliveries.run(
         outcome.status,
-        shortError(outcome.error),
+        withHtmlPageAsTitle(outcome.error),
         clock().toISOString(),
         outcome.activityId,
         outcome.inbox,
@@ -356,7 +356,7 @@ function toDelivery(row: Row): Delivery {
     actorId: String(row['actor_id']),
     inboxId: String(row['inbox_id']),
     status: deliveryStatus(row['status']),
-    error: shortError(nullableText(row['error'])),
+    error: withHtmlPageAsTitle(nullableText(row['error'])),
     attemptedAt: String(row['attempted_at']),
   };
 }
@@ -364,11 +364,7 @@ function toDelivery(row: Row): Delivery {
 const HTML_PAGE = /^\s*<(?:!doctype\s+html|html)\b/i;
 const PAGE_TITLE = /<title[^>]*>([\s\S]*?)<\/title>/i;
 
-/**
- * An error whose body is an HTML page, as a CDN's challenge or a proxy's error
- * page is, cut down to its first line and the page's title.
- */
-function shortError(error: string | null): string | null {
+function withHtmlPageAsTitle(error: string | null): string | null {
   if (error === null) return null;
   const lineEnd = error.indexOf('\n');
   if (lineEnd === -1) return error;

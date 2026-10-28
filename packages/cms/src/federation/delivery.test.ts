@@ -1817,6 +1817,7 @@ describe('the delivery log', () => {
       queued: 0,
       retrying: 0,
       failed: 0,
+      unknown: 0,
     });
     assert.equal(delivered('Create').length, 1, 'one shared inbox took one POST');
   });

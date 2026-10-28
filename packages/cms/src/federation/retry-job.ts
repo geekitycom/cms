@@ -35,7 +35,6 @@ export type RetryReport = {
   }[];
 };
 
-/** A delivery that failed, or one whose outcome was never seen. */
 const RETRIED: ReadonlySet<DeliveryStatus> = new Set(['failed', 'unknown']);
 
 export const RETRY_DELIVERIES_JOB = jobName<RetryFilter, RetryReport>('retry-deliveries');
