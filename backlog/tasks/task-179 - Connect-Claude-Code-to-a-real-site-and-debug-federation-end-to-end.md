@@ -1,11 +1,11 @@
 ---
 id: TASK-179
 title: Connect Claude Code to a real site and debug federation end to end
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: 2026-09-29 02:14
-updated_date: '2026-10-28T12:35:00Z'
+updated_date: '2026-10-28T20:01:00Z'
 labels:
   - mcp
   - federation
@@ -32,7 +32,7 @@ The point of the milestone: the owner adds their blog to Claude Code and uses it
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Claude Code is connected to the deployed site by OAuth and by a personal token, and the steps are in docs/
+- [x] #1 Claude Code is connected to the deployed site by OAuth, both directly (claude mcp add, then /mcp) and through a claude.ai connector; the personal-token path is proven in the local rehearsal; the steps for all three are in docs/
 - [x] #2 A real federation question is answered from the tools alone, and the transcript summary is noted on the task
 - [x] #3 A post is drafted by the agent, reviewed, and published through the tools
 - [x] #4 The plugin-umami tool answers a stats question for a real post
@@ -82,4 +82,12 @@ Still open:
 - AC#4: shll.me has no geekity_plugin_umami__post_stats tool: plugin-umami is not installed there (plugins: post-summary, tag-suggest, wordpress, llm). It needs plugin-umami installed and pointed at an Umami site on shll.me, or the check run against andrewshell.org.
 
 2026-10-28, AC#4: plugin-umami is now on shll.me and the claude.ai Shll.me connector lists geekity_plugin_umami__post_stats. Called it for the post published in AC#3, path /2026/10/written-over-mcp/, days 7: answered 2026-10-22 to 2026-10-28 with the title 'Written and published over MCP', 0 views, 0 visitors, 0 visits, the previous span 0, no referrers. A 30-day call for / also answered all zeros. The zeros are real data, not a wiring fault: the client throws unauthorized on a 401/403 and not-found when the account cannot see the website ID, and neither happened. The published page carries the Umami Cloud tracker (cloud.umami.is/script.js, data-website-id 8257032a-..., data-domains shll.me, data-do-not-track true), so visits from now on will be counted. Only AC#1 remains open.
+
+2026-10-28, AC#1 reworded with the owner: OAuth covers Claude Code and claude.ai, so a live token run on shll.me would re-prove code the 2026-10-25 rehearsal already exercised (claude mcp add --header and add-json Connected, missing scope refused with -32001). The owner ran the direct Claude Code OAuth path against https://shll.me/_geekity/mcp (claude mcp add --transport http, /mcp > Authenticate, consent named Claude Code, claude mcp list Connected) and it worked as docs/mcp.md describes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Claude Code was connected to shll.me and used on real work through MCP alone. OAuth works both directly from Claude Code (client metadata document) and through a claude.ai connector (stateless dynamic client registration). The personal-token path was proven in the local rehearsal, and docs/mcp.md has the steps for all three. A federation question (why did hello-world's Update to me.dm fail, and does the follower still get posts) was answered from federation_status, followers, post_federation, remote_lookup and inbox_search: the 403 was a one-off Cloudflare challenge, and me.dm accepts signed requests. A post was drafted, read back, corrected with update_post and published at https://shll.me/2026/10/written-over-mcp/, and its Create was marked sent to me.dm. After plugin-umami was installed on shll.me, its post_stats tool answered for that post. Follow-ups: TASK-521 (delivery rows written before TASK-516 stay queued forever, on andrewshell.org too) and TASK-522 (HTML error pages stored whole in delivery errors). Caveat: a connector's tool list loads when a session starts, so a newly installed plugin tool needs a reconnect and a new session.
+<!-- SECTION:FINAL_SUMMARY:END -->
