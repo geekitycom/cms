@@ -129,12 +129,11 @@ export interface DeliveryStore {
   /**
    * Turn every `queued` or `retrying` row attempted before `before` that no
    * waiting message carries into `unknown`, keeping its error and its time.
-   * Answers how many rows it changed.
    */
   markUnsettledDeliveriesUnknown(unsettled: {
     readonly before: string;
     readonly waiting: readonly WaitingDelivery[];
-  }): number;
+  }): void;
   /** Every follower's outcome for one activity, in follower order. */
   listDeliveries(activityId: string): Delivery[];
   /** How many followers this activity stands at each status with. */
@@ -279,11 +278,7 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     },
 
     markUnsettledDeliveriesUnknown({ before, waiting }) {
-      const result = statements.markUnsettledDeliveriesUnknown.run({
-        before,
-        waiting: JSON.stringify(waiting),
-      });
-      return Number(result.changes);
+      statements.markUnsettledDeliveriesUnknown.run({ before, waiting: JSON.stringify(waiting) });
     },
 
     listDeliveries(activityId) {

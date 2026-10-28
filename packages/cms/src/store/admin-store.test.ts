@@ -1203,12 +1203,11 @@ describe('the delivery outcome cache', () => {
         unsettled('https://later.example/inbox', 'queued', '2026-07-01T00:00:00.000Z'),
       );
 
-      const marked = admin.markUnsettledDeliveriesUnknown({
+      admin.markUnsettledDeliveriesUnknown({
         before: BEFORE,
         waiting: [{ activityId: ACTIVITY_ID, inbox: WAITING_INBOX }],
       });
 
-      assert.equal(marked, 2);
       assert.deepEqual(
         admin
           .listDeliveries(ACTIVITY_ID)
@@ -1240,7 +1239,8 @@ describe('the delivery outcome cache', () => {
         }),
       );
 
-      assert.equal(admin.markUnsettledDeliveriesUnknown({ before: BEFORE, waiting: [] }), 0);
+      admin.markUnsettledDeliveriesUnknown({ before: BEFORE, waiting: [] });
+
       assert.deepEqual(
         admin.listDeliveries(ACTIVITY_ID).map((row) => row.status),
         ['failed', 'sent'],

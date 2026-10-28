@@ -36,7 +36,7 @@ export type RetryReport = {
 };
 
 /** A delivery that failed, or one whose outcome was never seen. */
-const RETRIED: ReadonlySet<DeliveryStatus | undefined> = new Set(['failed', 'unknown']);
+const RETRIED: ReadonlySet<DeliveryStatus> = new Set(['failed', 'unknown']);
 
 export const RETRY_DELIVERIES_JOB = jobName<RetryFilter, RetryReport>('retry-deliveries');
 
@@ -84,12 +84,13 @@ export function failedRetries(services: RetryPlanServices, filter: RetryFilter):
   const retries = new Map<string, RetryRecipient[]>();
   for (const [key, { slug, row }] of newest) {
     if (!RETRIED.has(row.status)) continue;
+    const create = newestCreate.get(key);
     if (filter.inbox !== null && row.inboxId !== filter.inbox) continue;
     const recipient = {
       actorId: row.actorId,
       inboxId: row.inboxId,
       error: row.error,
-      missedAnnouncement: RETRIED.has(newestCreate.get(key)?.status),
+      missedAnnouncement: create !== undefined && RETRIED.has(create.status),
     };
     const held = retries.get(slug);
     if (held === undefined) retries.set(slug, [recipient]);
