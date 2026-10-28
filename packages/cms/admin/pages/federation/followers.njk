@@ -252,7 +252,7 @@
               <td>{% if row.author %}@{{ row.author }}{% else %}—{% endif %}</td>
               {% if row.lastActivity %}
                 <td>{{ row.lastActivity.activityType }} <span class="whitespace-nowrap text-sm">{{ row.lastActivity.attemptedAt | date('html') }}</span></td>
-                <td>{{ row.lastActivity.counts.sent }}</td>
+                <td>{{ row.lastActivity.counts.sent }}{% if row.lastActivity.counts.unknown %}, {{ row.lastActivity.counts.unknown }} outcome unknown{% endif %}</td>
                 <td>{{ row.lastActivity.counts.queued }}{% if row.lastActivity.counts.retrying %}, {{ row.lastActivity.counts.retrying }} retrying{% endif %}</td>
                 <td class="whitespace-nowrap">{% if row.lastActivity.counts.failed %}{{ status('failed', row.lastActivity.counts.failed + ' failed') }}{% else %}0{% endif %}</td>
               {% else %}

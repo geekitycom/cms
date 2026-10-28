@@ -37,6 +37,7 @@ import type {
   RelayService,
   SiteFederation,
 } from '../federation/index.ts';
+import { markForgottenDeliveries } from '../federation/forgotten-deliveries.ts';
 import { observeOutbox } from '../federation/outbox-observer.ts';
 import { createFederationQueue } from '../federation/queue.ts';
 import { createInboxRefusals } from '../federation/refusals.ts';
@@ -480,6 +481,16 @@ export function createServices({
   for (const listener of conversationWriteSubscribers) admin.onConversationWrite(listener);
 
   const lifecycle: readonly Service[] = [
+    {
+      name: 'deliveries the queue no longer holds',
+      start: () => {
+        markForgottenDeliveries(admin, {
+          dataDir: resolved.dataDir,
+          queue: resolved.federation.queue,
+          now: resolved.now,
+        });
+      },
+    },
     // The index is brought up to date before the first request, so a site
     // never serves a stale document, and the watcher takes over from there.
     {

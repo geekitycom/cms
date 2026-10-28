@@ -1,9 +1,11 @@
 ---
 id: TASK-522
 title: Shorten HTML error pages in recorded delivery errors
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-10-28T12:14:00Z'
+updated_date: '2026-10-28T20:03:00Z'
 labels:
   - federation
   - mcp

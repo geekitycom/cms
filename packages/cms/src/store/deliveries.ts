@@ -14,7 +14,7 @@ import {
 import type { ListPageOptions, Page, Row } from './rows.ts';
 
 /** How one delivery of one activity to one follower ended. */
-export const DELIVERY_STATUSES = ['sent', 'queued', 'retrying', 'failed'] as const;
+export const DELIVERY_STATUSES = ['sent', 'queued', 'retrying', 'failed', 'unknown'] as const;
 
 /**
  * One of {@link DELIVERY_STATUSES}.
@@ -23,7 +23,10 @@ export const DELIVERY_STATUSES = ['sent', 'queued', 'retrying', 'failed'] as con
  * Fedify's outbox queue and not yet settled. `retrying` is one whose last
  * attempt failed, with that error, and which the queue will try again.
  * `failed` is a delivery Fedify gave up on, or one that threw before it
- * reached the queue, with the reason in the row.
+ * reached the queue, with the reason in the row. `unknown` is one left
+ * `queued` or `retrying` with nothing for it in the queue any more: a version
+ * that did not settle outcomes wrote it, or the queue lost it, so how it
+ * ended was never seen.
  */
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
@@ -81,6 +84,12 @@ export type NewDelivery = Omit<Delivery, 'attemptedAt'> & {
   attemptedAt?: string | undefined;
 };
 
+/** One delivery a message in the queue still carries. */
+export interface WaitingDelivery {
+  readonly activityId: string;
+  readonly inbox: string;
+}
+
 export interface SentActivity {
   readonly activityId: string;
   readonly activityType: string;
@@ -116,6 +125,15 @@ export interface DeliveryStore {
    */
   recordDelivery(delivery: NewDelivery): Delivery;
   settleDeliveries(outcome: DeliveryOutcome): void;
+  /**
+   * Turn every `queued` or `retrying` row attempted before `before` that no
+   * waiting message carries into `unknown`, keeping its error and its time.
+   * Answers how many rows it changed.
+   */
+  markUnsettledDeliveriesUnknown(unsettled: {
+    readonly before: string;
+    readonly waiting: readonly WaitingDelivery[];
+  }): number;
   /** Every follower's outcome for one activity, in follower order. */
   listDeliveries(activityId: string): Delivery[];
   /** How many followers this activity stands at each status with. */
@@ -170,6 +188,16 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     settleDeliveries: db.prepare(`
       UPDATE ap_deliveries SET status = ?, error = ?, attempted_at = ?
       WHERE activity_id = ? AND inbox_id = ?
+    `),
+    markUnsettledDeliveriesUnknown: db.prepare(`
+      UPDATE ap_deliveries SET status = 'unknown'
+      WHERE status IN ('queued', 'retrying')
+        AND attempted_at < :before
+        AND NOT EXISTS (
+          SELECT 1 FROM json_each(:waiting) AS waiting
+          WHERE json_extract(waiting.value, '$.activityId') = ap_deliveries.activity_id
+            AND json_extract(waiting.value, '$.inbox') = ap_deliveries.inbox_id
+        )
     `),
     listDeliveries: db.prepare(`
       SELECT * FROM ap_deliveries WHERE activity_id = ? ORDER BY actor_id
@@ -247,6 +275,14 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
         outcome.activityId,
         outcome.inbox,
       );
+    },
+
+    markUnsettledDeliveriesUnknown({ before, waiting }) {
+      const result = statements.markUnsettledDeliveriesUnknown.run({
+        before,
+        waiting: JSON.stringify(waiting),
+      });
+      return Number(result.changes);
     },
 
     listDeliveries(activityId) {
