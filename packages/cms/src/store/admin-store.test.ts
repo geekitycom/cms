@@ -1112,6 +1112,70 @@ describe('the delivery outcome cache', () => {
       'and nothing about a post it was never asked about',
     );
   });
+  describe('an error that carries the page the inbox answered with', () => {
+    const CLOUDFLARE = [
+      `Failed to send activity ${ACTIVITY_ID} to https://remote.example/inbox (403 Forbidden):`,
+      '<!DOCTYPE html>',
+      '<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->',
+      '<head>',
+      '<title>Attention Required! | Cloudflare</title>',
+      '<style>body{margin:0;padding:0}</style>',
+      '<script>if (!navigator.cookieEnabled) {}</script>',
+    ].join('\n');
+    const SHORT = `Failed to send activity ${ACTIVITY_ID} to https://remote.example/inbox (403 Forbidden):\nAn HTML page titled "Attention Required! | Cloudflare".`;
+
+    it('keeps the status line and the page title, recorded or settled', async () => {
+      const admin = await store();
+      admin.recordDelivery(outcome({ status: 'failed', error: CLOUDFLARE }));
+      assert.equal(admin.listDeliveries(ACTIVITY_ID)[0]?.error, SHORT);
+
+      admin.settleDeliveries({
+        activityId: ACTIVITY_ID,
+        inbox: 'https://remote.example/inbox',
+        status: 'retrying',
+        error: CLOUDFLARE.replace('Cloudflare</title>', 'Cloudflare &amp; co</title>'),
+      });
+      assert.equal(
+        admin.listDeliveries(ACTIVITY_ID)[0]?.error,
+        SHORT.replace('Cloudflare".', 'Cloudflare & co".'),
+      );
+    });
+
+    it('shortens a page an older version stored whole', async () => {
+      const dataDir = await temporaryDir();
+      const admin = openAdminStore({ dataDir });
+      openStores.push(admin);
+      admin.recordDelivery(outcome({ status: 'failed', error: 'placeholder' }));
+      const db = new DatabaseSync(path.join(dataDir, 'geekity.db'));
+      db.prepare('UPDATE ap_deliveries SET error = ?').run(CLOUDFLARE);
+      db.close();
+
+      assert.equal(admin.listDeliveries(ACTIVITY_ID)[0]?.error, SHORT);
+      assert.equal(admin.searchDeliveries({}).items[0]?.error, SHORT);
+    });
+
+    it('says only that it was a page when the page has no title', async () => {
+      const admin = await store();
+      admin.recordDelivery(
+        outcome({
+          status: 'failed',
+          error: 'Failed (502 Bad Gateway):\n<html><body>Down</body></html>',
+        }),
+      );
+      assert.equal(
+        admin.listDeliveries(ACTIVITY_ID)[0]?.error,
+        'Failed (502 Bad Gateway):\nAn HTML page.',
+      );
+    });
+
+    it('leaves a plain-text or JSON body as it came', async () => {
+      const admin = await store();
+      const json = 'Failed (401 Unauthorized):\n{"error":"public key not found"}';
+      admin.recordDelivery(outcome({ status: 'failed', error: json }));
+      assert.equal(admin.listDeliveries(ACTIVITY_ID)[0]?.error, json);
+    });
+  });
+
   describe('rows the queue no longer holds', () => {
     const BEFORE = '2026-06-01T00:00:00.000Z';
     const WAITING_INBOX = 'https://waiting.example/inbox';

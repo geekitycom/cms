@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
+import { decodeEntities } from '../util/html.ts';
 
 import {
   allRows,
@@ -256,7 +257,7 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
         delivery.actorId,
         delivery.inboxId,
         delivery.status,
-        delivery.error,
+        shortError(delivery.error),
         delivery.attemptedAt ?? clock().toISOString(),
       );
       if (recorded === undefined) {
@@ -270,7 +271,7 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     settleDeliveries(outcome) {
       statements.settleDeliveries.run(
         outcome.status,
-        outcome.error,
+        shortError(outcome.error),
         clock().toISOString(),
         outcome.activityId,
         outcome.inbox,
@@ -360,9 +361,29 @@ function toDelivery(row: Row): Delivery {
     actorId: String(row['actor_id']),
     inboxId: String(row['inbox_id']),
     status: deliveryStatus(row['status']),
-    error: nullableText(row['error']),
+    error: shortError(nullableText(row['error'])),
     attemptedAt: String(row['attempted_at']),
   };
+}
+
+const HTML_PAGE = /^\s*<(?:!doctype\s+html|html)\b/i;
+const PAGE_TITLE = /<title[^>]*>([\s\S]*?)<\/title>/i;
+
+/**
+ * An error whose body is an HTML page, as a CDN's challenge or a proxy's error
+ * page is, cut down to its first line and the page's title.
+ */
+function shortError(error: string | null): string | null {
+  if (error === null) return null;
+  const lineEnd = error.indexOf('\n');
+  if (lineEnd === -1) return error;
+  const body = error.slice(lineEnd + 1);
+  if (!HTML_PAGE.test(body)) return error;
+  const title = decodeEntities(PAGE_TITLE.exec(body)?.[1] ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const page = title === '' ? 'An HTML page.' : `An HTML page titled "${title}".`;
+  return `${error.slice(0, lineEnd)}\n${page}`;
 }
 
 /**

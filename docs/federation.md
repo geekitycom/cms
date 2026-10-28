@@ -332,6 +332,9 @@ A status is one of:
 - `retrying`: its last attempt failed, and the queue will try again. The error
   says why the attempt failed, including the status code the inbox answered
   with.
+  When the inbox answered with an HTML page, such as a Cloudflare challenge,
+  the error keeps the status line and the page's title and drops the rest of
+  the markup. A plain-text or JSON body is kept as it came.
 - `failed`: Fedify gave up, with the error. Fedify gives up on an inbox that
   answers `404` or `410`, and on any other failure once its retry policy runs
   out. A send that throws before it reaches the queue is also `failed`.
