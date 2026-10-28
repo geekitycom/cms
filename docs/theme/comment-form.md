@@ -49,6 +49,58 @@ technology, and give it `tabindex="-1"` and `autocomplete="off"`. The CMS drops
 a submission that fills it in. **Do not** remove it from a replacement partial.
 It is one of the three spam checks on the form.
 
+## The form challenge
+
+When the site has a form challenge on, `commentForm` carries one more key on
+a stranger's form. With the built-in hCaptcha challenge, that is while a site
+key and a secret are stored on Settings > Discussion and hCaptcha has not
+refused them. With no challenge on, the key is not there at all. A signed-in
+form never has it, because a session is better evidence than a widget.
+
+| Key                   | What it holds                                                                                                                      |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `challenge.provider`  | Which service draws the widget: `hcaptcha` for the built-in challenge. A challenge a site sets in its config names its own.        |
+| `challenge.siteKey`   | The public key the widget is drawn with. It is printed in the page. The secret is never on the context.                            |
+| `challenge.scriptUrl` | The service's script, `https://js.hcaptcha.com/1/api.js` for hCaptcha.                                                             |
+| `challenge.field`     | The field the widget posts its answer in, `h-captcha-response` for hCaptcha. The widget creates the field itself; do not draw one. |
+
+The packaged partial draws the widget ahead of the submit button with
+`partials/form-challenge.njk`:
+
+```njk
+{% import "partials/form-challenge.njk" as challenge %}
+{{ challenge.widget(commentForm.challenge, "comment", "comment") }}
+```
+
+The macro draws nothing without a challenge. With hCaptcha it draws a
+`div.form-challenge` with `role="group"`, a visible "Spam check" label, an
+empty `div.h-captcha` with `data-sitekey`, and a hint. The hint says that
+without the check, for example with JavaScript off, the comment is still
+posted but may need a manual check. The widget is an iframe that hCaptcha
+draws, and it is reached with Tab like any other field.
+
+The page shell loads the script. `layouts/base.njk` adds
+`<script src="/theme/hcaptcha.js" data-script="…" defer>` at the end of the
+body when a stranger's comment form or a contact form on the page carries an
+hCaptcha challenge. The tag is outside the `scripts` block, so a site that
+overrides that block keeps it. `hcaptcha.js` looks for `div.h-captcha` elements
+with a `data-sitekey`. When it finds one, it loads hCaptcha's script from
+`data-script` with `render=explicit`, `hl` set to the page's `<html lang>`,
+and an `onload` callback that draws each widget. The widget is drawn dark
+when `<html data-mode>` is `dark`, light when it is `light`, and in the
+visitor's `prefers-color-scheme` otherwise. A page that draws no widget
+loads nothing from hCaptcha. A site without a challenge gets no script on
+its forms.
+
+**A replacement partial that draws no widget still works, but every
+stranger's comment from it is filed as spam.** The CMS counts a submission
+with no answer as a failed challenge and stores it as spam without telling
+anyone, the same as a submission from a visitor with JavaScript off. To keep
+the widget, call the macro above in the replacement partial, or draw
+`<div class="h-captcha" data-sitekey="{{ commentForm.challenge.siteKey }}"></div>`
+inside the form yourself. The shell's script draws either one. Do not load
+hCaptcha's script a second time.
+
 ## When a submission is refused
 
 The CMS answers a refused comment with the post again, `problems` and `error`

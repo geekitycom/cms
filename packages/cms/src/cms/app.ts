@@ -27,6 +27,7 @@ import {
   mountWellKnown,
   redirectBy,
 } from '../web/index.ts';
+import { challengeWidgetOf } from '../forms/challenge.ts';
 import { DEV_MODE } from '../settings/dev-mode.ts';
 import { SITE } from '../site/namespace.ts';
 import { drawnWith } from '../web/render-scope.ts';
@@ -100,10 +101,12 @@ export function createApp(
     const devMode = await settings.get(DEV_MODE.on);
     const mailConfigured = await services.mail.configured();
     const site = await settings.values(SITE);
+    const challenge = await challengeWidgetOf(resolved.formChallenge);
     c.set('devMode', devMode);
     c.set('mailConfigured', mailConfigured);
+    c.set('challengeWidget', challenge);
     c.set('siteAtRequestStart', site);
-    await drawnWith({ devMode, mailConfigured, site }, next);
+    await drawnWith({ devMode, mailConfigured, site, challenge }, next);
   });
 
   app.use(

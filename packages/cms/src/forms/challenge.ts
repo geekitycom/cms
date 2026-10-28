@@ -96,3 +96,36 @@ export function challengeTokenOf(
 ): string {
   return challenge === undefined ? '' : stringOrEmpty(body[challenge.field]);
 }
+
+/**
+ * What a challenge's widget is for this request, or `undefined` while it is
+ * off.
+ *
+ * Asked once per request, before anything is drawn, because a template is
+ * drawn synchronously. A widget that throws is off: a challenge that cannot
+ * say how to draw itself must not stop a page being served.
+ */
+export async function challengeWidgetOf(
+  challenge: FormChallenge | undefined,
+  logger: { warn(message: string): void } = console,
+): Promise<ChallengeWidget | undefined> {
+  if (challenge === undefined) return undefined;
+
+  try {
+    return await challenge.widget();
+  } catch (error) {
+    logger.warn(`The form challenge could not say how to draw itself: ${messageOf(error)}`);
+    return undefined;
+  }
+}
+
+/**
+ * The same form with a challenge's widget on it, or untouched while there is
+ * none, so a theme asks `{% if commentForm.challenge %}` and nothing else.
+ */
+export function withChallenge<Form extends { challenge?: ChallengeWidget | undefined }>(
+  form: Form,
+  widget: ChallengeWidget | undefined,
+): Form {
+  return widget === undefined ? form : { ...form, challenge: widget };
+}

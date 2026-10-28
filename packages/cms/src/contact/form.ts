@@ -1,5 +1,7 @@
 import { CONTACT_FRONT_MATTER_KEY } from '../content/contact.ts';
 import type { Document } from '../content/document.ts';
+import { withChallenge } from '../forms/challenge.ts';
+import type { ChallengeWidget } from '../forms/challenge.ts';
 import { FORM_LOADED_FIELD, FORM_TRAP_FIELD } from '../forms/protection.ts';
 
 /**
@@ -103,6 +105,12 @@ export interface ContactFormContext {
   subjectLength: number;
   /** The longest a message may be, for the textarea's `maxlength`. */
   messageLength: number;
+  /**
+   * What the theme draws the site's form challenge from, and absent while
+   * there is none. A theme that draws no widget from it still has a working
+   * form, but every message sent from it is filed as spam.
+   */
+  challenge?: ChallengeWidget | undefined;
 }
 
 /** Whether this document offers a contact form. */
@@ -166,9 +174,11 @@ export function contactValuesOf(form: ContactForm): ContactFormContext['values']
 export function contactFormFor(options: {
   document: Document;
   now: Date;
+  /** The site's form challenge for this request, when one is on. */
+  challenge?: ChallengeWidget | undefined;
 }): ContactFormContext | undefined {
   if (!contactOpen(options.document)) return undefined;
-  return contactForm(options.document, options.now);
+  return withChallenge(contactForm(options.document, options.now), options.challenge);
 }
 
 /**

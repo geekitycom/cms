@@ -94,7 +94,11 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       // themselves that it is. Saying so is more honest than pretending the
       // URL is wrong, and a closed post is a state rather than a mistake.
       return page(c, document, 403, viewer, {
-        ...drawnFor(refilledCommentForm(document, valuesOf(form), {}, now), viewer),
+        ...drawnFor(
+          refilledCommentForm(document, valuesOf(form), {}, now),
+          viewer,
+          c.var.challengeWidget,
+        ),
         error: 'This post is not taking comments any more.',
       });
     }
@@ -180,7 +184,11 @@ function refusedPage(
   if (refusal.kind === 'rate-limited') {
     c.header('Retry-After', String(refusal.retryAfter));
     return page(c, document, 429, viewer, {
-      ...drawnFor(refilledCommentForm(document, valuesOf(form), {}, now), viewer),
+      ...drawnFor(
+        refilledCommentForm(document, valuesOf(form), {}, now),
+        viewer,
+        c.var.challengeWidget,
+      ),
       error: 'That is a lot of comments in a short time. Try again in a few minutes.',
     });
   }
@@ -193,7 +201,11 @@ function refusedPage(
         : undefined;
 
   return page(c, document, 400, viewer, {
-    ...drawnFor(refilledCommentForm(document, valuesOf(form), problemsOf(refusal), now), viewer),
+    ...drawnFor(
+      refilledCommentForm(document, valuesOf(form), problemsOf(refusal), now),
+      viewer,
+      c.var.challengeWidget,
+    ),
     ...(message === undefined ? {} : { error: message }),
   });
 }

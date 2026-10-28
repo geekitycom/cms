@@ -14,8 +14,12 @@
   under an entry, because it is the same kind of form as the comment one and
   the two are better off sharing a set of rules than keeping two that drift.
 
-  It works with JavaScript switched off, and there is no script on it.
+  It works with JavaScript switched off. With the site's form challenge on,
+  `contactForm.challenge` is set for a stranger and the widget is drawn ahead of
+  the submit button by `partials/form-challenge.njk`; the shell loads its
+  script. A site without one gets no script here at all.
 #}
+{%- import "partials/form-challenge.njk" as challenge %}
 <section class="comment-respond contact-form" id="contact">
   {% if contactNotice %}
   {#
@@ -99,6 +103,8 @@
       <span class="contact-field-error" id="contact-message-error">{{ problems.message }}</span>
       {% endif %}
     </p>
+
+    {{ challenge.widget(contactForm.challenge, "contact", "message") }}
 
     <p class="form-submit">
       <button type="submit">Send message</button>

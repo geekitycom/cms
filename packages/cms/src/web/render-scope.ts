@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import nunjucks from 'nunjucks';
 
+import type { ChallengeWidget } from '../forms/challenge.ts';
 import { NO_PAGE_TAGS } from '../plugins/page-tags.ts';
 import type { DrawnPageTags } from '../plugins/page-tags.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
@@ -17,6 +18,7 @@ export interface RequestInputs {
   readonly devMode: boolean;
   readonly mailConfigured: boolean;
   readonly site: SiteSettings;
+  readonly challenge?: ChallengeWidget | undefined;
 }
 
 const requestInputs = new AsyncLocalStorage<RequestInputs>();
@@ -52,6 +54,10 @@ export function requestDevMode(): boolean {
 
 export function requestMailConfigured(): boolean {
   return requestInputs.getStore()?.mailConfigured === true;
+}
+
+export function requestChallenge(): ChallengeWidget | undefined {
+  return requestInputs.getStore()?.challenge;
 }
 
 export function requestSignedIn(): boolean {

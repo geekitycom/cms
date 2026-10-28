@@ -1486,6 +1486,17 @@
     @apply flex items-center gap-2;
   }
 
+  /* The form challenge: a label, the widget hCaptcha draws, and a hint. The
+     widget's box keeps the height of hCaptcha's checkbox before it is drawn,
+     so the button below does not jump when it appears. */
+  .form-challenge-label {
+    @apply mb-1 block font-sans text-sm;
+  }
+
+  .form-challenge .h-captcha {
+    min-block-size: 78px;
+  }
+
   .comment-check label {
     @apply mb-0;
   }

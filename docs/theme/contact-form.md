@@ -35,6 +35,21 @@ of style rules.
 `fields.trap` is the same honeypot as in the comment form, with the same
 rules. Render it, hide it, and **do not** remove it from a replacement partial.
 
+`challenge` is on `contactForm` while the site has a form challenge on, and
+absent otherwise. It holds `provider`, `siteKey`, `scriptUrl` and `field`,
+the same as on the comment form. The packaged partial draws the widget ahead
+of the submit button with
+`{{ challenge.widget(contactForm.challenge, "contact", "message") }}` from
+`partials/form-challenge.njk`, and the page shell loads the script. See
+[The form challenge](comment-form.md#the-form-challenge) for the keys, the
+script and the colour mode. The shell loads no script once the form has been
+sent and `contactNotice` is shown instead.
+
+**A replacement partial that draws no widget still sends messages, but every
+one of them is filed as spam.** The message is stored on the Spam list of the
+Messages screen and nobody is emailed about it. Call the macro, or draw a
+`div.h-captcha` with `data-sitekey`, inside the form.
+
 One more key comes from the URL, not from the page:
 
 | Key             | What it holds                                                                                                                            |

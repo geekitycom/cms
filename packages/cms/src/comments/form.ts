@@ -1,4 +1,5 @@
 import type { Document } from '../content/document.ts';
+import type { ChallengeWidget } from '../forms/challenge.ts';
 import { COMMENT_FIELDS, MAXIMUM_BODY_LENGTH, MAXIMUM_NAME_LENGTH } from './submission.ts';
 import type { CommentForm, CommentProblems } from './submission.ts';
 
@@ -58,6 +59,16 @@ export interface CommentFormContext {
    * does and the endpoint checks it the way the admin guard does.
    */
   csrfToken?: string | undefined;
+  /**
+   * What the theme draws the site's form challenge from, and absent while
+   * there is none.
+   *
+   * Only ever on a stranger's form: somebody signed in is not challenged, for
+   * the reason they skip the honeypot. A theme that draws no widget from it
+   * still has a working form, but every stranger's comment from it is filed as
+   * spam.
+   */
+  challenge?: ChallengeWidget | undefined;
 }
 
 /**
@@ -92,8 +103,9 @@ export function signedInCommentForm(
   form: CommentFormContext,
   viewer: CommentViewer,
 ): CommentFormContext {
+  const { challenge: _challenge, ...unchallenged } = form;
   return {
-    ...form,
+    ...unchallenged,
     signedInAs: { name: viewer.name, url: viewer.url },
     csrfToken: viewer.csrfToken,
   };
