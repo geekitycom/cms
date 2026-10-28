@@ -91,7 +91,7 @@ export const DISCUSSION_SETTINGS: SettingsPage = {
 
   endpoints: (app, options) => {
     mountAkismet(app, options);
-    mountHcaptcha(app, options);
+    mountHcaptcha(app);
   },
 };
 
@@ -229,7 +229,7 @@ export async function akismetPanel(settings: SettingsRegistry): Promise<Record<s
  * refuses is stored all the same, as an Akismet key is: the screen says so,
  * and nothing that was pasted is thrown away.
  */
-function mountHcaptcha(app: Hono<GeekityEnv>, _options: MountSettingsOptions): void {
+function mountHcaptcha(app: Hono<GeekityEnv>): void {
   const here = DISCUSSION_SETTINGS.path;
 
   app.post(HCAPTCHA_PATH, async (c) => {
@@ -343,14 +343,14 @@ export async function hcaptchaPanel(settings: SettingsRegistry): Promise<Record<
   };
 
   if (!siteKeyPresent || !secretPresent) {
+    const half = siteKeyPresent || secretPresent;
     return {
       ...forms,
       hcaptchaPresent: false,
-      hcaptchaState: siteKeyPresent || secretPresent ? 'incomplete' : 'none',
-      hcaptchaHint:
-        siteKeyPresent || secretPresent
-          ? 'Not on yet: a challenge needs both a site key and a secret.'
-          : 'Not connected: no site key and secret, so no form is challenged.',
+      hcaptchaState: half ? 'incomplete' : 'none',
+      hcaptchaHint: half
+        ? 'Not on yet: a challenge needs both a site key and a secret.'
+        : 'Not connected: no site key and secret, so no form is challenged.',
     };
   }
 
