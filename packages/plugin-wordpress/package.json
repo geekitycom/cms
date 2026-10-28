@@ -44,8 +44,8 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@fedify/fedify": "^2.4.4",
-    "@fedify/vocab": "^2.4.4",
+    "@fedify/fedify": "^2.4.5",
+    "@fedify/vocab": "^2.4.5",
     "entities": "^8.1.0",
     "sax": "^1.6.1",
     "turndown": "^7.2.4"
@@ -54,7 +54,7 @@
     "@geekity/cms": "workspace:^"
   },
   "devDependencies": {
-    "@fedify/cli": "2.4.4",
+    "@fedify/cli": "2.4.5",
     "@geekity/cms": "workspace:*",
     "@geekity/plugin-llm": "workspace:*",
     "@geekity/plugin-post-summary": "workspace:*",
