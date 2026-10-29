@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { createCms, createUser } from '@geekity/cms';
+import { createCms } from '@geekity/cms';
 import type { Cms, Plugin } from '@geekity/cms';
 
 /** A site with the plugins installed and enabled, and an admin signed in to it. */
@@ -39,7 +39,7 @@ export async function llmSite(
       plugins: Object.fromEntries(plugins.map((plugin) => [plugin.name, { enabled: true }])),
     }),
   );
-  await createUser({ dataDir, ...ADA });
+  writeAda(dataDir);
   const cms = createCms({ dataDir, contentDir, watch: false, plugins });
   opened.push(cms);
   return { cms, admin: await signIn(cms), contentDir, dataDir };
@@ -81,4 +81,24 @@ export function flashes(html: string): string[] {
   return [
     ...html.matchAll(/<div role="status" class="alert alert-\w+">\s*<span>([\s\S]*?)<\/span>/g),
   ].map(([, message]) => message ?? '');
+}
+
+/**
+ * `users.json` with Ada in it, written straight. Her password is hashed at
+ * argon2id's smallest cost; sign-in honours the cost a hash records, so it
+ * checks her in well under a millisecond where the site's own cost takes
+ * tens, and the test never spends a hash of its own.
+ */
+function writeAda(dataDir: string): void {
+  mkdirSync(dataDir, { recursive: true });
+  const ada = {
+    id: 1,
+    username: ADA.username,
+    passwordHash:
+      '$argon2id$v=19$m=8,t=1,p=1$Z2Vla2l0eS10ZXN0LXNhbA$NsFbSo8eArho8Bui32EukJ/FbrTl8bMJovDFMH9DCbQ',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  writeFileSync(path.join(dataDir, 'users.json'), JSON.stringify({ users: [ada], nextId: 2 }), {
+    mode: 0o600,
+  });
 }
