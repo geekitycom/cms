@@ -32,6 +32,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
 import { createUser } from './__testing__/users.ts';
 import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
+import { shared } from './__testing__/shared.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -122,33 +123,9 @@ async function siteWearingAnAvatar(settings: Record<string, unknown> = {}): Prom
   return cms;
 }
 
-const sharedSites = new Map<string, Promise<Cms>>();
-
-/**
- * {@link site}, built once for every test that asks for the same settings and
- * only reads from it. A test that changes its site asks for a fresh one.
- */
-function sharedSite(
-  settings: Record<string, unknown> = {},
-  config: GeekityConfig = {},
-): Promise<Cms> {
-  return memo(['site', settings, config], () => site(settings, config));
-}
-
-/** {@link siteWearingAnAvatar}, shared the same way. */
-function sharedAvatarSite(settings: Record<string, unknown> = {}): Promise<Cms> {
-  return memo(['avatar', settings], () => siteWearingAnAvatar(settings));
-}
-
-function memo(key: unknown, build: () => Promise<Cms>): Promise<Cms> {
-  const text = JSON.stringify(key);
-  let built = sharedSites.get(text);
-  if (built === undefined) {
-    built = build();
-    sharedSites.set(text, built);
-  }
-  return built;
-}
+/** {@link site} and {@link siteWearingAnAvatar}, for a test that only reads. */
+const sharedSite = shared(site);
+const sharedAvatarSite = shared(siteWearingAnAvatar);
 
 /** Give the site a user with a profile, the way the users screen would. */
 async function addUser(
