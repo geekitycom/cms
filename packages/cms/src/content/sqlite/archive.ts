@@ -13,6 +13,7 @@ export function archiveReader(index: IndexDatabase): ArchiveReader {
     listPosts: (options = {}) =>
       selectNewestFirst(index, ["type = 'post'", LISTED_CLAUSE], [nowKey(index)], options),
     listListed: () => selectNewestFirst(index, [LISTED_CLAUSE], [nowKey(index)], {}),
+    listWiki: () => selectNewestFirst(index, ["type = 'wiki'", LISTED_CLAUSE], [nowKey(index)], {}),
     neighbours: (document) => neighbours(index, document),
     listByTag: (tag, options = {}) => selectByTerm(index, TERM_TABLES.tag, tag, options),
     listByCategory: (category, options = {}) =>

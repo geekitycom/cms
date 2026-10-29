@@ -91,6 +91,8 @@ export interface ArchiveReader {
    * last: what the sitemap and `llms.txt` publish, in one query.
    */
   listListed(): Document[];
+  /** Published, untrashed, listed wiki pages, in no particular order: what the wiki index lists. */
+  listWiki(): Document[];
   /**
    * The published posts either side of one by date: what a theme links as
    * previous and next under an entry.

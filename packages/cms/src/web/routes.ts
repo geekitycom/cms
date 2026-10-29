@@ -22,7 +22,7 @@ import { embedView, oEmbed } from './embed.ts';
 import { commentPage, comments, feed, repliesFeed } from './feed-routes.ts';
 import { feedPathUnder, FEED_FORMATS, REPLIES_ROOT, splitFeedPath } from './feeds.ts';
 import { indexNowKeyPath, indexNowKeyResponse } from '../site/indexnow-key.ts';
-import { listing, search } from './listing-pages.ts';
+import { listing, search, wikiIndex } from './listing-pages.ts';
 import { feedHref, SITE_POSTS } from './listing-subject.ts';
 import { LLMS_TXT_LINK, LLMS_TXT_PATH } from './llms.ts';
 import { FAVICON_PATH, manifestResponse, MANIFEST_PATH, webManifest } from './manifest.ts';
@@ -61,6 +61,7 @@ import type { SiteView } from './site-view.ts';
 import { SITEMAP_CHILD_ROUTE, SITEMAP_PATH } from './sitemap.ts';
 import { redirectedTerm, termHref } from '../content/taxonomy.ts';
 import type { TaxonomyTerm } from '../content/taxonomy.ts';
+import { wikiIndexHref } from './wiki-index.ts';
 
 /**
  * Register the public site on a Hono app.
@@ -277,13 +278,18 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     for (const candidate of extension.paths) {
       const found = classifyPath(view, candidate);
       if (found === undefined || found.kind === 'feed') continue;
-      if (found.kind === 'listing' && !LISTING_REPRESENTATIONS.includes(representation)) continue;
+      if (found.kind !== 'document' && !LISTING_REPRESENTATIONS.includes(representation)) continue;
 
       const href = representationHref(canonicalHref(view, found), representation);
       if (href !== here) return c.redirect(`${href}${search}`, 301);
-      return found.kind === 'listing'
-        ? listing(c, found, representation)
-        : negotiateDocument(c, found.document, representation);
+      switch (found.kind) {
+        case 'listing':
+          return listing(c, found, representation);
+        case 'wiki-index':
+          return wikiIndex(c, representation);
+        case 'document':
+          return negotiateDocument(c, found.document, representation);
+      }
     }
   }
 
@@ -327,6 +333,8 @@ function serve(c: Context<GeekityEnv>, match: PathMatch): Response {
   switch (match.kind) {
     case 'listing':
       return listing(c, match);
+    case 'wiki-index':
+      return wikiIndex(c);
     case 'feed':
       return match.target.kind === 'listing'
         ? feed(c, match.format, match.target.subject)
@@ -379,10 +387,11 @@ function renamedTermHref(
 }
 
 /**
- * Where a wiki page lives now when the path names it under a wiki base the
- * site used before, or `undefined` when it does not. A wiki page's URL is the
- * base and its name, so a change of base moves every one of them, and each old
- * URL leads on to the new one as a renamed term's archive does.
+ * Where a wiki page or the wiki index lives now when the path names it under a
+ * wiki base the site used before, or `undefined` when it does not. A wiki
+ * page's URL is the base and its name, so a change of base moves every one of
+ * them and the index with them, and each old URL leads on to the new one as a
+ * renamed term's archive does. One that leads nowhere live is left to 404.
  */
 function formerWikiHref(
   view: SiteView,
@@ -391,12 +400,25 @@ function formerWikiHref(
   representation: Representation | undefined,
 ): string | undefined {
   const [leading, base, slug, trailing, ...rest] = pathname.split('/');
-  if (leading !== '' || trailing !== '' || rest.length > 0) return undefined;
-  if (base === undefined || slug === undefined || slug === '') return undefined;
+  if (leading !== '' || base === undefined || slug === undefined) return undefined;
   if (base === view.bases.wiki || !formerBases.includes(base)) return undefined;
 
-  const document = publicDocumentAt(view.store, `/${view.bases.wiki}/${slug}/`);
-  if (document?.type !== 'wiki') return undefined;
-  const href = encodePath(document.permalink);
+  const href =
+    slug === '' && trailing === undefined
+      ? movedWikiIndexHref(view)
+      : trailing === '' && rest.length === 0 && slug !== ''
+        ? movedWikiPageHref(view, slug)
+        : undefined;
+  if (href === undefined) return undefined;
   return representation === undefined ? href : representationHref(href, representation);
+}
+
+function movedWikiPageHref(view: SiteView, slug: string): string | undefined {
+  const document = publicDocumentAt(view.store, `/${view.bases.wiki}/${slug}/`);
+  return document?.type === 'wiki' ? encodePath(document.permalink) : undefined;
+}
+
+function movedWikiIndexHref(view: SiteView): string | undefined {
+  const href = wikiIndexHref(view.bases);
+  return classifyPath(view, href)?.kind === 'wiki-index' ? href : undefined;
 }

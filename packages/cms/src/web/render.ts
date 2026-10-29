@@ -37,6 +37,7 @@ import type { Pagination } from './pagination.ts';
 import { requestSite } from './render-scope.ts';
 import { createThemeEnvironment, siteColorsWithTokens } from './theme-environment.ts';
 import { STATUS_PAGES, untilContext } from './theme-templates.ts';
+import type { WikiGroup } from './wiki-index.ts';
 import type { StatusPage, StatusPageName } from './theme-templates.ts';
 
 export interface ThemeText {
@@ -100,6 +101,12 @@ export interface Listing {
   document?: Document | undefined;
 }
 
+export interface WikiIndexPage {
+  title: string;
+  url: string;
+  groups: readonly WikiGroup<Document>[];
+}
+
 export interface SearchPage {
   query: string;
   url: string;
@@ -129,6 +136,7 @@ export interface Renderer {
   ): string;
   renderListing(listing: Listing): string;
   renderSearch(search: SearchPage): string;
+  renderWikiIndex(index: WikiIndexPage): string;
   renderComment(thread: CommentThread): string;
   renderNotFound(url: string): string;
   renderGone(url: string): string;

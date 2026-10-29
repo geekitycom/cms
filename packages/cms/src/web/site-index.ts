@@ -20,6 +20,7 @@ import { conditionalHeaders, documentLabel, encodePath } from './request.ts';
 import { notFound } from './status-pages.ts';
 import { servedPath, siteView } from './site-view.ts';
 import { sitemapResponse } from './sitemap.ts';
+import { wikiIndexHref } from './wiki-index.ts';
 import type { SitemapUrl } from './sitemap.ts';
 
 /**
@@ -51,7 +52,7 @@ export function llmsTxt(c: Context<GeekityEnv>): Response {
 
 /**
  * Every URL the public site publishes, in the order the sitemap lists them:
- * the home archive's pages, then every post, page and wiki page, then every tag archive
+ * the home archive's pages, then every post, page and wiki page, the wiki index, then every tag archive
  * and every category archive with their own pages.
  */
 function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
@@ -90,6 +91,10 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
     if (document.path === pages.home?.path || document.path === pages.posts?.path) continue;
     urls.push({ loc: document.permalink, lastmod: lastModifiedOf(document) });
   }
+
+  // The wiki index exists while a wiki page is listed, and is dated by the
+  // newest change to any of them.
+  if (wiki.length > 0) urls.push({ loc: wikiIndexHref(view.bases), lastmod: latestModified(wiki) });
 
   // A taxonomy archive exists only while something public carries the term,
   // which is exactly what these two queries report.

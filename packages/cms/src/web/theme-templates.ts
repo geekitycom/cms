@@ -7,6 +7,7 @@ export const TEMPLATES = {
   post: 'layouts/post.njk',
   page: 'layouts/page.njk',
   wiki: 'layouts/wiki.njk',
+  wikiIndex: 'layouts/wiki-index.njk',
   tag: 'layouts/tag.njk',
   category: 'layouts/category.njk',
   author: 'layouts/author.njk',

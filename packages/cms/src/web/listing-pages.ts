@@ -5,7 +5,7 @@ import type { ListOptions } from '../content/store.ts';
 import type { GeekityEnv } from './env.ts';
 import { archiveOf } from './listing-subject.ts';
 import type { ListingRequest } from './listing-subject.ts';
-import { listingMarkdown, searchMarkdown } from './markdown-representation.ts';
+import { listingMarkdown, searchMarkdown, wikiIndexMarkdown } from './markdown-representation.ts';
 import {
   documentJson,
   latestModified,
@@ -20,6 +20,7 @@ import { offsetForPage, paginate } from './pagination.ts';
 import type { Pagination } from './pagination.ts';
 import {
   conditionalHeaders,
+  documentLabel,
   drawnForSomebody,
   queryFeedFormat,
   selectFromAccept,
@@ -35,6 +36,7 @@ import {
   SEARCH_QUERY_PARAM,
 } from './search.ts';
 import { siteView } from './site-view.ts';
+import { wikiGroups, wikiIndexHref } from './wiki-index.ts';
 import { NO_PAGE_TAGS } from '../plugins/page-tags.ts';
 import type { DrawnPageTags } from '../plugins/page-tags.ts';
 
@@ -230,6 +232,57 @@ export function search(
           body: full,
         })
       : renderer.renderSearch({ query, url: page.href, hits, pagination: page.pagination });
+
+  return pagedResponse(c, page, { body, documents, available, full });
+}
+
+/** What the wiki index is called, in its heading and its title. */
+const WIKI_INDEX_TITLE = 'Wiki';
+
+/**
+ * The wiki index, in whichever representation the request settled on: every
+ * published wiki page, A to Z by title and grouped by first letter.
+ *
+ * It is one page however long it grows, because a reader looks a note up by
+ * its name, and a pager would hide the letter they want. Its JSON is the
+ * pages in that order, in a listing's shape, and it has no feed: a wiki page
+ * is a note the site keeps, not news.
+ */
+export function wikiIndex(
+  c: Context<GeekityEnv>,
+  representation: Representation | undefined = selectFromAccept(c, LISTING_REPRESENTATIONS),
+): Response {
+  const { renderer, config, store } = c.var;
+  const href = wikiIndexHref(siteView(c).bases);
+  const available = LISTING_REPRESENTATIONS;
+  if (representation === undefined) return notAcceptableResponse(href, available);
+
+  const groups = wikiGroups(store.listWiki(), (document) => documentLabel(c, document));
+  const documents = groups.flatMap((group) => group.pages);
+  const page: OpenPage = {
+    pagination: paginate({
+      total: documents.length,
+      size: documents.length,
+      pageNumber: 0,
+      hrefForPage: () => href,
+    }),
+    href,
+    representation,
+    paging: {},
+  };
+  const title = WIKI_INDEX_TITLE;
+
+  const format = textFormatOf(representation);
+  if (format !== undefined) {
+    const body = wikiIndexMarkdown(c, { href, title, groups }, format);
+    return pagedResponse(c, page, { body, documents, available, fingerprint: body });
+  }
+
+  const full = wantsFullDocuments(c);
+  const body =
+    representation === 'json'
+      ? documents.map((document) => documentJson(document, { baseUrl: config.baseUrl, body: full }))
+      : renderer.renderWikiIndex({ title, url: href, groups });
 
   return pagedResponse(c, page, { body, documents, available, full });
 }

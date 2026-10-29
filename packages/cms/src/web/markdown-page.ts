@@ -2,6 +2,7 @@ import { dump } from 'js-yaml';
 
 import type { AuthorContext } from '../site/authors.ts';
 import type { MarkdownCommentThread } from './markdown-conversation.ts';
+import type { WikiGroup } from './wiki-index.ts';
 
 /**
  * The Markdown representation of a page: front matter, the theme's header, the
@@ -57,6 +58,8 @@ export interface MarkdownChrome {
   readonly feeds: readonly MarkdownFeed[];
   /** On a comment's own page: the comment and its place in the thread. */
   readonly thread?: MarkdownCommentThread | undefined;
+  /** On the wiki index: its pages A to Z, a group for each first letter. */
+  readonly wikiGroups?: readonly WikiGroup<MarkdownEntry>[] | undefined;
 }
 
 /**
