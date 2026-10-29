@@ -28,6 +28,7 @@ import { videoOf } from '../src/content/video.ts';
 import { startAutosave } from './autosave.ts';
 import { focusMode } from './focus.ts';
 import { LOOK } from './look.ts';
+import { wikiLinkMarks, wikiSlugsOf } from './wiki-links.ts';
 import { wordCounter } from './words.ts';
 
 /** The element the server hangs the editor's URLs off. */
@@ -86,6 +87,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
       keymap.of([{ key: 'Tab', run: indentList('in'), shift: indentList('out') }]),
       markdown(),
       markdownHighlighting(),
+      wikiLinkMarks(wikiSlugsOf(tools)),
       EditorView.lineWrapping,
       // The textarea is the form's value; the view is only a view of it.
       EditorView.updateListener.of((update) => {

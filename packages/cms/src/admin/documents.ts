@@ -1104,6 +1104,12 @@ async function editorModel(
     autosaveFileTime: document?.updated,
     autosaveTimezone: timezone,
     words: editorWordCounter(c, form.body),
+    // What a `[[link]]` in the body can reach, so the editor can mark one that
+    // reaches nothing. A draft is there to be linked to; the trash is not.
+    wikiSlugs: c.var.store
+      .listAll({ type: 'wiki' })
+      .map((page) => page.slug)
+      .sort(),
     resume: await resumeOffer(c, {
       kind,
       document,
