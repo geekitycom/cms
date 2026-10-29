@@ -16,13 +16,15 @@ import { cleanupTemporaryDirs, CLI, runCli, temporaryDir } from './__testing__/c
 import { fakeNpmRegistry, pluginFiles } from './__testing__/npm-registry.ts';
 import { freePort, geminiRequest } from './gemini/__testing__/client.ts';
 import { nextEvent } from './__testing__/wait.ts';
-import { PLUGIN_SETTLE_MS } from './supervisor/plugin-watcher.ts';
+import { PLUGIN_POLL_MS } from './supervisor/plugin-watcher.ts';
 
 after(cleanupTemporaryDirs);
 
 const PLUGINS_PATH = '/admin/plugins';
 const RELOAD_PATH = '/admin/plugins/reload';
 const PROCESS_EVENT_TIMEOUT_MS = 90_000;
+const SETTLE_SECONDS = 2;
+const WATCHING = { GEEKITY_PLUGIN_WATCH: 'on', GEEKITY_PLUGIN_SETTLE: String(SETTLE_SECONDS) };
 
 /** A `geekity serve` that is up. */
 interface Serving {
@@ -482,7 +484,7 @@ describe('geekity serve, supervised', () => {
 
   it('loads a hand-copied plugin by itself once the folder settles, refusing no request (TASK-309 AC #1)', async (t) => {
     const { site: directory, pluginsDir } = await site();
-    const server = await serve(directory, pluginsDir, { GEEKITY_PLUGIN_WATCH: 'on' });
+    const server = await serve(directory, pluginsDir, WATCHING);
     const agent = await signedIn(server);
     const traffic = load(server);
 
@@ -500,7 +502,10 @@ describe('geekity serve, supervised', () => {
     const { statuses, failures } = await traffic.stop();
     t.diagnostic(`reloaded ${String(took)} ms after the copy; answers ${JSON.stringify(statuses)}`);
 
-    assert.ok(took >= PLUGIN_SETTLE_MS - 1000, 'not before the folder had stood still');
+    assert.ok(
+      took >= SETTLE_SECONDS * 1000 - PLUGIN_POLL_MS,
+      'not before the folder had stood still',
+    );
     assert.equal([...server.output().matchAll(/Reloading:/g)].length, 1, 'one reload for the copy');
     assert.deepEqual(failures, [], 'no request failed');
     assert.deepEqual(Object.keys(statuses), ['200'], 'every request was answered 200');
@@ -515,7 +520,7 @@ describe('geekity serve, supervised', () => {
 
   it('tries a folder that will not boot once, and waits for the next change (TASK-309 AC #4)', async () => {
     const { site: directory, pluginsDir } = await site();
-    const server = await serve(directory, pluginsDir, { GEEKITY_PLUGIN_WATCH: 'on' });
+    const server = await serve(directory, pluginsDir, WATCHING);
     const agent = await signedIn(server);
 
     await installPlugin(pluginsDir, 'plugin-twin', '@test/plugin-first');
