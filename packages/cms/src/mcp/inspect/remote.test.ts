@@ -34,6 +34,9 @@ const lookup: HostLookup = (hostname) =>
   Promise.resolve(hostname === 'internal.example' ? ['10.0.0.5'] : ['203.0.113.7']);
 
 const sent: Request[] = [];
+// Nothing else holds a request the fake server never answers, and once it is
+// collected its timeout signal goes with it and never fires.
+const stalled: Request[] = [];
 
 function json(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -84,6 +87,7 @@ function answer(request: Request): Promise<Response> {
         new Response('x'.repeat(300 * 1024), { headers: { 'content-type': 'text/plain' } }),
       );
     case SLOW:
+      stalled.push(request);
       return new Promise((_resolve, reject) => {
         request.signal.addEventListener('abort', () => {
           reject(request.signal.reason as Error);
