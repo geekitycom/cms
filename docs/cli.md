@@ -98,11 +98,11 @@ which is a reload, when one of these events happens:
   folder. The socket is named after the site's data folder. The command prints
   how the reload went, or says that no supervisor answered.
 - The plugins folder (`pluginsDir`) differs from what the running worker
-  loaded, and it has not changed for five seconds. The supervisor reads the
-  folder every second, so a slow copy loads once, when it is complete. It
-  prints a line when it first sees the folder change, and a line when the
-  folder settles as it was when its last reload failed, which it leaves alone
-  until the folder changes again. Set `GEEKITY_PLUGIN_WATCH=off` to turn this
+  loaded, and it has not changed for five seconds, or for `pluginSettle`
+  seconds when that is set. The supervisor reads the folder every second, so a
+  slow copy loads once, when it is complete. It prints a line when it first
+  sees the folder change, and a line when the folder settles as it was when its
+  last reload failed, which it leaves alone until the folder changes again. Set `GEEKITY_PLUGIN_WATCH=off` to turn this
   off. The supervisor then says at start that the folder is not watched.
 - You press **Reload** on Admin > Plugins. The screen offers the button
   whenever the folder differs from what the running worker loaded. It names the

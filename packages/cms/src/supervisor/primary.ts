@@ -45,6 +45,7 @@ export interface SupervisorOptions {
   log(line: string): void;
   exit(code: number): void;
   watch?: PluginWatch | 'off' | undefined;
+  pluginSettleMs?: number;
 }
 
 export interface Supervisor {
@@ -103,6 +104,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
   const reloads = createReloadQueue();
   const plugins = createPluginWatcher({
     watch: options.watch === 'off' ? undefined : options.watch,
+    settleMs: options.pluginSettleMs,
     schedule: (task, ms) => options.schedule(task, ms),
     now: () => options.now(),
     log: (line) => options.log(line),
@@ -312,6 +314,7 @@ export function superviseCluster(options: {
   dataDir: string;
   pluginsDir: string | undefined;
   pluginWatch: boolean;
+  pluginSettle: number;
 }): void {
   const { pluginsDir } = options;
   const log = (line: string) => process.stderr.write(`${line}\n`);
@@ -344,6 +347,7 @@ export function superviseCluster(options: {
     },
     now: () => Date.now(),
     log,
+    pluginSettleMs: options.pluginSettle * 1000,
     exit(code) {
       control.close();
       process.exit(code);

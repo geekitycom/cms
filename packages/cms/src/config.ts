@@ -16,6 +16,7 @@ import type { Plugin } from './plugin.ts';
 import { withoutTrailingSlash } from './util/url.ts';
 import { systemHostLookup } from './util/public-address.ts';
 import type { HostLookup } from './util/public-address.ts';
+import { PLUGIN_SETTLE_MS } from './supervisor/plugin-watcher.ts';
 
 /**
  * Something a site wants to happen when the index changes.
@@ -468,11 +469,18 @@ export interface GeekityConfig {
   /**
    * Whether `geekity serve` reloads by itself once
    * {@link GeekityConfig.pluginsDir} has changed and then stood still for
-   * five seconds. On by default. Off leaves Reload on the Plugins
-   * screen and the reload `geekity plugin` and the admin ask for. Overridden
-   * by `GEEKITY_PLUGIN_WATCH`.
+   * {@link GeekityConfig.pluginSettle} seconds. On by default. Off leaves
+   * Reload on the Plugins screen and the reload `geekity plugin` and the admin
+   * ask for. Overridden by `GEEKITY_PLUGIN_WATCH`.
    */
   pluginWatch?: boolean;
+  /**
+   * How many seconds {@link GeekityConfig.pluginsDir} must stand still after
+   * a change before `geekity serve` reloads it, so that a plugin copied in by
+   * hand loads once the copy has finished. Five by default. Overridden by
+   * `GEEKITY_PLUGIN_SETTLE`.
+   */
+  pluginSettle?: number;
   /**
    * The operator's own certificate for the Gemini listener, a PEM file,
    * instead of the self-signed one the site generates under
@@ -575,6 +583,8 @@ export interface ResolvedConfig {
   readonly pluginInstall: boolean;
   /** Whether `geekity serve` reloads by itself when the plugins folder changes. */
   readonly pluginWatch: boolean;
+  /** How many seconds the plugins folder stands still before it reloads by itself. */
+  readonly pluginSettle: number;
   /** The operator's Gemini certificate file, or `undefined` for the generated one. */
   readonly geminiCert: string | undefined;
   /** The operator's Gemini key file, or `undefined` for the generated one. */
@@ -863,6 +873,7 @@ const ENV_SETTINGS = {
   pluginsDir: setting('GEEKITY_PLUGINS_DIR', OPTIONAL_PATH, undefined),
   pluginInstall: setting('GEEKITY_PLUGIN_INSTALL', BOOLEAN, true),
   pluginWatch: setting('GEEKITY_PLUGIN_WATCH', BOOLEAN, true),
+  pluginSettle: setting('GEEKITY_PLUGIN_SETTLE', SECONDS, PLUGIN_SETTLE_MS / 1000),
   geminiCert: setting('GEEKITY_GEMINI_CERT', OPTIONAL_PATH, undefined),
   geminiKey: setting('GEEKITY_GEMINI_KEY', OPTIONAL_PATH, undefined),
   geminiPort: setting('GEEKITY_GEMINI_PORT', PORT, DEFAULT_GEMINI_PORT),

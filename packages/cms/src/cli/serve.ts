@@ -24,6 +24,7 @@ export async function serveCommand({ configPath }: ParsedArgs): Promise<number> 
     dataDir: resolved.dataDir,
     pluginsDir: resolved.pluginsDir,
     pluginWatch: resolved.pluginWatch,
+    pluginSettle: resolved.pluginSettle,
   });
   return 0;
 }
