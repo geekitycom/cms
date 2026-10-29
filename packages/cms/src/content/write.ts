@@ -47,6 +47,7 @@ import type {
 import type { DocumentChange } from './sync.ts';
 import type { SyndicationTarget } from './syndicate-to.ts';
 import { respellTags } from './tags.ts';
+import { DEFAULT_PERMALINK_BASES } from './taxonomy.ts';
 import type { Respelling } from './tags.ts';
 import { calendarDayIn, toUtcInstant } from './time.ts';
 
@@ -71,6 +72,11 @@ export interface DocumentSite extends SiteRecords {
   /** The username of whoever is writing: the author a new document starts on. */
   readonly writer: string | undefined;
   readonly timezone: string;
+  /**
+   * The first URL segment of the wiki, which a wiki page is written under and
+   * no post or page may take. The default base when absent.
+   */
+  readonly wikiBase?: string | undefined;
   readonly citedContext: (target: string) => Promise<CitedPage | undefined>;
   readonly storedContext: (target: string) => CitedPage | undefined;
   readonly learnHandles: (body: string) => Promise<void>;
@@ -129,7 +135,24 @@ export async function writeDocument(
   const checked = await checkForm(site, write);
   if ('outcome' in checked) return checked;
   const identity = await resolveIdentity(site, write, checked);
+  const taken = wikiTaken(site, write.kind, identity.permalink);
+  if (taken !== undefined) return taken;
   return await persist(site, write, checked, identity);
+}
+
+/**
+ * The refusal for a post or page permalink under the wiki base, which the
+ * wiki owns: every URL there is a wiki page's, or the wiki index.
+ */
+function wikiTaken(site: DocumentSite, kind: DocumentKind, permalink: string): Refused | undefined {
+  if (kind.type === 'wiki') return undefined;
+  const base = site.wikiBase ?? DEFAULT_PERMALINK_BASES.wiki;
+  const segments = permalink.split('/').filter((segment) => segment !== '');
+  if (segments[0] !== base) return undefined;
+  return refused(
+    `Everything under /${base}/ belongs to the wiki. Choose a permalink outside it, or change the wiki base on Settings > Permalinks.`,
+    'editor-permalink',
+  );
 }
 
 interface CheckedForm {
@@ -292,7 +315,14 @@ async function resolveIdentity(
   // name; an existing one keeps the slug it was given.
   const finalSlug =
     document === undefined
-      ? await freeSlug({ contentDir, store, type: kind.type, slug, date: filed })
+      ? await freeSlug({
+          contentDir,
+          store,
+          type: kind.type,
+          slug,
+          date: filed,
+          wikiBase: site.wikiBase,
+        })
       : slug;
 
   // A URL somebody has been shown only moves when the author asks it to, by
@@ -315,6 +345,7 @@ async function resolveIdentity(
           date: filed,
           document,
           timezone,
+          wikiBase: site.wikiBase,
         });
   const target = documentPath({ kind, slug: finalSlug, date: filed, trashed });
 
@@ -431,6 +462,7 @@ async function replaceFile(
       path: target,
       content: input.content,
       timezone: input.timezone,
+      wikiBase: site.wikiBase,
     });
   } catch (error) {
     restoreRow();
@@ -666,12 +698,17 @@ function resolvePermalink(input: {
   document: Document | undefined;
   /** The site's zone, for reading the day an existing document was filed under. */
   timezone: string;
+  wikiBase: string | undefined;
 }): string {
   const fallback = defaultPermalink({
     type: input.kind.type,
     slug: input.slug,
     date: input.date,
+    wikiBase: input.wikiBase,
   });
+
+  // A wiki page is where its base and its name say, whatever the form asks.
+  if (input.kind.type === 'wiki') return fallback;
 
   const submitted = normalizePermalink(input.form.permalink);
   if (submitted === undefined) return fallback;

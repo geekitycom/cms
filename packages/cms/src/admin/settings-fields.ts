@@ -37,6 +37,7 @@ import type { SiteLicense, SiteSettings } from '../site/settings.ts';
 
 type OffTheForm =
   | 'taxonomy_redirects'
+  | 'former_wiki_bases'
   | 'menus'
   | 'index_now_key'
   | 'clients_without_pkce'

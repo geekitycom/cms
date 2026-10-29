@@ -1,0 +1,45 @@
+{#
+  One wiki page: a linked note at the wiki base and its file name. It is
+  drawn as a page is, the same `blog-post h-entry`, with what a wiki page has
+  in place of a date: when it was last updated, and the pages that link to it.
+
+  What a wiki page does not have: a date, taxonomy, neighbours, a contact form
+  or a bio. It is a note the site keeps, not something anybody published on a
+  Tuesday, and it is reached by its links rather than by an archive.
+#}
+{% extends "layouts/base.njk" %}
+{% import "partials/kicker.njk" as kicker with context %}
+{% import "partials/lang.njk" as language with context %}
+
+{% block content %}
+{% set entryUrl = page.url or url %}
+<article class="blog-post wiki-page h-entry"{{ language.attr(lang) }}>
+  <header class="post-header">
+    {{ kicker.line("Wiki") }}
+    {% if title %}
+    <h1 class="p-name">{{ title }}</h1>
+    {% endif %}
+  </header>
+
+  <section class="e-content">
+    {{ content | safe }}
+    {#- A wiki page written by hand and never saved here has no update time,
+        and then the line is empty, which the stylesheet hides. -#}
+    <p class="page-meta">
+      {%- if updated %}
+      <a href="{{ entryUrl | url }}" class="u-url"><time class="small dt-updated" datetime="{{ updated | date("iso") }}">Last updated {{ updated | date("readable", none, lang) }}</time></a>
+      {%- endif -%}
+    </p>
+  </section>
+</article>
+
+{% include "partials/backlinks.njk" %}
+
+{% if conversation %}
+{% include "partials/conversation.njk" %}
+{% endif %}
+{% if commentForm %}
+{% include "partials/comment-form.njk" %}
+{% endif %}
+
+{% endblock %}

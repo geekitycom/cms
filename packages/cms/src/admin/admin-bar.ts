@@ -3,7 +3,13 @@ import type { Environment } from 'nunjucks';
 
 import { adminColorScheme } from '../site/admin-theme.ts';
 import { ADMIN_PREFIX, editUserPath } from '../site/admin-paths.ts';
-import { editorPath, newEditorPath, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
+import {
+  editorPath,
+  newEditorPath,
+  PAGE_SCREENS,
+  POST_SCREENS,
+  WIKI_SCREENS,
+} from './documents.ts';
 import type { DocumentScreens } from './documents.ts';
 import { LOGOUT_PATH } from './routes.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
@@ -23,6 +29,7 @@ import { formatDate } from '../theme/templates.ts';
 const KINDS: Readonly<Record<DocumentType, DocumentScreens>> = {
   post: POST_SCREENS,
   page: PAGE_SCREENS,
+  wiki: WIKI_SCREENS,
 };
 
 /** Built on the first signed-in page; the admin's own is closed over by its mount. */
@@ -112,7 +119,7 @@ function unpublishedNotice(c: Context<GeekityEnv>, document: Document): string |
 }
 
 function hiddenBecause(c: Context<GeekityEnv>, document: Document, reason: HiddenReason): string {
-  const it = `This ${document.type}`;
+  const it = `This ${KINDS[document.type].singular}`;
   switch (reason.kind) {
     case 'trashed':
       return `${it} is in the trash`;

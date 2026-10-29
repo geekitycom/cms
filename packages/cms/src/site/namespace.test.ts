@@ -31,6 +31,7 @@ const STABLE_SITE_JSON_KEYS = [
   'tagBase',
   'categoryBase',
   'wikiBase',
+  'formerWikiBases',
   'comments',
   'commentsOnPosts',
   'commentsOnPages',

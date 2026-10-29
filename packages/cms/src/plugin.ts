@@ -800,8 +800,8 @@ export type PluginPostType =
 
 /** The document in the editor as it stands when a button is pressed, saved or not. */
 export interface PluginEditorDraft {
-  readonly type: 'post' | 'page';
-  /** A post's kind, or `undefined` for a page. */
+  readonly type: 'post' | 'page' | 'wiki';
+  /** A post's kind, or `undefined` for a page or a wiki page. */
   readonly postType: PluginPostType | undefined;
   /** Whether the document is on disk, rather than new in the editor. */
   readonly saved: boolean;

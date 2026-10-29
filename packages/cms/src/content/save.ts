@@ -4,7 +4,7 @@ import { writeFileAtomically } from '../files/atomic.ts';
 import { exists } from '../util/files.ts';
 import type { Document, DocumentContent, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
-import { parseDocument } from './parser.ts';
+import { parseDocument, typeForPath } from './parser.ts';
 import { defaultPermalink } from './slug.ts';
 import { isTrashedPath } from './store.ts';
 import type { DocumentLookup, IndexWriter } from './store.ts';
@@ -13,7 +13,7 @@ import { serializeDocument } from './writer.ts';
 
 /** What {@link contentFilePath} needs to name a file. */
 export interface ContentFilePathInput {
-  /** Posts get a dated filename; pages do not. */
+  /** Posts get a dated filename; pages and wiki pages do not. */
   type: DocumentType;
   /** The slug, already URL-safe. It becomes the tail of the filename. */
   slug: string;
@@ -35,6 +35,7 @@ export function contentFilePath(input: ContentFilePathInput): string {
   }
 
   if (input.type === 'page') return `pages/${input.slug}.md`;
+  if (input.type === 'wiki') return `wiki/${input.slug}.md`;
 
   if (input.date === undefined) {
     throw new TypeError(`A post filename needs a date; "${input.slug}" has none.`);
@@ -49,6 +50,8 @@ export interface FreeSlugOptions extends ContentFilePathInput {
   contentDir: string;
   /** The index, consulted so a permalink another file claims is skipped too. */
   store: DocumentLookup;
+  /** The wiki base a wiki page's permalink is under. The default base when absent. */
+  wikiBase?: string | undefined;
 }
 
 /**
@@ -67,7 +70,12 @@ export async function freeSlug(options: FreeSlugOptions): Promise<string> {
   for (let suffix = 1; ; suffix += 1) {
     const slug = suffix === 1 ? input.slug : `${input.slug}-${String(suffix)}`;
     const relative = contentFilePath({ ...input, slug });
-    const permalink = defaultPermalink({ type: input.type, slug, date: input.date });
+    const permalink = defaultPermalink({
+      type: input.type,
+      slug,
+      date: input.date,
+      wikiBase: input.wikiBase,
+    });
 
     if (store.getByPath(relative) !== undefined) continue;
     const holder = store.getByPermalink(permalink);
@@ -93,6 +101,8 @@ export interface SaveDocumentOptions {
    * a caller says otherwise; the admin passes the `timezone` setting.
    */
   timezone?: string | undefined;
+  /** The wiki base a wiki page is read back under. The default base when absent. */
+  wikiBase?: string | undefined;
 }
 
 /**
@@ -107,6 +117,7 @@ export async function saveDocument(options: SaveDocumentOptions): Promise<Docume
   const file = path.join(options.contentDir, ...relative.split('/'));
   const source = serializeDocument(
     utcDates(options.content, options.timezone ?? DEFAULT_TIMEZONE, relative),
+    typeForPath(relative),
   );
 
   // Parsed before it is written, so a document that cannot be read back is
@@ -114,6 +125,7 @@ export async function saveDocument(options: SaveDocumentOptions): Promise<Docume
   const document = parseDocument(source, {
     path: relative,
     handles: handleDirectory(options.contentDir),
+    wikiBase: options.wikiBase,
   });
 
   await writeFileAtomically(file, source);

@@ -45,7 +45,12 @@ import { representationHref } from './negotiate.ts';
 import type { TextFormat } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
 import type { LayoutParts, ThemeText } from './render.ts';
-import { OPTIONAL_TEMPLATES, STATUS_PAGES, TEMPLATES } from './theme-templates.ts';
+import {
+  DOCUMENT_TEMPLATES,
+  OPTIONAL_TEMPLATES,
+  STATUS_PAGES,
+  TEMPLATES,
+} from './theme-templates.ts';
 import type { StatusPageName } from './theme-templates.ts';
 import { classifyPath } from './paths.ts';
 import { documentLabel, encodePath } from './request.ts';
@@ -105,7 +110,7 @@ export function documentMarkdown(
       layouts:
         url === '/'
           ? [OPTIONAL_TEMPLATES.frontPage, TEMPLATES.page]
-          : [document.type === 'post' ? TEMPLATES.post : TEMPLATES.page],
+          : [DOCUMENT_TEMPLATES[document.type]],
     },
   );
 }

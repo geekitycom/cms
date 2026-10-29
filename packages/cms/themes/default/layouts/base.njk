@@ -61,7 +61,7 @@
 {% set metaTitle = pageTitle or site.title %}
 {% set metaUrl = (page.url or "/") | absoluteUrl %}
 {% set metaImage = shareImage.url if shareImage else "" %}
-{% set isEntry = (type == "post" or type == "page") and not pagination %}
+{% set isEntry = (type == "post" or type == "page" or type == "wiki") and not pagination %}
 {% set canonicalUrl = original.url if (isEntry and original) else metaUrl %}
 {#- An author archive is the only page that is about a person: a listing whose
     `author` is whose page this is, rather than the posts page's writer. -#}

@@ -1174,3 +1174,51 @@ describe('the wiki base', () => {
     assert.equal(asked.at(-1), 'notes');
   });
 });
+
+describe('wiki pages', () => {
+  it('index under the wiki base, and move when it changes', async () => {
+    const dir = await contentDir({
+      'wiki/some-page.md': '---\ntitle: Some page\n---\n\nHello.\n',
+    });
+    const index = await store();
+    let base = 'wiki';
+    const content = createContentSync({
+      store: index,
+      contentDir: dir,
+      watch: false,
+      wikiBase: () => base,
+      logger: { warn: () => undefined },
+    });
+    runningSyncs.push(content);
+
+    await content.sync();
+    assert.equal(index.getByPath('wiki/some-page.md')?.permalink, '/wiki/some-page/');
+
+    base = 'notes';
+    const result = await content.sync();
+    assert.equal(result.updated, 1, 'the unchanged file is re-indexed under the new base');
+    assert.equal(index.getByPath('wiki/some-page.md')?.permalink, '/notes/some-page/');
+    assert.equal(index.getByPermalink('/wiki/some-page/'), undefined);
+  });
+
+  it('warn about a permalink in the front matter, which is ignored', async () => {
+    const dir = await contentDir({
+      'wiki/moved.md': '---\ntitle: Moved\npermalink: /elsewhere/\n---\n',
+    });
+    const warnings: string[] = [];
+    const index = await store();
+    const content = createContentSync({
+      store: index,
+      contentDir: dir,
+      watch: false,
+      logger: { warn: (message) => warnings.push(message) },
+    });
+    runningSyncs.push(content);
+
+    await content.sync();
+    assert.equal(index.getByPath('wiki/moved.md')?.permalink, '/wiki/moved/');
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0] ?? '', /wiki\/moved\.md/);
+    assert.match(warnings[0] ?? '', /permalink/);
+  });
+});

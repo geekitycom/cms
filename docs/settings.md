@@ -72,6 +72,8 @@ The file holds these keys:
 - `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`
 - `contactEmail`, `securityContacts`, `securityPolicy`, `securityLanguages`
 - `relays`, `menus` and `taxonomyRedirects`
+- `formerWikiBases` (when the wiki base has changed, see
+  [The archive bases](#the-archive-bases))
 - `colorScheme` (when set) and `colorMode` (see
   [Colour scheme and mode](#colour-scheme-and-mode))
 - `headingFont` and `bodyFont` (when set, see
@@ -254,6 +256,16 @@ Saving a tag or category base moves these on the next request:
 - the `Hashtag` hrefs on the ActivityStreams `Article`
 
 The old base returns 404.
+
+Saving a wiki base moves every wiki page to `/{wikiBase}/{page}/`, because a
+wiki page's URL comes from the base and its file name and is not stored in its
+file. The site re-reads every wiki page under the new base. The old base is
+recorded in `formerWikiBases`, and a request for `/{old base}/{page}/`, or for
+its `.md`, `.gmi` or `.json` representation, returns `301` to the same page
+under the new base. A base the site moves back to leaves that list. A change
+made with `geekity settings set site.wiki_base` while the server is running
+reaches the wiki pages when the server next starts. A post or a page cannot
+take a permalink under the wiki base: the save is refused, naming the base.
 
 An archive path matches its term case-insensitively. A tag's archive lives at
 its lower-case spelling. A category's archive lives at the spelling the site

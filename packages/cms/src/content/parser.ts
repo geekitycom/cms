@@ -12,7 +12,7 @@ import { normalizeBody, serializeDocument } from './writer.ts';
 
 const KNOWN_KEYS = new Set<string>(KNOWN_FRONT_MATTER_KEYS);
 
-/** Where the file came from, which is what tells a post from a page. */
+/** Where the file came from, which is what tells a post from a page or a wiki page. */
 export interface ParseDocumentOptions {
   /** Path relative to the content directory, e.g. `posts/2026-09-02-hello.md`. */
   path: string;
@@ -46,19 +46,21 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
   // two documents parsed from identical text never share nested data objects.
   const parsed = matter(text, {});
 
-  const data = parsed.data;
   const type = options.type ?? typeForPath(path);
+  const data = type === 'wiki' ? wikiFrontMatter(parsed.data) : parsed.data;
   const title = asString(data['title']) ?? '';
   const date = asDate(data['date'], 'date', path);
   const body = normalizeBody(parsed.content);
 
   const permalink =
-    asString(data['permalink']) ??
-    defaultPermalink({
-      type,
-      slug: fallbackSlug(title, path),
-      date,
-    });
+    type === 'wiki'
+      ? defaultPermalink({ type, slug: wikiSlug(title, path), wikiBase: options.wikiBase })
+      : (asString(data['permalink']) ??
+        defaultPermalink({
+          type,
+          slug: fallbackSlug(title, path),
+          date,
+        }));
 
   const content: DocumentContent = {
     title,
@@ -83,26 +85,57 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
     path,
     slug: slugForPermalink(permalink) ?? fallbackSlug(title, path),
     html: renderMarkdown(body, options.handles),
-    hash: hashDocument(content),
+    hash: hashDocument(content, type),
   };
 }
 
-/** The SHA-256 a {@link Document} carries: a hash of its canonical file text. */
-export function hashDocument(content: DocumentContent): string {
-  return createHash('sha256').update(serializeDocument(content), 'utf8').digest('hex');
+/**
+ * The SHA-256 a {@link Document} carries: a hash of its canonical file text.
+ * A wiki page's file has no permalink, so a change of wiki base leaves its hash
+ * where it was.
+ */
+export function hashDocument(content: DocumentContent, type?: DocumentType): string {
+  return createHash('sha256').update(serializeDocument(content, type), 'utf8').digest('hex');
 }
 
 /**
- * Decide whether a path holds a post or a page. Only the directory matters, so
- * a file that moves between `posts/` and `pages/` changes type with it.
+ * The front matter keys a wiki page's file carries that a wiki page does not
+ * have: it is at the wiki base and its file name whatever `permalink` says, and
+ * it is not dated, filed or a reply. They are not read, so the next save drops
+ * them, and the sync says so.
+ */
+export function ignoredWikiKeys(source: string): string[] {
+  const text = source.replace(/\r\n?/g, '\n');
+  if (!/^---\n/.test(text)) return [];
+  return Object.keys(matter(text, {}).data).filter((key) => IGNORED_WIKI_KEYS.has(key));
+}
+
+/** The front matter a wiki page is read with: its own, less what it does not have. */
+function wikiFrontMatter(data: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(data).filter(([key]) => !IGNORED_WIKI_KEYS.has(key)));
+}
+
+const IGNORED_WIKI_KEYS = new Set(['permalink', 'date', 'tags', 'categories', 'in-reply-to']);
+
+/** A wiki page's slug: its file name, slugified, or its title when that is empty. */
+function wikiSlug(title: string, path: string): string {
+  const basename = path.split('/').at(-1) ?? '';
+  return slugify(basename.replace(/\.(md|markdown)$/i, '')) || slugify(title) || 'untitled';
+}
+
+/**
+ * Decide whether a path holds a post, a page or a wiki page. Only the
+ * directory matters, so a file that moves between `posts/`, `pages/` and
+ * `wiki/` changes type with it.
  */
 export function typeForPath(path: string): DocumentType {
   for (const segment of path.split('/')) {
     if (segment === 'posts') return 'post';
     if (segment === 'pages') return 'page';
+    if (segment === 'wiki') return 'wiki';
   }
   throw new TypeError(
-    `Cannot tell the type of ${path}: it is under neither posts/ nor pages/. Pass an explicit type.`,
+    `Cannot tell the type of ${path}: it is under none of posts/, pages/ and wiki/. Pass an explicit type.`,
   );
 }
 

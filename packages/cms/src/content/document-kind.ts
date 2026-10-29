@@ -80,3 +80,21 @@ export const PAGE_KIND: DocumentKind = {
   federated: false,
   fields: [],
 };
+
+/**
+ * Wiki pages: linked notes under `wiki/`, at the wiki base and their file
+ * name. Nothing a post or a page carries beyond a title and a body.
+ */
+export const WIKI_KIND: DocumentKind = {
+  type: 'wiki',
+  singular: 'wiki page',
+  dated: false,
+  tagged: false,
+  categorised: false,
+  excludable: false,
+  contactable: false,
+  replies: false,
+  located: false,
+  federated: false,
+  fields: [],
+};

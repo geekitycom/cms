@@ -17,7 +17,7 @@ import { mountWebmentions } from './webmention-routes.ts';
 import { favicon, imageVariant, themeAsset, upload } from './asset-routes.ts';
 import { THEME_ASSET_PREFIX } from '../theme/assets.ts';
 import { negotiateDocument } from './document-page.ts';
-import { goneDocumentAt, previewDocumentAt } from '../content/permalinks.ts';
+import { goneDocumentAt, previewDocumentAt, publicDocumentAt } from '../content/permalinks.ts';
 import { embedView, oEmbed } from './embed.ts';
 import { commentPage, comments, feed, repliesFeed } from './feed-routes.ts';
 import { feedPathUnder, FEED_FORMATS, REPLIES_ROOT, splitFeedPath } from './feeds.ts';
@@ -32,6 +32,7 @@ import {
   representationHref,
   splitRepresentationExtension,
 } from './negotiate.ts';
+import type { Representation } from './negotiate.ts';
 import { EMBED_PATH, OEMBED_PATH } from './oembed.ts';
 import { openSearchDescription, openSearchResponse, OPENSEARCH_PATH } from './opensearch.ts';
 import {
@@ -290,12 +291,17 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   // it lives now. Asked only after every live lookup, which is what lets a new
   // document take an old URL over, and a term that comes back into use beat
   // the record of what it was renamed to.
+  const formerBases = c.var.siteAtRequestStart.former_wiki_bases;
   const formerly =
     movedHref(view, pathname, undefined) ??
     extension?.paths
       .map((candidate) => movedHref(view, candidate, extension.representation))
       .find((href) => href !== undefined) ??
-    renamedTermHref(c, view, pathname);
+    renamedTermHref(c, view, pathname) ??
+    formerWikiHref(view, formerBases, pathname, undefined) ??
+    extension?.paths
+      .map((candidate) => formerWikiHref(view, formerBases, candidate, extension.representation))
+      .find((href) => href !== undefined);
   if (formerly !== undefined) return c.redirect(`${formerly}${search}`, 301);
 
   const deleted = [pathname, ...(extension?.paths ?? [])].some(
@@ -370,4 +376,27 @@ function renamedTermHref(
   return feedPath === undefined
     ? termHref(moved, asked.pageNumber, view.bases)
     : feedHref(moved, feedPath.format, view.bases);
+}
+
+/**
+ * Where a wiki page lives now when the path names it under a wiki base the
+ * site used before, or `undefined` when it does not. A wiki page's URL is the
+ * base and its name, so a change of base moves every one of them, and each old
+ * URL leads on to the new one as a renamed term's archive does.
+ */
+function formerWikiHref(
+  view: SiteView,
+  formerBases: readonly string[],
+  pathname: string,
+  representation: Representation | undefined,
+): string | undefined {
+  const [leading, base, slug, trailing, ...rest] = pathname.split('/');
+  if (leading !== '' || trailing !== '' || rest.length > 0) return undefined;
+  if (base === undefined || slug === undefined || slug === '') return undefined;
+  if (base === view.bases.wiki || !formerBases.includes(base)) return undefined;
+
+  const document = publicDocumentAt(view.store, `/${view.bases.wiki}/${slug}/`);
+  if (document?.type !== 'wiki') return undefined;
+  const href = encodePath(document.permalink);
+  return representation === undefined ? href : representationHref(href, representation);
 }

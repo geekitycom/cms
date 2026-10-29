@@ -12,6 +12,7 @@ const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 const DOCUMENT_DIRECTORIES: ReadonlyMap<string, DocumentType> = new Map([
   ['posts', 'post'],
   ['pages', 'page'],
+  ['wiki', 'wiki'],
 ]);
 
 export async function walk(contentDir: string, logger: SyncLogger, from = ''): Promise<string[]> {

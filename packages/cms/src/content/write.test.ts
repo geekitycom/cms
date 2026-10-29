@@ -12,7 +12,7 @@ import { createUser, setUserProfile } from '../site/users.ts';
 import type { Document } from './document.ts';
 import { blankForm } from './document-form.ts';
 import type { EditorForm } from './document-form.ts';
-import { POST_KIND } from './document-kind.ts';
+import { PAGE_KIND, POST_KIND, WIKI_KIND } from './document-kind.ts';
 import { openContentStore } from './sqlite/open.ts';
 import { DuplicatePermalinkError } from './store.ts';
 import type { ContentStore } from './store.ts';
@@ -383,5 +383,60 @@ describe('the site records a write is given', () => {
     assert.equal(written.outcome, 'saved');
     assert.deepEqual(written.saved.redirectFrom, [saved.permalink]);
     assert.equal(written.saved.extra['syndicate-to'], undefined);
+  });
+});
+
+describe('the wiki base', () => {
+  it('is refused as a post or page permalink, naming the base', async () => {
+    const { site, contentDir } = await scratch();
+    const notes = { ...site, wikiBase: 'notes' };
+
+    for (const [kind, permalink] of [
+      [POST_KIND, '/notes/hello/'],
+      [PAGE_KIND, 'notes/about'],
+    ] as const) {
+      const written = await writeDocument(notes, {
+        kind,
+        document: undefined,
+        form: {
+          ...blankForm(kind, 'UTC', new Date('2026-09-02T10:00:00.000Z')),
+          title: 'Hi',
+          permalink,
+        },
+        draft: false,
+      });
+      assert.equal(written.outcome, 'refused', permalink);
+      assert.match(written.outcome === 'refused' ? written.message : '', /\/notes\//);
+      assert.equal(written.outcome === 'refused' ? written.field : '', 'editor-permalink');
+    }
+    await assert.rejects(readdir(path.join(contentDir, 'pages')));
+
+    const elsewhere = await writeDocument(notes, {
+      kind: PAGE_KIND,
+      document: undefined,
+      form: { ...blankForm(PAGE_KIND, 'UTC', new Date()), title: 'Wiki', permalink: '/wiki/' },
+      draft: false,
+    });
+    assert.equal(elsewhere.outcome, 'saved', 'the default base is free once the site moved off it');
+  });
+
+  it('files a wiki page under wiki/ at the base, with no permalink in its file', async () => {
+    const { site, contentDir, store } = await scratch();
+    const written = await writeDocument(
+      { ...site, wikiBase: 'notes' },
+      {
+        kind: WIKI_KIND,
+        document: undefined,
+        form: { ...blankForm(WIKI_KIND, 'UTC', new Date()), title: 'Some page', body: 'Hi.' },
+        draft: false,
+      },
+    );
+    assert.equal(written.outcome, 'saved');
+    if (written.outcome !== 'saved') return;
+    assert.equal(written.saved.path, 'wiki/some-page.md');
+    assert.equal(written.saved.permalink, '/notes/some-page/');
+    assert.equal(store.getByPermalink('/notes/some-page/')?.path, 'wiki/some-page.md');
+    const file = await readFile(path.join(contentDir, 'wiki', 'some-page.md'), 'utf8');
+    assert.doesNotMatch(file, /permalink/);
   });
 });

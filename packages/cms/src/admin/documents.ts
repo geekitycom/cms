@@ -24,7 +24,7 @@ import {
   splitTags,
 } from '../content/document-form.ts';
 import type { EditorForm, ResolvedMedia } from '../content/document-form.ts';
-import { PAGE_KIND, POST_KIND } from '../content/document-kind.ts';
+import { PAGE_KIND, POST_KIND, WIKI_KIND } from '../content/document-kind.ts';
 import type { DocumentKind } from '../content/document-kind.ts';
 import { enclosureOf, TRANSCRIPT_TYPES } from '../content/enclosure.ts';
 import { ENCLOSURE_FIELDS, resolveEnclosure } from '../content/enclosure-form.ts';
@@ -129,6 +129,13 @@ export const PAGE_SCREENS: DocumentScreens = {
   section: 'pages',
   basePath: `${ADMIN_PREFIX}/pages`,
   plural: 'Pages',
+};
+
+export const WIKI_SCREENS: DocumentScreens = {
+  ...WIKI_KIND,
+  section: 'wiki',
+  basePath: `${ADMIN_PREFIX}/wiki`,
+  plural: 'Wiki',
 };
 
 /** A submitted Comments field, or the site default for anything else. */

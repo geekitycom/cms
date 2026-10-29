@@ -78,6 +78,9 @@ export async function moveDocumentFile(
     path: target,
     type: document.type,
     handles: handleDirectory(contentDir),
+    // A move does not change the wiki base, so a wiki page keeps the one it
+    // was indexed under.
+    wikiBase: document.type === 'wiki' ? document.permalink.split('/')[1] : undefined,
   });
   store.remove(document.path);
   store.upsert(moved);

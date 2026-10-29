@@ -90,6 +90,7 @@ export function commentPolicyOf(site: Record<string, unknown>): CommentPolicy {
     openByDefault: {
       post: site['commentsOnPosts'] !== false,
       page: site['commentsOnPages'] === true,
+      wiki: false,
     },
   };
 }

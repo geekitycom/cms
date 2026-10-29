@@ -1,7 +1,7 @@
 import { dump } from 'js-yaml';
 
 import { KNOWN_FRONT_MATTER_KEYS } from './document.ts';
-import type { DocumentContent } from './document.ts';
+import type { DocumentContent, DocumentType } from './document.ts';
 
 /**
  * Turn a Document back into the text of its Markdown file.
@@ -11,9 +11,13 @@ import type { DocumentContent } from './document.ts';
  * they were read, so an unchanged document always writes the same bytes and a
  * real edit produces a small diff. Keys that carry no information — an empty
  * tag list, `draft: false`, a note's empty title — are left out.
+ *
+ * A wiki page's permalink is the wiki base and its file name, worked out when
+ * it is read, so given the `wiki` type it is not written.
  */
-export function serializeDocument(document: DocumentContent): string {
+export function serializeDocument(document: DocumentContent, type?: DocumentType): string {
   const frontMatter = documentFrontMatter(document);
+  if (type === 'wiki') delete frontMatter['permalink'];
   const yaml = dump(frontMatter, { lineWidth: -1, noRefs: true });
   const body = normalizeBody(document.body);
 

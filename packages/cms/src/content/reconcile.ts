@@ -10,7 +10,7 @@ import {
   ORIGINAL_NAME_FRONT_MATTER_KEY,
   originalOf,
 } from './original.ts';
-import { parseDocument } from './parser.ts';
+import { ignoredWikiKeys, parseDocument } from './parser.ts';
 import { replyTarget } from './post-type.ts';
 import { DuplicatePermalinkError } from './store.ts';
 import type { DocumentLookup, IndexWriter } from './store.ts';
@@ -90,9 +90,18 @@ export function createReconciler(options: CreateReconcilerOptions): Reconciler {
       return 'skipped';
     }
 
-    if (previous !== undefined && previous.hash === document.hash) return 'unchanged';
+    // A wiki page's permalink is not in its file, so a new wiki base moves it
+    // with the hash unchanged.
+    if (
+      previous !== undefined &&
+      previous.hash === document.hash &&
+      previous.permalink === document.permalink
+    ) {
+      return 'unchanged';
+    }
 
     warnAboutIgnoredFields(relativePath, document, logger);
+    if (document.type === 'wiki') warnAboutIgnoredWikiKeys(relativePath, source, logger);
 
     try {
       await indexOverStaleRow(document, origin);
@@ -132,6 +141,14 @@ function warnAboutIgnoredFields(
       `${relativePath} names ${ORIGINAL_NAME_FRONT_MATTER_KEY} ${JSON.stringify(name)} with no absolute http or https ${ORIGINAL_FRONT_MATTER_KEY}, so it names nothing.`,
     );
   }
+}
+
+function warnAboutIgnoredWikiKeys(relativePath: string, source: string, logger: SyncLogger): void {
+  const ignored = ignoredWikiKeys(source);
+  if (ignored.length === 0) return;
+  logger.warn(
+    `${relativePath} names ${ignored.join(', ')}, which a wiki page does not have: it lives at the wiki base and its file name, undated and unfiled. The next save drops them.`,
+  );
 }
 
 async function readSource(file: string): Promise<string | undefined> {

@@ -138,6 +138,17 @@ const taxonomyRedirects: SettingType<readonly TaxonomyRedirect[]> = jsonValue(
   (value) => value.map((entry) => ({ ...entry })),
 );
 
+const formerWikiBases: SettingType<readonly string[]> = jsonValue(
+  (raw) =>
+    Array.isArray(raw)
+      ? {
+          ok: true,
+          value: raw.filter((base): base is string => typeof base === 'string' && base !== ''),
+        }
+      : { ok: false, problem: 'must be a list of words' },
+  (value) => (value.length === 0 ? undefined : [...value]),
+);
+
 const clientsWithoutPkce: SettingType<readonly string[]> = jsonValue(
   (raw) =>
     Array.isArray(raw)
@@ -220,6 +231,26 @@ export async function mintMissingIndexNowKey(
   );
   if (!minted.ok) {
     console.error(`No IndexNow key was minted: ${Object.values(minted.problems).join(' ')}`);
+  }
+}
+
+/**
+ * Remember the wiki base a change left, so its URLs lead on to where the wiki
+ * is now. The base it arrived at leaves the list: the wiki lives there again.
+ */
+async function recordFormerWikiBase({
+  previous,
+  next,
+  by,
+  settings,
+}: SettingChange<string>): Promise<void> {
+  const former = await settings.get(SITE.former_wiki_bases);
+  const kept = [...former.filter((base) => base !== previous && base !== next), previous];
+  const recorded = await settings.set('site', new Map([['former_wiki_bases', kept]]), by);
+  if (!recorded.ok) {
+    console.error(
+      `The old wiki base was not recorded: ${Object.values(recorded.problems).join(' ')}`,
+    );
   }
 }
 
@@ -306,6 +337,13 @@ export const SITE = declareNamespace({
       default: DEFAULT_PERMALINK_BASES.wiki,
       description: 'The first URL segment of the wiki pages and the wiki index.',
       check: permalinkBase('wiki'),
+      onChange: recordFormerWikiBase,
+    },
+    former_wiki_bases: {
+      fileKey: 'formerWikiBases',
+      type: formerWikiBases,
+      default: [],
+      description: 'The wiki bases the site used before, whose URLs redirect to the wiki.',
     },
     comments: { type: boolean, default: true, description: 'Whether the site takes comments.' },
     comments_on_posts: {

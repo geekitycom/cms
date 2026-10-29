@@ -21,7 +21,12 @@ import type { PageContexts } from './page-context.ts';
 import type { RenderDeps, RenderedPage, RenderPageOptions } from './render.ts';
 import { requestMailConfigured, requestSite } from './render-scope.ts';
 import type { ThemeRender } from './theme-environment.ts';
-import { OPTIONAL_TEMPLATES, TEMPLATES, themeTemplate } from './theme-templates.ts';
+import {
+  DOCUMENT_TEMPLATES,
+  OPTIONAL_TEMPLATES,
+  TEMPLATES,
+  themeTemplate,
+} from './theme-templates.ts';
 
 const STAMP_WINDOW_MS = (MAXIMUM_FORM_AGE_SECONDS * 1000) / 2;
 
@@ -55,7 +60,7 @@ export function createDocumentPages(
   ): RenderedPage {
     if (!frontPage) {
       return documentPage(document, {
-        template: document.type === 'post' ? TEMPLATES.post : TEMPLATES.page,
+        template: DOCUMENT_TEMPLATES[document.type],
         extra,
         viewer,
       });
