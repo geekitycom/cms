@@ -93,12 +93,3 @@ export async function refuses(port: number): Promise<boolean> {
     socket.once('error', () => resolve(true));
   });
 }
-
-export async function freePort(): Promise<number> {
-  const server = net.createServer();
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const address = server.address();
-  await new Promise((resolve) => server.close(resolve));
-  if (typeof address !== 'object' || address === null) throw new Error('no port');
-  return address.port;
-}

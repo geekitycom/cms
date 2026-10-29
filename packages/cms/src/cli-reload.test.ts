@@ -14,7 +14,7 @@ import { promisify } from 'node:util';
 
 import { cleanupTemporaryDirs, CLI, runCli, temporaryDir } from './__testing__/cli.ts';
 import { fakeNpmRegistry, pluginFiles } from './__testing__/npm-registry.ts';
-import { freePort, geminiRequest } from './gemini/__testing__/client.ts';
+import { geminiRequest } from './gemini/__testing__/client.ts';
 import { nextEvent } from './__testing__/wait.ts';
 import { PLUGIN_POLL_MS } from './supervisor/plugin-watcher.ts';
 
@@ -323,11 +323,11 @@ describe('geekity serve, supervised', () => {
       path.join(directory, 'content', '_data', 'site.json'),
       JSON.stringify({ title: 'Reloading', gemini: true }),
     );
-    const geminiPort = await freePort();
-    const server = await serve(directory, pluginsDir, { GEEKITY_GEMINI_PORT: String(geminiPort) });
+    const server = await serve(directory, pluginsDir, { GEEKITY_GEMINI_PORT: '0' });
     await server.printed('the Gemini port', (text) =>
       /Gemini is on port \d+ for localhost/.test(text),
     );
+    const geminiPort = Number(/Gemini is on port (\d+)/.exec(server.output())?.[1]);
     const agent = await signedIn(server);
     await installPlugin(pluginsDir, 'plugin-second');
 
@@ -349,7 +349,7 @@ describe('geekity serve, supervised', () => {
     await server.printed('the old worker to retire', (text) => /Reloaded/.test(text));
     await server.printed(
       'the new worker to serve Gemini',
-      (text) => [...text.matchAll(/Gemini is on port/g)].length === 2,
+      (text) => text.split(`Gemini is on port ${String(geminiPort)} `).length === 3,
     );
     const before = statuses.get(20) ?? 0;
     while ((statuses.get(20) ?? 0) < before + 20) await new Promise((r) => setImmediate(r));
