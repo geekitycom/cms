@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 
 import { SqliteMessageQueue } from '@fedify/sqlite';
 import { Temporal } from '@js-temporal/polyfill';
 
-import { cleanupTemporaryDirs, exists, runCli, siteWithContent } from './__testing__/cli.ts';
+import {
+  cleanupTemporaryDirs,
+  exists,
+  runCli,
+  siteWithContent,
+  temporaryDir,
+} from './__testing__/cli.ts';
 import { queuedMessages } from './__testing__/federation-queue.ts';
 import { FEDERATION_QUEUE_TABLE, queueFile } from './store/queue-database.ts';
 import { createCms } from './index.ts';
@@ -65,10 +71,23 @@ describe('geekity rebuild', () => {
     });
   }
 
+  let synced: string;
+  before(async () => {
+    synced = await federatedSite();
+    const run = await runCli(['sync'], synced);
+    assert.equal(run.code, 0, run.stderr);
+  });
+
+  /** A copy of the federated site after a `geekity sync`, its database built. */
+  async function syncedSite(): Promise<string> {
+    const directory = await temporaryDir('geekity-rebuild-');
+    await fs.cp(synced, directory, { recursive: true });
+    return directory;
+  }
+
   it('deletes the database and reports what it read back out of the files', async () => {
-    const directory = await federatedSite();
+    const directory = await syncedSite();
     const database = path.join(directory, 'data', 'geekity.db');
-    await runCli(['sync'], directory);
     // Something the rebuild must not carry over: a table nothing in the files
     // says anything about. Its absence afterwards is what proves the file was
     // replaced rather than migrated in place — an inode comparison would say
@@ -120,8 +139,7 @@ describe('geekity rebuild', () => {
   });
 
   it('refuses while a server holds the database, and leaves it where it is', async () => {
-    const directory = await federatedSite();
-    await runCli(['sync'], directory);
+    const directory = await syncedSite();
     const database = path.join(directory, 'data', 'geekity.db');
     const before = (await fs.stat(database)).ino;
 
@@ -142,8 +160,7 @@ describe('geekity rebuild', () => {
   });
 
   it('leaves data/queue.sqlite and the deliveries waiting in it alone (TASK-379 AC #2)', async () => {
-    const directory = await federatedSite();
-    await runCli(['sync'], directory);
+    const directory = await syncedSite();
     const file = queueFile(path.join(directory, 'data'));
     assert.ok(await exists(file), 'the site keeps its queue in a file of its own');
     const queue = new SqliteMessageQueue(new DatabaseSync(file), {

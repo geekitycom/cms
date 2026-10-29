@@ -32,7 +32,7 @@ describe('geekity strip-metadata', () => {
   const read = async (directory: string, relative: string): Promise<Uint8Array> =>
     new Uint8Array(await fs.readFile(path.join(directory, 'content', 'uploads', relative)));
 
-  it('strips files already uploaded, reports each one, and keeps their dates', async () => {
+  it('strips files already uploaded as a recorded job, reports each one, and keeps their dates', async () => {
     const notes = new TextEncoder().encode('Plain notes.\n');
     const directory = await site({
       '2025/05/beach.jpg': await jpegWithMetadata(6),
@@ -56,6 +56,17 @@ describe('geekity strip-metadata', () => {
       assert.equal(stat.mtime.toISOString(), '2025-05-01T00:00:00.000Z', relative);
     }
     assert.deepEqual(await read(directory, '2025/04/notes.txt'), notes);
+
+    const job = await createFileRecords(path.join(directory, 'data', 'jobs.json')).latest(
+      'strip-metadata',
+    );
+    assert.equal(job?.state, 'finished');
+    assert.deepEqual(
+      finishedResult(STRIP_METADATA_JOB, job)
+        ?.stripped.map((file) => file.path)
+        .sort(),
+      ['2025/04/clip.mp4', '2025/05/beach.jpg', '2025/05/chart.png'],
+    );
   });
 
   it('changes nothing the second time', async () => {
@@ -84,22 +95,6 @@ describe('geekity strip-metadata', () => {
     assert.match(run.stderr, /2025\/05\/broken\.jpg: /);
     assert.match(run.stdout, /Checked 2 files: 1 stripped, 0 already clean, 1 unreadable/);
     assert.deepEqual(await read(directory, '2025/05/broken.jpg'), broken);
-  });
-
-  it('runs as a strip-metadata job, recorded in data/jobs.json', async () => {
-    const directory = await site({ '2025/05/beach.jpg': await jpegWithMetadata(6) });
-
-    const run = await runCli(['strip-metadata'], directory);
-
-    assert.equal(run.code, 0, run.stderr);
-    const job = await createFileRecords(path.join(directory, 'data', 'jobs.json')).latest(
-      'strip-metadata',
-    );
-    assert.equal(job?.state, 'finished');
-    assert.deepEqual(
-      finishedResult(STRIP_METADATA_JOB, job)?.stripped.map((file) => file.path),
-      ['2025/05/beach.jpg'],
-    );
   });
 
   it('says so when there are no uploads', async () => {

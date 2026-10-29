@@ -107,21 +107,10 @@ describe('geekity serve', () => {
     assert.doesNotMatch(running.stdout, /seeded/i);
   });
 
-  it('writes nothing into an empty content directory when seeding is off, as it is by default', async () => {
-    const site = await temporaryDir('geekity-serve-noseed-');
+  it('serves an empty content directory as it is: no seeding by default, no dev mode, one access-log line per request', async () => {
+    const site = await temporaryDir('geekity-serve-plain-');
     const content = path.join(site, 'content');
     await fs.mkdir(content);
-
-    const running = await serve(site, {});
-    await running.stop();
-
-    assert.deepEqual(await fs.readdir(content), []);
-    assert.doesNotMatch(running.stdout, /seeded/i);
-  });
-
-  it('writes one access-log line per request, which serving turns on by itself', async () => {
-    const site = await temporaryDir('geekity-serve-log-');
-    await fs.mkdir(path.join(site, 'content'));
 
     const running = await serve(site, {});
     try {
@@ -130,6 +119,9 @@ describe('geekity serve', () => {
       await running.stop();
     }
 
+    assert.deepEqual(await fs.readdir(content), []);
+    assert.doesNotMatch(running.stdout, /seeded/i);
+    assert.doesNotMatch(running.stdout, /Dev mode/);
     assert.match(running.output(), /^GET \/healthz 200 \d+(\.\d+)?ms$/m, running.output());
   });
 
@@ -156,15 +148,5 @@ describe('geekity serve', () => {
 
     assert.match(running.stdout, /Dev mode is on/, running.stdout);
     assert.ok(await exists(path.join(site, 'data', 'dev-mode.json')), 'the boot latched it');
-  });
-
-  it('says nothing of dev mode for a site that is live', async () => {
-    const site = await temporaryDir('geekity-serve-live-');
-    await fs.mkdir(path.join(site, 'content'));
-
-    const running = await serve(site, {});
-    await running.stop();
-
-    assert.doesNotMatch(running.stdout, /Dev mode/);
   });
 });
