@@ -2,6 +2,7 @@
 // land in one shard together; this deals them out by test-weights.json.
 import { spawn } from 'node:child_process';
 import { globSync, readFileSync, writeFileSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 
 const WEIGHTS = new URL('test-weights.json', import.meta.url);
 const LISTED_FROM = 3;
@@ -17,7 +18,8 @@ if (process.argv.includes('--measure')) {
   if (shard === null) throw new Error('Set TEST_SHARD to the shard to run, for example 2/6.');
   const [index, total] = [Number(shard[1]), Number(shard[2])];
   const mine = deal(files, readWeights(), total)[index - 1] ?? [];
-  const child = spawn(process.execPath, [...RUN, ...mine], { stdio: 'inherit' });
+  const concurrency = `--test-concurrency=${String(availableParallelism())}`;
+  const child = spawn(process.execPath, [...RUN, concurrency, ...mine], { stdio: 'inherit' });
   child.on('exit', (code) => process.exit(code ?? 1));
 }
 
