@@ -269,6 +269,12 @@ export interface Cms {
    */
   serve(): Promise<{ port: number; geminiPort: number | undefined }>;
   /**
+   * The port Gemini is listening on now, or undefined while it is not. It
+   * changes when `site.gemini` turns the listener off and on, which matters
+   * when {@link ResolvedConfig.geminiPort} is 0.
+   */
+  geminiPort(): number | undefined;
+  /**
    * Hand over to a new server: refuse every request but GET and
    * HEAD with a 503, let the writes already in flight finish, stop the
    * timers, the watcher and the plugins, send what the queues hold, and then
@@ -469,6 +475,10 @@ export function createCms(
         changeGemini(next ? () => startGemini(false) : stopGemini),
       );
       return { port, geminiPort: gemini?.port };
+    },
+
+    geminiPort() {
+      return gemini?.port;
     },
 
     async drain(onWritesInFlight) {
