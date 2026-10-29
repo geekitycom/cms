@@ -1,7 +1,8 @@
 {#
   The person a page speaks for, in Markdown: what they wrote about themselves,
   then their links, one list item each. Prints nothing when the context has no
-  `bio`.
+  `bio`. The note is Markdown already, so it is printed as written, with
+  `markdownLinks` giving this site's links their `.md` URLs.
 
   `bio` is on an author archive and on the homepage of a site whose author is
   a user: `name`, `url`, `note` and `links` (each a `label` and a `url`). The
@@ -10,7 +11,7 @@
 -#}
 {% if bio %}
 {% if bio.note %}
-{{ bio.note | escapeMarkdown }}
+{{ bio.note | markdownLinks }}
 
 {% endif %}
 {% for link in bio.links %}

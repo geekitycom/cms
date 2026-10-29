@@ -84,12 +84,15 @@ links are numbered through the page.
 A site theme that writes a `layouts/front-page.md.njk`, such as the one under
 [A front page](markdown.md#a-front-page), gets the same front page in Gemini
 without a Gemini template. The bio's links and the list of newest posts are
-Markdown lists of links, which convert to link lines:
+Markdown lists of links, which convert to link lines. A link inside the bio's
+note becomes a numbered reference in its text and a link line after it:
 
 ```
 Who writes this.
 
-Wrote the *first* program.
+Wrote the first program. Start here[1].
+
+=> /about/index.gmi 1: /about/index.gmi
 
 => https://ada.example Her notes
 

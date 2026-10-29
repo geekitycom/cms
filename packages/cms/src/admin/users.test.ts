@@ -291,6 +291,15 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     }
   });
 
+  it('says the bio takes Markdown', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    const { html } = await editScreen(agent, idOf(cms.config.dataDir, 'ada'));
+
+    assert.match(html, /about them, in Markdown: \[words\]\(url\) makes a link/);
+  });
+
   it('holds the account, the profile and what this person is emailed about', async () => {
     const cms = await siteSendingMail();
     const agent = await signedIn(cms);

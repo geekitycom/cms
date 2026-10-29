@@ -1,6 +1,7 @@
 import nunjucks from 'nunjucks';
 import type { Environment } from 'nunjucks';
 
+import { rewriteMarkdownLinks } from '../content/markdown-links.ts';
 import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { formatFileSize } from '../util/file-size.ts';
 import { escapeMarkdown } from './markdown-page.ts';
@@ -72,11 +73,25 @@ function addMarkdownFilters(environment: Environment): void {
   for (const name of ['markdownUrl', 'geminiUrl']) {
     environment.addFilter(name, function (this: unknown, value: unknown) {
       const url = filterText(value);
-      const lookup = (this as { lookup?: (name: string) => unknown } | undefined)?.lookup;
-      const write = typeof lookup === 'function' ? lookup.call(this, name) : undefined;
-      return typeof write === 'function' ? (write as MarkdownUrl)(url) : url;
+      const write = contextUrl(this, name);
+      return write === undefined ? url : write(url);
     });
   }
+  environment.addFilter('markdownLinks', function (this: unknown, value: unknown) {
+    const text = filterText(value);
+    const write = contextUrl(this, 'markdownUrl');
+    if (write === undefined) return text;
+    return rewriteMarkdownLinks(text, (href) => {
+      const written = write(href);
+      return written === href ? undefined : written;
+    });
+  });
+}
+
+function contextUrl(filter: unknown, name: string): MarkdownUrl | undefined {
+  const lookup = (filter as { lookup?: (name: string) => unknown } | undefined)?.lookup;
+  const write = typeof lookup === 'function' ? lookup.call(filter, name) : undefined;
+  return typeof write === 'function' ? (write as MarkdownUrl) : undefined;
 }
 
 function nest(text: string, width: number): string {

@@ -72,8 +72,8 @@
       {%- if bioAuthor.location %} from <span class="p-locality">{{ bioAuthor.location }}</span>{% endif %}.
     </p>
 
-    {%- if bioAuthor.bio %}
-    <p class="bio-note p-note">{{ bioAuthor.bio }}</p>
+    {%- if bioAuthor.bioHtml %}
+    <div class="bio-note p-note">{{ bioAuthor.bioHtml | trim | safe }}</div>
     {%- endif %}
 
     {%- if bioAuthor.links.length %}

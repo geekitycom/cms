@@ -341,7 +341,7 @@ describe('what heads a listing (AC #3)', () => {
       /<a class="u-url p-name" rel="author me" href="\/author\/ada\/">Ada Lovelace<\/a>/,
       'no p-name',
     );
-    assert.match(inside, /class="[^"]*p-note">Wrote the first program\.</, 'no p-note');
+    assert.match(inside, /class="[^"]*p-note"><p>Wrote the first program\.</, 'no p-note');
     assert.match(
       inside,
       /<a class="u-url" rel="me" href="https:\/\/ada\.example">Site<\/a>/,

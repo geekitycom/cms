@@ -9,7 +9,9 @@ in the admin. That screen is the only place where identity is written:
 | `author.name`     | What to print: their display name, else their username, else the raw name the file gives.                      |
 | `author.url`      | Their archive, `/author/{username}/`. **Absent** when the name matches no user of the site.                    |
 | `author.username` | Their login. Absent for the same reason `url` is.                                                              |
-| `author.bio`      | What they wrote about themselves, when they wrote any.                                                         |
+| `author.bio`      | What they wrote about themselves, as the Markdown they typed. Absent when they wrote none.                     |
+| `author.bioHtml`  | The bio as HTML, a `<p>` per paragraph. Raw HTML typed in the bio is escaped. Absent with `bio`.               |
+| `author.bioText`  | The bio's words with the Markdown removed, for structured data and other plain text. Absent with `bio`.        |
 | `author.avatar`   | Their picture, as a path or URL. Absent when they have none.                                                   |
 | `author.jobTitle` | What they do, when their profile says.                                                                         |
 | `author.location` | Where they are, as they wrote it.                                                                              |
@@ -19,7 +21,13 @@ in the admin. That screen is the only place where identity is written:
 prints it in `{% if author %}`. Wrap the link in `{% if author.url %}`. A file
 can name a person who has no account on the site, such as a guest author or a
 colleague whose account was deleted. The theme prints that name without a
-link. [The bio](page-shell.md#the-bio) does both. The theme prints the bio in
+link. [The bio](page-shell.md#the-bio) does both.
+
+The bio is a short piece of Markdown: links, emphasis and code, and paragraphs
+if it needs them. Print `bioHtml` in HTML, through `safe`, since the CMS
+has escaped any raw HTML in it already. Print `bioText` where only text fits,
+such as a `meta` description or JSON-LD. `bio` is the Markdown as written, for
+a Markdown template. A bio with no Markdown in it reads the same in all three. The theme prints the bio in
 place of the `partials/byline.njk` it used to have.
 
 ## The author archive

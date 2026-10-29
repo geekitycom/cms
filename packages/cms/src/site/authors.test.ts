@@ -30,6 +30,8 @@ describe('what a theme is given as `author`', () => {
       name: 'Ada Lovelace',
       url: '/author/ada/',
       bio: 'Wrote the first program.',
+      bioHtml: '<p>Wrote the first program.</p>\n',
+      bioText: 'Wrote the first program.',
       avatar: '/uploads/ada.jpg',
       // Every profile link is published rel="me" whether or not the Links box
       // typed it, which is what that box is for (TASK-114).

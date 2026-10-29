@@ -61,43 +61,47 @@ same for another format. The `.gmi` page converts these templates, and a
 theme's Gemini templates read the same context. See
 [The Gemini representation](gemini.md).
 
+A piece of Markdown in the context, such as `bio.note`, has its links written
+inside it. The `markdownLinks` filter passes each of them through
+`markdownUrl` and leaves the rest of the text as written.
+
 ## Context
 
-| Key               | What it is                                                                                                                 |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `site`            | `content/_data/site.json`.                                                                                                 |
-| `url`             | The path the page is served at.                                                                                            |
-| `title`           | The heading to write. Absent when the page has no title, or when its body opens with a level-one heading of its own.       |
-| `home`            | A link to the homepage.                                                                                                    |
-| `previous`        | A post's older neighbour, or a listing's newer page. Absent when there is none.                                            |
-| `next`            | A post's newer neighbour, or a listing's older page. Absent when there is none.                                            |
-| `byline`          | On a post whose author is a user: the author's display name and the URL of their archive.                                  |
-| `bio`             | On an author archive, and on the homepage of a site whose author is a user: `name`, `url`, `note` (their bio) and `links`. |
-| `navigation`      | Every item of every menu the site stores, each URL once, in the order the menus are stored.                                |
-| `menus`           | The same menus by name, as the HTML has them. See [Navigation](navigation.md).                                             |
-| `soloAuthor`      | The site's author, on a site whose author is a user. The same object the HTML has.                                         |
-| `newestPosts`     | On the homepage, when it is a page: the function the front page layout has. See [Template context](template-context.md).   |
-| `staticFrontPage` | True on the homepage when it is a page, false everywhere else.                                                             |
-| `archiveMonths`   | On a page whose front matter says `archive: true`: every published post as `{ month, posts }`, newest month first.         |
-| `type`            | `post`, `page`, `listing`, `comment` or `status`. The search is a `listing`, and a 404, 410, 500 or 503 is a `status`.     |
-| `categories`      | On a post: its categories, in the order the file lists them.                                                               |
-| `tags`            | On a post: its tags, in the order the file lists them.                                                                     |
-| `backlinks`       | On a post or a page: the site's posts and pages that link to it, newest first, as the HTML's Linked from list has them.    |
-| `feeds`           | The feeds the HTML head advertises for the page, in the head's order.                                                      |
-| `postType`        | On a post: its kind, as the HTML has it, such as `reply`, `like`, `rsvp`, `event` or `review`.                             |
-| `cites`           | On a post: what it answers or cites, one entry for its reply target, then one for each like, repost and bookmark.          |
-| `rsvp`            | On an RSVP: its `value` (`yes`, `no`, `maybe` or `interested`) and its `label`, such as `Going`.                           |
-| `event`           | On an event: `start`, `end` when it has one, and `location`, the same object `event.njk` reads.                            |
-| `review`          | On a review: the HTML's `item`, `kindLabel`, `rating` and `best`, with the review line in plain words.                     |
-| `location`        | On a post with a location: what Settings > Privacy shares of it, the same object `location.njk` reads. Absent otherwise.   |
-| `lang`            | On a post whose front matter names its language: that language. Dates are written in it.                                   |
-| `enclosure`       | On a post with a recording: the object `recording.njk` reads. Absent otherwise.                                            |
-| `photos`          | On a post: its photos, in the order the HTML draws them, each a `url` and an `alt`. Empty when it has none.                |
-| `conversation`    | On a post or a page that has been answered: what `conversation.njk` draws, in Markdown. Absent when nothing has been said. |
-| `commentForm`     | On a post or a page taking comments: the `url` of the comment form on its HTML page. Absent when it is closed.             |
-| `contactForm`     | On a page whose front matter says `contact: true`: the `url` of the contact form on its HTML page.                         |
-| `webmention`      | The site's webmention endpoint, when it takes webmentions.                                                                 |
-| `thread`          | On a comment's own page: the post, the comments it answers and the comment itself. See below.                              |
+| Key               | What it is                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `site`            | `content/_data/site.json`.                                                                                                                             |
+| `url`             | The path the page is served at.                                                                                                                        |
+| `title`           | The heading to write. Absent when the page has no title, or when its body opens with a level-one heading of its own.                                   |
+| `home`            | A link to the homepage.                                                                                                                                |
+| `previous`        | A post's older neighbour, or a listing's newer page. Absent when there is none.                                                                        |
+| `next`            | A post's newer neighbour, or a listing's older page. Absent when there is none.                                                                        |
+| `byline`          | On a post whose author is a user: the author's display name and the URL of their archive.                                                              |
+| `bio`             | On an author archive, and on the homepage of a site whose author is a user: `name`, `url`, `note` (their bio, as the Markdown they wrote) and `links`. |
+| `navigation`      | Every item of every menu the site stores, each URL once, in the order the menus are stored.                                                            |
+| `menus`           | The same menus by name, as the HTML has them. See [Navigation](navigation.md).                                                                         |
+| `soloAuthor`      | The site's author, on a site whose author is a user. The same object the HTML has.                                                                     |
+| `newestPosts`     | On the homepage, when it is a page: the function the front page layout has. See [Template context](template-context.md).                               |
+| `staticFrontPage` | True on the homepage when it is a page, false everywhere else.                                                                                         |
+| `archiveMonths`   | On a page whose front matter says `archive: true`: every published post as `{ month, posts }`, newest month first.                                     |
+| `type`            | `post`, `page`, `listing`, `comment` or `status`. The search is a `listing`, and a 404, 410, 500 or 503 is a `status`.                                 |
+| `categories`      | On a post: its categories, in the order the file lists them.                                                                                           |
+| `tags`            | On a post: its tags, in the order the file lists them.                                                                                                 |
+| `backlinks`       | On a post or a page: the site's posts and pages that link to it, newest first, as the HTML's Linked from list has them.                                |
+| `feeds`           | The feeds the HTML head advertises for the page, in the head's order.                                                                                  |
+| `postType`        | On a post: its kind, as the HTML has it, such as `reply`, `like`, `rsvp`, `event` or `review`.                                                         |
+| `cites`           | On a post: what it answers or cites, one entry for its reply target, then one for each like, repost and bookmark.                                      |
+| `rsvp`            | On an RSVP: its `value` (`yes`, `no`, `maybe` or `interested`) and its `label`, such as `Going`.                                                       |
+| `event`           | On an event: `start`, `end` when it has one, and `location`, the same object `event.njk` reads.                                                        |
+| `review`          | On a review: the HTML's `item`, `kindLabel`, `rating` and `best`, with the review line in plain words.                                                 |
+| `location`        | On a post with a location: what Settings > Privacy shares of it, the same object `location.njk` reads. Absent otherwise.                               |
+| `lang`            | On a post whose front matter names its language: that language. Dates are written in it.                                                               |
+| `enclosure`       | On a post with a recording: the object `recording.njk` reads. Absent otherwise.                                                                        |
+| `photos`          | On a post: its photos, in the order the HTML draws them, each a `url` and an `alt`. Empty when it has none.                                            |
+| `conversation`    | On a post or a page that has been answered: what `conversation.njk` draws, in Markdown. Absent when nothing has been said.                             |
+| `commentForm`     | On a post or a page taking comments: the `url` of the comment form on its HTML page. Absent when it is closed.                                         |
+| `contactForm`     | On a page whose front matter says `contact: true`: the `url` of the contact form on its HTML page.                                                     |
+| `webmention`      | The site's webmention endpoint, when it takes webmentions.                                                                                             |
+| `thread`          | On a comment's own page: the post, the comments it answers and the comment itself. See below.                                                          |
 
 `home`, `previous`, `next` and `byline` are each a `label` and a `url`. So is
 each of `bio.links`, each `navigation` item, and each of `categories` and
@@ -303,7 +307,10 @@ package's:
 ```
 
 `partials/markdown-bio.md.njk` prints `bio.note` and `bio.links` as the
-default header does, and nothing when there is no `bio`.
+default header does, and nothing when there is no `bio`. The note is Markdown
+already, so the partial prints it as written through the `markdownLinks`
+filter, which gives each link to a page of this site its `.md` URL and leaves
+every other link as it is.
 `partials/markdown-post-list.md.njk` prints `postList`, entries in the shape
 `newestPosts(count)` gives, one line each as a listing's Markdown has them.
 Between the header and the footer, the page reads:
@@ -311,7 +318,7 @@ Between the header and the footer, the page reads:
 ```markdown
 Who writes this.
 
-Wrote the \*first\* program.
+Wrote the _first_ program. Start [here](/about/index.md).
 
 - [Her notes](https://ada.example)
 

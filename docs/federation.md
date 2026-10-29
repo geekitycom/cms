@@ -535,7 +535,7 @@ stored in `data/users.json`:
 | Actor field         | User record field |
 | ------------------- | ----------------- |
 | `name`              | Display name      |
-| `summary`           | Bio               |
+| `summary`           | Bio, as HTML      |
 | `icon`              | Avatar            |
 | `attachment`        | Links             |
 | `preferredUsername` | Login             |
@@ -545,6 +545,11 @@ always show the same details. `alsoKnownAs` lists every URL the user answers
 to: the actor id, the archive, and `/@{username}`. The profile has two more
 fields that the actor does not carry, a job title and a location. A theme can
 print them beside the name.
+
+The bio is Markdown. The `summary` is that Markdown rendered as HTML, a `<p>`
+per paragraph, with every link to this site made absolute. Raw HTML typed in
+the bio is escaped rather than passed on, so a `<` or `&` in it reaches other
+servers as text.
 
 The avatar is a path like `/uploads/2026/09/me.png`, stored with the site's
 other uploads. The actor carries it as an absolute URL, resolved against the

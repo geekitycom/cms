@@ -1,4 +1,5 @@
 import { authorHref, userForAuthor } from '../content/authors.ts';
+import { bioHtml, bioText } from './bio.ts';
 import type { ProfileLink, User } from './users.ts';
 import { relText } from './navigation.ts';
 
@@ -57,8 +58,12 @@ export interface AuthorContext {
   name: string;
   /** Their archive, when the name resolved to a user. Absent when it did not. */
   url?: string | undefined;
-  /** What they say about themselves, when they have said anything. */
+  /** What they say about themselves, when they have said anything: Markdown, as written. */
   bio?: string | undefined;
+  /** The bio as HTML, a `<p>` per paragraph, with any raw HTML in it escaped. */
+  bioHtml?: string | undefined;
+  /** The bio's words with the Markdown taken off. */
+  bioText?: string | undefined;
   /** Their picture, as the path or URL it is served at. */
   avatar?: string | undefined;
   /** What they do, when their profile says. */
@@ -106,7 +111,9 @@ export function profileContext(user: User): AuthorContext {
     username: user.username,
     name: profile?.displayName ?? user.username,
     url: authorHref(user.username),
-    ...(profile?.bio === undefined ? {} : { bio: profile.bio }),
+    ...(profile?.bio === undefined
+      ? {}
+      : { bio: profile.bio, bioHtml: bioHtml(profile.bio), bioText: bioText(profile.bio) }),
     ...(profile?.avatar === undefined ? {} : { avatar: profile.avatar }),
     ...(profile?.jobTitle === undefined ? {} : { jobTitle: profile.jobTitle }),
     ...(profile?.location === undefined ? {} : { location: profile.location }),

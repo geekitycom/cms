@@ -261,7 +261,7 @@ describe('a static front page’s Markdown with the author’s card and the newe
           '',
           'Who writes this.',
           '',
-          'Wrote the \\*first\\* program.',
+          'Wrote the *first* program.',
           '',
           '- [Her notes](https://ada.example)',
           '',
@@ -283,7 +283,7 @@ describe('a static front page’s Markdown with the author’s card and the newe
         [
           'Who writes this.',
           '',
-          'Wrote the *first* program.',
+          'Wrote the first program.',
           '',
           '=> https://ada.example Her notes',
           '',

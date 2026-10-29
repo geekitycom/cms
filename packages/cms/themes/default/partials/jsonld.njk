@@ -110,7 +110,7 @@
       {{- member("name", siteAuthor.name) }}
       {{- member("url", personUrl) }}
       {{- member("image", siteAuthor.avatar | absoluteUrl if siteAuthor.avatar else "") }}
-      {{- member("description", siteAuthor.bio) }}
+      {{- member("description", siteAuthor.bioText) }}
       {{- member("jobTitle", siteAuthor.jobTitle) }}
       {{- member("address", address) }}
       {{- member("sameAs", sameAs if sameAs.length else "") }}
