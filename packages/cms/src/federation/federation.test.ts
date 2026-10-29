@@ -85,6 +85,14 @@ async function site(
   return instance;
 }
 
+let shared: Promise<Cms> | undefined;
+
+/** One default {@link site}, booted once and shared by the tests that only read it. */
+function sharedSite(): Promise<Cms> {
+  shared ??= site();
+  return shared;
+}
+
 /** A request to the site's own origin, since Fedify answers by origin. */
 async function get(instance: Cms, pathname: string, accept?: string): Promise<Response> {
   const request = new Request(
@@ -131,7 +139,7 @@ describe('WebFinger', () => {
   }
 
   it('resolves acct:{username}@{host} to the actor (AC #1)', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const response = await webFinger(instance, `acct:${ADA}@blog.example`);
 
@@ -154,7 +162,7 @@ describe('WebFinger', () => {
   });
 
   it('lists the author URL and /@{username} as aliases', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const document = (await (await webFinger(instance, `acct:${ADA}@blog.example`)).json()) as {
       aliases: string[];
@@ -164,7 +172,7 @@ describe('WebFinger', () => {
   });
 
   it('answers for the author URL and for /@{username} as well as the handle', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     for (const resource of [ACTOR_URL, `${BASE_URL}/@${ADA}`, `${ADA}@blog.example`]) {
       const response = await webFinger(instance, resource);
@@ -175,7 +183,7 @@ describe('WebFinger', () => {
   });
 
   it('answers a handle whose host is spelled in another case (AC #1)', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const response = await webFinger(instance, `acct:${ADA}@BLOG.EXAMPLE`);
 
@@ -186,7 +194,7 @@ describe('WebFinger', () => {
   });
 
   it('answers a handle written with the leading @ a person reads (AC #2)', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     for (const resource of [`acct:@${ADA}@blog.example`, `@${ADA}@blog.example`]) {
       const response = await webFinger(instance, resource);
@@ -197,7 +205,7 @@ describe('WebFinger', () => {
   });
 
   it('answers an actor URL whose host is spelled in another case (AC #4)', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const response = await webFinger(instance, `https://BLOG.EXAMPLE/author/${ADA}/`);
 
@@ -211,7 +219,7 @@ describe('WebFinger', () => {
   // username exactly, so `Ada` is somebody else, and WebFinger must not be the
   // one place where two accounts quietly become one.
   it('does not answer for a username spelled in another case (AC #3)', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     for (const resource of [
       `acct:Ada@blog.example`,
@@ -225,7 +233,7 @@ describe('WebFinger', () => {
   });
 
   it("carries the site's own spelling as the subject, whatever was asked for (AC #5)", async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     for (const resource of [
       `acct:${ADA}@BLOG.EXAMPLE`,
@@ -243,7 +251,7 @@ describe('WebFinger', () => {
   });
 
   it('is a 404 for a username nobody has', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     assert.equal((await webFinger(instance, 'acct:nobody@blog.example')).status, 404);
     assert.equal((await webFinger(instance, '')).status, 404);
@@ -252,7 +260,7 @@ describe('WebFinger', () => {
 
 describe('/@{username}', () => {
   it('redirects to the author archive', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const response = await get(instance, `/@${ADA}`);
 
@@ -261,7 +269,7 @@ describe('/@{username}', () => {
   });
 
   it('answers 404 for a handle nobody answers to (TASK-112 AC #4)', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     for (const pathname of [
       '/@nobody',
@@ -285,7 +293,7 @@ describe('/@{username}', () => {
 
 describe('a user actor', () => {
   it('answers the author URL with a Person built from the profile (AC #1)', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const response = await get(instance, `/author/${ADA}/`, 'application/activity+json');
 
@@ -315,7 +323,7 @@ describe('a user actor', () => {
   });
 
   it('is the archive to a browser at the same URL (AC #1)', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const page = await get(instance, `/author/${ADA}/`, 'text/html');
 
@@ -325,7 +333,7 @@ describe('a user actor', () => {
   });
 
   it('lists every URL it answers to as alsoKnownAs', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const actor = (await (
       await get(instance, `/author/${ADA}/`, 'application/activity+json')
@@ -335,7 +343,7 @@ describe('a user actor', () => {
   });
 
   it('lists the site host as an attribution domain, termed as Mastodon reads it (TASK-210 AC #1)', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const actor = (await (
       await get(instance, `/author/${ADA}/`, 'application/activity+json')
@@ -346,7 +354,7 @@ describe('a user actor', () => {
   });
 
   it('publishes an RSA public key and an Ed25519 assertion method', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const actor = (await (
       await get(instance, `/author/${ADA}/`, 'application/activity+json')
@@ -429,7 +437,7 @@ describe('a user actor', () => {
   });
 
   it('serves collections with no inline items: the outbox pages, the rest are empty', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     for (const collection of ['outbox', 'followers', 'following']) {
       const response = await get(
@@ -444,7 +452,7 @@ describe('a user actor', () => {
   });
 
   it('answers 404 for a username nobody has', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const response = await get(instance, '/author/someone-else/', 'application/activity+json');
 
@@ -452,7 +460,7 @@ describe('a user actor', () => {
   });
 
   it('no longer answers the site actor at /ap/ (AC #5)', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     for (const gone of [
       '/ap/actor',
@@ -726,7 +734,7 @@ describe('the followers collection', () => {
 
 describe('NodeInfo', () => {
   it('points /.well-known/nodeinfo at the 2.1 document', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const response = await get(instance, '/.well-known/nodeinfo');
 
@@ -742,7 +750,7 @@ describe('NodeInfo', () => {
     const { version } = await import('../../package.json', { with: { type: 'json' } }).then(
       (module) => module.default as { version: string },
     );
-    const instance = await site();
+    const instance = await sharedSite();
 
     const response = await get(instance, '/nodeinfo/2.1');
 
@@ -766,7 +774,7 @@ describe('NodeInfo', () => {
 
 describe('the CMS instance', () => {
   it('exposes the federation object so later work can send activities', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     assert.equal(typeof instance.federation.fetch, 'function');
   });
@@ -797,7 +805,7 @@ describe('the CMS instance', () => {
 
 describe('the rest of the app', () => {
   it('still answers a browser, so Fedify only claims its own paths', async () => {
-    const instance = await site();
+    const instance = await sharedSite();
 
     const home = await get(instance, '/', 'text/html');
     const health = await get(instance, '/_geekity/health');
