@@ -52,8 +52,14 @@ function whenChanged<T>(
         );
       };
       const watcher = watch(directory, check);
+      // Under load fs.watch has let a write go by unreported, so look again
+      // now and then as well.
+      const again = setInterval(check, 250);
       check();
-      return () => watcher.close();
+      return () => {
+        watcher.close();
+        clearInterval(again);
+      };
     },
     PROCESS_EVENT_TIMEOUT_MS,
   );
