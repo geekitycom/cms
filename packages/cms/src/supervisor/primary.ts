@@ -43,6 +43,8 @@ export interface SupervisorOptions {
   schedule(task: () => void, ms: number): Cancel;
   now(): number;
   log(line: string): void;
+  /** Print what a worker announces once it serves. */
+  announce(text: string): void;
   exit(code: number): void;
   watch?: PluginWatch | 'off' | undefined;
   pluginSettleMs?: number;
@@ -183,12 +185,14 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
         case 'ready':
           if (state.phase === 'booting' && state.worker === worker) {
             everServed = true;
+            options.announce(message.announcement);
             reloads.answer({ ok: true });
             serve(worker, message.pluginsFingerprint);
           } else if (state.phase === 'replacing' && state.next === worker) {
             state.deadline.cancel();
             state.old.send({ type: 'retire' });
             options.log('Reloaded: the new server is serving and the old one is retiring.');
+            options.announce(message.announcement);
             reloads.answer({ ok: true });
             serve(worker, message.pluginsFingerprint);
           }
@@ -347,6 +351,7 @@ export function superviseCluster(options: {
     },
     now: () => Date.now(),
     log,
+    announce: (text) => process.stdout.write(text),
     pluginSettleMs: options.pluginSettle * 1000,
     exit(code) {
       control.close();

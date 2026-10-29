@@ -22,7 +22,12 @@
 export const EXIT_FOR_REPLACEMENT = 1;
 
 export type WorkerMessage =
-  | { readonly type: 'ready'; readonly pluginsFingerprint: string }
+  | {
+      readonly type: 'ready';
+      readonly pluginsFingerprint: string;
+      /** What to print once the supervisor takes this worker on: its port, for one. */
+      readonly announcement: string;
+    }
   | { readonly type: 'boot-failed'; readonly error: string }
   | { readonly type: 'reload' }
   | { readonly type: 'drained' }
