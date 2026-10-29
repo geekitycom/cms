@@ -6,7 +6,9 @@ import path from 'node:path';
 import '../../__testing__/stub-notify-pings.ts';
 import { seedActorKeys } from '../../federation/__testing__/keys.ts';
 import { createCms, settleConfig } from '../../index.ts';
+import { countUsers } from '../../site/users.ts';
 import { sessionCookieName } from '../../web/session.ts';
+import { writeUsers } from './users.ts';
 import type { Cms, GeekityConfig, ServeContext } from '../../index.ts';
 
 /**
@@ -260,9 +262,21 @@ export async function signIn(cms: Cms, credentials = FIRST_ADMIN): Promise<Brows
   return agent;
 }
 
-/** A browser that is already signed in as the site's first admin. */
+/**
+ * A browser that is already signed in as the site's first admin.
+ *
+ * On a site with no users yet, the admin is written with a cheap hash and
+ * signed in through the login form, because the setup form hashes at
+ * production cost and nearly every admin test starts here. The setup form
+ * itself is tested through {@link setUpFirstAdmin}.
+ */
 export async function signedIn(cms: Cms): Promise<Browser> {
-  const agent = browser(cms);
-  await setUpFirstAdmin(agent);
-  return agent;
+  if (countUsers(cms.config.dataDir) > 0) {
+    const agent = browser(cms);
+    await setUpFirstAdmin(agent);
+    return agent;
+  }
+
+  writeUsers(cms.config.dataDir, [{ ...FIRST_ADMIN, createdAt: cms.config.now().toISOString() }]);
+  return signIn(cms);
 }
