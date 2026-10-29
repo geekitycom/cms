@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.47.0](https://github.com/geekitycom/cms/compare/v0.46.0...v0.47.0) (2026-10-29)
+
+
+### Features
+
+* **cms:** let a theme write a Markdown and Gemini template per layout ([c2375a2](https://github.com/geekitycom/cms/commit/c2375a2050c55ce621a9f69be1bcd7078593563c))
+* **cms:** render a user's bio as Markdown in every format ([67c9c97](https://github.com/geekitycom/cms/commit/67c9c97f613d10ecba68b1b70da252315765ef10))
+
+
+### Bug Fixes
+
+* **cms:** say the starter privacy page's scripts include hCaptcha when it is on ([f586245](https://github.com/geekitycom/cms/commit/f586245e1073395af9fd0298864a682a5abbc988))
+
 ## [0.46.0](https://github.com/geekitycom/cms/compare/v0.45.0...v0.46.0) (2026-10-28)
 
 
