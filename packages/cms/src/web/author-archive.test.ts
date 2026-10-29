@@ -7,8 +7,8 @@ import { after, describe, it } from 'node:test';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 /**
  * The author archive and its feeds, from the outside (TASK-67).
@@ -101,7 +101,7 @@ async function site(
         }),
   });
 
-  const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  const ada = addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   await setUserProfile({
     dataDir,
     userId: ada.id,
@@ -112,7 +112,7 @@ async function site(
       links: [{ label: 'Her notes', href: 'https://ada.example' }],
     },
   });
-  await createUser({ dataDir, username: 'grace', password: 'a password of hers' });
+  addUser({ dataDir, username: 'grace', password: 'a password of hers' });
 
   const instance = createCms({ contentDir, dataDir, watch: false });
   started.push(instance);

@@ -8,8 +8,8 @@ import { LOCATIONS, dataPath } from '../files/data-files.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 /**
  * A page's Markdown carries its place in the site: the front matter a Markdown
@@ -112,7 +112,7 @@ async function site(
     });
   }
 
-  const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  const ada = addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   await setUserProfile({
     dataDir,
     userId: ada.id,

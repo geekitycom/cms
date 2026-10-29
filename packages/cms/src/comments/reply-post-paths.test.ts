@@ -24,7 +24,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import { moderationLink, NOTIFICATION_FIELDS } from '../notifications/links.ts';
-import { writeSignInUsers } from '../site/__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import type { ModerationAction } from './moderate.ts';
 import { COMMENT_FIELDS } from './submission.ts';
@@ -98,7 +98,7 @@ async function site(extra: Record<string, string> = {}, config: GeekityConfig = 
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  writeSignInUsers(dataDir, [
+  writeUsers(dataDir, [
     {
       username: ADA.username,
       email: 'ada@example.com',

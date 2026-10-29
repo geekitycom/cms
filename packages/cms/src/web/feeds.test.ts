@@ -9,11 +9,11 @@ import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { listUsers, setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
 import { child, childrenNamed, parseXml } from './__testing__/xml.ts';
 import type { XmlElement } from './__testing__/xml.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -2155,7 +2155,7 @@ describe('who a feed credits (TASK-192)', () => {
         permalink: '/2026/08/nobodys/',
       }),
     });
-    const andrew = await createUser({
+    const andrew = addUser({
       dataDir: cms.config.dataDir,
       username: 'andrew',
       password: 'correct horse battery',

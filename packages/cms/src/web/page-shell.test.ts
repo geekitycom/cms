@@ -30,9 +30,9 @@ import { sandbox } from '../admin/__testing__/harness.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
 import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -128,12 +128,12 @@ const sharedSite = shared(site);
 const sharedAvatarSite = shared(siteWearingAnAvatar);
 
 /** Give the site a user with a profile, the way the users screen would. */
-async function addUser(
+async function addProfiledUser(
   cms: Cms,
   username: string,
   profile: Record<string, unknown>,
 ): Promise<void> {
-  const user = await createUser({
+  const user = addUser({
     dataDir: cms.config.dataDir,
     username,
     password: 'a password of theirs',
@@ -335,7 +335,7 @@ describe('the page shell (AC #1)', () => {
       author: 'Ada Lovelace',
       menus: { primary: [{ label: 'About', url: '/about/' }] },
     });
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace' });
 
     // A post, a listing, an author archive and a 404: every shape of page the
     // theme draws, including the two that used to read the menu out of a bio.
@@ -484,7 +484,7 @@ describe('the menus a theme renders by name (TASK-107)', () => {
 describe('the footer (AC #2, TASK-105)', () => {
   it('prints the year, the site author and the colophon', async () => {
     const cms = await site({ author: 'ada' });
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace' });
     const printed = footer(await body(cms, '/'));
 
     assert.match(printed, new RegExp(`&copy; ${YEAR}, Ada Lovelace`), 'no copyright line');
@@ -505,7 +505,7 @@ describe('the footer (AC #2, TASK-105)', () => {
         ],
       },
     });
-    await addUser(cms, 'ada', {
+    await addProfiledUser(cms, 'ada', {
       displayName: 'Ada Lovelace',
       links: [
         { label: 'Mastodon', href: 'https://example.social/@ada' },
@@ -872,7 +872,7 @@ describe('the colour scheme and mode the site chooses (TASK-488)', () => {
 describe('a post as an Open Graph article (TASK-146 AC #2)', () => {
   it('carries its times, its author and its tags', async () => {
     const cms = await siteWearingAnAvatar({ url: 'https://example.com', author: 'ada' });
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace' });
     const html = await body(cms, '/2026/09/hello/');
 
     assert.equal(metaContent(html, 'article:published_time'), '2026-09-02T09:00:00.000Z');
@@ -928,7 +928,7 @@ describe('the fediverse:creator tag (TASK-202)', () => {
         'posts/by.md': `---\ntitle: By someone\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/by/\nauthor: ${author}\n---\n\nHi.\n`,
       },
     );
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace' });
     return cms;
   }
 
@@ -1096,7 +1096,7 @@ describe('the share image falls back to a photo, then the icon (TASK-211)', () =
       {},
       BY_GRACE,
     );
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace', ...profile });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace', ...profile });
     return cms;
   }
 
@@ -1114,7 +1114,7 @@ describe('the share image falls back to a photo, then the icon (TASK-211)', () =
 
   it('pictures a post by the writer’s photo on a site with several authors (AC #1)', async () => {
     const cms = await siteWith({}, { icon: ICON });
-    await addUser(cms, 'grace', { displayName: 'Grace Hopper', avatar: PHOTO });
+    await addProfiledUser(cms, 'grace', { displayName: 'Grace Hopper', avatar: PHOTO });
 
     const html = await body(cms, '/2026/09/by-grace/');
     assert.equal(image(html), `https://example.com${PHOTO}`);
@@ -1277,7 +1277,7 @@ describe('the JSON-LD graph (TASK-81 AC #3)', () => {
       author: 'ada',
       ...settings,
     });
-    await addUser(cms, 'ada', {
+    await addProfiledUser(cms, 'ada', {
       displayName: 'Ada Lovelace',
       bio: 'Writes about engines.',
       avatar: '/uploads/2026/09/ada.png',
@@ -1419,7 +1419,7 @@ describe('the JSON-LD headline and image of an untitled post (TASK-201)', () => 
       {},
       NOTES,
     );
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace', ...profile });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace', ...profile });
     return cms;
   }
 
@@ -1749,7 +1749,7 @@ describe('every nav reads as links (TASK-111, TASK-187)', () => {
         "---\ntitle: Test 001\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/test-001/\n---\n\nBody with [a link](https://example.com/) in it.\n",
     });
     await cms.sync();
-    await addUser(cms, 'ada', {
+    await addProfiledUser(cms, 'ada', {
       displayName: 'Ada Lovelace',
       links: [{ label: 'Site', href: 'https://ada.example' }],
     });
@@ -2026,7 +2026,7 @@ describe('breadcrumbs (TASK-150)', () => {
           "---\ntitle: Older\ndate: '2026-09-01T09:00:00Z'\npermalink: /2026/09/older/\ncategories:\n  - general\n---\n\nBody.\n",
       },
     );
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace' });
     return cms;
   }
 

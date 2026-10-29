@@ -16,8 +16,8 @@ import { after, describe, it } from 'node:test';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -159,8 +159,12 @@ async function site(
 const sharedSite = shared(site);
 
 /** Give the site a user with a profile, the way the users screen would. */
-async function addUser(cms: Cms, username: string, profile: Record<string, string>): Promise<void> {
-  const user = await createUser({
+async function addProfiledUser(
+  cms: Cms,
+  username: string,
+  profile: Record<string, string>,
+): Promise<void> {
+  const user = addUser({
     dataDir: cms.config.dataDir,
     username,
     password: 'a password of theirs',
@@ -195,7 +199,7 @@ function entries(html: string): string[] {
 describe('siteAuthor, on every page (AC #1)', () => {
   it('is the profile behind the site author setting wherever the site is read', async () => {
     const cms = await site({ author: 'Ada Lovelace' });
-    await addUser(cms, 'ada', {
+    await addProfiledUser(cms, 'ada', {
       displayName: 'Ada Lovelace',
       jobTitle: 'Analyst',
       location: 'London',
@@ -220,8 +224,8 @@ describe('siteAuthor, on every page (AC #1)', () => {
 
   it('is the entry’s own author on a post that names somebody else', async () => {
     const cms = await site({ author: 'grace' });
-    await addUser(cms, 'grace', { displayName: 'Grace Hopper', jobTitle: 'Rear Admiral' });
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace', location: 'London' });
+    await addProfiledUser(cms, 'grace', { displayName: 'Grace Hopper', jobTitle: 'Rear Admiral' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace', location: 'London' });
 
     assert.equal(
       siteAuthorOf(await body(cms, '/posts/beta/')),
@@ -237,8 +241,8 @@ describe('siteAuthor, on every page (AC #1)', () => {
 
   it('is the archive’s user on an author archive', async () => {
     const cms = await site({ author: 'grace' });
-    await addUser(cms, 'grace', { displayName: 'Grace Hopper' });
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace', jobTitle: 'Analyst' });
+    await addProfiledUser(cms, 'grace', { displayName: 'Grace Hopper' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace', jobTitle: 'Analyst' });
 
     assert.equal(siteAuthorOf(await body(cms, '/author/ada/')), 'Ada Lovelace|ada|Analyst|');
   });
@@ -252,7 +256,7 @@ describe('siteAuthor, on every page (AC #1)', () => {
 
   it('is absent when the site names no author at all', async () => {
     const cms = await site();
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace' });
 
     assert.equal(siteAuthorOf(await body(cms, '/')), 'nobody');
   });
@@ -288,7 +292,7 @@ describe('summary, on every listing entry (AC #2)', () => {
 
   it('is on the entries of a taxonomy archive and an author archive too', async () => {
     const cms = await site();
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace' });
 
     assert.deepEqual(entries(await body(cms, '/tag/shared/')), [
       'true:Gamma|Body of gamma.',

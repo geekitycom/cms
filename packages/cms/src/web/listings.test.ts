@@ -16,10 +16,10 @@ import { after, describe, it } from 'node:test';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
 import { createTemplateEnvironment } from '../theme/templates.ts';
 import { systemClock } from '../util/clock.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -324,7 +324,7 @@ describe('what heads a listing (AC #3)', () => {
 
   it('keeps the h-card on an author archive', async () => {
     const cms = await site(POSTS, {}, {}, async (dataDir) => {
-      const user = await createUser({ dataDir, username: 'ada', password: 'a password of hers' });
+      const user = addUser({ dataDir, username: 'ada', password: 'a password of hers' });
       await setUserProfile({
         dataDir,
         userId: user.id,

@@ -9,7 +9,7 @@ import { FIRST_ADMIN, browser, sandbox, signIn } from '../admin/__testing__/harn
 import type { Browser } from '../admin/__testing__/harness.ts';
 import type { Document } from '../content/document.ts';
 import type { Cms } from '../index.ts';
-import { writeSignInUsers } from '../site/__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { commentsFile } from './records.ts';
 import { COMMENT_FIELDS } from './submission.ts';
@@ -94,9 +94,7 @@ async function site(extra: Record<string, string> = {}): Promise<Cms> {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  writeSignInUsers(dataDir, [
-    { username: ADA.username, profile: { displayName: ADA.displayName } },
-  ]);
+  writeUsers(dataDir, [{ username: ADA.username, profile: { displayName: ADA.displayName } }]);
 
   const cms = await box.open({ contentDir, dataDir, baseUrl: BASE_URL, now: () => NOW });
   logNote(cms, { id: NOTE, url: NOTE_URL, inReplyTo: `${BASE_URL}${POST_URL}` });

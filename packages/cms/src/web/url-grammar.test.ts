@@ -6,8 +6,8 @@ import { after, describe, it } from 'node:test';
 
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from './__testing__/users.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -48,7 +48,7 @@ async function site(files: Record<string, string> = CONTENT): Promise<Cms> {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   const instance = createCms({ contentDir, dataDir, watch: false });
   started.push(instance);
   await instance.sync();

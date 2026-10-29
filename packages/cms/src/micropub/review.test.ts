@@ -10,7 +10,7 @@ import { FIRST_ADMIN, sandbox } from '../admin/__testing__/harness.ts';
 import { postTypeOf } from '../content/post-type.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
-import { writeSignInUsers } from '../site/__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 
 remoteHostsDoNotExist();
@@ -30,7 +30,7 @@ interface Site {
 async function site(): Promise<Site> {
   const contentDir = await box.dir('geekity-micropub-review-content-');
   const dataDir = await box.dir('geekity-micropub-review-data-');
-  writeSignInUsers(dataDir);
+  writeUsers(dataDir);
   const cms = await box.open({
     contentDir,
     dataDir,

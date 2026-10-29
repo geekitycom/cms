@@ -21,10 +21,10 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import { setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
 import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 import type { Cms } from '../index.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -122,7 +122,7 @@ async function site(
   const cms = await box.open({ contentDir, dataDir, now: () => new Date(NOW) });
 
   if (profile !== null) {
-    const user = await createUser({ dataDir, username: 'ada', password: 'a password of hers' });
+    const user = addUser({ dataDir, username: 'ada', password: 'a password of hers' });
     await setUserProfile({ dataDir, userId: user.id, profile });
   }
 

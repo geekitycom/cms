@@ -10,8 +10,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { after, describe, it, mock } from 'node:test';
 
-import { csrfField, sandbox } from '../admin/__testing__/harness.ts';
-import { signedIn } from './__testing__/users.ts';
+import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { statuses } from '../admin/__testing__/statuses.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';

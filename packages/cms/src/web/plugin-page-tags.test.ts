@@ -5,9 +5,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { csrfField, sandbox } from '../admin/__testing__/harness.ts';
+import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { signedIn } from './__testing__/users.ts';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin, PluginHost, PluginPageTags, PluginPageTagsContext } from '../plugin.ts';
 import { pluginRegistryOptions } from '../__testing__/plugin-registry-options.ts';

@@ -6,8 +6,8 @@ import { after, describe, it } from 'node:test';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -92,7 +92,7 @@ async function site(
       ...theme,
     });
   }
-  const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  const ada = addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   await setUserProfile({
     dataDir,
     userId: ada.id,

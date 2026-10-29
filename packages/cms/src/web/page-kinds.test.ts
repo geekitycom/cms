@@ -15,7 +15,7 @@ import { after, describe, it } from 'node:test';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -74,7 +74,7 @@ async function site(settings: Record<string, unknown> = {}): Promise<Cms> {
     ),
   });
 
-  const user = await createUser({ dataDir, username: 'ada', password: 'a password of hers' });
+  const user = addUser({ dataDir, username: 'ada', password: 'a password of hers' });
   await setUserProfile({ dataDir, userId: user.id, profile: { displayName: 'Ada Lovelace' } });
 
   return box.open({ contentDir, dataDir, now: () => new Date(NOW) });

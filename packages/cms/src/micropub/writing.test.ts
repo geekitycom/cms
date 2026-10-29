@@ -6,7 +6,7 @@ import { FIRST_ADMIN, sandbox } from '../admin/__testing__/harness.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
-import { writeSignInUsers } from '../site/__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { readWritingLedger } from '../writing/ledger.ts';
@@ -24,7 +24,7 @@ const ALL: Scope[] = ['create', 'update'];
 
 async function site(): Promise<{ cms: Cms; grace: User; token: string }> {
   const dataDir = await box.dir('geekity-micropub-writing-data-');
-  writeSignInUsers(dataDir, [{ username: FIRST_ADMIN.username }, { username: 'grace' }]);
+  writeUsers(dataDir, [{ username: FIRST_ADMIN.username }, { username: 'grace' }]);
   const cms = await box.site({ dataDir, baseUrl: BASE, now: () => NOW });
   const grace = findUser(dataDir, 'grace');
   assert.ok(grace !== undefined);

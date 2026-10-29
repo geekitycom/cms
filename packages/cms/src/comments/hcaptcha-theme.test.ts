@@ -12,7 +12,7 @@ import { parseDocument } from '../content/parser.ts';
 import type { ChallengeWidget, FormChallenge } from '../forms/challenge.ts';
 import { challengeWidgetOf } from '../forms/challenge.ts';
 import type { Cms } from '../index.ts';
-import { writeSignInUsers } from '../site/__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { COMMENT_POST_PATH, commentForm, signedInCommentForm } from './form.ts';
 import type { CommentViewer } from './form.ts';
 import { HCAPTCHA_RESPONSE_FIELD, HCAPTCHA_SCRIPT_URL } from './hcaptcha.ts';
@@ -115,7 +115,7 @@ async function site(options: { paired?: boolean; status?: string } = {}): Promis
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  writeSignInUsers(dataDir, [{ username: ADMIN.username, email: ADMIN.email }]);
+  writeUsers(dataDir, [{ username: ADMIN.username, email: ADMIN.email }]);
   if (options.paired !== false) {
     await settingsOver({ contentDir, dataDir }).set(
       'hcaptcha',

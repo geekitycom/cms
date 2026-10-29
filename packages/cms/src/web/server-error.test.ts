@@ -10,9 +10,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import type { TestContext } from 'node:test';
 
-import { sandbox } from '../admin/__testing__/harness.ts';
+import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { signedIn } from './__testing__/users.ts';
 import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 
 const box = sandbox();

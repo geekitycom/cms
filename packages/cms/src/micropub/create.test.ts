@@ -18,7 +18,7 @@ import { addFollower } from '../federation/records.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
-import { writeSignInUsers } from '../site/__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 
 remoteHostsDoNotExist();
@@ -43,7 +43,7 @@ interface EditorSite {
 /** A site whose first admin, ada, holds a token with `scopes`. */
 async function site(scopes: Scope[] = ['create'], config: GeekityConfig = {}): Promise<Site> {
   const dataDir = await box.dir('geekity-micropub-create-data-');
-  writeSignInUsers(dataDir);
+  writeUsers(dataDir);
   const cms = await box.open({
     contentDir: await box.dir('geekity-micropub-create-content-'),
     dataDir,

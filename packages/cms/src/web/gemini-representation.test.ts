@@ -8,7 +8,7 @@ import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { RECHECK_MS } from '../maintenance.ts';
 import { setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -100,7 +100,7 @@ async function site(settings: Record<string, unknown> = {}): Promise<Cms> {
     ...FILES,
     '_data/site.json': JSON.stringify({ ...SITE, ...settings }),
   });
-  const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  const ada = addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   await setUserProfile({ dataDir, userId: ada.id, profile: { displayName: 'Ada Lovelace' } });
   const cms = await box.open({
     contentDir,

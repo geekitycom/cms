@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
-import { writeSignInUsers } from './__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { hashPassword } from './passwords.ts';
 import {
   ConflictingActorIdError,
@@ -660,7 +660,7 @@ describe('a login and a database that may be deleted (AC #2)', () => {
 
   it('refuses a session whose user the file no longer holds', async () => {
     const dataDir = await box.dir('geekity-accounts-gone-data-');
-    writeSignInUsers(dataDir, [{ username: FIRST_ADMIN.username }, { username: 'grace' }]);
+    writeUsers(dataDir, [{ username: FIRST_ADMIN.username }, { username: 'grace' }]);
     const cms = await box.site({ dataDir });
     const grace = findUser(dataDir, 'grace');
     assert.ok(grace !== undefined);

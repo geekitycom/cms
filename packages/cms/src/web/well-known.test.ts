@@ -8,8 +8,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { browser, sandbox } from '../admin/__testing__/harness.ts';
-import { signedIn } from './__testing__/users.ts';
+import { browser, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { saveSettings } from '../admin/__testing__/settings.ts';
 import type { Cms } from '../index.ts';
 import { shared } from './__testing__/shared.ts';

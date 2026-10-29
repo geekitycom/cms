@@ -7,9 +7,9 @@ import { after, describe, it } from 'node:test';
 import { csrfField, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from './__testing__/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 
@@ -42,7 +42,7 @@ async function site(): Promise<Cms> {
     path.join(contentDir, '_data', 'site.json'),
     JSON.stringify({ title: 'A Site', author: 'ada' }),
   );
-  await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   return await box.open({ contentDir, dataDir, baseUrl: BASE, hostLookup: PUBLIC });
 }
 

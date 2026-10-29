@@ -8,7 +8,7 @@ import { mf2 } from 'microformats-parser';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -62,7 +62,7 @@ before(async () => {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  const ada = addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   await setUserProfile({ dataDir, userId: ada.id, profile: { displayName: 'Ada Lovelace' } });
   cms = await box.open({ contentDir, dataDir, baseUrl: BASE });
 });

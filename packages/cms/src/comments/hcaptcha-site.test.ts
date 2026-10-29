@@ -11,7 +11,7 @@ import type { CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
-import { writeSignInUsers } from '../site/__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { WEBMENTION_PATH } from '../webmention/endpoint.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { HCAPTCHA_RESPONSE_FIELD } from './hcaptcha.ts';
@@ -117,7 +117,7 @@ async function site(
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  writeSignInUsers(dataDir, [{ username: ADMIN.username, email: ADMIN.email }]);
+  writeUsers(dataDir, [{ username: ADMIN.username, email: ADMIN.email }]);
   if (options.paired !== false) await pair({ contentDir, dataDir }, 'the-site-key', '0xsecret');
 
   const provider = createMemoryMailProvider();

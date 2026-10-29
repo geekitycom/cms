@@ -11,7 +11,7 @@ import { sandbox } from '../admin/__testing__/harness.ts';
 import type { AuthorizationCode } from '../indieauth/grants.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
-import { writeSignInUsers } from '../site/__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 
 const box = sandbox();
@@ -43,7 +43,7 @@ async function site(grant: Partial<AuthorizationCode> = {}): Promise<Site> {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  writeSignInUsers(dataDir);
+  writeUsers(dataDir);
   const cms = await box.open({ contentDir, dataDir, baseUrl: BASE });
   const ada = findUser(dataDir, 'ada');
   assert.ok(ada !== undefined);

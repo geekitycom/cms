@@ -9,7 +9,7 @@ import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { FIRST_ADMIN, sandbox } from '../admin/__testing__/harness.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
-import { writeSignInUsers } from '../site/__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 
 remoteHostsDoNotExist();
@@ -33,7 +33,7 @@ async function site(): Promise<Site> {
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
   await writeFile(path.join(contentDir, '_data', 'syndicationTargets.json'), TARGETS, 'utf8');
   const dataDir = await box.dir('geekity-micropub-quill-data-');
-  writeSignInUsers(dataDir);
+  writeUsers(dataDir);
   const cms = await box.open({
     contentDir,
     dataDir,

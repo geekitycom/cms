@@ -3,8 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { sandbox } from '../admin/__testing__/harness.ts';
-import { signedIn } from './__testing__/users.ts';
+import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { saveSettings } from '../admin/__testing__/settings.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
 import type { Cms } from '../index.ts';

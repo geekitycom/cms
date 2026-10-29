@@ -11,7 +11,7 @@ import { COMMENT_POST_PATH } from './form.ts';
 import { commentsFile, readComments } from './records.ts';
 import { COMMENT_FIELDS } from './submission.ts';
 import type { CommentChecker, CommentSubmission } from '../forms/checker.ts';
-import { writeSignInUsers } from '../site/__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 
 /**
  * Commenting as yourself: what the form under a post looks like when the
@@ -73,7 +73,7 @@ async function site(
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, POST, 'utf8');
 
-  writeSignInUsers(dataDir, [
+  writeUsers(dataDir, [
     {
       username: ADA.username,
       email: ADA.email,

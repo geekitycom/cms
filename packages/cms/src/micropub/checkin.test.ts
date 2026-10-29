@@ -8,7 +8,7 @@ import type { LocationSharing } from '../content/location.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
 import { changeSiteSettings } from '../__testing__/site-settings.ts';
-import { writeSignInUsers } from '../site/__testing__/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 import { feedPathUnder } from '../web/feed-source.ts';
 import { OEMBED_PATH } from '../web/oembed.ts';
@@ -32,7 +32,7 @@ async function site(sharing: LocationSharing = 'none'): Promise<Site> {
     await changeSiteSettings(contentDir, { location_sharing: sharing });
   }
   const dataDir = await box.dir('geekity-micropub-checkin-data-');
-  writeSignInUsers(dataDir);
+  writeUsers(dataDir);
   const cms = await box.open({
     contentDir,
     dataDir,

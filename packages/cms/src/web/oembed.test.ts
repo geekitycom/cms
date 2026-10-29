@@ -20,12 +20,12 @@ import { sandbox, signIn } from '../admin/__testing__/harness.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
-import { createUser } from './__testing__/users.ts';
 import { schemeTokens } from '../theme/scheme-tokens.ts';
 import type { SchemeTokens } from '../theme/scheme-tokens.ts';
 import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 import { child, parseXml } from './__testing__/xml.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -81,7 +81,7 @@ async function site(
     await writeFile(file, contents);
   }
 
-  const user = await createUser({ dataDir, username: 'ada', password: 'a password of hers' });
+  const user = addUser({ dataDir, username: 'ada', password: 'a password of hers' });
   await setUserProfile({ dataDir, userId: user.id, profile: { displayName: 'Ada Lovelace' } });
 
   return box.open({

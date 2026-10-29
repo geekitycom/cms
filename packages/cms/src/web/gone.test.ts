@@ -12,8 +12,8 @@ import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { createUser } from './__testing__/users.ts';
 import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const BASE_URL = 'https://blog.example';
 const ADA = { username: 'ada', password: 'correct horse battery' };
@@ -81,7 +81,7 @@ async function site(files: Record<string, string>): Promise<Site> {
       webmentions_receive: true,
     },
   });
-  await createUser({ dataDir, ...ADA });
+  addUser({ dataDir, ...ADA });
   seedActorKeys(dataDir, ADA.username);
   return { cms: await boot(contentDir, dataDir), contentDir, dataDir };
 }

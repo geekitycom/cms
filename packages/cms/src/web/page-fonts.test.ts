@@ -3,8 +3,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
 
-import { csrfField, sandbox } from '../admin/__testing__/harness.ts';
-import { signedIn } from './__testing__/users.ts';
+import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { BODY, BOLD, FAMILY, googleLookup, stubGoogle } from '../fonts/__testing__/google.ts';
 import type { StubbedGoogle } from '../fonts/__testing__/google.ts';
 import { FONT_FETCH_JOB } from '../fonts/index.ts';
