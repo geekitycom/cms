@@ -628,7 +628,7 @@ export function verifyUserPassword(
   if (user === undefined) {
     // Hash anyway, so a missing user and a wrong password take the same time
     // and the login form does not become a user enumerator.
-    verifyPasswordHash(DUMMY_HASH, password);
+    verifyPasswordHash(dummyPasswordHash(), password);
     return undefined;
   }
   if (!verifyPasswordHash(user.passwordHash, password)) return undefined;
@@ -655,10 +655,18 @@ function withoutHash(user: StoredUser): User {
 /**
  * A hash of a password no user has, so a login attempt for an unknown
  * username costs the same as one for a known name with the wrong password.
+ *
+ * Made on first use rather than at import: every process that loads the app
+ * would otherwise spend an argon2 run on it, most of them never seeing a login.
  */
-const DUMMY_HASH = hashPassword(
-  'a password no user has, hashed once so that verification is constant time',
-);
+let dummyHash: string | undefined;
+
+function dummyPasswordHash(): string {
+  dummyHash ??= hashPassword(
+    'a password no user has, hashed once so that verification is constant time',
+  );
+  return dummyHash;
+}
 
 /** The file as it is on disk: the users, and the next id to hand out. */
 export interface UsersFileContents {
