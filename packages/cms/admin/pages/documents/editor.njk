@@ -490,8 +490,8 @@
       {% call card() %}
         {% if not editorKind or editorKind.title != 'none' or form.title %}
           {% set titleHint %}{% if postKind == 'note' %}Add a title and the note becomes an article.{% endif %}{% endset %}
-          {#- A post may go without one, and is then a note; a page is always named. -#}
-          {{ field.text('editor-title', 'title', ('Title (optional)' if editorKind and editorKind.title != 'named' else 'Title'), value=form.title, required=(kind.type == "page"), autofocus=true, error=(error if errorField == 'editor-title' else ''), hintHtml=titleHint) }}
+          {#- A post may go without one, and is then a note; a page or a wiki page is always named. -#}
+          {{ field.text('editor-title', 'title', ('Title (optional)' if editorKind and editorKind.title != 'named' else 'Title'), value=form.title, required=(kind.type != "post"), autofocus=true, error=(error if errorField == 'editor-title' else ''), hintHtml=titleHint) }}
           {{ pluginActions('editor-title', editorActions['editor-title']) }}
         {% endif %}
 
@@ -623,8 +623,11 @@
 
       {% call collapse('Address', open.address, fields=true) %}
         {{ field.text('editor-slug', 'slug', 'Slug', value=form.slug, error=(error if errorField == 'editor-slug' else '')) }}
-        {% set permalinkHint %}Leave it empty to let the {{ kind.singular }} take the URL its slug implies.{% endset %}
-        {{ field.text('editor-permalink', 'permalink', 'Permalink', value=form.permalink, hintHtml=permalinkHint) }}
+        {#- A wiki page is at the wiki base and its slug, and takes no permalink of its own. -#}
+        {% if kind.type != "wiki" %}
+          {% set permalinkHint %}Leave it empty to let the {{ kind.singular }} take the URL its slug implies.{% endset %}
+          {{ field.text('editor-permalink', 'permalink', 'Permalink', value=form.permalink, hintHtml=permalinkHint) }}
+        {% endif %}
       {% endcall %}
 
       {% call collapse('Summary and language', open.summary, fields=true) %}

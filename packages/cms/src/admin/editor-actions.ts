@@ -1,6 +1,6 @@
 /**
  * Editor actions: a running plugin's buttons beside
- * the title, description and tags fields of the post and page editor, and the
+ * the title, description and tags fields of the document editors, and the
  * endpoint each posts the draft to.
  *
  * Core draws the button, the suggestion and its Accept and Dismiss, and
@@ -16,7 +16,8 @@ import type { Context, Hono } from 'hono';
 
 import { splitTags } from '../content/document-form.ts';
 import type { EditorForm } from '../content/document-form.ts';
-import { PAGE_KIND, POST_KIND } from '../content/document-kind.ts';
+import { isDocumentType } from '../content/document.ts';
+import { DOCUMENT_KINDS, POST_KIND } from '../content/document-kind.ts';
 import type { DocumentKind } from '../content/document-kind.ts';
 import { resolveEvent } from '../content/event-form.ts';
 import { handleDirectory } from '../content/handles.ts';
@@ -166,10 +167,11 @@ export function mountEditorActions(app: Hono<GeekityEnv>): void {
     }
 
     const body = await c.req.parseBody();
-    const kind = body['type'] === 'page' ? PAGE_KIND : POST_KIND;
+    const kind = isDocumentType(body['type']) ? DOCUMENT_KINDS[body['type']] : POST_KIND;
     const draft = editorDraft(c, kind, submittedForm(kind, body, c.var.config.contentDir));
     if (!offered(action, draft)) {
-      const noun = draft.postType === undefined ? 'a page' : DRAFT_NOUNS[draft.postType];
+      const noun =
+        draft.postType === undefined ? `a ${kind.singular}` : DRAFT_NOUNS[draft.postType];
       return c.json({
         ok: false,
         withdrawn: true,

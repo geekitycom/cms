@@ -9,11 +9,14 @@ import type { SyncLogger } from './sync.ts';
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 
-const DOCUMENT_DIRECTORIES: ReadonlyMap<string, DocumentType> = new Map([
-  ['posts', 'post'],
-  ['pages', 'page'],
-  ['wiki', 'wiki'],
-]);
+/** The directory each type of document is filed under. */
+export const DOCUMENT_DIRECTORIES: Readonly<Record<DocumentType, string>> = {
+  post: 'posts',
+  page: 'pages',
+  wiki: 'wiki',
+};
+
+const DOCUMENT_DIRECTORY_NAMES: ReadonlySet<string> = new Set(Object.values(DOCUMENT_DIRECTORIES));
 
 export async function walk(contentDir: string, logger: SyncLogger, from = ''): Promise<string[]> {
   const found: string[] = [];
@@ -53,5 +56,5 @@ export function isWalkableDirectory(name: string): boolean {
 export function isDocumentPath(relativePath: string): boolean {
   if (!MARKDOWN_EXTENSIONS.has(path.extname(relativePath).toLowerCase())) return false;
   const segments = relativePath.split('/').slice(0, -1);
-  return segments.some((segment) => DOCUMENT_DIRECTORIES.has(segment));
+  return segments.some((segment) => DOCUMENT_DIRECTORY_NAMES.has(segment));
 }

@@ -19,7 +19,7 @@
 import { THEMES_PATH } from './appearance.ts';
 import { LOOK_CHILD, LOOK_PATH } from './look.ts';
 import { COMMENTS_PATH } from './comments.ts';
-import { newEditorPath, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
+import { newEditorPath, PAGE_SCREENS, POST_SCREENS, WIKI_SCREENS } from './documents.ts';
 import { FEDERATION_PATH, FEDERATION_SETTINGS_PATH } from './federation.ts';
 import { MEDIA_PATH } from './media.ts';
 import { MESSAGES_PATH } from './messages.ts';
@@ -116,6 +116,10 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   section('pages', 'Pages', [
     { child: 'all', label: 'All pages', url: PAGE_SCREENS.basePath },
     { child: 'new', label: 'Add new', url: newEditorPath(PAGE_SCREENS) },
+  ]),
+  section('wiki', 'Wiki', [
+    { child: 'all', label: 'All wiki pages', url: WIKI_SCREENS.basePath },
+    { child: 'new', label: 'Add new', url: newEditorPath(WIKI_SCREENS) },
   ]),
   // After Pages, because a menu is mostly a list of them, and above Media for
   // the same reason: it is content the site arranges rather than a setting.

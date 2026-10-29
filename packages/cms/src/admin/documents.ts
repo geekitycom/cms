@@ -44,6 +44,7 @@ import { syndicateToField } from '../content/post-fields.ts';
 import { firstWords, postLabel } from '../content/post-type.ts';
 import { RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
 import { scheduledFor } from '../content/schedule.ts';
+import { slugify } from '../content/slug.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { CatalogReader, DocumentLookup, ListAllOptions } from '../content/store.ts';
 import type { Respelling } from '../content/tags.ts';
@@ -101,12 +102,13 @@ import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**
- * Everything that differs between the posts screens and the pages screens.
+ * Everything that differs between the posts, pages and wiki screens.
  *
- * Posts and pages are the same screens over the same store with two knobs
- * turned: a post carries a date and taxonomy, a page carries neither. Keeping the
- * difference in data rather than in two copies of the code is what lets
- * `/admin/pages` be one call to {@link mountDocumentScreens}.
+ * Posts, pages and wiki pages are the same screens over the same store with a
+ * few knobs turned: a post carries a date and taxonomy, a page and a wiki page
+ * carry neither. Keeping the difference in data rather than in copies of the
+ * code is what lets `/admin/pages` and `/admin/wiki` each be one call to
+ * {@link mountDocumentScreens}.
  */
 export interface DocumentScreens extends DocumentKind {
   /** The navigation section they mark as current. */
@@ -136,6 +138,13 @@ export const WIKI_SCREENS: DocumentScreens = {
   section: 'wiki',
   basePath: `${ADMIN_PREFIX}/wiki`,
   plural: 'Wiki',
+};
+
+/** The screens each type of document is written in. */
+export const DOCUMENT_SCREENS: Readonly<Record<DocumentType, DocumentScreens>> = {
+  post: POST_SCREENS,
+  page: PAGE_SCREENS,
+  wiki: WIKI_SCREENS,
 };
 
 /** A submitted Comments field, or the site default for anything else. */
@@ -230,7 +239,7 @@ export interface MountDocumentScreensOptions {
 /**
  * Register the listing and the editor for one kind of document.
  *
- * Both `/admin/posts` and `/admin/pages` are this function with a different
+ * `/admin/posts`, `/admin/pages` and `/admin/wiki` are this function with a different
  * {@link DocumentScreens}: the screens, the templates and the write path are
  * shared, and the kind decides what a file is called, whether the form has a
  * date and a taxonomy, and which section of the navigation marks itself.
@@ -288,7 +297,7 @@ export function mountDocumentScreens(
       document: undefined,
       form: restoring
         ? submittedForm(kind, copy.fields, c.var.config.contentDir)
-        : blankForm(kind, siteTimezone(c), c.var.store.now()),
+        : askedFor(c, blankForm(kind, siteTimezone(c), c.var.store.now())),
       postKind: isPostKind(postKind) ? postKind : undefined,
       autosave: id,
       copy,
@@ -340,6 +349,18 @@ export function mountDocumentScreens(
       saveFromForm(c, { kind, render, document, body })
     );
   });
+}
+
+/**
+ * A blank form with the title and slug a link to the new editor named, so a
+ * link to a wiki page nobody has written yet opens the editor ready to write it.
+ */
+function askedFor(c: Context<GeekityEnv>, form: EditorForm): EditorForm {
+  return {
+    ...form,
+    title: (c.req.query('title') ?? '').trim(),
+    slug: slugify(c.req.query('slug') ?? ''),
+  };
 }
 
 interface RestoreCopyOptions {
@@ -823,12 +844,7 @@ function renderUnsaved(
       const gone = copy.path !== undefined && document === undefined;
       return {
         label: copyLabel(copy),
-        kind:
-          postKind !== undefined
-            ? EDITOR_KINDS[postKind].label
-            : kind.type === 'page'
-              ? PAGE_CHOICE.label
-              : 'Post',
+        kind: postKind !== undefined ? EDITOR_KINDS[postKind].label : COPY_KINDS[kind.type],
         savedAt: copy.savedAt,
         at: formatInTimezone(copy.savedAt, siteTimezone(c)),
         of:
@@ -941,8 +957,22 @@ interface EditorAction {
   label: string;
 }
 
+/** How the comments setting names every document of a type. */
+const THESE: Readonly<Record<DocumentType, string>> = {
+  post: 'posts',
+  page: 'pages',
+  wiki: 'wiki pages',
+};
+
+/** What the unsaved changes listing calls a copy that is not of a post kind. */
+const COPY_KINDS: Readonly<Record<DocumentType, string>> = {
+  post: 'Post',
+  page: PAGE_CHOICE.label,
+  wiki: 'Wiki page',
+};
+
 function siteDefaultLabel(type: DocumentType, policy: CommentPolicy): string {
-  const these = type === 'post' ? 'posts' : 'pages';
+  const these = THESE[type];
   if (!policy.enabled) return 'comments are off on this site';
   if (!policy.openByDefault[type]) return `closed for ${these}`;
   const days = policy.closeAfterDays;

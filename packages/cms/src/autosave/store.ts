@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readdirSync, rmSync, statSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 
+import { isDocumentType } from '../content/document.ts';
 import type { DocumentType } from '../content/document.ts';
 import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.ts';
 import { AUTOSAVE, dataFolder, dataPath } from '../files/data-files.ts';
@@ -138,7 +139,7 @@ function isCopy(value: unknown): value is AutosaveCopy {
   const { key, type, kind, path: documentPath, hash, fields, savedAt } = value;
   return (
     typeof key === 'string' &&
-    (type === 'post' || type === 'page') &&
+    isDocumentType(type) &&
     (kind === undefined || typeof kind === 'string') &&
     (documentPath === undefined || typeof documentPath === 'string') &&
     typeof hash === 'string' &&

@@ -32,7 +32,7 @@ import { listUsers } from '../site/users.ts';
 import { isFile } from '../util/files.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { pageCount } from '../web/pagination.ts';
-import { documentEditorPath, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
+import { DOCUMENT_SCREENS, documentEditorPath } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { jobStatusView } from './job-status.ts';
@@ -201,7 +201,7 @@ function documentSource(document: Document): ReferenceSource {
   return {
     reference: {
       title: postLabel(document),
-      editUrl: documentEditorPath(document.type === 'page' ? PAGE_SCREENS : POST_SCREENS, document),
+      editUrl: documentEditorPath(DOCUMENT_SCREENS[document.type], document),
       where,
       trashed: isTrashedPath(document.path),
     },

@@ -18,6 +18,7 @@ const COUNTS_SQL = `
     COUNT(*) AS total,
     COALESCE(SUM(type = 'post' AND ${LISTED_CLAUSE}), 0) AS posts,
     COALESCE(SUM(type = 'page' AND ${LISTED_CLAUSE}), 0) AS pages,
+    COALESCE(SUM(type = 'wiki' AND ${LISTED_CLAUSE}), 0) AS wiki,
     COALESCE(SUM(draft = 1 AND trashed = 0), 0) AS drafts,
     COALESCE(SUM(draft = 0 AND trashed = 0 AND ${SCHEDULED_CLAUSE}), 0) AS scheduled,
     COALESCE(SUM(trashed = 1), 0) AS trashed
@@ -58,11 +59,12 @@ export function catalogReader(index: IndexDatabase): CatalogReader {
         .map((row) => String(row['path'])),
     counts() {
       const now = nowKey(index);
-      const row = cachedStatement(index, COUNTS_SQL).get(now, now, now) as Row;
+      const row = cachedStatement(index, COUNTS_SQL).get(now, now, now, now) as Row;
       return {
         total: Number(row['total']),
         posts: Number(row['posts']),
         pages: Number(row['pages']),
+        wiki: Number(row['wiki']),
         drafts: Number(row['drafts']),
         scheduled: Number(row['scheduled']),
         trashed: Number(row['trashed']),

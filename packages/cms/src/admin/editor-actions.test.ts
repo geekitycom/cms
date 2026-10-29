@@ -210,7 +210,7 @@ describe('editor actions', () => {
     assert.equal(await readFile(file, 'utf8'), before, 'nothing was saved');
   });
 
-  it('reads a new untitled post as an unsaved note, a titled one as an article, a page as a page', async () => {
+  it('reads a new untitled post as an unsaved note, a titled one as an article, a page as a page, a wiki page as a wiki page', async () => {
     const pressed: Pressed = { drafts: [] };
     const { agent } = await site([suggester(pressed)], true);
     await press(agent, '/admin/posts/new?kind=note', 'suggest-tags', { body: 'Just a thought.' });
@@ -219,12 +219,14 @@ describe('editor actions', () => {
       body: 'Many words.',
     });
     await press(agent, '/admin/pages/new', 'suggest-tags', { title: 'About', body: 'Me.' });
+    await press(agent, '/admin/wiki/new', 'suggest-tags', { title: 'Compost', body: 'Rot.' });
     assert.deepEqual(
       pressed.drafts.map(({ type, postType, saved, lang }) => ({ type, postType, saved, lang })),
       [
         { type: 'post', postType: 'note', saved: false, lang: 'en' },
         { type: 'post', postType: 'article', saved: false, lang: 'en' },
         { type: 'page', postType: undefined, saved: false, lang: 'en' },
+        { type: 'wiki', postType: undefined, saved: false, lang: 'en' },
       ],
     );
   });

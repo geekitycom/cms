@@ -98,3 +98,10 @@ export const WIKI_KIND: DocumentKind = {
   federated: false,
   fields: [],
 };
+
+/** The kind of each type of document. */
+export const DOCUMENT_KINDS: Readonly<Record<DocumentType, DocumentKind>> = {
+  post: POST_KIND,
+  page: PAGE_KIND,
+  wiki: WIKI_KIND,
+};

@@ -4,6 +4,13 @@
  */
 export type DocumentType = 'post' | 'page' | 'wiki';
 
+/** Every {@link DocumentType}. */
+export const DOCUMENT_TYPES: readonly DocumentType[] = ['post', 'page', 'wiki'];
+
+export function isDocumentType(value: unknown): value is DocumentType {
+  return DOCUMENT_TYPES.includes(value as DocumentType);
+}
+
 /**
  * Everything about how a post federates, whether its author wrote it or the
  * CMS wrote it back after a delivery. Eleventy ignores the whole block, which

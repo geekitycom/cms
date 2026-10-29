@@ -32,6 +32,7 @@ import { publishPost } from './authoring/publish.ts';
 import { getPostSource } from './authoring/source.ts';
 import { updatePost } from './authoring/update.ts';
 import { base64Length, uploadMedia } from './authoring/upload.ts';
+import { createWikiPage, getWikiPage, updateWikiPage } from './authoring/wiki.ts';
 import { inboxSearch } from './inspect/inbox.ts';
 import { postFederation } from './inspect/post.ts';
 import { followers, quoteApprovals, relays } from './inspect/records.ts';
@@ -60,6 +61,9 @@ const CORE_TOOLS: readonly McpTool[] = [
   updatePost,
   publishPost,
   uploadMedia,
+  createWikiPage,
+  getWikiPage,
+  updateWikiPage,
 ];
 
 export const MCP_CALLS_PER_WINDOW = 60;

@@ -60,6 +60,7 @@
     { label: 'Published posts', value: counts.posts },
     { label: 'Drafts', value: counts.drafts },
     { label: 'Pages', value: counts.pages },
+    { label: 'Wiki pages', value: counts.wiki },
     { label: 'Followers', value: followers, href: federationUrl },
     { label: 'Comments waiting', value: pendingComments, href: commentsUrl + '?status=pending' },
     { label: 'Messages unread', value: unreadMessages, href: messagesUrl }
@@ -67,7 +68,7 @@
 
   <section class="@container mb-8">
     <h2 class="mb-3 text-lg font-semibold">At a glance</h2>
-    <div class="grid grid-cols-2 gap-4 @2xl:grid-cols-3 @5xl:grid-cols-6">
+    <div class="grid grid-cols-2 gap-4 @2xl:grid-cols-4 @5xl:grid-cols-7">
       {% for count in glance %}
         {% call stats() %}{{ stat(count.label, count.value, href=count.href) }}{% endcall %}
       {% endfor %}

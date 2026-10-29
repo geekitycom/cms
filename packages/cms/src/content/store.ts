@@ -414,9 +414,11 @@ export interface ContentCounts {
   posts: number;
   /** Published, untrashed, already-due, listed pages. */
   pages: number;
-  /** Untrashed drafts of either type. */
+  /** Published, untrashed, listed wiki pages. */
+  wiki: number;
+  /** Untrashed drafts of any type. */
   drafts: number;
-  /** Untrashed non-drafts of either type whose date has not arrived yet. */
+  /** Untrashed non-drafts of any type whose date has not arrived yet. */
   scheduled: number;
   /** Documents under `_trash/`. */
   trashed: number;
