@@ -122,6 +122,34 @@ async function siteWearingAnAvatar(settings: Record<string, unknown> = {}): Prom
   return cms;
 }
 
+const sharedSites = new Map<string, Promise<Cms>>();
+
+/**
+ * {@link site}, built once for every test that asks for the same settings and
+ * only reads from it. A test that changes its site asks for a fresh one.
+ */
+function sharedSite(
+  settings: Record<string, unknown> = {},
+  config: GeekityConfig = {},
+): Promise<Cms> {
+  return memo(['site', settings, config], () => site(settings, config));
+}
+
+/** {@link siteWearingAnAvatar}, shared the same way. */
+function sharedAvatarSite(settings: Record<string, unknown> = {}): Promise<Cms> {
+  return memo(['avatar', settings], () => siteWearingAnAvatar(settings));
+}
+
+function memo(key: unknown, build: () => Promise<Cms>): Promise<Cms> {
+  const text = JSON.stringify(key);
+  let built = sharedSites.get(text);
+  if (built === undefined) {
+    built = build();
+    sharedSites.set(text, built);
+  }
+  return built;
+}
+
 /** Give the site a user with a profile, the way the users screen would. */
 async function addUser(
   cms: Cms,
@@ -204,7 +232,7 @@ function node(nodes: Record<string, unknown>[], type: string): Record<string, un
 
 describe('the page shell (AC #1)', () => {
   it('wraps every page in a global wrapper, marked only at the root', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     assert.match(
       await body(cms, '/'),
@@ -224,7 +252,7 @@ describe('the page shell (AC #1)', () => {
   });
 
   it('keeps the skip link ahead of the wrapper', async () => {
-    const html = await body(await site(), '/');
+    const html = await body(await sharedSite(), '/');
 
     assert.match(html, /<a class="screen-reader-text" href="#main">Skip to content<\/a>/);
     assert.ok(
@@ -235,7 +263,7 @@ describe('the page shell (AC #1)', () => {
   });
 
   it('heads the front page with the site title and the tagline', async () => {
-    const front = header(await body(await site(), '/'));
+    const front = header(await body(await sharedSite(), '/'));
 
     assert.match(front, /<h1 class="main-heading">\s*<a href="\/">A Site<\/a>\s*<\/h1>/);
     assert.match(front, /<p class="site-tagline">Words about words<\/p>/);
@@ -243,7 +271,7 @@ describe('the page shell (AC #1)', () => {
   });
 
   it('heads every other page with the small link home', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     for (const pathname of ['/about/', '/2026/09/hello/', '/tag/notes/']) {
       const inside = header(await body(cms, pathname));
@@ -262,7 +290,7 @@ describe('the page shell (AC #1)', () => {
   });
 
   it('heads the root listing once, with the header rather than the site title twice', async () => {
-    const cms = await site({ postsPerPage: 1 });
+    const cms = await sharedSite({ postsPerPage: 1 });
 
     const root = [...(await body(cms, '/')).matchAll(/<h1[^>]*>/g)];
     assert.equal(root.length, 1, `the root listing has ${String(root.length)} h1 elements`);
@@ -288,7 +316,7 @@ describe('the page shell (AC #1)', () => {
   });
 
   it('gives the root header the menu as a line of its own under the tagline (TASK-105 AC #1)', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       menus: {
         primary: [
           { label: 'Home', url: '/' },
@@ -305,7 +333,7 @@ describe('the page shell (AC #1)', () => {
   });
 
   it('puts the menu beside the link home on every other page (TASK-105 AC #1)', async () => {
-    const cms = await site({ menus: { primary: [{ label: 'About', url: '/about/' }] } });
+    const cms = await sharedSite({ menus: { primary: [{ label: 'About', url: '/about/' }] } });
 
     for (const pathname of ['/about/', '/2026/09/hello/', '/tag/notes/']) {
       assert.match(
@@ -369,7 +397,7 @@ describe('the menus a theme renders by name (TASK-107)', () => {
   }
 
   it('renders menus.primary and menus.footer, each in its own place (AC #4)', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       menus: {
         primary: [
           { label: 'Home', url: '/' },
@@ -397,7 +425,7 @@ describe('the menus a theme renders by name (TASK-107)', () => {
   });
 
   it('marks the current item of whichever menu holds this page (AC #5)', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       menus: {
         primary: [{ label: 'Home', url: '/' }],
         footer: [
@@ -422,7 +450,7 @@ describe('the menus a theme renders by name (TASK-107)', () => {
   });
 
   it('gives an item the rel values it carries, and an unmarked one none (AC #2, TASK-114)', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       menus: {
         footer: [
           { label: 'Mastodon', url: 'https://example.social/@ada', rel: 'me' },
@@ -470,7 +498,7 @@ describe('the menus a theme renders by name (TASK-107)', () => {
   });
 
   it('reads no menu at all out of the navigation key TASK-106 left behind (AC #7)', async () => {
-    const cms = await site({ navigation: [{ label: 'Anachronism', url: '/old/' }] });
+    const cms = await sharedSite({ navigation: [{ label: 'Anachronism', url: '/old/' }] });
 
     assert.doesNotMatch(await body(cms, '/about/'), /Anachronism/);
   });
@@ -526,7 +554,7 @@ describe('the footer (AC #2, TASK-105)', () => {
 
   it('prints no list for an empty or missing footer menu (TASK-105 AC #5)', async () => {
     for (const menus of [{}, { footer: [] }, { primary: [{ label: 'Home', url: '/' }] }]) {
-      const printed = footer(await body(await site({ author: 'Joe Blog', menus }), '/'));
+      const printed = footer(await body(await sharedSite({ author: 'Joe Blog', menus }), '/'));
 
       assert.doesNotMatch(printed, /<nav|<ul/, `${JSON.stringify(menus)} left an empty list`);
       assert.match(
@@ -541,7 +569,7 @@ describe('the footer (AC #2, TASK-105)', () => {
     // A `site.json` written before the Site author select can name an author
     // no user answers to (TASK-192): the site then has several authors, and
     // the site title stands in for the name it used to print.
-    const printed = footer(await body(await site({ author: 'Joe Blog' }), '/'));
+    const printed = footer(await body(await sharedSite({ author: 'Joe Blog' }), '/'));
 
     assert.match(
       printed,
@@ -554,7 +582,7 @@ describe('the footer (AC #2, TASK-105)', () => {
 
 describe('the head (AC #5)', () => {
   it('still carries the canonical, the feeds, the comments feed and webmention', async () => {
-    const cms = await site({ url: 'https://example.com' });
+    const cms = await sharedSite({ url: 'https://example.com' });
     const html = await body(cms, '/2026/09/hello/');
 
     for (const marker of [
@@ -575,7 +603,7 @@ describe('the head (AC #5)', () => {
 
 describe('the description, Open Graph and Twitter card tags (TASK-81 AC #1)', () => {
   it('describes an entry by its own description, else its summary', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const post = await body(cms, '/2026/09/hello/');
     assert.equal(metaContent(post, 'description'), 'Body.', 'a post falls back to its summary');
@@ -597,7 +625,7 @@ describe('the description, Open Graph and Twitter card tags (TASK-81 AC #1)', ()
   });
 
   it('describes a page that is not an entry by the tagline', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     for (const pathname of ['/', '/tag/notes/']) {
       assert.equal(
@@ -613,7 +641,7 @@ describe('the description, Open Graph and Twitter card tags (TASK-81 AC #1)', ()
   });
 
   it('cards a post as an article and a listing as a website', async () => {
-    const cms = await siteWearingAnAvatar({ url: 'https://example.com' });
+    const cms = await sharedAvatarSite({ url: 'https://example.com' });
 
     const post = await body(cms, '/2026/09/hello/');
     assert.equal(metaContent(post, 'og:title'), 'Hello');
@@ -646,7 +674,7 @@ describe('the description, Open Graph and Twitter card tags (TASK-81 AC #1)', ()
   });
 
   it('prefers the entry’s own image to the site avatar', async () => {
-    const cms = await siteWearingAnAvatar({ url: 'https://example.com' });
+    const cms = await sharedAvatarSite({ url: 'https://example.com' });
     const html = await body(cms, '/2026/09/photo/');
 
     assert.equal(metaContent(html, 'og:image'), 'https://example.com/uploads/2026/09/hero.png');
@@ -657,7 +685,7 @@ describe('the description, Open Graph and Twitter card tags (TASK-81 AC #1)', ()
   });
 
   it('leaves the image out when the site has no avatar and the entry no picture', async () => {
-    const html = await body(await site({ url: 'https://example.com' }), '/2026/09/hello/');
+    const html = await body(await sharedSite({ url: 'https://example.com' }), '/2026/09/hello/');
 
     assert.equal(metaContent(html, 'og:image'), undefined, 'an image was invented');
     assert.equal(metaContent(html, 'twitter:image'), undefined);
@@ -690,7 +718,7 @@ describe('the colour scheme and the theme colour (TASK-146 AC #1)', () => {
   ) as { colorScheme: string; themeColor: { light: string; dark: string } };
 
   it('declares the colour scheme before the stylesheet can paint anything', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
 
     assert.equal(metaContent(html, 'color-scheme'), declared.colorScheme);
     const scheme = html.indexOf('<meta name="color-scheme"');
@@ -700,7 +728,7 @@ describe('the colour scheme and the theme colour (TASK-146 AC #1)', () => {
 
   it('colours the browser chrome from theme.json, once for each scheme', async () => {
     for (const pathname of ['/', '/2026/09/hello/', '/tag/notes/']) {
-      const html = await body(await site(), pathname);
+      const html = await body(await sharedSite(), pathname);
       assert.ok(
         html.includes(
           `<meta name="theme-color" content="${declared.themeColor.light}" media="(prefers-color-scheme: light)">`,
@@ -762,7 +790,7 @@ describe('the colour scheme and mode the site chooses (TASK-488)', () => {
   }
 
   it('draws the first scheme and follows the system when the site chooses neither', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
     const paper = colorsOf('paper');
 
     assert.equal(htmlTag(html), '<html lang="en" data-scheme="paper" data-mode="system">');
@@ -774,7 +802,7 @@ describe('the colour scheme and mode the site chooses (TASK-488)', () => {
   });
 
   it('prints the chosen scheme in both colours under the system mode', async () => {
-    const html = await body(await site({ colorScheme: 'forest' }), '/');
+    const html = await body(await sharedSite({ colorScheme: 'forest' }), '/');
     const forest = colorsOf('forest');
 
     assert.equal(htmlTag(html), '<html lang="en" data-scheme="forest" data-mode="system">');
@@ -786,7 +814,7 @@ describe('the colour scheme and mode the site chooses (TASK-488)', () => {
   });
 
   it('is always light in the light mode, with one theme colour', async () => {
-    const html = await body(await site({ colorScheme: 'slate', colorMode: 'light' }), '/');
+    const html = await body(await sharedSite({ colorScheme: 'slate', colorMode: 'light' }), '/');
 
     assert.equal(htmlTag(html), '<html lang="en" data-scheme="slate" data-mode="light">');
     assert.equal(metaContent(html, 'color-scheme'), 'light');
@@ -796,7 +824,10 @@ describe('the colour scheme and mode the site chooses (TASK-488)', () => {
   });
 
   it('is always dark in the dark mode, with one theme colour', async () => {
-    const html = await body(await site({ colorScheme: 'plum', colorMode: 'dark' }), '/about/');
+    const html = await body(
+      await sharedSite({ colorScheme: 'plum', colorMode: 'dark' }),
+      '/about/',
+    );
 
     assert.equal(htmlTag(html), '<html lang="en" data-scheme="plum" data-mode="dark">');
     assert.equal(metaContent(html, 'color-scheme'), 'dark');
@@ -806,7 +837,7 @@ describe('the colour scheme and mode the site chooses (TASK-488)', () => {
   });
 
   it('falls back to the first scheme and the system mode for names it does not know', async () => {
-    const html = await body(await site({ colorScheme: 'neon', colorMode: 'sepia' }), '/');
+    const html = await body(await sharedSite({ colorScheme: 'neon', colorMode: 'sepia' }), '/');
 
     assert.equal(htmlTag(html), '<html lang="en" data-scheme="paper" data-mode="system">');
     assert.equal(metaContent(html, 'color-scheme'), 'light dark');
@@ -843,8 +874,8 @@ describe('the colour scheme and mode the site chooses (TASK-488)', () => {
 
   it('applies the same scheme and mode to the error pages', async () => {
     const chosen = { colorScheme: 'ocean', colorMode: 'dark' };
-    const notFound = await (await site(chosen)).app.request('/no/such/page/');
-    const down = await (await site(chosen, { maintenance: true })).app.request('/');
+    const notFound = await (await sharedSite(chosen)).app.request('/no/such/page/');
+    const down = await (await sharedSite(chosen, { maintenance: true })).app.request('/');
 
     for (const [response, status] of [
       [notFound, 404],
@@ -874,7 +905,7 @@ describe('a post as an Open Graph article (TASK-146 AC #2)', () => {
   });
 
   it('is modified when it was published, when it was never updated', async () => {
-    const html = await body(await site(), '/2026/09/photo/');
+    const html = await body(await sharedSite(), '/2026/09/photo/');
 
     assert.equal(metaContent(html, 'article:modified_time'), '2026-09-03T09:00:00.000Z');
     assert.deepEqual(metaContents(html, 'article:tag'), [], 'a tag was invented');
@@ -894,13 +925,13 @@ describe('a post as an Open Graph article (TASK-146 AC #2)', () => {
   });
 
   it('names no author for a post that names nobody on a site with several authors', async () => {
-    const html = await body(await site({ author: 'Joe Blog' }), '/2026/09/hello/');
+    const html = await body(await sharedSite({ author: 'Joe Blog' }), '/2026/09/hello/');
 
     assert.equal(metaContent(html, 'article:author'), undefined);
   });
 
   it('leaves the article tags off a listing', async () => {
-    const html = await body(await site(), '/tag/notes/');
+    const html = await body(await sharedSite(), '/tag/notes/');
 
     assert.equal(metaContent(html, 'article:published_time'), undefined);
     assert.deepEqual(metaContents(html, 'article:tag'), []);
@@ -992,7 +1023,7 @@ describe('the share image’s alt text and card (TASK-146 AC #3, AC #4)', () => 
   });
 
   it('describes an avatar nobody has described by whose it is', async () => {
-    const cms = await siteWearingAnAvatar({ author: 'Joe Blog' });
+    const cms = await sharedAvatarSite({ author: 'Joe Blog' });
 
     assert.equal(
       metaContent(await body(cms, '/'), 'og:image:alt'),
@@ -1019,7 +1050,7 @@ describe('the share image’s alt text and card (TASK-146 AC #3, AC #4)', () => 
   });
 
   it('never prints an image without alt text', async () => {
-    const cms = await siteWearingAnAvatar();
+    const cms = await sharedAvatarSite();
 
     for (const pathname of ['/', '/about/', '/2026/09/hello/', '/2026/09/photo/', '/tag/notes/']) {
       const html = await body(cms, pathname);
@@ -1035,7 +1066,7 @@ describe('the share image’s alt text and card (TASK-146 AC #3, AC #4)', () => 
   });
 
   it('prints no alt text when there is no image', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
 
     assert.equal(metaContent(html, 'og:image:alt'), undefined);
   });
@@ -1064,7 +1095,7 @@ describe('the share image’s alt text and card (TASK-146 AC #3, AC #4)', () => 
   });
 
   it('keeps a picture it knows no size for a summary, with no size', async () => {
-    const html = await body(await siteWearingAnAvatar(), '/2026/09/photo/');
+    const html = await body(await sharedAvatarSite(), '/2026/09/photo/');
 
     assert.equal(metaContent(html, 'twitter:card'), 'summary');
     assert.equal(metaContent(html, 'og:image:width'), undefined);
@@ -1207,7 +1238,7 @@ describe('the share image falls back to a photo, then the icon (TASK-211)', () =
 
 describe('the icons (TASK-81 AC #2)', () => {
   it('links three square icons derived from the site avatar', async () => {
-    const cms = await siteWearingAnAvatar();
+    const cms = await sharedAvatarSite();
     const icons = links(await body(cms, '/')).filter((link) => link.rel.includes('icon'));
 
     assert.deepEqual(
@@ -1236,7 +1267,7 @@ describe('the icons (TASK-81 AC #2)', () => {
   });
 
   it('links no icon at all when the site has no avatar', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     for (const pathname of ['/', '/about/', '/2026/09/hello/']) {
       const html = await body(cms, pathname);
@@ -1251,7 +1282,7 @@ describe('the icons (TASK-81 AC #2)', () => {
   it('serves every link in the head of a site without an avatar', async () => {
     // The demo's case, and the one that would 404 quietly: a head full of
     // links to files nobody has uploaded.
-    const cms = await site();
+    const cms = await sharedSite();
 
     for (const link of links(await body(cms, '/2026/09/hello/'))) {
       if (!link.href.startsWith('/') || link.rel === 'webmention') continue;
@@ -1364,7 +1395,7 @@ describe('the JSON-LD graph (TASK-81 AC #3)', () => {
 
   it('leaves the Person and every reference to it out when nobody matches', async () => {
     // The demo's case: `site.json` names an author no user answers to.
-    const nodes = graph(await body(await site({ author: 'Joe Blog' }), '/2026/09/hello/'));
+    const nodes = graph(await body(await sharedSite({ author: 'Joe Blog' }), '/2026/09/hello/'));
 
     assert.equal(node(nodes, 'Person'), undefined, 'a Person was invented');
 
@@ -1381,7 +1412,7 @@ describe('the JSON-LD graph (TASK-81 AC #3)', () => {
   });
 
   it('keeps printing JSON when the words in it could close the script', async () => {
-    const cms = await site({ title: 'A </script><script>alert(1)</script> Site' });
+    const cms = await sharedSite({ title: 'A </script><script>alert(1)</script> Site' });
     const html = await body(cms, '/2026/09/hello/');
 
     const website = node(graph(html), 'WebSite');
@@ -1538,7 +1569,7 @@ describe('the code highlighter in the shell (TASK-86 AC #2)', () => {
   }
 
   it('loads the highlighter, deferred, on a page that has a code block', async () => {
-    const html = await body(await site(), '/code/');
+    const html = await body(await sharedSite(), '/code/');
 
     assert.match(
       html,
@@ -1555,7 +1586,7 @@ describe('the code highlighter in the shell (TASK-86 AC #2)', () => {
   });
 
   it('ships no JavaScript at all on a page without one', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     for (const pathname of ['/', '/about/', '/2026/09/hello/', '/tag/notes/']) {
       const other = scripts(await body(cms, pathname)).filter(
@@ -1566,7 +1597,7 @@ describe('the code highlighter in the shell (TASK-86 AC #2)', () => {
   });
 
   it('serves the bundle the script tag points at', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const response = await cms.app.request('/theme/highlight.js');
 
     assert.equal(response.status, 200);
@@ -1807,7 +1838,7 @@ describe('every nav reads as links (TASK-111, TASK-187)', () => {
   });
 
   it('keeps the site title and the small link home reading as plain text (AC #2)', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const front = await body(cms, '/');
     const elsewhere = await body(cms, '/about/');
 
@@ -1944,7 +1975,7 @@ describe('speculation rules and view transitions (TASK-140)', () => {
   ];
 
   it('prefetches same-origin public links at moderate eagerness, and nothing else (AC #1)', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const origin = new URL(cms.config.baseUrl).origin;
 
     for (const pathname of ['/', '/2026/09/hello/', '/about/', '/tag/notes/', '/nope/']) {
@@ -1961,7 +1992,7 @@ describe('speculation rules and view transitions (TASK-140)', () => {
   });
 
   it('keeps the rules inside the base path of a site in a subdirectory (AC #1)', async () => {
-    const cms = await site({}, { baseUrl: 'https://example.com/blog/' });
+    const cms = await sharedSite({}, { baseUrl: 'https://example.com/blog/' });
     const html = await body(cms, '/2026/09/hello/');
     const pageUrl = 'https://example.com/blog/2026/09/hello/';
 
@@ -1976,7 +2007,7 @@ describe('speculation rules and view transitions (TASK-140)', () => {
   });
 
   it('opts into cross-document view transitions, only without reduced motion (AC #3)', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
     const style = /<style>([\s\S]*?)<\/style>/.exec(html)?.[1] ?? '';
 
     assert.match(
@@ -2160,7 +2191,7 @@ describe('the content license (TASK-206)', () => {
   }
 
   it('links the chosen license with rel="license" on every page (AC #2)', async () => {
-    const cms = await site({ license: 'cc-by-sa' });
+    const cms = await sharedSite({ license: 'cc-by-sa' });
 
     for (const pathname of ['/', '/2026/09/hello/', '/about/', '/tag/notes/', '/search/']) {
       assert.deepEqual(
@@ -2172,7 +2203,7 @@ describe('the content license (TASK-206)', () => {
   });
 
   it('puts the license on the JSON-LD WebSite and the BlogPosting (AC #2)', async () => {
-    const cms = await site({ license: 'cc-by-sa' });
+    const cms = await sharedSite({ license: 'cc-by-sa' });
 
     const post = graph(await body(cms, '/2026/09/hello/'));
     assert.equal(node(post, 'WebSite')?.['license'], BY_SA);
@@ -2184,7 +2215,10 @@ describe('the content license (TASK-206)', () => {
   });
 
   it('names a custom license by the name it was given (AC #2)', async () => {
-    const cms = await site({ license: 'https://example.com/terms', licenseName: 'House <terms>' });
+    const cms = await sharedSite({
+      license: 'https://example.com/terms',
+      licenseName: 'House <terms>',
+    });
     const html = await body(cms, '/2026/09/hello/');
     assert.deepEqual(licenseLinks(html), [
       { href: 'https://example.com/terms', text: 'House &lt;terms&gt;' },
