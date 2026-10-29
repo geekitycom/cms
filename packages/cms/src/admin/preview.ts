@@ -124,7 +124,11 @@ function previewDocument(
       ...previewReview(body, c.var.config.contentDir),
     },
     body: markdown,
-    html: renderMarkdown(markdown, handleDirectory(c.var.config.contentDir)),
+    html: renderMarkdown(
+      markdown,
+      handleDirectory(c.var.config.contentDir),
+      permalinkBasesFromSettings(c.var.siteAtRequestStart).wiki,
+    ),
     // A preview is not a version of anything, so it has no hash to be
     // mistaken for one.
     hash: '',

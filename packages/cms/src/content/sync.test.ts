@@ -1222,3 +1222,48 @@ describe('wiki pages', () => {
     assert.match(warnings[0] ?? '', /permalink/);
   });
 });
+
+describe('documents with wiki links', () => {
+  it('re-render under a new wiki base, and the others stay as they were', async () => {
+    const dir = await contentDir({
+      'posts/linking.md': markdown({
+        title: 'Linking',
+        permalink: '/linking/',
+        date: '2026-09-01',
+        body: 'See [[Some page]].',
+      }),
+      'posts/plain.md': markdown({
+        title: 'Plain',
+        permalink: '/plain/',
+        date: '2026-09-01',
+        body: 'No [links] here.',
+      }),
+    });
+    const index = await store();
+    let base = 'wiki';
+    const changed: string[] = [];
+    const content = createContentSync({
+      store: index,
+      contentDir: dir,
+      watch: false,
+      wikiBase: () => base,
+    });
+    runningSyncs.push(content);
+    content.events.on('change', (change) => {
+      changed.push(change.path);
+    });
+
+    await content.sync();
+    assert.match(index.getByPath('posts/linking.md')?.html ?? '', /href="\/wiki\/some-page\/"/);
+
+    changed.length = 0;
+    base = 'notes';
+    const result = await content.sync();
+    assert.equal(result.updated, 1);
+    assert.deepEqual(changed, ['posts/linking.md']);
+    assert.match(index.getByPath('posts/linking.md')?.html ?? '', /href="\/notes\/some-page\/"/);
+
+    changed.length = 0;
+    assert.equal((await content.sync()).updated, 0, 'and once is enough');
+  });
+});

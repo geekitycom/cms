@@ -84,7 +84,7 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
     type,
     path,
     slug: slugForPermalink(permalink) ?? fallbackSlug(title, path),
-    html: renderMarkdown(body, options.handles),
+    html: renderMarkdown(body, options.handles, options.wikiBase),
     hash: hashDocument(content, type),
   };
 }

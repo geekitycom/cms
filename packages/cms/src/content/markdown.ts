@@ -5,6 +5,8 @@ import footnote from 'markdown-it-footnote';
 import type { HandleDirectory } from './handles.ts';
 import { slugify } from './slug.ts';
 import { videoEmbedHtml, videoOf } from './video.ts';
+import { wikiLinks } from './wiki-links.ts';
+import type { WikiLinkEnv } from './wiki-links.ts';
 
 /**
  * The renderer: markdown-it with Eleventy's default option (`html: true`),
@@ -18,6 +20,7 @@ const markdown: MarkdownItInstance = new MarkdownIt({ html: true, linkify: true 
   .use(focusableCodeBlocks)
   .use(htmlInlineOffsets)
   .use(fediverseHandles)
+  .use(wikiLinks)
   .use(schemedLinksOnly)
   .use(videoEmbeds);
 
@@ -28,10 +31,11 @@ export function schemedLinksOnly(md: MarkdownItInstance): void {
 
 /**
  * Render a Markdown body to the HTML the site and the feeds serve. A handle
- * `handles` knows links to its profile; any other stays text.
+ * `handles` knows links to its profile; any other stays text. A wiki link
+ * points under `wikiBase`, the default base when it is not given.
  */
-export function renderMarkdown(body: string, handles?: HandleDirectory): string {
-  const env: HandleEnv = { handles };
+export function renderMarkdown(body: string, handles?: HandleDirectory, wikiBase?: string): string {
+  const env: HandleEnv & WikiLinkEnv = { handles, wikiBase };
   return markdown.render(body, env);
 }
 

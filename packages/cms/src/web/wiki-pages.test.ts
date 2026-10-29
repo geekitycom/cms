@@ -28,6 +28,8 @@ const CONTENT: Record<string, string> = {
   'posts/citing.md':
     "---\ntitle: Citing the shed\ndate: '2026-09-03T09:00:00Z'\npermalink: /2026/09/citing/\n---\n\nSee [the tools](/wiki/garden-tools/).\n",
   'pages/about.md': '---\ntitle: About\npermalink: /about/\n---\n\nAbout.\n',
+  'posts/wiki-linking.md':
+    "---\ntitle: Linking by name\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/wiki-linking/\n---\n\nRead [[garden-tools|the tools]], [[garden-tools#In the shed|the shed]] and [[Nowhere yet]], not `[[garden-tools]]`.\n",
 };
 
 async function site(): Promise<Cms> {
@@ -164,5 +166,59 @@ describe('a change of wiki base', () => {
     assert.equal(moved.status, 301);
     assert.equal(moved.headers.get('location'), '/wiki/garden-tools/');
     assert.deepEqual((await siteSettingsIn(cms.config.contentDir)).former_wiki_bases, ['notes']);
+  });
+});
+
+describe('a wiki link', () => {
+  it('is a link in the HTML, in the feeds and in the backlinks of its target', async () => {
+    const cms = await site();
+    const html = await body(cms, '/2026/09/wiki-linking/');
+    assert.match(html, /<a class="wiki-link" href="\/wiki\/garden-tools\/">the tools<\/a>/);
+    assert.match(
+      html,
+      /<a class="wiki-link" href="\/wiki\/garden-tools\/#in-the-shed">the shed<\/a>/,
+    );
+    assert.match(html, /<a class="wiki-link" href="\/wiki\/nowhere-yet\/">Nowhere yet<\/a>/);
+    assert.match(html, /<code>\[\[garden-tools\]\]<\/code>/);
+
+    const feed = await body(cms, '/feed/');
+    assert.match(
+      feed,
+      /<a class="wiki-link" href="https:\/\/blog\.example\/wiki\/garden-tools\/">/,
+    );
+
+    const target = await body(cms, '/wiki/garden-tools/');
+    assert.match(target, /<section class="backlinks"[\s\S]*Linking by name[\s\S]*<\/section>/);
+  });
+
+  it('is an ordinary Markdown link in index.md and a link line in index.gmi', async () => {
+    const cms = await site();
+    const markdown = await body(cms, '/2026/09/wiki-linking/index.md');
+    assert.match(markdown, /\[the tools\]\(\/wiki\/garden-tools\/index\.md\)/);
+    assert.match(markdown, /\[the shed\]\(\/wiki\/garden-tools\/index\.md#in-the-shed\)/);
+    assert.match(markdown, /\[Nowhere yet\]\(\/wiki\/nowhere-yet\/\)/);
+    assert.match(markdown, /`\[\[garden-tools\]\]`/);
+    assert.doesNotMatch(markdown, /\[\[garden-tools\|/);
+
+    const gemini = await body(cms, '/2026/09/wiki-linking/index.gmi');
+    assert.match(gemini, /^Read the tools\[1\], the shed\[2\] and Nowhere yet\[3\]/m);
+    assert.match(gemini, /^=> \/wiki\/garden-tools\/index\.gmi 1: /m);
+    assert.match(gemini, /^=> \/wiki\/garden-tools\/index\.gmi#in-the-shed 2: /m);
+    assert.match(gemini, /^=> \/wiki\/nowhere-yet\/ 3: /m);
+    assert.doesNotMatch(gemini, /\[\[garden-tools\|/);
+  });
+
+  it('follows a change of wiki base', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+    await saveSettings(agent, 'permalinks', { wiki_base: 'notes' });
+
+    const html = await body(cms, '/2026/09/wiki-linking/');
+    assert.match(html, /<a class="wiki-link" href="\/notes\/garden-tools\/">the tools<\/a>/);
+    assert.doesNotMatch(html, /href="\/wiki\//);
+    assert.match(
+      await body(cms, '/2026/09/wiki-linking/index.md'),
+      /\(\/notes\/garden-tools\/index\.md\)/,
+    );
   });
 });

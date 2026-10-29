@@ -14,6 +14,7 @@ import { findUser } from '../site/users.ts';
 import type { Cms } from '../index.ts';
 import { fieldsOf, saveUrlOf } from './__testing__/editor-form.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
+import { saveSettings } from './__testing__/settings.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { statuses } from './__testing__/statuses.ts';
 
@@ -241,6 +242,22 @@ describe('the shared editor paths for a wiki page', () => {
     const page = await response.text();
     assert.match(page, /<article class="blog-post wiki-page h-entry"/);
     assert.match(page, /Shown before saving\./);
+  });
+
+  it("preview wiki links under the site's wiki base", async () => {
+    const { agent } = await site();
+    await saveSettings(agent, 'permalinks', { wiki_base: 'notes' });
+    const { fields } = await editorFields(agent, '/admin/pages/new', {
+      title: 'Previewed',
+      body: 'See [[Garden tools#The shed|the shed]].',
+    });
+
+    const response = await agent.post('/admin/preview', fields);
+    assert.equal(response.status, 200);
+    assert.match(
+      await response.text(),
+      /<a class="wiki-link" href="\/notes\/garden-tools\/#the-shed">the shed<\/a>/,
+    );
   });
 
   it('link a comment on a wiki page to the wiki editor', async () => {

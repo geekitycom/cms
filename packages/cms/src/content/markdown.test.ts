@@ -158,3 +158,62 @@ describe('fediverse handles', () => {
     );
   });
 });
+
+describe('wiki links', () => {
+  it('link a target to its slug under the wiki base, named by the target', () => {
+    assert.equal(
+      renderMarkdown('See [[Some Page]].', undefined, 'wiki'),
+      '<p>See <a class="wiki-link" href="/wiki/some-page/">Some Page</a>.</p>\n',
+    );
+  });
+
+  it('take their text after a bar', () => {
+    assert.equal(
+      renderMarkdown('[[Some Page|that page]]', undefined, 'notes'),
+      '<p><a class="wiki-link" href="/notes/some-page/">that page</a></p>\n',
+    );
+  });
+
+  it('point at a heading with the id headingAnchors gives it', () => {
+    const heading = /<h2 id="([^"]+)">/.exec(renderMarkdown("## Where it's at, Café!\n"))?.[1];
+    assert.equal(heading, 'where-its-at-cafe');
+    assert.equal(
+      renderMarkdown("[[Some Page#Where it's at, Café!]]"),
+      '<p><a class="wiki-link" href="/wiki/some-page/#where-its-at-cafe">Some Page</a></p>\n',
+    );
+    assert.equal(
+      renderMarkdown('[[Some Page#Usage|how to use it]]'),
+      '<p><a class="wiki-link" href="/wiki/some-page/#usage">how to use it</a></p>\n',
+    );
+  });
+
+  it('use the default base when none is given', () => {
+    assert.match(renderMarkdown('[[Garden tools]]'), /href="\/wiki\/garden-tools\/"/);
+  });
+
+  it('escape the text they print', () => {
+    assert.equal(
+      renderMarkdown('[[Tom & Jerry|<b>Tom</b> & Jerry]]'),
+      '<p><a class="wiki-link" href="/wiki/tom-jerry/">&lt;b&gt;Tom&lt;/b&gt; &amp; Jerry</a></p>\n',
+    );
+  });
+
+  it('stay literal when the target slugifies to nothing', () => {
+    assert.equal(renderMarkdown('[[!!!]] and [[]]'), '<p>[[!!!]] and [[]]</p>\n');
+  });
+
+  it('stay literal in code spans, code blocks and after a backslash', () => {
+    assert.equal(renderMarkdown('`[[Page]]`'), '<p><code>[[Page]]</code></p>\n');
+    assert.doesNotMatch(renderMarkdown('```\n[[Page]]\n```\n'), /wiki-link/);
+    assert.doesNotMatch(renderMarkdown('    [[Page]]\n'), /wiki-link/);
+    assert.equal(renderMarkdown('\\[[Page]]'), '<p>[[Page]]</p>\n');
+  });
+
+  it('win over a link around them, as an inner link does, and do not cross a line', () => {
+    assert.equal(
+      renderMarkdown('[a [[Page]] b](/x/)'),
+      '<p>[a <a class="wiki-link" href="/wiki/page/">Page</a> b](/x/)</p>\n',
+    );
+    assert.doesNotMatch(renderMarkdown('[[Some\nPage]]'), /wiki-link/);
+  });
+});

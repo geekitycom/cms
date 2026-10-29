@@ -91,11 +91,12 @@ export function createReconciler(options: CreateReconcilerOptions): Reconciler {
     }
 
     // A wiki page's permalink is not in its file, so a new wiki base moves it
-    // with the hash unchanged.
+    // with the hash unchanged, and a wiki link's href changes with it.
     if (
       previous !== undefined &&
       previous.hash === document.hash &&
-      previous.permalink === document.permalink
+      previous.permalink === document.permalink &&
+      !wikiLinksMoved(previous, document)
     ) {
       return 'unchanged';
     }
@@ -149,6 +150,16 @@ function warnAboutIgnoredWikiKeys(relativePath: string, source: string, logger: 
   logger.warn(
     `${relativePath} names ${ignored.join(', ')}, which a wiki page does not have: it lives at the wiki base and its file name, undated and unfiled. The next save drops them.`,
   );
+}
+
+/**
+ * Whether a body that may hold a wiki link renders to other HTML than it was
+ * indexed with. The HTML is only compared when the body has a `[[`, so a site
+ * without wiki links is not re-indexed for anything else that changes it,
+ * such as a handle resolved since.
+ */
+function wikiLinksMoved(previous: Document, next: Document): boolean {
+  return next.body.includes('[[') && previous.html !== next.html;
 }
 
 async function readSource(file: string): Promise<string | undefined> {

@@ -94,3 +94,31 @@ describe('rewriteMarkdownLinks', () => {
     );
   });
 });
+
+describe('rewriteMarkdownLinks over wiki links', () => {
+  it('writes each as an ordinary link through the rewrite', () => {
+    assert.equal(
+      rewriteMarkdownLinks('See [[Some Page]] and [[Other#Usage|how]].', toMarkdown, 'notes'),
+      'See [Some Page](/notes/some-page/index.md) and [how](/notes/other/index.md#usage).',
+    );
+  });
+
+  it('keeps the site path when the rewrite has no answer', () => {
+    assert.equal(
+      rewriteMarkdownLinks('[[Missing [page]]] and [[Gone]]', () => undefined),
+      '[[Missing [page]]] and [Gone](/wiki/gone/)',
+    );
+  });
+
+  it('leaves code, an escaped bracket and an empty target alone', () => {
+    const body = '`[[Page]]` \\[[Page]] [[!!!]]\n\n```\n[[Page]]\n```\n';
+    assert.equal(rewriteMarkdownLinks(body, toMarkdown), body);
+  });
+
+  it('escapes brackets in the text', () => {
+    assert.equal(
+      rewriteMarkdownLinks('[[Page|a \\ b]]', () => undefined),
+      '[a \\\\ b](/wiki/page/)',
+    );
+  });
+});

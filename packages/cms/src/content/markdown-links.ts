@@ -3,6 +3,8 @@ import type { MarkdownIt as MarkdownItInstance, StateBlock, StateInline, Token }
 import footnote from 'markdown-it-footnote';
 
 import { schemedLinksOnly } from './markdown.ts';
+import { WIKI_LINK_RULE, wikiLinks } from './wiki-links.ts';
+import type { WikiLinkEnv } from './wiki-links.ts';
 
 /**
  * Where one link's destination is written in a Markdown source, and what it
@@ -15,19 +17,22 @@ interface LinkAt {
   readonly end: number;
   readonly href: string;
   readonly bare?: string | undefined;
+  /** A wiki link, which is rewritten as a link even when `rewrite` has no answer. */
+  readonly wiki?: true;
 }
 
-type LinkEnv = { found: LinkAt[] };
+type LinkEnv = WikiLinkEnv & { found: LinkAt[] };
 
 /**
  * The same parse the site renders a body with (`html`, schemed linkify,
- * footnotes), with each rule that writes a link destination wrapped to record
- * where it wrote it. markdown-it keeps no source offsets for inline tokens, so
- * the positions are taken while the rules run.
+ * footnotes, wiki links), with each rule that writes a link destination
+ * wrapped to record where it wrote it. markdown-it keeps no source offsets for
+ * inline tokens, so the positions are taken while the rules run.
  */
 const parser: MarkdownItInstance = new MarkdownIt({ html: true, linkify: true })
   .use(footnote)
   .use(schemedLinksOnly)
+  .use(wikiLinks)
   .use(recordLinks);
 
 parser.core.ruler.disable(['inline', 'linkify', 'replacements', 'smartquotes', 'text_join']);
@@ -36,19 +41,21 @@ parser.core.ruler.disable(['inline', 'linkify', 'replacements', 'smartquotes', '
  * A Markdown body with every link destination `rewrite` answers for replaced
  * by its answer: inline links, autolinks, bare URLs and reference definitions.
  * Images, code, raw HTML and every link `rewrite` returns `undefined` for are
- * left as written.
+ * left as written. A wiki link, which no Markdown reader knows, always becomes
+ * an inline link: to `rewrite`'s answer, or to its path under `wikiBase`.
  *
  * `rewrite` gets the href as the rendered page would carry it.
  */
 export function rewriteMarkdownLinks(
   body: string,
   rewrite: (href: string) => string | undefined,
+  wikiBase?: string,
 ): string {
   const source = body.replace(/\r\n?/g, '\n');
   const edits: { start: number; end: number; text: string }[] = [];
 
-  for (const link of linksIn(source)) {
-    const target = rewrite(link.href);
+  for (const link of linksIn(source, wikiBase)) {
+    const target = rewrite(link.href) ?? (link.wiki ? link.href : undefined);
     if (target === undefined) continue;
     const destination = /[\s()<>]/.test(target) ? `<${target}>` : target;
     const text =
@@ -61,8 +68,8 @@ export function rewriteMarkdownLinks(
     .reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
 }
 
-function linksIn(source: string): LinkAt[] {
-  const env: LinkEnv = { found: [] };
+function linksIn(source: string, wikiBase: string | undefined): LinkAt[] {
+  const env: LinkEnv = { found: [], wikiBase };
   const tokens = parser.parse(source, env);
   const blockLinks = env.found;
   const lines = lineStarts(source);
@@ -75,7 +82,7 @@ function linksIn(source: string): LinkAt[] {
     if (offsets === undefined) continue;
 
     const found: LinkAt[] = [];
-    parser.inline.parse(token.content, parser, { found } satisfies LinkEnv, []);
+    parser.inline.parse(token.content, parser, { found, wikiBase } satisfies LinkEnv, []);
     for (const link of found) {
       const start = toSource(offsets, link.start);
       const end = toSource(offsets, link.end);
@@ -196,6 +203,19 @@ function recordLinks(md: MarkdownItInstance): void {
     const href = openedAt(state, before)?.attrGet('href');
     if (!silent && typeof href === 'string') {
       record(state, { start, end: state.pos, href, bare: state.src.slice(start, state.pos) });
+    }
+    return true;
+  });
+
+  wrapInline(md, WIKI_LINK_RULE, (state, silent, original) => {
+    const start = state.pos;
+    const before = state.tokens.length;
+    if (!original(state, silent)) return false;
+    const open = openedAt(state, before);
+    const href = open?.attrGet('href');
+    const text = open === undefined ? undefined : state.tokens[state.tokens.indexOf(open) + 1];
+    if (!silent && typeof href === 'string' && text?.type === 'text') {
+      record(state, { start, end: state.pos, href, bare: text.content, wiki: true });
     }
     return true;
   });
