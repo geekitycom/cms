@@ -12,6 +12,7 @@ import type { TestContext } from 'node:test';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { RECHECK_MS } from '../maintenance.ts';
+import { shared } from './__testing__/shared.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -63,6 +64,9 @@ async function site(theme?: Record<string, string>): Promise<Cms> {
   return cms;
 }
 
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
+
 async function maintenance(cms: Cms, until?: Date): Promise<void> {
   await cms.settings.set(
     'maintenance',
@@ -98,7 +102,7 @@ const LINKS = /\[home\]\(\/index\.md\).*\[search the site\]\(\/search\/index\.md
 
 describe('a 404 asked for in Markdown (AC #1, #2)', () => {
   it('answers a .md URL that names nothing with a Markdown 404', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const response = await get(cms, '/2026/09/never/index.md');
     const text = await response.text();
@@ -114,7 +118,7 @@ describe('a 404 asked for in Markdown (AC #1, #2)', () => {
   });
 
   it('answers by Accept: text/markdown, and text/plain under that label', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const markdown = await get(cms, '/2026/09/never/', 'text/markdown');
     assertMarkdown(markdown, 404);
@@ -124,7 +128,7 @@ describe('a 404 asked for in Markdown (AC #1, #2)', () => {
   });
 
   it('stays HTML with no Accept, with */*, with a browser Accept and for JSON', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     assertHtml(await get(cms, '/2026/09/never/'), 404);
     assertHtml(await get(cms, '/2026/09/never/', '*/*'), 404);
@@ -137,7 +141,7 @@ describe('a 404 asked for in Markdown (AC #1, #2)', () => {
   });
 
   it('still serves a .md that exists with a 200', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const response = await get(cms, '/2026/09/hello/index.md');
     assert.equal(response.status, 200);
@@ -147,7 +151,7 @@ describe('a 404 asked for in Markdown (AC #1, #2)', () => {
 
 describe('a 410 asked for in Markdown (AC #1, #2)', () => {
   it('answers the .md of a deleted post with a Markdown 410', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const response = await get(cms, '/2026/09/gone/index.md');
     const text = await response.text();
@@ -160,7 +164,7 @@ describe('a 410 asked for in Markdown (AC #1, #2)', () => {
   });
 
   it('answers Accept: text/markdown with a 410 and keeps HTML for a browser', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     assertMarkdown(await get(cms, '/2026/09/gone/', 'text/markdown'), 410);
     assertHtml(await get(cms, '/2026/09/gone/'), 410);
@@ -262,7 +266,7 @@ describe('a theme’s Markdown status pages (AC #3)', () => {
   });
 
   it('takes the header and footer from the theme too', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'partials/markdown-header.md.njk': 'TOP {{ type }} {{ title }}\n',
       'partials/markdown-footer.md.njk': 'BOTTOM\n',
     });

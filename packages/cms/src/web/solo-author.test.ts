@@ -10,6 +10,7 @@ import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
 import { createUser } from './__testing__/users.ts';
+import { shared } from './__testing__/shared.ts';
 
 /**
  * Who the site is, from the outside (TASK-180, TASK-192).
@@ -98,6 +99,9 @@ async function site(
   return instance;
 }
 
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
+
 async function body(cms: Cms, pathname: string): Promise<string> {
   const response = await cms.app.request(pathname);
   assert.equal(response.status, 200, `${pathname} answers`);
@@ -149,7 +153,7 @@ const ADA_PERSON = { '@id': 'http://localhost:3000/author/ada/#person' };
 
 describe('a site whose author is a user (AC #2)', () => {
   it("prints the site author's bio card on a post-listing homepage", async () => {
-    const home = main(await body(await site({ ...LISTING, ...SOLO }), '/'));
+    const home = main(await body(await sharedSite({ ...LISTING, ...SOLO }), '/'));
 
     assert.match(home, /class="bio p-author h-card"/);
     assert.match(home, /Ada Lovelace/);
@@ -157,7 +161,7 @@ describe('a site whose author is a user (AC #2)', () => {
   });
 
   it('prints only the page on a static front page (TASK-317)', async () => {
-    const home = main(await body(await site({ ...FRONT_PAGE, ...SOLO }), '/'));
+    const home = main(await body(await sharedSite({ ...FRONT_PAGE, ...SOLO }), '/'));
 
     assert.match(home, /Hello and welcome\./);
     assert.doesNotMatch(home, /h-card|Wrote the first program/, 'the bio is still printed');
@@ -168,7 +172,7 @@ describe('a site whose author is a user (AC #2)', () => {
     ['a static front page', FRONT_PAGE],
   ] as const) {
     it(`claims the author's profiles and archive with rel="me" on ${shape}`, async () => {
-      const home = await body(await site({ ...settings, ...SOLO }), '/');
+      const home = await body(await sharedSite({ ...settings, ...SOLO }), '/');
 
       assert.ok(claimsMe(home, MASTODON), 'a Mastodon profile linking here verifies');
       assert.ok(claimsMe(home, '/author/ada/'), 'the homepage claims the author archive');
@@ -177,7 +181,7 @@ describe('a site whose author is a user (AC #2)', () => {
 
   it('keeps the rel="me" claims under a site theme whose front page prints only its words', async () => {
     const home = await body(
-      await site(
+      await sharedSite(
         { ...FRONT_PAGE, ...SOLO },
         {
           'layouts/front-page.njk':
@@ -193,7 +197,7 @@ describe('a site whose author is a user (AC #2)', () => {
   });
 
   it('has the author archive claim the homepage back with rel="me"', async () => {
-    const archive = await body(await site(SOLO), '/author/ada/');
+    const archive = await body(await sharedSite(SOLO), '/author/ada/');
 
     assert.ok(claimsMe(archive, '/'), 'the archive claims the homepage');
   });
@@ -205,14 +209,14 @@ describe('a site with several authors (AC #2, AC #3)', () => {
     ['a static front page', FRONT_PAGE],
   ] as const) {
     it(`prints no bio card on ${shape}`, async () => {
-      const home = main(await body(await site({ ...settings, ...SEVERAL }), '/'));
+      const home = main(await body(await sharedSite({ ...settings, ...SEVERAL }), '/'));
 
       assert.doesNotMatch(home, /h-card/);
       assert.doesNotMatch(home, /Wrote the first program\./);
     });
 
     it(`makes no rel="me" claims from ${shape}`, async () => {
-      const home = await body(await site({ ...settings, ...SEVERAL }), '/');
+      const home = await body(await sharedSite({ ...settings, ...SEVERAL }), '/');
 
       assert.ok(!claimsMe(home, '/author/ada/'), 'the homepage does not claim the archive');
       assert.ok(!claimsMe(home, MASTODON), 'nor the author’s profiles');
@@ -220,14 +224,14 @@ describe('a site with several authors (AC #2, AC #3)', () => {
   }
 
   it('has the author archive make no claim on the homepage', async () => {
-    const archive = await body(await site(SEVERAL), '/author/ada/');
+    const archive = await body(await sharedSite(SEVERAL), '/author/ada/');
 
     assert.ok(!claimsMe(archive, '/'), 'the archive does not claim the homepage');
   });
 
   it('is what an empty author gets', async () => {
-    const empty = await body(await site({ author: '' }), '/');
-    const absent = await body(await site(SEVERAL), '/');
+    const empty = await body(await sharedSite({ author: '' }), '/');
+    const absent = await body(await sharedSite(SEVERAL), '/');
 
     assert.equal(main(empty), main(absent));
   });
@@ -235,7 +239,7 @@ describe('a site with several authors (AC #2, AC #3)', () => {
 
 describe('a site.json written before the select (AC #5)', () => {
   it('reads an author that is a display name as that user', async () => {
-    const home = await body(await site({ author: 'Ada Lovelace', soloAuthor: false }), '/');
+    const home = await body(await sharedSite({ author: 'Ada Lovelace', soloAuthor: false }), '/');
 
     assert.match(main(home), /class="bio p-author h-card"/);
     assert.ok(claimsMe(home, '/author/ada/'), 'the homepage claims the archive');
@@ -243,7 +247,7 @@ describe('a site.json written before the select (AC #5)', () => {
   });
 
   it('reads an author that matches nobody as several authors', async () => {
-    const home = await body(await site({ author: 'Joe Blog', soloAuthor: true }), '/');
+    const home = await body(await sharedSite({ author: 'Joe Blog', soloAuthor: true }), '/');
 
     assert.doesNotMatch(main(home), /h-card/);
     assert.ok(!claimsMe(home, '/author/ada/'), 'no claim on anybody’s archive');
@@ -254,18 +258,22 @@ describe('a site.json written before the select (AC #5)', () => {
 describe('the footer (AC #4)', () => {
   it('prints the site author’s display name, not their username', async () => {
     for (const pathname of ['/', '/welcome/', '/2026/09/hello/']) {
-      assert.equal(copyright(await body(await site(SOLO), pathname)), 'Ada Lovelace', pathname);
+      assert.equal(
+        copyright(await body(await sharedSite(SOLO), pathname)),
+        'Ada Lovelace',
+        pathname,
+      );
     }
   });
 
   it('prints the site title on a site with several authors', async () => {
-    assert.equal(copyright(await body(await site(SEVERAL), '/')), 'A Site');
+    assert.equal(copyright(await body(await sharedSite(SEVERAL), '/')), 'A Site');
   });
 });
 
 describe('the structured data (AC #9)', () => {
   it('has the WebSite published by and about the site author, on every page', async () => {
-    const cms = await site(SOLO);
+    const cms = await sharedSite(SOLO);
     for (const pathname of ['/', '/welcome/', '/2026/09/hello/', '/author/ada/']) {
       const node = website(await body(cms, pathname));
       assert.deepEqual(node['publisher'], ADA_PERSON, pathname);
@@ -274,7 +282,7 @@ describe('the structured data (AC #9)', () => {
   });
 
   it('prints the site author’s Person on a page about nobody in particular', async () => {
-    const nodes = graph(await body(await site(SOLO), '/welcome/'));
+    const nodes = graph(await body(await sharedSite(SOLO), '/welcome/'));
     const person = nodes.find((node) => node['@type'] === 'Person');
 
     assert.equal(person?.['@id'], ADA_PERSON['@id']);
@@ -282,7 +290,7 @@ describe('the structured data (AC #9)', () => {
   });
 
   it('has a site with several authors published by an Organization named for it', async () => {
-    const cms = await site(SEVERAL);
+    const cms = await sharedSite(SEVERAL);
     for (const pathname of ['/', '/welcome/']) {
       const nodes = graph(await body(cms, pathname));
       const node = website(await body(cms, pathname));
@@ -302,7 +310,7 @@ describe('the structured data (AC #9)', () => {
   });
 
   it('still credits a post’s writer on a site with several authors', async () => {
-    const nodes = graph(await body(await site(SEVERAL), '/2026/09/hello/'));
+    const nodes = graph(await body(await sharedSite(SEVERAL), '/2026/09/hello/'));
     const posting = nodes.find((entry) => entry['@type'] === 'BlogPosting');
 
     assert.deepEqual(posting?.['author'], ADA_PERSON);
@@ -373,14 +381,14 @@ function bioCard(html: string, pageUrl: string): Mf2Item {
 describe('the homepage h-card is the site’s representative h-card (TASK-193)', () => {
   for (const [shape, settings] of [['a post-listing homepage', LISTING]] as const) {
     it(`gives the bio card u-url and u-uid equal to the homepage on ${shape} (AC #1)`, async () => {
-      const card = bioCard(await body(await site({ ...settings, ...SOLO }), '/'), HOME);
+      const card = bioCard(await body(await sharedSite({ ...settings, ...SOLO }), '/'), HOME);
 
       assert.deepEqual(card.properties['uid'], [HOME]);
       assert.equal(card.properties['url']?.[0], HOME, 'the homepage is the card’s first url');
     });
 
     it(`is what the representative h-card algorithm finds on ${shape} (AC #2)`, async () => {
-      const html = await body(await site({ ...settings, ...SOLO }), '/');
+      const html = await body(await sharedSite({ ...settings, ...SOLO }), '/');
       const card = representativeHCard(html, HOME);
 
       assert.ok(card !== undefined, 'the homepage has a representative h-card');
@@ -393,7 +401,7 @@ describe('the homepage h-card is the site’s representative h-card (TASK-193)',
     });
 
     it(`keeps the archive link and the rel="me" links on ${shape} (AC #3)`, async () => {
-      const html = await body(await site({ ...settings, ...SOLO }), '/');
+      const html = await body(await sharedSite({ ...settings, ...SOLO }), '/');
       const card = bioCard(html, HOME);
 
       assert.ok(claimsMe(html, '/author/ada/'), 'the name still links the archive');
@@ -408,7 +416,10 @@ describe('the homepage h-card is the site’s representative h-card (TASK-193)',
     ['a post', '/2026/09/hello/'],
   ] as const) {
     it(`leaves the card on ${page} as it was (AC #3)`, async () => {
-      const card = bioCard(await body(await site(SOLO), pathname), `${HOME}${pathname.slice(1)}`);
+      const card = bioCard(
+        await body(await sharedSite(SOLO), pathname),
+        `${HOME}${pathname.slice(1)}`,
+      );
 
       assert.equal(card.properties['uid'], undefined, 'no uid');
       assert.equal(card.properties['url']?.[0], `${HOME}author/ada/`, 'the archive comes first');
@@ -416,14 +427,14 @@ describe('the homepage h-card is the site’s representative h-card (TASK-193)',
   }
 
   it('is left to the page’s own words on a static front page (TASK-317)', async () => {
-    const html = await body(await site({ ...FRONT_PAGE, ...SOLO }), '/');
+    const html = await body(await sharedSite({ ...FRONT_PAGE, ...SOLO }), '/');
 
     assert.equal(representativeHCard(html, HOME), undefined, 'the theme still prints a card');
     assert.ok(claimsMe(html, '/author/ada/'), 'the claims went with it');
   });
 
   it('gives a site with several authors no homepage uid', async () => {
-    const html = await body(await site({ ...FRONT_PAGE, ...SEVERAL }), '/');
+    const html = await body(await sharedSite({ ...FRONT_PAGE, ...SEVERAL }), '/');
 
     assert.doesNotMatch(html, /u-uid/);
   });

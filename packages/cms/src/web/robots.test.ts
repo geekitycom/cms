@@ -7,6 +7,7 @@ import { after, describe, it } from 'node:test';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { robotsTxt } from './robots.ts';
+import { shared } from './__testing__/shared.ts';
 
 /**
  * The robots file a site's settings describe (TASK-148): the rules a site adds,
@@ -42,6 +43,9 @@ async function site(siteJson: Record<string, unknown> = {}): Promise<Cms> {
   await instance.sync();
   return instance;
 }
+
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
 
 /** The served robots file. */
 async function robots(cms: Cms): Promise<string> {
@@ -160,10 +164,10 @@ describe('Content-Signal (AC #3)', () => {
   });
 
   it('names only the signals a site set, and is absent when it set none', async () => {
-    const partial = await robots(await site({ contentSignalAiTrain: 'no' }));
+    const partial = await robots(await sharedSite({ contentSignalAiTrain: 'no' }));
     assert.match(partial, /^Content-Signal: ai-train=no$/m);
 
-    const none = await robots(await site({}));
+    const none = await robots(await sharedSite({}));
     assert.doesNotMatch(none, /Content-Signal/);
   });
 
@@ -191,7 +195,7 @@ describe('Content-Signal (AC #3)', () => {
 
 describe('the Markdown and JSON alternates of a page (AC #4)', () => {
   it('ask search engines not to index them, and the HTML does not', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     for (const url of ['/hello/index.md', '/hello/index.json']) {
       const response = await cms.app.request(url);

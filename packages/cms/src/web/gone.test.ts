@@ -13,6 +13,7 @@ import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { createUser } from './__testing__/users.ts';
+import { shared } from './__testing__/shared.ts';
 
 const BASE_URL = 'https://blog.example';
 const ADA = { username: 'ada', password: 'correct horse battery' };
@@ -85,6 +86,9 @@ async function site(files: Record<string, string>): Promise<Site> {
   return { cms: await boot(contentDir, dataDir), contentDir, dataDir };
 }
 
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
+
 function post(
   title: string,
   options: { date: string; permalink: string; draft?: boolean; extra?: string[] },
@@ -125,7 +129,7 @@ async function submit(
 
 describe('a deleted post', () => {
   it('answers 410 Gone with a small page, not 404', async () => {
-    const { cms } = await site(GONE);
+    const { cms } = await sharedSite(GONE);
 
     const response = await get(cms, GONE_URL);
 
@@ -138,14 +142,14 @@ describe('a deleted post', () => {
   });
 
   it('answers 410 for its Markdown and JSON as well', async () => {
-    const { cms } = await site(GONE);
+    const { cms } = await sharedSite(GONE);
 
     assert.equal((await get(cms, `${GONE_URL}index.md`)).status, 410);
     assert.equal((await get(cms, `${GONE_URL}index.json`)).status, 410);
   });
 
   it('still 404s where nothing was ever public: a trashed draft and a URL naming nothing', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_trash/posts/2026-09-03-secret.md': post('Secret', {
         date: '2026-09-03T09:00:00Z',
         permalink: '/2026/09/secret/',
@@ -158,7 +162,7 @@ describe('a deleted post', () => {
   });
 
   it('answers an ActivityStreams request at its id with 410 and a Tombstone', async () => {
-    const { cms } = await site(GONE);
+    const { cms } = await sharedSite(GONE);
 
     const response = await get(cms, GONE_URL, ACTIVITY_STREAMS);
 
@@ -172,7 +176,7 @@ describe('a deleted post', () => {
 
   it('answers 410 and a Tombstone at the id a moved post kept, and no Article', async () => {
     const formerId = `${BASE_URL}/2026/09/old-name/`;
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       [GONE_FILE]: post('Gone', {
         date: '2026-09-02T09:00:00Z',
         permalink: GONE_URL,

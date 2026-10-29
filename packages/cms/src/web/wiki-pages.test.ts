@@ -8,6 +8,7 @@ import { signedIn } from './__testing__/users.ts';
 import { saveSettings } from '../admin/__testing__/settings.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
 import type { Cms } from '../index.ts';
+import { shared } from './__testing__/shared.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -43,6 +44,9 @@ async function site(): Promise<Cms> {
   });
 }
 
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
+
 async function body(cms: Cms, pathname: string, init?: RequestInit): Promise<string> {
   const response = await cms.app.request(pathname, init);
   assert.equal(response.status, 200, `GET ${pathname} answered ${String(response.status)}`);
@@ -51,7 +55,7 @@ async function body(cms: Cms, pathname: string, init?: RequestInit): Promise<str
 
 describe('a wiki page on the public site', () => {
   it('is served at its permalink with the wiki layout, its update time and its backlinks', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const html = await body(cms, '/wiki/garden-tools/');
 
     assert.match(html, /<article class="blog-post wiki-page h-entry"/);
@@ -62,7 +66,7 @@ describe('a wiki page on the public site', () => {
   });
 
   it('is served as Markdown, Gemini text and JSON', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.match(await body(cms, '/wiki/garden-tools/index.md'), /A spade and a fork/);
     assert.match(await body(cms, '/wiki/garden-tools/index.gmi'), /A spade and a fork/);
     const json = JSON.parse(await body(cms, '/wiki/garden-tools/index.json')) as {
@@ -74,7 +78,7 @@ describe('a wiki page on the public site', () => {
   });
 
   it('is a 404 while a draft and a 410 once trashed, as a page is', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.equal((await cms.app.request('/wiki/unfinished/')).status, 404);
     assert.equal((await cms.app.request('/wiki/binned/')).status, 410);
   });
@@ -82,21 +86,21 @@ describe('a wiki page on the public site', () => {
 
 describe('where wiki pages are listed', () => {
   it('in site search', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const html = await body(cms, '/search/?q=marigold');
     assert.match(html, /\/wiki\/garden-tools\//);
     assert.match(html, /<span class="kicker-kind">Wiki<\/span>/);
   });
 
   it('in the sitemap', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const xml = await body(cms, '/sitemap.xml');
     assert.match(xml, /<loc>https:\/\/blog\.example\/wiki\/garden-tools\/<\/loc>/);
     assert.doesNotMatch(xml, /unfinished|binned/);
   });
 
   it('in a section of their own in /llms.txt', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const text = await body(cms, '/llms.txt');
     const wiki = text.slice(text.indexOf('## Wiki'));
     assert.ok(text.includes('## Wiki'), text);
@@ -111,7 +115,7 @@ describe('where wiki pages are listed', () => {
 
 describe('where wiki pages are not listed', () => {
   it('in the feeds, the home page or the archives', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     for (const pathname of ['/feed/', '/feed/atom/', '/feed/json/', '/', '/2026/', '/2026/09/']) {
       const response = await cms.app.request(pathname);
       const text = await response.text();
@@ -120,7 +124,7 @@ describe('where wiki pages are not listed', () => {
   });
 
   it('on the fediverse', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const html = await body(cms, '/wiki/garden-tools/');
     assert.doesNotMatch(html, /application\/activity\+json/);
     const asked = await cms.app.request('/wiki/garden-tools/', {
@@ -167,7 +171,7 @@ describe('a change of wiki base', () => {
 
 describe('a wiki link', () => {
   it('is a link in the HTML, in the feeds and in the backlinks of its target', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const html = await body(cms, '/2026/09/wiki-linking/');
     assert.match(html, /<a class="wiki-link" href="\/wiki\/garden-tools\/">the tools<\/a>/);
     assert.match(
@@ -188,7 +192,7 @@ describe('a wiki link', () => {
   });
 
   it('is an ordinary Markdown link in index.md and a link line in index.gmi', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const markdown = await body(cms, '/2026/09/wiki-linking/index.md');
     assert.match(markdown, /\[the tools\]\(\/wiki\/garden-tools\/index\.md\)/);
     assert.match(markdown, /\[the shed\]\(\/wiki\/garden-tools\/index\.md#in-the-shed\)/);

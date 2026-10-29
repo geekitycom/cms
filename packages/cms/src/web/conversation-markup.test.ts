@@ -26,6 +26,7 @@ import { COMMENT_FIELDS } from '../comments/submission.ts';
 import { CONTACT_FIELDS } from '../contact/form.ts';
 import type { Cms } from '../index.ts';
 import { avatarHref } from '../avatars/avatars.ts';
+import { shared } from './__testing__/shared.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -227,6 +228,9 @@ async function site(): Promise<Cms> {
   return cms;
 }
 
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
+
 /** Log one fediverse reply, the way the inbox logs one. */
 function logReply(cms: Cms, options: { id: string; inReplyTo: string; url: string }): void {
   const actor = 'https://remote.example/users/bob';
@@ -316,7 +320,7 @@ function comment(html: string, id: string): string {
 
 describe('the reactions under a post (AC #1)', () => {
   it('groups the likes, the boosts and the mentions, each counted', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
     const section = reactions(html);
 
     assert.notEqual(section, '', `no reactions section on the page: ${html}`);
@@ -336,7 +340,7 @@ describe('the reactions under a post (AC #1)', () => {
   });
 
   it('is a facepile of avatars, and a badge and a name for whoever has none', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
     const likes = group(reactions(html), 'p-like');
 
     assert.match(likes, /<div class="facepile">/, 'the likers are not a facepile');
@@ -354,13 +358,13 @@ describe('the reactions under a post (AC #1)', () => {
   });
 
   it('points a mention at the page it came from', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
 
     assert.match(group(reactions(html), 'p-mention'), new RegExp(`href="${SOURCE_PAGE}"`));
   });
 
   it('prints no group for a kind nothing has', async () => {
-    const html = await body(await site(), '/2026/09/quiet/');
+    const html = await body(await sharedSite(), '/2026/09/quiet/');
     const section = reactions(html);
 
     assert.match(
@@ -374,7 +378,7 @@ describe('the reactions under a post (AC #1)', () => {
 
 describe('the comments under a post (AC #2)', () => {
   it('is a comments-area with the count over the list', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
     const area = comments(html);
 
     assert.notEqual(area, '', `no comments area on the page: ${html}`);
@@ -389,7 +393,7 @@ describe('the comments under a post (AC #2)', () => {
   });
 
   it('says One reply where there is one', async () => {
-    const html = await body(await site(), '/2026/09/closed/');
+    const html = await body(await sharedSite(), '/2026/09/closed/');
 
     assert.match(
       comments(html),
@@ -399,7 +403,7 @@ describe('the comments under a post (AC #2)', () => {
   });
 
   it('marks a comment up the way the source theme does', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
     const said = comment(comments(html), ADA);
 
     assert.match(said, /class="comment h-entry comment-comment"/, 'the item is not an h-entry');
@@ -420,7 +424,7 @@ describe('the comments under a post (AC #2)', () => {
   });
 
   it('nests an answer in an ol.children inside what it answers', async () => {
-    const area = comments(await body(await site(), '/2026/09/hello/'));
+    const area = comments(await body(await sharedSite(), '/2026/09/hello/'));
 
     const first = area.indexOf('Approved words.');
     const nested = area.indexOf('<ol class="children">');
@@ -429,7 +433,7 @@ describe('the comments under a post (AC #2)', () => {
   });
 
   it('offers Reply on a comment left here and on nothing else', async () => {
-    const area = comments(await body(await site(), '/2026/09/hello/'));
+    const area = comments(await body(await sharedSite(), '/2026/09/hello/'));
 
     assert.match(
       comment(area, ADA),
@@ -444,7 +448,7 @@ describe('the comments under a post (AC #2)', () => {
   });
 
   it('offers Reply on nothing at all once the post is closed', async () => {
-    const area = comments(await body(await site(), '/2026/09/closed/'));
+    const area = comments(await body(await sharedSite(), '/2026/09/closed/'));
 
     assert.doesNotMatch(area, /class="reply"/, 'a closed post still offers a Reply link');
   });
@@ -452,20 +456,20 @@ describe('the comments under a post (AC #2)', () => {
 
 describe('a post that has stopped taking comments (AC #3)', () => {
   it('says so when it has some', async () => {
-    const area = comments(await body(await site(), '/2026/09/closed/'));
+    const area = comments(await body(await sharedSite(), '/2026/09/closed/'));
 
     assert.match(area, /<p class="no-comments">Comments are closed\.<\/p>/);
   });
 
   it('says nothing when it has none', async () => {
-    const html = await body(await site(), '/2026/09/quiet/');
+    const html = await body(await sharedSite(), '/2026/09/quiet/');
 
     assert.doesNotMatch(html, /no-comments/, 'a post nobody commented on announces nothing');
     assert.doesNotMatch(html, /comments-area/, 'and draws no comments area either');
   });
 
   it('says nothing on a post that is still open', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
 
     assert.doesNotMatch(html, /no-comments/, 'an open post is not closed');
   });
@@ -473,7 +477,7 @@ describe('a post that has stopped taking comments (AC #3)', () => {
 
 describe('the forms (AC #4)', () => {
   it('draws the comment form as a comment-respond with everything it had', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
 
     assert.match(html, /<section class="comment-respond" id="respond">/, 'not a comment-respond');
     assert.match(html, /<h2 class="comment-reply-title">Leave a comment<\/h2>/);
@@ -494,7 +498,7 @@ describe('the forms (AC #4)', () => {
   });
 
   it('gives the contact form the same form styling and every field', async () => {
-    const html = await body(await site(), '/write/');
+    const html = await body(await sharedSite(), '/write/');
 
     assert.match(html, /class="comment-respond contact-form" id="contact"/, 'not the same form');
     for (const field of [
@@ -514,7 +518,7 @@ describe('the forms (AC #4)', () => {
 
 describe('the stylesheet (AC #5)', () => {
   it('styles the comments and the reactions the way the source theme does', async () => {
-    const css = await body(await site(), '/theme/style.css');
+    const css = await body(await sharedSite(), '/theme/style.css');
 
     for (const rule of [
       '.comments-area',

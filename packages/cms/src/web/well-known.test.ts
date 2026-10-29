@@ -12,6 +12,7 @@ import { browser, sandbox } from '../admin/__testing__/harness.ts';
 import { signedIn } from './__testing__/users.ts';
 import { saveSettings } from '../admin/__testing__/settings.ts';
 import type { Cms } from '../index.ts';
+import { shared } from './__testing__/shared.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -50,6 +51,9 @@ async function site(siteJson?: Record<string, unknown>): Promise<Site> {
   };
 }
 
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
+
 function field(body: string, name: string): string[] {
   return body
     .split('\n')
@@ -59,7 +63,7 @@ function field(body: string, name: string): string[] {
 
 describe('/.well-known/security.txt', () => {
   it('is a 404 on a site that has named no security contact', async () => {
-    const { cms } = await site({ title: 'Quiet', contactEmail: 'hello@blog.example' });
+    const { cms } = await sharedSite({ title: 'Quiet', contactEmail: 'hello@blog.example' });
 
     const response = await cms.app.request('/.well-known/security.txt');
 
@@ -72,7 +76,7 @@ describe('/.well-known/security.txt', () => {
   });
 
   it('serves every field the site set, as UTF-8 plain text', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       securityContacts: ['mailto:security@blog.example', 'https://blog.example/security'],
       securityPolicy: 'https://blog.example/disclosure',
       securityLanguages: 'en, fr',
@@ -94,7 +98,7 @@ describe('/.well-known/security.txt', () => {
   });
 
   it('leaves out the optional fields a site did not set', async () => {
-    const { cms } = await site({ securityContacts: ['mailto:security@blog.example'] });
+    const { cms } = await sharedSite({ securityContacts: ['mailto:security@blog.example'] });
 
     const body = await (await cms.app.request('/.well-known/security.txt')).text();
 

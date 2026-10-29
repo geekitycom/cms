@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { shared } from './__testing__/shared.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -49,6 +50,9 @@ async function site(
   await instance.sync();
   return { cms: instance, contentDir };
 }
+
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
 
 /** The file text of the one post every test in here negotiates over. */
 const HELLO_FILE = [
@@ -94,7 +98,7 @@ const HELLO_MARKDOWN = [
 
 describe('the Markdown representation', () => {
   it('serves the stored file under its title as a heading, front matter included', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     const response = await cms.app.request('/2026/09/hello/', {
       headers: { accept: 'text/markdown' },
@@ -109,7 +113,7 @@ describe('the Markdown representation', () => {
   it('adds no heading to a note, or to a body that already opens with one', async () => {
     const note = `---\ndate: '2026-09-05T09:00:00Z'\npermalink: /note/\n---\n\nJust a thought.\n`;
     const headed = `---\ntitle: Headed\ndate: '2026-09-06T09:00:00Z'\npermalink: /headed/\n---\n\n# My own heading\n\nBody.\n`;
-    const { cms } = await site({ 'posts/note.md': note, 'posts/headed.md': headed });
+    const { cms } = await sharedSite({ 'posts/note.md': note, 'posts/headed.md': headed });
 
     const markdown = async (url: string): Promise<string> =>
       (await cms.app.request(url, { headers: { accept: 'text/markdown' } })).text();
@@ -147,7 +151,7 @@ describe('the Markdown representation', () => {
   });
 
   it('keeps the stored body in the JSON', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     const json = (await (
       await cms.app.request('/2026/09/hello/', { headers: { accept: 'application/json' } })
@@ -157,7 +161,7 @@ describe('the Markdown representation', () => {
   });
 
   it('serves the same file as text/plain to a reader that asks for that', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     const response = await cms.app.request('/2026/09/hello/', {
       headers: { accept: 'text/plain' },
@@ -171,7 +175,7 @@ describe('the Markdown representation', () => {
   });
 
   it('labels it Markdown when the request ranks text/markdown as high', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     const response = await cms.app.request('/2026/09/hello/', {
       headers: { accept: 'text/plain, text/markdown' },
@@ -183,7 +187,7 @@ describe('the Markdown representation', () => {
 
 describe('the JSON representation', () => {
   it('serves schema, url, front matter, markdown and html', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     const response = await cms.app.request('/2026/09/hello/', {
       headers: { accept: 'application/json' },
@@ -212,7 +216,7 @@ describe('the JSON representation', () => {
 
 describe('the extension escape hatch', () => {
   it('beats Accept', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     const markdown = await cms.app.request('/2026/09/hello/index.md', {
       headers: { accept: 'text/html' },
@@ -231,7 +235,7 @@ describe('the extension escape hatch', () => {
   });
 
   it('redirects the bare .ext spelling to the index.ext one', async () => {
-    const { cms } = await site({ ...HELLO, ...ARCHIVE });
+    const { cms } = await sharedSite({ ...HELLO, ...ARCHIVE });
 
     for (const [url, location] of [
       ['/2026/09/hello.md', '/2026/09/hello/index.md'],
@@ -247,7 +251,7 @@ describe('the extension escape hatch', () => {
   });
 
   it('serves the bare .ext spelling in place when the permalink has no slash', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'pages/colophon.md': '---\ntitle: Colophon\npermalink: /colophon\n---\n\nMade by hand.\n',
     });
 
@@ -258,7 +262,7 @@ describe('the extension escape hatch', () => {
   });
 
   it('leaves a path that merely contains a dot alone', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'pages/notes.md': [
         '---',
         'title: Notes',
@@ -277,7 +281,7 @@ describe('the extension escape hatch', () => {
   });
 
   it('404s an extension on a path no document claims', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     for (const url of ['/nothing-here.md', '/nothing-here/index.json']) {
       assert.equal((await cms.app.request(url)).status, 404, `${url} is not found`);
@@ -287,7 +291,7 @@ describe('the extension escape hatch', () => {
 
 describe('choosing from Accept', () => {
   it('gives HTML to a request that expresses no preference', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     for (const headers of [
       {},
@@ -306,7 +310,7 @@ describe('choosing from Accept', () => {
   });
 
   it('honours q-values rather than header order', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     for (const [accept, expected] of [
       ['text/html;q=0.5, text/markdown;q=0.9', /^text\/markdown/],
@@ -321,7 +325,7 @@ describe('choosing from Accept', () => {
   });
 
   it('406s a request that accepts nothing on offer, and lists the alternates', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     const response = await cms.app.request('/2026/09/hello/', {
       headers: { accept: 'image/png, application/pdf' },
@@ -340,7 +344,7 @@ describe('choosing from Accept', () => {
   });
 
   it('406s when every acceptable type is refused with q=0', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     const response = await cms.app.request('/2026/09/hello/', {
       headers: { accept: '*/*;q=0' },
@@ -384,7 +388,7 @@ describe('validators and alternates', () => {
   });
 
   it('gives each representation its own ETag, and the JSON a Last-Modified', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
     const etags = new Set<string>();
 
     for (const accept of ['text/html', 'text/markdown', 'application/json']) {
@@ -405,7 +409,7 @@ describe('validators and alternates', () => {
   });
 
   it('answers 304 with an empty body when If-None-Match still matches', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     for (const accept of ['text/html', 'text/markdown', 'application/json']) {
       const first = await cms.app.request('/2026/09/hello/', { headers: { accept } });
@@ -423,7 +427,7 @@ describe('validators and alternates', () => {
   });
 
   it('does not honour one representation ETag for another', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
     const markdown = await cms.app.request('/2026/09/hello/', {
       headers: { accept: 'text/markdown' },
     });
@@ -436,7 +440,7 @@ describe('validators and alternates', () => {
   });
 
   it('answers 304 to a fresh If-Modified-Since and 200 to a stale one', async () => {
-    const { cms } = await site(HELLO);
+    const { cms } = await sharedSite(HELLO);
 
     const fresh = await cms.app.request('/2026/09/hello/', {
       headers: {
@@ -472,7 +476,7 @@ const ARCHIVE = {
 
 describe('listings', () => {
   it('serves an array of summaries with no markdown or html', async () => {
-    const { cms } = await site(ARCHIVE);
+    const { cms } = await sharedSite(ARCHIVE);
 
     const response = await cms.app.request('/', { headers: { accept: 'application/json' } });
     const body: unknown = await response.json();
@@ -504,7 +508,7 @@ describe('listings', () => {
   });
 
   it('includes markdown and html when ?full=1 asks for them', async () => {
-    const { cms } = await site(ARCHIVE);
+    const { cms } = await sharedSite(ARCHIVE);
 
     const response = await cms.app.request('/?full=1', {
       headers: { accept: 'application/json' },
@@ -517,7 +521,7 @@ describe('listings', () => {
   });
 
   it('negotiates later pages and tag archives too', async () => {
-    const { cms } = await site(ARCHIVE);
+    const { cms } = await sharedSite(ARCHIVE);
 
     const second = (await (
       await cms.app.request('/page/2/', { headers: { accept: 'application/json' } })
@@ -537,7 +541,7 @@ describe('listings', () => {
   });
 
   it('answers the .json extension on a listing URL', async () => {
-    const { cms } = await site(ARCHIVE);
+    const { cms } = await sharedSite(ARCHIVE);
 
     for (const url of ['/index.json', '/page/2/index.json', '/tag/notes/index.json']) {
       const response = await cms.app.request(url, { headers: { accept: 'text/html' } });
@@ -548,7 +552,7 @@ describe('listings', () => {
   });
 
   it('406s what a listing does not offer, listing the alternates that have a URL', async () => {
-    const { cms } = await site(ARCHIVE);
+    const { cms } = await sharedSite(ARCHIVE);
 
     const response = await cms.app.request('/', { headers: { accept: 'image/png' } });
     const body = (await response.json()) as { alternates: unknown };
@@ -563,7 +567,7 @@ describe('listings', () => {
   });
 
   it('links the Markdown and JSON alternates from a listing, and revalidates', async () => {
-    const { cms } = await site(ARCHIVE);
+    const { cms } = await sharedSite(ARCHIVE);
 
     const html = await cms.app.request('/tag/notes/');
     assert.equal(
@@ -597,7 +601,7 @@ describe('listings', () => {
   });
 
   it('still renders HTML for a listing when nothing else is asked for', async () => {
-    const { cms } = await site(ARCHIVE);
+    const { cms } = await sharedSite(ARCHIVE);
 
     for (const accept of [undefined, '*/*', 'text/html', 'text/*']) {
       const response = await cms.app.request(
@@ -625,7 +629,7 @@ const ARCHIVE_FEEDS = [
 
 describe('a listing as Markdown (TASK-289)', () => {
   it('lists the page’s posts under its title, with the older page’s Markdown', async () => {
-    const { cms } = await site(LONG_ARCHIVE);
+    const { cms } = await sharedSite(LONG_ARCHIVE);
 
     const response = await cms.app.request('/tag/notes/', {
       headers: { accept: 'text/markdown' },
@@ -667,7 +671,7 @@ describe('a listing as Markdown (TASK-289)', () => {
   });
 
   it('links a later page back to the newer one', async () => {
-    const { cms } = await site(LONG_ARCHIVE);
+    const { cms } = await sharedSite(LONG_ARCHIVE);
 
     const body = await (
       await cms.app.request('/tag/notes/page/2/', { headers: { accept: 'text/markdown' } })
@@ -680,7 +684,7 @@ describe('a listing as Markdown (TASK-289)', () => {
   });
 
   it('heads /page/N/ with the site’s title, and links both neighbours', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...LONG_ARCHIVE,
       'posts/five.md': post('Five', '2026-08-29T09:00:00Z', '/five/'),
     });
@@ -696,7 +700,7 @@ describe('a listing as Markdown (TASK-289)', () => {
   });
 
   it('renders the home listing under the site’s title and tagline, not llms.txt', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...LONG_ARCHIVE,
       '_data/site.json': JSON.stringify({
         title: 'Archive',
@@ -746,7 +750,7 @@ describe('a listing as Markdown (TASK-289)', () => {
   });
 
   it('is served at {listing}/index.md exactly as Accept serves it', async () => {
-    const { cms } = await site(LONG_ARCHIVE);
+    const { cms } = await sharedSite(LONG_ARCHIVE);
 
     const negotiated = await (
       await cms.app.request('/tag/notes/', { headers: { accept: 'text/markdown' } })
@@ -759,7 +763,7 @@ describe('a listing as Markdown (TASK-289)', () => {
   });
 
   it('answers text/plain with the same body under that label', async () => {
-    const { cms } = await site(LONG_ARCHIVE);
+    const { cms } = await sharedSite(LONG_ARCHIVE);
 
     const markdown = await (
       await cms.app.request('/tag/notes/', { headers: { accept: 'text/markdown' } })
@@ -774,7 +778,7 @@ describe('a listing as Markdown (TASK-289)', () => {
   });
 
   it('revalidates on its own bytes, apart from the text/plain copy', async () => {
-    const { cms } = await site(LONG_ARCHIVE);
+    const { cms } = await sharedSite(LONG_ARCHIVE);
 
     const first = await cms.app.request('/tag/notes/', { headers: { accept: 'text/markdown' } });
     const etag = first.headers.get('etag') ?? '';

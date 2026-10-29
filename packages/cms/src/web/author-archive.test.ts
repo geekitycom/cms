@@ -8,6 +8,7 @@ import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
 import { createUser } from './__testing__/users.ts';
+import { shared } from './__testing__/shared.ts';
 
 /**
  * The author archive and its feeds, from the outside (TASK-67).
@@ -119,9 +120,12 @@ async function site(
   return instance;
 }
 
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
+
 describe('the author archive (AC #3)', () => {
   it('lists that user’s published posts, newest first', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const response = await cms.app.request('/author/ada/');
     const html = await response.text();
@@ -141,7 +145,7 @@ describe('the author archive (AC #3)', () => {
   });
 
   it('heads the archive with the profile (AC #5)', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const html = await (await cms.app.request('/author/ada/')).text();
 
@@ -163,7 +167,7 @@ describe('the author archive (AC #3)', () => {
   });
 
   it('gives a user with no profile an archive under their username', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const response = await cms.app.request('/author/grace/');
     const html = await response.text();
@@ -174,7 +178,7 @@ describe('the author archive (AC #3)', () => {
   });
 
   it('paginates like the home page', async () => {
-    const cms = await site(CONTENT, { postsPerPage: 1 });
+    const cms = await sharedSite(CONTENT, { postsPerPage: 1 });
 
     const first = await (await cms.app.request('/author/ada/')).text();
     assert.ok(first.includes('/2026/09/by-login/'), 'page one holds the newest');
@@ -190,14 +194,14 @@ describe('the author archive (AC #3)', () => {
   });
 
   it('404s for a username nobody has', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     assert.equal((await cms.app.request('/author/babbage/')).status, 404);
     assert.equal((await cms.app.request('/author/babbage/feed/')).status, 404);
   });
 
   it('answers for a user who exists but has published nothing', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       '_data/site.json': CONTENT['_data/site.json'] as string,
       'posts/2026-09-02-by-login.md': CONTENT['posts/2026-09-02-by-login.md'] as string,
     });
@@ -213,7 +217,7 @@ describe('the author archive (AC #3)', () => {
   });
 
   it('redirects the spellings that are not the canonical one', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const slashless = await cms.app.request('/author/ada');
     assert.equal(slashless.status, 301);
@@ -229,7 +233,7 @@ describe('the author archive (AC #3)', () => {
   });
 
   it('answers the older feed spellings the way every listing does', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const alias = await cms.app.request('/author/ada/feed/rss/');
     assert.equal(alias.status, 301);
@@ -241,7 +245,7 @@ describe('the author archive (AC #3)', () => {
   });
 
   it('keeps the URL from a document permalinked under it (AC #4)', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       ...CONTENT,
       'pages/impostor.md':
         '---\ntitle: Impostor\npermalink: /author/ada/\n---\n\nNot the archive.\n',
@@ -254,7 +258,7 @@ describe('the author archive (AC #3)', () => {
   });
 
   it('answers JSON when a reader asks for it, as every listing does', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const response = await cms.app.request('/author/ada/', {
       headers: { accept: 'application/json' },
@@ -273,7 +277,7 @@ describe('a peer that also accepts application/json (TASK-505)', () => {
   const accept = 'application/activity+json,application/ld+json,application/json';
 
   it('gets the actor at the author archive', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const response = await cms.app.request('/author/ada/', { headers: { accept } });
     const actor = (await response.json()) as { type: string; publicKey?: { id: string } };
@@ -285,7 +289,7 @@ describe('a peer that also accepts application/json (TASK-505)', () => {
   });
 
   it('gets the ActivityStreams object at a published post', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const response = await cms.app.request('/2026/09/by-login/', { headers: { accept } });
 
@@ -296,7 +300,7 @@ describe('a peer that also accepts application/json (TASK-505)', () => {
 
 describe('the author archive as Markdown (TASK-289)', () => {
   it('lists their posts under their name, linked to each post’s Markdown', async () => {
-    const cms = await site(CONTENT, { postsPerPage: 1 });
+    const cms = await sharedSite(CONTENT, { postsPerPage: 1 });
 
     const response = await cms.app.request('/author/ada/', {
       headers: { accept: 'text/markdown' },
@@ -344,7 +348,7 @@ describe('the author archive as Markdown (TASK-289)', () => {
 
 describe('the author feeds (AC #3)', () => {
   it('serves the three formats over the same posts', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const rss = await cms.app.request('/author/ada/feed/');
     const rssBody = await rss.text();
@@ -370,7 +374,7 @@ describe('the author feeds (AC #3)', () => {
   });
 
   it('is advertised on the archive', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const html = await (await cms.app.request('/author/ada/')).text();
 
@@ -382,7 +386,7 @@ describe('the author feeds (AC #3)', () => {
 
 describe('a byline (AC #2, AC #5)', () => {
   it('names the author and links to their archive', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const html = await (await cms.app.request('/2026/08/by-display-name/')).text();
 
@@ -391,7 +395,7 @@ describe('a byline (AC #2, AC #5)', () => {
   });
 
   it('prints a name that is nobody’s without linking anywhere', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       '_data/site.json': CONTENT['_data/site.json'] as string,
       'posts/2026-09-02-by-a-stranger.md': post('By A Stranger', {
         month: '09',

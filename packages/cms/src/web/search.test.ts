@@ -9,6 +9,7 @@ import type { Cms } from '../index.ts';
 import { representationHref } from './negotiate.ts';
 import type { SearchJson } from './search.ts';
 import { searchHref, searchPageIndex, searchQuery, snippetHtml } from './search.ts';
+import { shared } from './__testing__/shared.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -47,6 +48,9 @@ async function site(files: Record<string, string>): Promise<Cms> {
   await cms.sync();
   return cms;
 }
+
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
 
 /** A post file, dated before the stopped clock unless `date` says otherwise. */
 function post(
@@ -88,7 +92,7 @@ function resultTitles(html: string): string[] {
 
 describe('GET /search/', () => {
   it('lists the published posts and pages that match, best first (AC #1)', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const response = await cms.app.request('/search/?q=otters');
     const html = await response.text();
@@ -102,7 +106,7 @@ describe('GET /search/', () => {
   });
 
   it('never returns a draft, a trashed post or a scheduled one (AC #3)', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const html = await (await cms.app.request('/search/?q=otters')).text();
     const json = (await (
@@ -120,7 +124,7 @@ describe('GET /search/', () => {
   });
 
   it('answers JSON to a client that asks for it, and at /search/index.json', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     for (const [url, headers] of [
       ['/search/?q=rivers', { accept: 'application/json' }],
@@ -144,7 +148,7 @@ describe('GET /search/', () => {
   });
 
   it('advertises the other representations with the query kept', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const html = await cms.app.request('/search/?q=otters');
     assert.equal(
@@ -164,7 +168,7 @@ describe('GET /search/', () => {
   });
 
   it('answers Markdown at /search/index.md and to a client that asks for it (TASK-477)', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const byPath = await cms.app.request('/search/index.md?q=rivers');
     const byAccept = await cms.app.request('/search/?q=rivers', {
@@ -209,7 +213,7 @@ describe('GET /search/', () => {
   });
 
   it('pages the Markdown results with the query kept (TASK-477)', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       '_data/site.json': JSON.stringify({ postsPerPage: 1 }),
       'posts/a.md': post('A', '/a/', 'shared word'),
       'posts/b.md': post('B', '/b/', 'shared word'),
@@ -229,7 +233,7 @@ describe('GET /search/', () => {
   });
 
   it('says how to search, and when nothing matches, in Markdown (TASK-477)', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const empty = await (await cms.app.request('/search/index.md')).text();
     assert.match(empty, /^title: Search$/m);
@@ -243,7 +247,7 @@ describe('GET /search/', () => {
   });
 
   it('points a page’s links to the search at the search’s Markdown (TASK-477)', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'pages/find.md': page('Find', '/find/', 'Try [a search](/search/?q=otters#top).'),
     });
 
@@ -252,7 +256,7 @@ describe('GET /search/', () => {
   });
 
   it('answers 406 to a client that accepts none of them', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const response = await cms.app.request('/search/?q=otters', {
       headers: { accept: 'image/png' },
@@ -268,7 +272,7 @@ describe('GET /search/', () => {
   });
 
   it('shows the form and nothing else before a search', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     for (const url of ['/search/', '/search/?q=', '/search/?q=%20%22-%22']) {
       const response = await cms.app.request(url);
@@ -280,14 +284,14 @@ describe('GET /search/', () => {
   });
 
   it('says so when nothing matches', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const html = await (await cms.app.request('/search/?q=platypus')).text();
     assert.match(html, /Nothing found for &ldquo;platypus&rdquo;\./);
   });
 
   it('puts the query back in the box and escapes it everywhere it is printed', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const html = await (
       await cms.app.request(`/search/?q=${encodeURIComponent('<script>"x"</script>')}`)
@@ -297,7 +301,7 @@ describe('GET /search/', () => {
   });
 
   it('marks the matched words and prints the rest of the snippet as text', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'posts/markup.md': post(
         'Markup',
         '/markup/',
@@ -310,7 +314,7 @@ describe('GET /search/', () => {
   });
 
   it('pages through the results and 404s past the last page', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       '_data/site.json': JSON.stringify({ postsPerPage: 1 }),
       'posts/a.md': post('A', '/a/', 'shared word'),
       'posts/b.md': post('B', '/b/', 'shared word'),
@@ -330,7 +334,7 @@ describe('GET /search/', () => {
   });
 
   it('redirects the path without its slash, keeping the query', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const response = await cms.app.request('/search?q=otters');
     assert.equal(response.status, 301);
@@ -338,7 +342,7 @@ describe('GET /search/', () => {
   });
 
   it('asks not to be indexed', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const html = await (await cms.app.request('/search/?q=otters')).text();
     assert.match(html, /<meta name="robots" content="noindex">/);
@@ -366,7 +370,7 @@ describe('the search box in the theme', () => {
     // It used to be in the footer of every page and at the top of this one.
     // Search is a menu item now — a `Search | /search/` line like any other —
     // so the box is on the page that is about searching and nowhere else.
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const results = await (await cms.app.request('/search/?q=otters')).text();
     assert.equal(results.match(/<form class="search-form"/g)?.length, 1);
@@ -378,7 +382,7 @@ describe('the search box in the theme', () => {
   });
 
   it('is advertised to clients as a SearchAction', async () => {
-    const cms = await site(corpus());
+    const cms = await sharedSite(corpus());
 
     const home = await (await cms.app.request('/')).text();
     const json = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(home)?.[1];

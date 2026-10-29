@@ -9,6 +9,7 @@ import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { setUserProfile } from '../site/users.ts';
 import { createUser } from './__testing__/users.ts';
+import { shared } from './__testing__/shared.ts';
 
 /**
  * A page's Markdown carries its place in the site: the front matter a Markdown
@@ -134,6 +135,9 @@ async function site(
   return instance;
 }
 
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
+
 async function markdown(cms: Cms, url: string): Promise<string> {
   const response = await cms.app.request(url);
   assert.equal(response.status, 200, `GET ${url} answered ${String(response.status)}`);
@@ -165,7 +169,7 @@ const FOOTER = [
 
 describe('the front matter a Markdown browser navigates by (AC #1, #7)', () => {
   it('gives a post home, and previous and next as the HTML post navigation has them', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const html = await markdown(cms, '/2026/09/two/');
     assert.match(html, /href="\/2026\/09\/one\/"[^>]*>[\s\S]*?Post one/);
 
@@ -188,7 +192,7 @@ describe('the front matter a Markdown browser navigates by (AC #1, #7)', () => {
   });
 
   it('leaves out a neighbour there is none of, and both on a page', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const first = frontMatterOf(await markdown(cms, '/2026/09/one/index.md'));
     assert.match(first, /^next: \/2026\/09\/two\/index\.md$/m);
     assert.doesNotMatch(first, /^previous:/m);
@@ -199,7 +203,7 @@ describe('the front matter a Markdown browser navigates by (AC #1, #7)', () => {
   });
 
   it('gives a page of a listing its newer and older pages', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const second = frontMatterOf(await markdown(cms, '/page/2/index.md'));
     assert.equal(
       second,
@@ -219,7 +223,7 @@ describe('the front matter a Markdown browser navigates by (AC #1, #7)', () => {
 
 describe('links that stay in the Markdown web (AC #2)', () => {
   it('points every link to a document of the site at its Markdown, through redirects', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const text = await markdown(cms, '/2026/09/two/index.md');
 
     assert.match(
@@ -240,7 +244,7 @@ describe('links that stay in the Markdown web (AC #2)', () => {
   });
 
   it('links each listed post at its Markdown, root-relative', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.match(
       await markdown(cms, '/index.md'),
       /^- \[2026-09-03 Post three\]\(\/2026\/09\/three\/index\.md\)$/m,
@@ -248,7 +252,7 @@ describe('links that stay in the Markdown web (AC #2)', () => {
   });
 
   it('adds the suffix to llms.txt as it is written', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const text = await markdown(cms, '/llms.txt');
     assert.match(text, /^- \[About\]\(https:\/\/example\.com\/about\/index\.md\)$/m);
   });
@@ -256,18 +260,18 @@ describe('links that stay in the Markdown web (AC #2)', () => {
 
 describe('the header and footer the theme draws (AC #3, #4)', () => {
   it('ends a post with a heading, its byline and the site menus, each label literal', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const text = await markdown(cms, '/2026/09/two/index.md');
     assert.ok(text.endsWith(`\n\n${FOOTER}`), text);
   });
 
   it('gives a page no byline', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.doesNotMatch(await markdown(cms, '/about/index.md'), /Written by/);
   });
 
   it('takes either partial from a site theme, leaving front matter and body to the CMS', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       site: { theme: 'mine' },
       theme: {
         'partials/markdown-header.md.njk': 'HEADER {{ title }}\n',
@@ -303,25 +307,25 @@ describe('the bio (AC #5)', () => {
   const BIO = ['Wrote the *first* program.', '', '- [Her notes](https://ada.example)'].join('\n');
 
   it('opens the author archive', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const text = await markdown(cms, '/author/ada/index.md');
     assert.ok(text.includes(`---\n\n# Ada Lovelace\n\n${BIO}\n\n## Posts`), text);
   });
 
   it("is on a solo author site's homepage that lists posts, as the HTML card is", async () => {
-    const listing = await site();
+    const listing = await sharedSite();
     assert.ok((await markdown(listing, '/index.md')).includes(BIO));
   });
 
   it('is left out of a static homepage by the default theme, which prints only the page', async () => {
-    const page = await site({ site: { homepage: 'about' } });
+    const page = await sharedSite({ site: { homepage: 'about' } });
     const home = await markdown(page, '/index.md');
     assert.ok(home.includes('# About\n\nWho writes this.'), home);
     assert.doesNotMatch(home, /first\\\* program/, 'the bio is not printed');
   });
 
   it('is given to a site theme on a static homepage, which may print it', async () => {
-    const page = await site({
+    const page = await sharedSite({
       site: { homepage: 'about', theme: 'mine' },
       theme: {
         'partials/markdown-header.md.njk':
@@ -332,14 +336,14 @@ describe('the bio (AC #5)', () => {
   });
 
   it('is nowhere on a site whose author is nobody', async () => {
-    const cms = await site({ site: { author: '' } });
+    const cms = await sharedSite({ site: { author: '' } });
     assert.doesNotMatch(await markdown(cms, '/index.md'), /first/);
   });
 });
 
 describe('dated lists (AC #6)', () => {
   it('lists a listing’s and an archive’s posts as YYYY-MM-DD Title', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.match(
       await markdown(cms, '/author/ada/index.md'),
       /## Posts\n\n- \[2026-09-03 Post three\]\(\/2026\/09\/three\/index\.md\)\n- \[2026-09-02 Post two\]\(\/2026\/09\/two\/index\.md\)\n/,
@@ -349,7 +353,7 @@ describe('dated lists (AC #6)', () => {
 
 describe('llms.txt navigation (AC #8)', () => {
   it('has a Navigation section with the site menus', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.match(
       await markdown(cms, '/llms.txt'),
       new RegExp(
@@ -402,7 +406,7 @@ describe('an archive page (TASK-468)', () => {
   ].join('\n');
 
   it('lists every published post under the page, by month, newest first, as the HTML does', async () => {
-    const cms = await site({ files: ARCHIVE_FILES });
+    const cms = await sharedSite({ files: ARCHIVE_FILES });
     const text = await markdown(cms, '/archive/index.md');
     assert.ok(text.includes(`# Everything\n\nEvery post.\n\n${MONTHS}\n\n## Feeds`), text);
     assert.doesNotMatch(text, /Drafted/);
@@ -418,12 +422,12 @@ describe('an archive page (TASK-468)', () => {
   });
 
   it('lists nothing on a page that did not ask for the archive', async () => {
-    const cms = await site({ files: ARCHIVE_FILES });
+    const cms = await sharedSite({ files: ARCHIVE_FILES });
     assert.doesNotMatch(await markdown(cms, '/about/index.md'), /September 2026/);
   });
 
   it('gives archiveMonths to both partials, so a site theme lays it out', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       files: ARCHIVE_FILES,
       site: { theme: 'mine' },
       theme: {
@@ -476,7 +480,7 @@ describe('what a post links to beyond its words (TASK-473)', () => {
   }
 
   it('lists a post’s categories and tags as links to their archives’ Markdown', async () => {
-    const cms = await site({ files: FILED });
+    const cms = await sharedSite({ files: FILED });
     const text = await markdown(cms, '/2026/09/one/index.md');
     assert.equal(
       section(text, 'Filed under'),
@@ -493,7 +497,7 @@ describe('what a post links to beyond its words (TASK-473)', () => {
   });
 
   it('links a post’s previous and next posts in its body', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.equal(
       section(await markdown(cms, '/2026/09/two/index.md'), 'More posts'),
       [
@@ -509,7 +513,7 @@ describe('what a post links to beyond its words (TASK-473)', () => {
   });
 
   it('lists the posts and pages that link here under Linked from, as the HTML does', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     for (const url of ['/2026/09/one/', '/about/']) {
       const html = await markdown(cms, url);
       assert.match(html, /Linked from[\s\S]*href="\/2026\/09\/two\/">Post two</);
@@ -520,7 +524,7 @@ describe('what a post links to beyond its words (TASK-473)', () => {
     }
     assert.equal(section(await markdown(cms, '/2026/09/two/index.md'), 'Linked from'), undefined);
 
-    const front = await site({ site: { homepage: 'about' } });
+    const front = await sharedSite({ site: { homepage: 'about' } });
     const html = await markdown(front, '/');
     const htmlLinks = [
       ...(/<section class="backlinks"[\s\S]*?<\/section>/.exec(html)?.[0] ?? '').matchAll(
@@ -551,7 +555,7 @@ describe('what a post links to beyond its words (TASK-473)', () => {
   }
 
   it('lists the feeds the HTML head advertises, on every kind of page', async () => {
-    const cms = await site({ files: FILED });
+    const cms = await sharedSite({ files: FILED });
     const pages = [
       '/2026/09/two/',
       '/about/',
@@ -561,7 +565,7 @@ describe('what a post links to beyond its words (TASK-473)', () => {
       '/author/ada/',
     ];
     for (const url of pages) await feedsMatch(cms, url);
-    await feedsMatch(await site({ site: { homepage: 'about' } }), '/');
+    await feedsMatch(await sharedSite({ site: { homepage: 'about' } }), '/');
 
     assert.equal(
       section(await markdown(cms, '/2026/09/two/index.md'), 'Feeds'),
@@ -587,7 +591,7 @@ describe('what a post links to beyond its words (TASK-473)', () => {
       '{% for link in backlinks %}b {{ link.date }} {{ link.label }} {{ link.url }}\n{% endfor %}',
       '{% for feed in feeds %}f {{ feed.format }} {{ feed.type }} {{ feed.label }} {{ feed.url }}\n{% endfor %}',
     ].join('\n');
-    const cms = await site({
+    const cms = await sharedSite({
       files: FILED,
       site: { theme: 'mine' },
       theme: {
@@ -917,7 +921,7 @@ describe('a post’s photos and its recording (TASK-475)', () => {
   };
 
   it('writes each photo as an image with its alt text, in the order the HTML draws them (AC #1)', async () => {
-    const cms = await site({ files: MEDIA });
+    const cms = await sharedSite({ files: MEDIA });
     const html = await markdown(cms, '/2026/09/beach/');
     const drawn = [...html.matchAll(/<img class="u-photo" src="([^"]+)" alt="([^"]*)"/g)].map(
       (match) => `${match[2] ?? ''} ${match[1] ?? ''}`,
@@ -940,7 +944,7 @@ describe('a post’s photos and its recording (TASK-475)', () => {
   });
 
   it('links the recording with its type and size, its transcript or captions, and each other version (AC #2)', async () => {
-    const cms = await site({ files: MEDIA });
+    const cms = await sharedSite({ files: MEDIA });
     assert.equal(
       headerOf(await markdown(cms, '/2026/09/episode/index.md'), 'Show notes.'),
       [
@@ -959,7 +963,7 @@ describe('a post’s photos and its recording (TASK-475)', () => {
   });
 
   it('puts a video before the photos, as the HTML does, with its transcript', async () => {
-    const cms = await site({ files: MEDIA });
+    const cms = await sharedSite({ files: MEDIA });
     const html = await markdown(cms, '/2026/09/screencast/');
     assert.ok(html.indexOf('<video') < html.indexOf('class="post-photos"'));
     assert.equal(
@@ -975,7 +979,7 @@ describe('a post’s photos and its recording (TASK-475)', () => {
   });
 
   it('writes no media lines on a post with neither', async () => {
-    const cms = await site({ files: MEDIA });
+    const cms = await sharedSite({ files: MEDIA });
     const text = await markdown(cms, '/2026/09/one/index.md');
     assert.doesNotMatch(text, /!\[|Download the|Other versions/);
   });
@@ -986,7 +990,7 @@ describe('a post’s photos and its recording (TASK-475)', () => {
       '{% if enclosure %}e {{ enclosure.player }} {{ enclosure.url }} {{ enclosure.type }} {{ enclosure.length | fileSize }} {{ enclosure.transcript.captions }}\n{% endif %}',
       '{% for alternate in enclosure.alternates %}a {{ alternate.title }} {{ alternate.lang }}\n{% endfor %}',
     ].join('\n');
-    const cms = await site({
+    const cms = await sharedSite({
       files: MEDIA,
       site: { theme: 'mine' },
       theme: {

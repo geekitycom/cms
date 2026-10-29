@@ -9,6 +9,7 @@ import type { Browser } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { createUser } from './__testing__/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
+import { shared } from './__testing__/shared.ts';
 
 const box = sandbox();
 
@@ -44,6 +45,9 @@ async function site(): Promise<Cms> {
   await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   return await box.open({ contentDir, dataDir, baseUrl: BASE, hostLookup: PUBLIC });
 }
+
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
 
 async function register(
   cms: Cms,
@@ -223,13 +227,13 @@ describe('a registered client_id', () => {
   });
 
   it('is not found when its path holds no registration', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const response = await cms.app.request('/_geekity/indieauth/clients/bm90IGpzb24');
     assert.equal(response.status, 404);
   });
 
   it('is advertised in the authorization server metadata', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const response = await cms.app.request('/.well-known/oauth-authorization-server');
     const metadata = (await response.json()) as Record<string, unknown>;
     assert.equal(metadata['registration_endpoint'], `${BASE}${REGISTER}`);

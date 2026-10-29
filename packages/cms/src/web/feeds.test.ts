@@ -13,6 +13,7 @@ import { createUser } from './__testing__/users.ts';
 import { child, childrenNamed, parseXml } from './__testing__/xml.ts';
 import type { XmlElement } from './__testing__/xml.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
+import { shared } from './__testing__/shared.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -61,6 +62,9 @@ async function site(
   await instance.sync();
   return { cms: instance, contentDir };
 }
+
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
 
 /** Point the site's feeds at another notify server, or at none. */
 async function setNotifyServer(cms: Cms, notifyServer: string): Promise<void> {
@@ -168,7 +172,7 @@ function htmlText(html: string): string {
 
 describe('the RSS feed', () => {
   it('serves a well-formed RSS 2.0 channel describing the site', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({
         title: 'Geekity Demo',
         tagline: 'A file-first site',
@@ -205,7 +209,7 @@ describe('the RSS feed', () => {
   });
 
   it('carries one item per published post, newest first, with the whole post', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'Geekity Demo' }),
       'posts/2026-09-02-newer.md': post('Newer', {
         date: '2026-09-02T09:00:00Z',
@@ -262,7 +266,7 @@ describe('the RSS feed', () => {
 
   it('summarises a post that carries no description with its first paragraph', async () => {
     const words = Array.from({ length: 70 }, (_, index) => `word${String(index + 1)}`);
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-long.md': post('Long', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/long/',
@@ -279,7 +283,7 @@ describe('the RSS feed', () => {
   });
 
   it('keeps the whole post out of an item that has to be escaped', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-hostile.md': post('"Angle < brackets" & ampersands', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/hostile/',
@@ -308,7 +312,7 @@ describe('the RSS feed', () => {
   });
 
   it('leaves out drafts, trashed documents and pages, and stops at the feed size', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'Short', feedSize: 2 }),
       'posts/2026-09-03-one.md': post('One', { date: '2026-09-03T09:00:00Z', permalink: '/one/' }),
       'posts/2026-09-02-two.md': post('Two', { date: '2026-09-02T09:00:00Z', permalink: '/two/' }),
@@ -370,7 +374,7 @@ describe('the RSS feed', () => {
   });
 
   it('leaves out the image when the site has no avatar', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-one.md': post('One', { date: '2026-09-02T09:00:00Z', permalink: '/one/' }),
     });
 
@@ -385,7 +389,7 @@ describe('the RSS feed', () => {
 
 describe('the Atom feed', () => {
   it('serves a well-formed Atom document describing the site', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({
         title: 'Geekity Demo',
         tagline: 'A file-first site',
@@ -416,7 +420,7 @@ describe('the Atom feed', () => {
   });
 
   it('carries one entry per published post, newest first, with full HTML content', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-newer.md': post('Newer', {
         date: '2026-09-02T09:00:00Z',
         updated: '2026-09-03T12:00:00Z',
@@ -473,7 +477,7 @@ describe('the Atom feed', () => {
   });
 
   it('leaves out drafts, trashed documents and pages', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-live.md': post('Live', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/2026/09/live/',
@@ -497,7 +501,7 @@ describe('the Atom feed', () => {
   });
 
   it('stops at the feed size the site data asks for', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'Short', postsPerPage: 1, feedSize: 2 }),
       'posts/one.md': post('One', { date: '2026-09-03T09:00:00Z', permalink: '/one/' }),
       'posts/two.md': post('Two', { date: '2026-09-02T09:00:00Z', permalink: '/two/' }),
@@ -512,7 +516,7 @@ describe('the Atom feed', () => {
   });
 
   it('escapes markup and ampersands in titles, tags and bodies', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-hostile.md': post('"Angle < brackets" & ampersands', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/2026/09/hostile/',
@@ -574,7 +578,7 @@ async function jsonFeedAt(
 
 describe('the JSON feed', () => {
   it('serves a JSON Feed 1.1 document describing the site', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({
         title: 'Geekity Demo',
         tagline: 'A file-first site',
@@ -621,7 +625,7 @@ describe('the JSON feed', () => {
       }),
     };
 
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const { items } = await jsonFeedAt(cms, '/feed/json/');
     const { feed: atomDocument } = await atom(cms, '/feed/atom/');
 
@@ -698,7 +702,7 @@ describe('the three formats over one post', () => {
   }
 
   it('agree on the post’s id, its terms and its summary', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const [rssReading, atomReading, jsonReading] = await readings(cms);
 
     // decision-12, all three answers at once. Written out rather than compared
@@ -716,7 +720,7 @@ describe('the three formats over one post', () => {
   });
 
   it('give the post the same validator on every poll', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     for (const url of ['/feed/', '/feed/atom/', '/feed/json/']) {
       const first = (await cms.app.request(url)).headers.get('etag');
@@ -740,7 +744,7 @@ describe('a post in another language (TASK-154 AC #3)', () => {
   };
 
   it('names its language in every format, and the feed’s on the rest', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const { channel } = await rss(cms, '/feed/');
     assert.equal(child(channel, 'language').text, 'en');
@@ -779,7 +783,7 @@ describe('the taxonomy feeds', () => {
   };
 
   it('serve every archive in all three formats under the configured bases', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...filed,
       '_data/site.json': JSON.stringify({
         title: 'Bases',
@@ -818,7 +822,7 @@ describe('the taxonomy feeds', () => {
   });
 
   it('404 a term nothing published carries, in every format', async () => {
-    const { cms } = await site(filed);
+    const { cms } = await sharedSite(filed);
 
     for (const url of [
       '/tag/nothing/feed/',
@@ -849,7 +853,7 @@ describe('the migrated feed URLs', () => {
   }
 
   it('redirect the unslashed forms to their canonical slashed ones', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     assert.equal(await movedTo(cms, '/feed'), '/feed/');
     assert.equal(await movedTo(cms, '/feed/atom'), '/feed/atom/');
@@ -862,7 +866,7 @@ describe('the migrated feed URLs', () => {
   });
 
   it('redirect the older spellings a migrated site was also served at', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     // `/feed/rss/` was WordPress's RSS 0.92; this site answers RSS 2.0 there.
     assert.equal(await movedTo(cms, '/feed/rss/'), '/feed/');
@@ -871,7 +875,7 @@ describe('the migrated feed URLs', () => {
   });
 
   it('redirect the query forms that predate the pretty URLs', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     assert.equal(await movedTo(cms, '/?feed=rss2'), '/feed/');
     assert.equal(await movedTo(cms, '/?feed=rss'), '/feed/');
@@ -885,7 +889,7 @@ describe('the migrated feed URLs', () => {
   });
 
   it('404 the paths the old feeds used to answer on', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     for (const url of ['/feed.xml', '/feed.json', '/tag/releases/feed.xml']) {
       assert.equal((await cms.app.request(url)).status, 404, url);
@@ -893,7 +897,7 @@ describe('the migrated feed URLs', () => {
   });
 
   it('do not redirect a feed for a term nothing published carries', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     // One 404, not a redirect and then a 404.
     assert.equal((await cms.app.request('/tag/nothing/feed')).status, 404);
@@ -920,7 +924,7 @@ describe('a tag feed', () => {
   };
 
   it('holds only what carries the tag, in Atom', async () => {
-    const { cms } = await site(tagged, { baseUrl: 'https://example.com' });
+    const { cms } = await sharedSite(tagged, { baseUrl: 'https://example.com' });
 
     const { response, feed } = await atom(cms, '/tag/releases/feed/atom/');
 
@@ -944,7 +948,7 @@ describe('a tag feed', () => {
   });
 
   it('holds only what carries the tag, in JSON', async () => {
-    const { cms } = await site(tagged);
+    const { cms } = await sharedSite(tagged);
 
     const { response, feed, items } = await jsonFeedAt(cms, '/tag/releases/feed/json/');
 
@@ -959,7 +963,7 @@ describe('a tag feed', () => {
   });
 
   it('404s a tag nothing published carries', async () => {
-    const { cms } = await site(tagged);
+    const { cms } = await sharedSite(tagged);
 
     for (const url of ['/tag/nothing/feed/atom/', '/tag/nothing/feed/json/']) {
       const response = await cms.app.request(url);
@@ -972,7 +976,7 @@ describe('a tag feed', () => {
   });
 
   it('serves a tag whose name needs escaping in the URL', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-one.md': post('Spaced', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/spaced/',
@@ -1017,7 +1021,7 @@ describe('a reply in the feeds', () => {
   };
 
   it('names its target in Atom, under the declared threading namespace', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const { feed } = await atom(cms, '/feed/atom/');
 
     assert.equal(feed.attributes['xmlns:thr'], 'http://purl.org/syndication/thread/1.0');
@@ -1036,7 +1040,7 @@ describe('a reply in the feeds', () => {
   });
 
   it('names its target in JSON Feed’s _geekity extension', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const { items } = await jsonFeedAt(cms, '/feed/json/');
 
     const [reply, invalid, standalone] = items as [
@@ -1050,7 +1054,7 @@ describe('a reply in the feeds', () => {
   });
 
   it('names the target in RSS as source:inReplyTo, with no threading namespace (TASK-300)', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const { body } = await rss(cms, '/feed/');
 
     assert.equal(body.includes('purl.org/syndication/thread'), false);
@@ -1067,7 +1071,7 @@ describe('an RSVP in the feeds (TASK-198)', () => {
   const EVENT = 'https://events.example/2026/10/indieweb-camp';
 
   it('opens its HTML with what its author will do and the p-rsvp', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/replyContexts.json': JSON.stringify({ [EVENT]: { name: 'IndieWeb Camp' } }),
       'posts/2026-09-03-camp.md': [
         '---',
@@ -1102,7 +1106,7 @@ describe('feed caching', () => {
   };
 
   it('answers a matching If-None-Match with 304 and no body', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     for (const url of ['/feed/atom/', '/feed/json/', '/tag/releases/feed/atom/']) {
       const first = await cms.app.request(url);
@@ -1121,7 +1125,7 @@ describe('feed caching', () => {
   });
 
   it('answers a fresh If-Modified-Since with 304', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const response = await cms.app.request('/feed/json/', {
       headers: { 'if-modified-since': 'Wed, 02 Sep 2026 09:00:00 GMT' },
@@ -1131,7 +1135,7 @@ describe('feed caching', () => {
   });
 
   it('gives the two formats and the two scopes different validators', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const etags = await Promise.all(
       ['/feed/atom/', '/feed/json/', '/tag/releases/feed/atom/', '/tag/releases/feed/json/'].map(
@@ -1173,7 +1177,7 @@ describe('the HTML pages', () => {
   };
 
   it('advertise all three feeds with link rel=alternate, RSS first', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...files,
       'posts/2026-09-01-filed.md': post('Filed', {
         date: '2026-09-01T09:00:00Z',
@@ -1204,7 +1208,7 @@ describe('the HTML pages', () => {
   });
 
   it('keep the ActivityStreams alternate on a post page', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const html = await (await cms.app.request('/one/')).text();
     const head = html.slice(0, html.indexOf('</head>'));
@@ -1218,7 +1222,7 @@ describe('the HTML pages', () => {
   });
 
   it("advertise an archive's own feeds as well as the site's", async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...files,
       'posts/2026-09-01-filed.md': post('Filed', {
         date: '2026-09-01T09:00:00Z',
@@ -1242,7 +1246,7 @@ describe('the HTML pages', () => {
   });
 
   it('prefix the feed links with the base path when the site lives in a subdirectory', async () => {
-    const { cms } = await site(files, { baseUrl: 'https://example.com/blog' });
+    const { cms } = await sharedSite(files, { baseUrl: 'https://example.com/blog' });
 
     const html = await (await cms.app.request('/')).text();
 
@@ -1356,7 +1360,7 @@ describe('a reply to a migrated post’s stored object id', () => {
   });
 
   it('is named by its stored id in all three formats, and still read at its permalink', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const permalink = 'https://example.com/2011/06/old-news/';
 
     // RSS: the guid WordPress's own feed gave the post, marked a name rather
@@ -1442,7 +1446,7 @@ describe('a post’s feed guid (TASK-292)', () => {
   };
 
   it('names each post by its guid key, else its activitypub.id, else its permalink', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const { channel } = await rss(cms, '/feed/');
     const rssItems = childrenNamed(channel, 'item');
@@ -1536,7 +1540,7 @@ describe('a post’s comments feed', () => {
   });
 
   it('answers empty rather than 404 when nobody has replied', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const { response, channel } = await rss(cms, '/2026/09/hello/feed/');
 
@@ -1545,7 +1549,7 @@ describe('a post’s comments feed', () => {
   });
 
   it('is a 404 for a URL that is no published post', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...files,
       'posts/2026-09-01-draft.md': post('Draft', {
         date: '2026-09-01T09:00:00Z',
@@ -1705,7 +1709,7 @@ describe('the site-wide comments feed', () => {
   });
 
   it('redirects the unslashed and the older spellings in one hop', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     for (const [from, to] of [
       ['/comments/feed', '/comments/feed/'],
@@ -1722,7 +1726,7 @@ describe('the site-wide comments feed', () => {
   });
 
   it('has no Atom or JSON spelling, at either root', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     for (const url of [
       '/comments/feed/atom/',
@@ -1814,7 +1818,7 @@ describe('the comments feeds on an HTML page', () => {
   };
 
   it('advertises the site’s comments feed everywhere', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     for (const url of ['/', '/2026/09/hello/', '/about/']) {
       const head = (await (await cms.app.request(url)).text()).split('</head>')[0] ?? '';
@@ -1823,7 +1827,7 @@ describe('the comments feeds on an HTML page', () => {
   });
 
   it('advertises a post’s own comments feed, and a closed page’s', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const post =
       (await (await cms.app.request('/2026/09/hello/')).text()).split('</head>')[0] ?? '';
@@ -1853,7 +1857,7 @@ describe('the notify server a feed advertises', () => {
   };
 
   it('is rpc.rsscloud.io, said three ways, in the RSS channel', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const { channel } = await rss(cms, '/feed/');
 
     // https://rpc.rsscloud.io/docs/quick-start: the legacy element names the
@@ -1875,7 +1879,7 @@ describe('the notify server a feed advertises', () => {
   });
 
   it('is the hub and the source cloud in Atom, and no <cloud>', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const { feed } = await atom(cms, '/feed/atom/');
 
     assert.equal(child(feed, 'source:cloud').text, 'https://rpc.rsscloud.io/pleaseNotify');
@@ -1889,7 +1893,7 @@ describe('the notify server a feed advertises', () => {
   });
 
   it('is a WebSub hub in the JSON feed, per JSON Feed 1.1', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const body = (await (await cms.app.request('/feed/json/')).json()) as {
       hubs?: { type: string; url: string }[];
     };
@@ -1898,7 +1902,7 @@ describe('the notify server a feed advertises', () => {
   });
 
   it('is a Link header on every feed response, self included', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...files,
       'posts/2026-09-02-hello.md': post('Hello, World!', {
         date: '2026-09-02T09:00:00Z',
@@ -1934,7 +1938,7 @@ describe('the notify server a feed advertises', () => {
   });
 
   it('is on the 304 as well, which is the response a poller usually gets', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const first = await cms.app.request('/feed/');
     const etag = first.headers.get('etag');
@@ -1946,7 +1950,7 @@ describe('the notify server a feed advertises', () => {
   });
 
   it('is advertised by a comments feed too, which is a feed like any other', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const { rss: document, channel } = await rss(cms, '/comments/feed/');
 
     assert.equal(document.attributes['xmlns:source'], 'https://source.scripting.com/');
@@ -2065,7 +2069,7 @@ describe('the update cadence an RSS feed declares', () => {
   }
 
   it('is hourly, once, in every RSS feed when the site has not said', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     for (const url of rssFeeds) {
       assert.deepEqual(
@@ -2092,7 +2096,7 @@ describe('the update cadence an RSS feed declares', () => {
   });
 
   it('is the default for a hand-written value the module does not allow', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...files,
       '_data/site.json': JSON.stringify({
         title: 'Geekity Demo',
@@ -2107,7 +2111,7 @@ describe('the update cadence an RSS feed declares', () => {
   });
 
   it('is said by RSS alone: Atom and JSON Feed have no element for it', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const atomBody = await (await cms.app.request('/feed/atom/')).text();
     assert.ok(!atomBody.includes('updatePeriod'), 'Atom carries no cadence');
@@ -2248,7 +2252,7 @@ describe('the license a feed declares (TASK-206)', () => {
   }
 
   it('declares the site license on the Atom feed and the RSS channel (AC #3)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'A Site', license: 'cc-by-sa' }),
       'posts/2026-09-01-hello.md': posts['posts/2026-09-01-hello.md'],
     });
@@ -2268,7 +2272,7 @@ describe('the license a feed declares (TASK-206)', () => {
   });
 
   it("gives a post's feed item the license its front matter names (AC #4)", async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'A Site', license: 'cc-by-sa' }),
       ...posts,
     });
@@ -2289,7 +2293,7 @@ describe('the license a feed declares (TASK-206)', () => {
   });
 
   it('declares nothing when no license is chosen (AC #5)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'A Site' }),
       'posts/2026-09-02-reserved.md': posts['posts/2026-09-02-reserved.md'],
       'posts/2026-09-01-hello.md': posts['posts/2026-09-01-hello.md'],
@@ -2302,7 +2306,7 @@ describe('the license a feed declares (TASK-206)', () => {
   });
 
   it('declares a post license on a site that has none, and only there (AC #4, AC #5)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'A Site' }),
       ...posts,
     });
@@ -2318,7 +2322,7 @@ describe('the license a feed declares (TASK-206)', () => {
   });
 
   it('moves the ETag when the site license changes', async () => {
-    const { cms, contentDir } = await site({
+    const { cms, contentDir } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'A Site' }),
       'posts/2026-09-01-hello.md': posts['posts/2026-09-01-hello.md'],
     });
@@ -2364,7 +2368,7 @@ describe('a summary that reads like markup', () => {
   };
 
   it('is escaped text in every RSS description', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const { channel } = await rss(cms, '/feed/');
 
     const descriptions = childrenNamed(channel, 'item').map(
@@ -2376,7 +2380,7 @@ describe('a summary that reads like markup', () => {
   });
 
   it('is the text itself in the plain-text Atom and JSON Feed summaries', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
     const { feed } = await atom(cms, '/feed/atom/');
     const { items } = await jsonFeedAt(cms, '/feed/json/');
 
@@ -2411,7 +2415,7 @@ describe('a summary that reads like markup', () => {
 
 describe('a post whose body holds an address nothing can resolve (TASK-260)', () => {
   it('leaves every feed serving the other posts', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-03-bad.md': post('Bad', {
         date: '2026-09-03T09:00:00Z',
         permalink: '/2026/09/bad/',

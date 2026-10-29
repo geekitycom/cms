@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { shared } from './__testing__/shared.ts';
 
 /**
  * The site's own redirect list, `content/_data/redirects.json` (TASK-128), and
@@ -57,6 +58,9 @@ async function site(files: Record<string, string>): Promise<{ cms: Cms; contentD
   return { cms, contentDir };
 }
 
+/** {@link site}, for a test that only reads from it. */
+const sharedSite = shared(site);
+
 async function redirectOf(
   cms: Cms,
   url: string,
@@ -72,7 +76,7 @@ const CONTENT: Record<string, string> = {
 
 describe('a declared redirect', () => {
   it('is served with the status the file declares, to a path or a URL', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/redirects.json': redirects([
         { from: '/old-hello/', to: '/2026/09/hello/' },
@@ -95,7 +99,7 @@ describe('a declared redirect', () => {
   });
 
   it('carries the request query on to a target that has none of its own', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/redirects.json': redirects([
         { from: '/old-hello/', to: '/2026/09/hello/' },
@@ -108,7 +112,7 @@ describe('a declared redirect', () => {
   });
 
   it('matches a ?p= link on the query it names, and only that query', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/redirects.json': redirects([
         { from: '/?p=123', to: '/2026/09/hello/' },
@@ -132,7 +136,7 @@ describe('a declared redirect', () => {
   });
 
   it('reaches its target in one hop from the URL without its trailing slash', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/redirects.json': redirects([{ from: '/soon/', to: '/about/', status: 302 }]),
     });
@@ -157,7 +161,7 @@ describe('a declared redirect', () => {
 
 describe('redirects split across files', () => {
   it('serves every file under _data/redirects/ beside redirects.json, as a list or a map', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/redirects.json': redirects([{ from: '/old-hello/', to: '/2026/09/hello/' }]),
       '_data/redirects/imported.json': redirects({
@@ -231,7 +235,7 @@ describe('redirects split across files', () => {
 
 describe('a declared redirect and what lives on the site', () => {
   it('never shadows a live document, a representation of one, or a route', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/redirects.json': redirects([
         { from: '/about/', to: 'https://elsewhere.example/' },
@@ -252,7 +256,7 @@ describe('a declared redirect and what lives on the site', () => {
   });
 
   it('is answered before the 404, and a URL nothing declares still 404s', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/redirects.json': redirects([{ from: '/gone/', to: '/about/' }]),
     });
@@ -282,7 +286,7 @@ describe('a declared redirect from an upload URL (TASK-377)', () => {
   });
 
   it('answers from a document that names the upload URL in redirect_from', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       'pages/resume.md':
         '---\ntitle: Resume\npermalink: /resume/\nredirect_from:\n  - /uploads/2019/02/resume.pdf\n---\n\nMy resume.\n',
@@ -295,7 +299,7 @@ describe('a declared redirect from an upload URL (TASK-377)', () => {
   });
 
   it('never shadows an upload that is there', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       'uploads/2026/03/resume.pdf': '%PDF-1.4 current',
       '_data/redirects.json': redirects([
@@ -310,7 +314,7 @@ describe('a declared redirect from an upload URL (TASK-377)', () => {
   });
 
   it('never answers for a metadata sweep temp file or a derived image path', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       'uploads/2026/09/beach.jpg': 'stripped',
       'uploads/2026/09/beach.jpg.geekity-strip': 'half written',
@@ -399,7 +403,7 @@ describe('a redirect file with problems', () => {
 
 describe('X-Redirect-By', () => {
   it('names the CMS on every kind of redirect it sends', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       'posts/2026-09-01-moved.md': post('moved', 'redirect_from:\n  - /2026/09/was-here/\n'),
       '_data/redirects.json': redirects([
