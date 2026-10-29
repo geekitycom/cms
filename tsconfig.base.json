@@ -20,6 +20,7 @@
     // resolve them directly); tsc rewrites them to .js on emit.
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
 
     "declaration": true,
     "declarationMap": true,

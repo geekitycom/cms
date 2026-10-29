@@ -157,11 +157,15 @@ const QUERIES: Readonly<Record<Query, (context: QueryContext) => object>> = {
 
 /** An error answer: Micropub's `error` code and what went wrong. */
 class Refusal {
-  constructor(
-    readonly status: 400 | 403 | 409,
-    readonly error: string,
-    readonly description: string,
-  ) {}
+  readonly status: 400 | 403 | 409;
+  readonly error: string;
+  readonly description: string;
+
+  constructor(status: 400 | 403 | 409, error: string, description: string) {
+    this.status = status;
+    this.error = error;
+    this.description = description;
+  }
 
   answer(c: Context<BearerEnv>): Response {
     c.header('cache-control', 'no-store');

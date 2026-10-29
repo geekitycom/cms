@@ -500,7 +500,10 @@ function framedScript(script: string, hash: string) {
     listeners.set(type, [...(listeners.get(type) ?? []), listener]);
   };
   class Element {
-    constructor(readonly href?: string) {}
+    readonly href: string | undefined;
+    constructor(href?: string) {
+      this.href = href;
+    }
     closest(): Element | null {
       return this.href === undefined ? null : this;
     }

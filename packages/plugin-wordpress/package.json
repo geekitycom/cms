@@ -36,7 +36,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ../../scripts/build-plugin-bundle.js",
-    "test": "tsx --import ../cms/src/__testing__/offline.ts --test \"test/*.test.ts\"",
+    "test": "node --import ../cms/src/__testing__/offline.ts --test \"test/*.test.ts\"",
     "prefed:smoke": "pnpm --filter @geekity/cms build",
     "fed:smoke": "tsx scripts/fed-smoke.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -46,9 +46,11 @@ export function watchTree(root: string, options: WatchTreeOptions): TreeWatcher 
 
 class Tree extends EventEmitter implements TreeWatcher {
   ready: Promise<void> = Promise.resolve();
+  private readonly stop: () => void;
 
-  constructor(private readonly stop: () => void) {
+  constructor(stop: () => void) {
     super();
+    this.stop = stop;
   }
 
   close(): void {
