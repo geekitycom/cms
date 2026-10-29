@@ -20,6 +20,11 @@ changes its Markdown footer changes its Gemini footer too.
 | `layouts/410.gmi.njk`            | `layouts/410.md.njk`              | The body of the 410 page.           |
 | `layouts/500.gmi.njk`            | `layouts/500.md.njk`              | The body of the 500 page.           |
 | `layouts/503.gmi.njk`            | `layouts/503.md.njk`              | The body of the maintenance page.   |
+| `layouts/<name>.gmi.njk`         | `layouts/<name>.md.njk`           | The whole page, for one layout.     |
+
+The layout slots are the ones listed under
+[Layout templates](markdown.md#layout-templates), one for each HTML layout,
+such as `layouts/post.gmi.njk` and `layouts/front-page.gmi.njk`.
 
 ## Lookup order
 
@@ -33,6 +38,13 @@ Each slot is looked up in four places. The first file that exists is used:
 A theme's Markdown template therefore beats the default theme's Gemini
 template. A site theme that overrides `layouts/404.md.njk` gets that body in
 Gemini as well, converted.
+
+A layout slot is looked up the same way. When none of the four places has the
+layout's template, the page is the header, the `Published` line, the page's
+words and the footer, as before. The homepage that is a page tries
+`layouts/front-page` and then `layouts/page`, and the posts page tries
+`layouts/posts-page` and then `layouts/home`, each through all four places
+before the next.
 
 The default theme ships Gemini templates for the four status pages only.
 Their Markdown ends with a sentence of two links, which converts to
@@ -49,6 +61,59 @@ Content not found.
 The default header and footer convert well, because the footer writes its
 links as lists and the CMS converts a list of links to plain link lines. The
 default theme has no Gemini header or footer.
+
+## Layout templates
+
+A layout's Gemini template gets the same context as its Markdown one, and
+`content`, `header` and `footer` written as gemtext:
+
+| Key       | What it is                                                                               |
+| --------- | ---------------------------------------------------------------------------------------- |
+| `content` | The `Published` line on a dated page, then the page's words, converted.                  |
+| `header`  | The header slot, looked up in the four places and converted when it comes from Markdown. |
+| `footer`  | The footer slot, the same way.                                                           |
+
+`content`, `header` and `footer` are each converted on their own, so each
+numbers its links from `[1]`.
+
+A layout's Markdown template converted for Gemini gets `content` as Markdown,
+opening with the `Published` line on a dated page, and `header` and `footer`
+from the Markdown partials. Its whole output is converted in one pass, so its
+links are numbered through the page.
+
+A site theme that writes a `layouts/front-page.md.njk`, such as the one under
+[A front page](markdown.md#a-front-page), gets the same front page in Gemini
+without a Gemini template. The bio's links and the list of newest posts are
+Markdown lists of links, which convert to link lines:
+
+```
+Who writes this.
+
+Wrote the *first* program.
+
+=> https://ada.example Her notes
+
+## Newest posts
+
+=> /2026/09/third/index.gmi 2026-09-03 Third post
+=> /2026/09/second/index.gmi 2026-09-02 Second post
+```
+
+A theme writes `layouts/front-page.gmi.njk` only where the conversion falls
+short:
+
+```njk
+{{ header }}
+
+{{ content }}
+
+## Newest posts
+{% for entry in newestPosts(5) %}
+=> {{ entry.url | geminiUrl }} {{ entry.date | date("html") }} {{ entry.label }}
+{% endfor %}
+
+{{ footer }}
+```
 
 ## Writing gemtext
 

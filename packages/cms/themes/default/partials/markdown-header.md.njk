@@ -11,10 +11,11 @@
 
   `title` is the heading, absent when the page's own Markdown opens with one.
   `bio` is the person the page speaks for, on an author archive and on a solo
-  author site's homepage: `name`, `url`, `note` and `links` (each a `label`
-  and a `url`). `staticFrontPage` is true on a homepage that is a page. This
-  theme prints the bio there only when the homepage lists posts, as its HTML
-  does (decision-45); a site theme may print it on a static homepage too.
+  author site's homepage, which `partials/markdown-bio.md.njk` prints.
+  `staticFrontPage` is true on a homepage that is a page. This theme prints
+  the bio there only when the homepage lists posts, as its HTML does
+  (decision-45); a site theme may print it on a static homepage too, from a
+  `layouts/front-page.md.njk` of its own.
 
   A post then says what kind it is, with the data its HTML partials read.
   `event` is an event's `start`, its `end` and its `location`, printed in the
@@ -100,14 +101,8 @@ Other versions:
 ![{{ photo.alt | escapeMarkdown }}]({{ photo.url | markdownUrl }})
 
 {% endfor %}
-{% if bio and not staticFrontPage %}
-{% if bio.note %}
-{{ bio.note | escapeMarkdown }}
-
-{% endif %}
-{% for link in bio.links %}
-- [{{ link.label | escapeMarkdown }}]({{ link.url | markdownUrl }})
-{% endfor %}
+{% if not staticFrontPage %}
+{% include "partials/markdown-bio.md.njk" %}
 {% endif %}
 {% if thread %}
 On [{{ thread.post.label | escapeMarkdown }}]({{ thread.post.url | markdownUrl }}){{ (" by " + conversing.named(thread.post.author)) if thread.post.author }}{{ (", " + (thread.post.date | date)) if thread.post.date }}

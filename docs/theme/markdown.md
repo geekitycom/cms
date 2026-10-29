@@ -6,17 +6,22 @@ pages answer a Markdown request in Markdown too. See
 [The Markdown](../public-site.md#the-markdown) for what it holds. The CMS
 writes the front matter, the page's own Markdown and the rewriting of the
 site's links. The theme writes the header and the footer, and the body of
-each status page.
+each status page. A theme may also write a layout template for a kind of page,
+which places the page's Markdown, the header and the footer itself. See
+[Layout templates](#layout-templates).
 
-| Template                          | Where it goes                                       |
-| --------------------------------- | --------------------------------------------------- |
-| `partials/markdown-header.md.njk` | After the front matter, before the page's Markdown. |
-| `partials/markdown-footer.md.njk` | After the page's Markdown, at the end of the file.  |
-| `partials/markdown-reply.md.njk`  | Macros both partials write the conversation with.   |
-| `layouts/404.md.njk`              | The body of the 404 page's Markdown.                |
-| `layouts/410.md.njk`              | The body of the 410 page's Markdown.                |
-| `layouts/500.md.njk`              | The body of the 500 page's Markdown.                |
-| `layouts/503.md.njk`              | The body of the maintenance page's Markdown.        |
+| Template                             | Where it goes                                               |
+| ------------------------------------ | ----------------------------------------------------------- |
+| `partials/markdown-header.md.njk`    | After the front matter, before the page's Markdown.         |
+| `partials/markdown-footer.md.njk`    | After the page's Markdown, at the end of the file.          |
+| `partials/markdown-reply.md.njk`     | Macros both partials write the conversation with.           |
+| `partials/markdown-bio.md.njk`       | The bio, where the header or a layout template includes it. |
+| `partials/markdown-post-list.md.njk` | A list of posts, where a layout template includes it.       |
+| `layouts/<name>.md.njk`              | The whole Markdown after the front matter, for one layout.  |
+| `layouts/404.md.njk`                 | The body of the 404 page's Markdown.                        |
+| `layouts/410.md.njk`                 | The body of the 410 page's Markdown.                        |
+| `layouts/500.md.njk`                 | The body of the 500 page's Markdown.                        |
+| `layouts/503.md.njk`                 | The body of the maintenance page's Markdown.                |
 
 All of them resolve like every other template. For example, a
 `partials/markdown-footer.md.njk` in the site's theme replaces the footer. The
@@ -225,6 +230,100 @@ as `YYYY-MM-DD`. The `description` is already on one line, and is absent when
 the post has none. The months and their posts are the same ones the HTML
 archive page lists. See [An archive page](page-shell.md#an-archive-page).
 
+## Layout templates
+
+A page's Markdown is the header, the page's Markdown and the footer, in that
+order. A theme that wants something else on one kind of page writes a layout
+template for it, named after the HTML layout that draws the same page. When
+the template exists, the Markdown after the front matter is what it writes.
+When no theme on the search path has one, the page is the header, its
+Markdown and the footer, as before. The default theme ships no layout
+templates.
+
+| Layout template             | The page                                                              |
+| --------------------------- | --------------------------------------------------------------------- |
+| `layouts/post.md.njk`       | A post.                                                               |
+| `layouts/page.md.njk`       | A page, and the homepage when it is a page and has no front page one. |
+| `layouts/front-page.md.njk` | The homepage, when it is a page.                                      |
+| `layouts/home.md.njk`       | The homepage when it lists posts, and the posts page without its own. |
+| `layouts/posts-page.md.njk` | The page the Reading setting names for the posts.                     |
+| `layouts/tag.md.njk`        | A tag archive.                                                        |
+| `layouts/category.md.njk`   | A category archive.                                                   |
+| `layouts/author.md.njk`     | An author archive.                                                    |
+| `layouts/search.md.njk`     | The search.                                                           |
+| `layouts/comment.md.njk`    | A comment's own page.                                                 |
+
+The homepage that is a page takes `layouts/front-page.md.njk`, else
+`layouts/page.md.njk`, as its HTML takes `layouts/front-page.njk`, else
+`layouts/page.njk`. The posts page takes `layouts/posts-page.md.njk`, else
+`layouts/home.md.njk`. The status pages keep their own templates, listed
+under [Status pages](#status-pages). A layout template resolves like every
+other template, so a site theme's one replaces the package's.
+
+A layout template gets everything the header and the footer get (see
+[Context](#context)), with three more keys:
+
+| Key       | What it is                                                                                                |
+| --------- | --------------------------------------------------------------------------------------------------------- |
+| `content` | The page's own Markdown, with the site's links rewritten. On a listing, its description, posts and pager. |
+| `header`  | What `partials/markdown-header.md.njk` writes for this page.                                              |
+| `footer`  | What `partials/markdown-footer.md.njk` writes for this page.                                              |
+
+Print `header` and `footer` where they belong, or leave either out. A
+template can also include the partials, which render with the same context:
+
+```njk
+{% include "partials/markdown-header.md.njk" %}
+{{ content }}
+```
+
+The template is written as it renders, so the blank lines between its blocks
+are the template's own. Nunjucks keeps the line after a `{# comment #}`.
+Close a comment with `-#}` to drop it.
+
+### A front page
+
+A site theme whose front page shows the author's bio and the newest posts
+writes `layouts/front-page.md.njk`. The header and the footer stay the
+package's:
+
+```njk
+{{ header }}
+
+{{ content }}
+
+{% include "partials/markdown-bio.md.njk" %}
+
+## Newest posts
+
+{% set postList = newestPosts(5) %}
+{% include "partials/markdown-post-list.md.njk" %}
+
+{{ footer }}
+```
+
+`partials/markdown-bio.md.njk` prints `bio.note` and `bio.links` as the
+default header does, and nothing when there is no `bio`.
+`partials/markdown-post-list.md.njk` prints `postList`, entries in the shape
+`newestPosts(count)` gives, one line each as a listing's Markdown has them.
+Between the header and the footer, the page reads:
+
+```markdown
+Who writes this.
+
+Wrote the \*first\* program.
+
+- [Her notes](https://ada.example)
+
+## Newest posts
+
+- [2026-09-03 Third post](/2026/09/third/index.md)
+- [2026-09-02 Second post](/2026/09/second/index.md)
+```
+
+The `.gmi` page converts this template as well. See
+[The Gemini representation](gemini.md#layout-templates).
+
 ## Status pages
 
 A request for a URL's `.md`, or with an `Accept` header that prefers
@@ -317,8 +416,9 @@ shares the exact location and the place has no words.
 
 Where there is a bio, the header writes its note and its links as a list. On a homepage that is a page (`staticFrontPage`), it
 leaves the bio out and prints only the page, as the HTML front page does
-(decision-45). A site theme that wants the bio there tests `bio` without
-`staticFrontPage`.
+(decision-45). A site theme that wants the bio there includes
+`partials/markdown-bio.md.njk` from its `layouts/front-page.md.njk`. See
+[A front page](#a-front-page).
 
 On a comment's own page the header writes `thread`: a line naming the post
 with its author and date, the post's summary as a quote, a line for each

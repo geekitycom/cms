@@ -7,7 +7,7 @@ import { escapeMarkdown } from './markdown-page.ts';
 import type { MarkdownUrl } from './markdown-page.ts';
 import type { TextFormat } from './negotiate.ts';
 import type { RenderDeps, ThemeText } from './render.ts';
-import { writesGemtext } from './theme-templates.ts';
+import { slotFormat } from './theme-templates.ts';
 import type { TextTemplates } from './theme-templates.ts';
 
 export interface MarkdownEnvironment {
@@ -17,6 +17,9 @@ export interface MarkdownEnvironment {
     format: TextFormat,
     context: Record<string, unknown>,
   ): ThemeText;
+  /** The format a slot is written in on a page in `format`, `undefined` when no theme has it. */
+  slotFormat(templates: TextTemplates, format: TextFormat): TextFormat | undefined;
+  render(template: string, context: Record<string, unknown>): string;
 }
 
 export function createMarkdownEnvironment(
@@ -32,13 +35,24 @@ export function createMarkdownEnvironment(
   });
   addMarkdownFilters(environment);
 
+  const current = (): readonly string[] => {
+    const { dirs } = themes.current();
+    useThemeDirs(environment, dirs);
+    return dirs;
+  };
+
   return {
     environment,
     renderText(templates, format, context) {
-      const { dirs } = themes.current();
-      useThemeDirs(environment, dirs);
-      const written = format === 'gemini' && writesGemtext(dirs, templates) ? 'gemini' : 'markdown';
+      const dirs = current();
+      const written =
+        format === 'gemini' ? (slotFormat(dirs, templates, format) ?? 'markdown') : 'markdown';
       return { format: written, text: environment.render(templates[written], context) };
+    },
+    slotFormat: (templates, format) => slotFormat(current(), templates, format),
+    render(template, context) {
+      current();
+      return environment.render(template, context);
     },
   };
 }
