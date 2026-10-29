@@ -356,13 +356,7 @@ function textPage(
       { ...frontMatter, ...navigationFrontMatter(chrome, linkUrl) },
       layout === undefined
         ? [header, ...body, footer].map(({ text }) => text)
-        : [
-            layout.render({
-              header: header.text.trim(),
-              content: joined(body),
-              footer: footer.text.trim(),
-            }),
-          ],
+        : [layout.render(markdownParts(header, body, footer))],
     );
   }
 
@@ -382,22 +376,26 @@ function textPage(
         : gemtextOf([
             {
               format: 'markdown',
-              text: layout.render({
-                header: header.text.trim(),
-                content: joined([dateline, ...body]),
-                footer: footer.text.trim(),
-              }),
+              text: layout.render(markdownParts(header, [dateline, ...body], footer)),
             },
           ]);
   const home = `=> ${linkUrl(HOME_LINK.url)} ${HOME_LINK.label}`;
   return gemtext.split('\n').includes(home) ? gemtext : `${gemtext}\n${home}\n`;
 }
 
-function joined(parts: readonly ThemeText[]): string {
-  return parts
-    .map(({ text }) => text.trim())
-    .filter((text) => text !== '')
-    .join('\n\n');
+function markdownParts(
+  header: ThemeText,
+  content: readonly ThemeText[],
+  footer: ThemeText,
+): LayoutParts {
+  return {
+    header: header.text.trim(),
+    content: content
+      .map(({ text }) => text.trim())
+      .filter((text) => text !== '')
+      .join('\n\n'),
+    footer: footer.text.trim(),
+  };
 }
 
 function gemtextParts(

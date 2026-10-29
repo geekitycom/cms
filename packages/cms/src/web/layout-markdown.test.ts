@@ -7,12 +7,6 @@ import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { createUser, setUserProfile } from '../site/users.ts';
 
-/**
- * A theme writes what goes around a page's words in its Markdown with one
- * template per HTML layout, `layouts/<name>.md.njk`, and in its gemtext with
- * `layouts/<name>.gmi.njk` or that Markdown template converted.
- */
-
 const box = sandbox();
 after(() => box.cleanup());
 
@@ -121,8 +115,7 @@ async function text(cms: Cms, url: string): Promise<string> {
   return response.text();
 }
 
-/** What follows the front matter. */
-async function body(cms: Cms, url: string): Promise<string> {
+async function afterFrontMatter(cms: Cms, url: string): Promise<string> {
   return (await text(cms, url)).split('\n---\n')[1] ?? '';
 }
 
@@ -141,7 +134,7 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
     });
 
     assert.equal(
-      await body(cms, '/2026/09/one/index.md'),
+      await afterFrontMatter(cms, '/2026/09/one/index.md'),
       [
         '',
         '# Post one',
@@ -154,7 +147,11 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
         '',
       ].join('\n'),
     );
-    assert.match(await body(cms, '/about/index.md'), /## Feeds/, 'a page keeps the footer');
+    assert.match(
+      await afterFrontMatter(cms, '/about/index.md'),
+      /## Feeds/,
+      'a page keeps the footer',
+    );
   });
 
   it('gives the header and footer already written, to place in any order', async () => {
@@ -162,7 +159,7 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
       'layouts/post.md.njk': '{{ footer }}\n\n{{ content }}\n\n{{ header }}\n',
     });
 
-    const written = await body(cms, '/2026/09/one/index.md');
+    const written = await afterFrontMatter(cms, '/2026/09/one/index.md');
     const at = (needle: string): number => written.indexOf(needle);
     assert.ok(at('## Feeds') >= 0, written);
     assert.ok(at('## Feeds') < at('The first, see'), written);
@@ -177,7 +174,7 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
     const cms = await site(theme);
 
     const opens = async (url: string, slot: string, words: RegExp): Promise<void> => {
-      const written = await body(cms, url);
+      const written = await afterFrontMatter(cms, url);
       assert.ok(written.startsWith(`\nSlot ${slot}: `), `${url}: ${written}`);
       assert.match(written, words, url);
     };
@@ -199,8 +196,8 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
       },
       { homepage: 'about' },
     );
-    assert.equal(await body(both, '/index.md'), '\nFront: Who writes this.\n');
-    assert.equal(await body(both, '/blog/index.md'), '\nPage: The blog.\n');
+    assert.equal(await afterFrontMatter(both, '/index.md'), '\nFront: Who writes this.\n');
+    assert.equal(await afterFrontMatter(both, '/blog/index.md'), '\nPage: The blog.\n');
 
     const pageOnly = await site(
       { 'layouts/page.md.njk': 'Page: {{ content }}\n' },
@@ -208,7 +205,7 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
         homepage: 'about',
       },
     );
-    assert.equal(await body(pageOnly, '/index.md'), '\nPage: Who writes this.\n');
+    assert.equal(await afterFrontMatter(pageOnly, '/index.md'), '\nPage: Who writes this.\n');
   });
 
   it('uses posts-page.md.njk on the posts page, else home.md.njk', async () => {
@@ -219,13 +216,16 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
       },
       { homepage: 'about', postsPage: 'blog' },
     );
-    assert.match(await body(both, '/blog/index.md'), /^\nPosts page\n\nThe blog\.\n\n## Posts\n/);
+    assert.match(
+      await afterFrontMatter(both, '/blog/index.md'),
+      /^\nPosts page\n\nThe blog\.\n\n## Posts\n/,
+    );
 
     const homeOnly = await site(
       { 'layouts/home.md.njk': 'Home\n\n{{ content }}\n' },
       { homepage: 'about', postsPage: 'blog' },
     );
-    assert.match(await body(homeOnly, '/blog/index.md'), /^\nHome\n\nThe blog\.\n/);
+    assert.match(await afterFrontMatter(homeOnly, '/blog/index.md'), /^\nHome\n\nThe blog\.\n/);
   });
 });
 
@@ -252,7 +252,7 @@ describe('a static front page’s Markdown with the author’s card and the newe
       { homepage: 'about' },
     );
 
-    const written = await body(cms, '/index.md');
+    const written = await afterFrontMatter(cms, '/index.md');
     assert.ok(
       written.startsWith(
         [

@@ -7,12 +7,6 @@ import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { createUser, setUserProfile } from '../site/users.ts';
 
-/**
- * A profile's bio is Markdown: a link in it is a link on the card, in the
- * page's Markdown and gemtext, and in the actor's summary, and its text is
- * what the structured data describes the person with.
- */
-
 const box = sandbox();
 after(() => box.cleanup());
 

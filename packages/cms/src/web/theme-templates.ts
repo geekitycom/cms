@@ -77,28 +77,28 @@ export function themeTemplate(
   return findThemeFile(themeDirs, preferred) === undefined ? fallback : preferred;
 }
 
-/** A layout's Markdown and Gemini templates: `layouts/post.njk` has `layouts/post.md.njk`. */
 export function layoutText(layout: string): TextTemplates {
   const name = layout.replace(/\.njk$/, '');
   return { markdown: `${name}.md.njk`, gemini: `${name}.gmi.njk` };
 }
 
-/**
- * Which of a slot's templates a page in `format` is written from, or
- * `undefined` when no theme has either. A Gemini page takes the first theme
- * on the search path with either file, its `.gmi.njk` before its `.md.njk`.
- */
 export function slotFormat(
   dirs: readonly string[],
   templates: TextTemplates,
   format: TextFormat,
 ): TextFormat | undefined {
-  if (format === 'markdown') {
-    return findThemeFile(dirs, templates.markdown) === undefined ? undefined : 'markdown';
-  }
-  for (const dir of dirs) {
-    if (findThemeFile([dir], templates.gemini) !== undefined) return 'gemini';
-    if (findThemeFile([dir], templates.markdown) !== undefined) return 'markdown';
+  return format === 'markdown' ? markdownSlot(dirs, templates) : geminiSlot(dirs, templates);
+}
+
+function markdownSlot(dirs: readonly string[], templates: TextTemplates): 'markdown' | undefined {
+  return findThemeFile(dirs, templates.markdown) === undefined ? undefined : 'markdown';
+}
+
+function geminiSlot(dirs: readonly string[], templates: TextTemplates): TextFormat | undefined {
+  for (const themeDir of dirs) {
+    const nearestTheme = [themeDir];
+    if (findThemeFile(nearestTheme, templates.gemini) !== undefined) return 'gemini';
+    if (findThemeFile(nearestTheme, templates.markdown) !== undefined) return 'markdown';
   }
   return undefined;
 }
