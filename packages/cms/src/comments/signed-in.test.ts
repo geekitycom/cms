@@ -3,15 +3,15 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { browser, sandbox, signIn } from '../admin/__testing__/harness.ts';
+import { FIRST_ADMIN, browser, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { writeUsers } from '../admin/__testing__/users.ts';
 import type { Document } from '../content/document.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { commentsFile, readComments } from './records.ts';
 import { COMMENT_FIELDS } from './submission.ts';
 import type { CommentChecker, CommentSubmission } from '../forms/checker.ts';
+import { writeSignInUsers } from '../site/__testing__/users.ts';
 
 /**
  * Commenting as yourself: what the form under a post looks like when the
@@ -41,7 +41,7 @@ const POST_URL = '/2026/09/hello-world/';
 /** The site's one account, with everything a comment can be attributed from. */
 const ADA = {
   username: 'ada',
-  password: 'correct horse battery',
+  password: FIRST_ADMIN.password,
   email: 'ada@example.com',
   displayName: 'Ada Lovelace',
 };
@@ -73,10 +73,9 @@ async function site(
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, POST, 'utf8');
 
-  writeUsers(dataDir, [
+  writeSignInUsers(dataDir, [
     {
       username: ADA.username,
-      password: ADA.password,
       email: ADA.email,
       ...(user.displayName === undefined ? {} : { profile: { displayName: user.displayName } }),
     },

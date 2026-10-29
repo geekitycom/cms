@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { sandbox } from '../admin/__testing__/harness.ts';
+import { FIRST_ADMIN, sandbox } from '../admin/__testing__/harness.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
@@ -24,7 +24,7 @@ const ALL: Scope[] = ['create', 'update'];
 
 async function site(): Promise<{ cms: Cms; grace: User; token: string }> {
   const dataDir = await box.dir('geekity-micropub-writing-data-');
-  writeSignInUsers(dataDir, ['grace']);
+  writeSignInUsers(dataDir, [{ username: FIRST_ADMIN.username }, { username: 'grace' }]);
   const cms = await box.site({ dataDir, baseUrl: BASE, now: () => NOW });
   const grace = findUser(dataDir, 'grace');
   assert.ok(grace !== undefined);

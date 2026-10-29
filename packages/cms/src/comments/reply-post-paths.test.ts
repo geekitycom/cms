@@ -4,9 +4,14 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { csrfField, resolveNothing, sandbox, signIn } from '../admin/__testing__/harness.ts';
+import {
+  FIRST_ADMIN,
+  csrfField,
+  resolveNothing,
+  sandbox,
+  signIn,
+} from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { writeUsers } from '../admin/__testing__/users.ts';
 import {
   COMMENT_ADMIN_FIELDS,
   COMMENTS_MODERATE_PATH,
@@ -19,6 +24,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import { moderationLink, NOTIFICATION_FIELDS } from '../notifications/links.ts';
+import { writeSignInUsers } from '../site/__testing__/users.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import type { ModerationAction } from './moderate.ts';
 import { COMMENT_FIELDS } from './submission.ts';
@@ -39,7 +45,7 @@ after(() => box.cleanup());
 const BASE_URL = 'https://blog.example';
 const NOW = new Date('2026-09-20T12:00:00.000Z');
 const POST_URL = '/2026/09/hello-world/';
-const ADA = { username: 'ada', password: 'correct horse battery', displayName: 'Ada Lovelace' };
+const ADA = { username: 'ada', password: FIRST_ADMIN.password, displayName: 'Ada Lovelace' };
 const ANN = '00000000000000a1';
 const ANN_PAGE = `${BASE_URL}/comment/${ANN}/`;
 const MICROPUB = '/_geekity/micropub';
@@ -92,10 +98,9 @@ async function site(extra: Record<string, string> = {}, config: GeekityConfig = 
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  writeUsers(dataDir, [
+  writeSignInUsers(dataDir, [
     {
       username: ADA.username,
-      password: ADA.password,
       email: 'ada@example.com',
       profile: { displayName: ADA.displayName },
     },

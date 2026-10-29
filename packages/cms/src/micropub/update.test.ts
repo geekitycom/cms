@@ -16,6 +16,7 @@ import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { writeSignInUsers } from '../site/__testing__/users.ts';
+import type { SignInUser } from '../site/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 
 remoteHostsDoNotExist();
@@ -38,7 +39,7 @@ async function site(
   scopes: Scope[] = ALL,
   config: GeekityConfig = {},
   files: Readonly<Record<string, string>> = {},
-  others: readonly string[] = [],
+  users: readonly SignInUser[] = [{ username: FIRST_ADMIN.username }],
 ): Promise<Site> {
   const contentDir = await box.dir('geekity-micropub-update-content-');
   for (const [relative, contents] of Object.entries(files)) {
@@ -47,7 +48,7 @@ async function site(
     await writeFile(file, contents, 'utf8');
   }
   const dataDir = await box.dir('geekity-micropub-update-data-');
-  writeSignInUsers(dataDir, others);
+  writeSignInUsers(dataDir, users);
   const cms = await box.open({
     contentDir,
     dataDir,
@@ -503,7 +504,7 @@ describe('which post a URL names (AC #4)', () => {
           "---\ntitle: Grace's\ndate: '2026-09-01T09:00:00Z'\npermalink: /2026/09/graces/\nauthor: grace\n---\n\nHers.\n",
         'pages/about.md': '---\ntitle: About\npermalink: /about/\n---\n\nA page.\n',
       },
-      ['grace'],
+      [{ username: FIRST_ADMIN.username }, { username: 'grace' }],
     );
     return { ...made, grace: `${BASE}/2026/09/graces/`, page: `${BASE}/about/` };
   }

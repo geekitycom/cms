@@ -3,8 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import { resolvePublic, sandbox, signIn } from '../admin/__testing__/harness.ts';
-import { writeUsers } from '../admin/__testing__/users.ts';
+import { FIRST_ADMIN, resolvePublic, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import { settingsOver } from '../__testing__/settings.ts';
 import { CONTACT_FIELDS, CONTACT_POST_PATH } from '../contact/form.ts';
 import { listContactMessages } from '../contact/records.ts';
@@ -12,6 +11,7 @@ import type { CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
+import { writeSignInUsers } from '../site/__testing__/users.ts';
 import { WEBMENTION_PATH } from '../webmention/endpoint.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { HCAPTCHA_RESPONSE_FIELD } from './hcaptcha.ts';
@@ -42,7 +42,7 @@ contact: true
 Write to me.
 `;
 
-const ADMIN = { username: 'ada', password: 'correct horse battery', email: 'ada@example.com' };
+const ADMIN = { username: 'ada', password: FIRST_ADMIN.password, email: 'ada@example.com' };
 
 type Answer = 'pass' | 'reject' | 'unreachable';
 
@@ -117,7 +117,7 @@ async function site(
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  writeUsers(dataDir, [ADMIN]);
+  writeSignInUsers(dataDir, [{ username: ADMIN.username, email: ADMIN.email }]);
   if (options.paired !== false) await pair({ contentDir, dataDir }, 'the-site-key', '0xsecret');
 
   const provider = createMemoryMailProvider();

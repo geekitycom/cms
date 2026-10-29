@@ -34,7 +34,7 @@ interface Site {
 async function site(scopes: Scope[] = ['media'], config: GeekityConfig = {}): Promise<Site> {
   const contentDir = await box.dir('geekity-micropub-media-content-');
   const dataDir = await box.dir('geekity-micropub-media-data-');
-  writeSignInUsers(dataDir, ['grace']);
+  writeSignInUsers(dataDir, [{ username: 'ada' }, { username: 'grace' }]);
   const cms = await box.open({ contentDir, dataDir, baseUrl: BASE, ...config });
   const tokens = { ada: '', grace: '' };
   for (const username of ['ada', 'grace'] as const) {
