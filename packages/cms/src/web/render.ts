@@ -60,11 +60,32 @@ export interface MarkdownChromeOptions {
    * its posts converts to a gemfeed line, `=> url YYYY-MM-DD title`.
    */
   format: TextFormat;
+  /**
+   * The HTML layouts whose text templates may write the page, first choice
+   * first: a front page names `layouts/front-page.njk` and then
+   * `layouts/page.njk`. Absent on a status page.
+   */
+  layouts?: readonly string[] | undefined;
+}
+
+/** The parts a layout's text template places, already written in its format. */
+export interface LayoutParts {
+  readonly header: string;
+  readonly content: string;
+  readonly footer: string;
+}
+
+/** A theme's text template for the page's layout, in the format it is written in. */
+export interface TextLayout {
+  readonly format: TextFormat;
+  render(parts: LayoutParts): string;
 }
 
 export interface MarkdownChromeText {
   readonly header: ThemeText;
   readonly footer: ThemeText;
+  /** Present when a theme writes this page's layout as text. */
+  readonly layout?: TextLayout | undefined;
 }
 
 export interface Listing {

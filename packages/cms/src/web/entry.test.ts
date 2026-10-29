@@ -296,7 +296,11 @@ describe('the bio (AC #2)', () => {
     // own links right under what they read.
     const inside = bio(await body(await site(), '/2026/09/hello/'));
 
-    assert.match(inside, /<p class="bio-note p-note">Wrote the first program\.<\/p>/, 'no note');
+    assert.match(
+      inside,
+      /<div class="bio-note p-note"><p>Wrote the first program\.<\/p><\/div>/,
+      'no note',
+    );
     assert.match(
       inside,
       /<ul class="hlist bio-links">[\s\S]*<a class="u-url" rel="me" href="https:\/\/ada\.example">Site<\/a>/,

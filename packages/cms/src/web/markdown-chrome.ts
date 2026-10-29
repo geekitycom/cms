@@ -35,8 +35,9 @@ import type {
   ThemeText,
 } from './render.ts';
 import { requestSite } from './render-scope.ts';
-import { CHROME_TEMPLATES, STATUS_PAGES, untilContext } from './theme-templates.ts';
-import type { StatusPageName } from './theme-templates.ts';
+import { CHROME_TEMPLATES, STATUS_PAGES, layoutText, untilContext } from './theme-templates.ts';
+import type { StatusPageName, TextTemplates } from './theme-templates.ts';
+import type { TextFormat } from './negotiate.ts';
 
 export interface MarkdownChromePages {
   renderMarkdownChrome(chrome: MarkdownChrome, options: MarkdownChromeOptions): MarkdownChromeText;
@@ -52,7 +53,7 @@ export function createMarkdownChrome(
 
   function renderMarkdownChrome(
     chrome: MarkdownChrome,
-    { markdownUrl, frontPage, document, format }: MarkdownChromeOptions,
+    { markdownUrl, frontPage, document, format, layouts = [] }: MarkdownChromeOptions,
   ): MarkdownChromeText {
     const site = siteData.read();
     const soloAuthor = siteAuthorContext(users(), site.author);
@@ -80,9 +81,26 @@ export function createMarkdownChrome(
         ? contexts.capsuleContext(chrome.url)
         : {}),
     };
+    const layout = layoutSlot(markdown, layouts, format);
+    if (layout === undefined) {
+      return {
+        header: markdown.renderText(CHROME_TEMPLATES.header, format, context),
+        footer: markdown.renderText(CHROME_TEMPLATES.footer, format, context),
+      };
+    }
+
+    const written = (templates: TextTemplates): ThemeText =>
+      layout.format === 'gemini'
+        ? markdown.renderText(templates, format, context)
+        : { format: 'markdown', text: markdown.render(templates.markdown, context) };
     return {
-      header: markdown.renderText(CHROME_TEMPLATES.header, format, context),
-      footer: markdown.renderText(CHROME_TEMPLATES.footer, format, context),
+      header: written(CHROME_TEMPLATES.header),
+      footer: written(CHROME_TEMPLATES.footer),
+      layout: {
+        format: layout.format,
+        render: (parts) =>
+          markdown.render(layout.templates[layout.format], { ...context, ...parts }),
+      },
     };
   }
 
@@ -102,6 +120,19 @@ export function createMarkdownChrome(
   }
 
   return { renderMarkdownChrome, renderStatusMarkdown };
+}
+
+function layoutSlot(
+  markdown: MarkdownEnvironment,
+  layouts: readonly string[],
+  format: TextFormat,
+): { templates: TextTemplates; format: TextFormat } | undefined {
+  for (const layout of layouts) {
+    const templates = layoutText(layout);
+    const written = markdown.slotFormat(templates, format);
+    if (written !== undefined) return { templates, format: written };
+  }
+  return undefined;
 }
 
 function markdownArchiveContext(

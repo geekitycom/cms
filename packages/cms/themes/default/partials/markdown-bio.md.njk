@@ -1,0 +1,20 @@
+{#
+  The person a page speaks for, in Markdown: what they wrote about themselves,
+  then their links, one list item each. Prints nothing when the context has no
+  `bio`. The note is Markdown already, so it is printed as written, with
+  `markdownLinks` giving this site's links their `.md` URLs.
+
+  `bio` is on an author archive and on the homepage of a site whose author is
+  a user: `name`, `url`, `note` and `links` (each a `label` and a `url`). The
+  header includes this file where the HTML draws the card, and a layout
+  Markdown template may include it anywhere, such as a static front page's.
+-#}
+{% if bio %}
+{% if bio.note %}
+{{ bio.note | markdownLinks }}
+
+{% endif %}
+{% for link in bio.links %}
+- [{{ link.label | escapeMarkdown }}]({{ link.url | markdownUrl }})
+{% endfor %}
+{% endif %}

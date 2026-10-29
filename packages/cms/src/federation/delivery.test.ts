@@ -2350,7 +2350,7 @@ describe('a user’s own profile', () => {
     assert.equal(object['id'], ACTOR_URL, 'the object is the actor itself');
     assert.equal(object['type'], 'Person');
     assert.equal(object['name'], 'Ada Lovelace');
-    assert.equal(object['summary'], 'Writes about engines.');
+    assert.equal(object['summary'], '<p>Writes about engines.</p>\n');
     const icon = object['icon'] as { url?: string } | undefined;
     assert.equal(
       icon?.url,

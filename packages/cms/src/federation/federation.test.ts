@@ -300,7 +300,7 @@ describe('a user actor', () => {
     assert.equal(actor['id'], ACTOR_URL);
     assert.equal(actor['preferredUsername'], ADA);
     assert.equal(actor['name'], 'Ada Lovelace');
-    assert.equal(actor['summary'], 'Writes about engines.');
+    assert.equal(actor['summary'], '<p>Writes about engines.</p>\n');
     assert.equal(actor['url'], ACTOR_URL);
     assert.equal(actor['inbox'], `${ACTOR_URL}inbox/`);
     assert.equal(actor['outbox'], `${ACTOR_URL}outbox/`);

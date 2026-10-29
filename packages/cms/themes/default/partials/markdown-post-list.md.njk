@@ -1,0 +1,15 @@
+{#
+  Posts as a Markdown list, one line each in the shape a listing's Markdown
+  has: `- [YYYY-MM-DD Title](url)`, with the description after a colon when
+  the post has one.
+
+  Set `postList` before including it. Each entry is a `label`, a `url`, a
+  `date` (a `Date`, written in the site's timezone) and a `description`, the
+  shape `newestPosts(count)` gives on a static front page:
+
+    {% set postList = newestPosts(5) %}
+    {% include "partials/markdown-post-list.md.njk" %}
+-#}
+{% for entry in postList %}
+- [{{ ((((entry.date | date("html")) + " ") if entry.date) + entry.label) | escapeMarkdown }}]({{ entry.url | markdownUrl }}){{ (": " + (entry.description | escapeMarkdown)) if entry.description }}
+{% endfor %}

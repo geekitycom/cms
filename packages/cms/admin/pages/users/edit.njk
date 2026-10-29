@@ -93,7 +93,7 @@
          hint='Printed instead of the login: it heads the archive and is the byline under their posts.') }}
 
     {{ field.textarea('profile-bio', fields.bio, 'Bio', account.profile.bio, rows='4',
-         hint='A line or two about them, shown on the archive under the name.') }}
+         hint='A line or two about them, in Markdown: [words](url) makes a link. Shown under their posts and on their archive, and as their fediverse profile.') }}
 
     {% set avatarHint %}A path such as <code>/uploads/2026/09/me.jpg</code>, or a full URL.{% endset %}
     {{ field.text('profile-avatar', fields.avatar, 'Avatar', account.profile.avatar,

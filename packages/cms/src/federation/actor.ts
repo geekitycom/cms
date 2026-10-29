@@ -16,6 +16,7 @@ import { escapeAttribute, escapeText } from '../util/html.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorHref } from '../content/authors.ts';
 import { profileContext } from '../site/authors.ts';
+import { bioHtml } from '../site/bio.ts';
 import { attributionDomainOf, handleHref } from './paths.ts';
 
 /**
@@ -214,7 +215,7 @@ export async function userActor(
     id,
     preferredUsername: user.username,
     name: profile.name,
-    summary: profile.bio ?? null,
+    summary: profile.bio === undefined ? null : bioHtml(profile.bio, { baseUrl }),
     url: new URL(absoluteUrl(authorHref(user.username), baseUrl)),
     icon: icon === undefined ? null : new Image({ url: new URL(icon) }),
     inbox: context.getInboxUri(user.username),

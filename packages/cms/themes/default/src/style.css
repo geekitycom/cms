@@ -1187,6 +1187,10 @@
     @apply mt-1 text-[0.95rem] text-muted;
   }
 
+  .bio-note p + p {
+    @apply mt-2;
+  }
+
   .bio-links {
     @apply mt-1 gap-x-4 font-sans text-sm;
   }

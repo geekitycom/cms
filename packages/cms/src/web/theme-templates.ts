@@ -1,4 +1,5 @@
 import { findThemeFile } from '../theme/themes.ts';
+import type { TextFormat } from './negotiate.ts';
 
 export const TEMPLATES = {
   home: 'layouts/home.njk',
@@ -76,10 +77,28 @@ export function themeTemplate(
   return findThemeFile(themeDirs, preferred) === undefined ? fallback : preferred;
 }
 
-export function writesGemtext(dirs: readonly string[], templates: TextTemplates): boolean {
-  for (const dir of dirs) {
-    if (findThemeFile([dir], templates.gemini) !== undefined) return true;
-    if (findThemeFile([dir], templates.markdown) !== undefined) return false;
+export function layoutText(layout: string): TextTemplates {
+  const name = layout.replace(/\.njk$/, '');
+  return { markdown: `${name}.md.njk`, gemini: `${name}.gmi.njk` };
+}
+
+export function slotFormat(
+  dirs: readonly string[],
+  templates: TextTemplates,
+  format: TextFormat,
+): TextFormat | undefined {
+  return format === 'markdown' ? markdownSlot(dirs, templates) : geminiSlot(dirs, templates);
+}
+
+function markdownSlot(dirs: readonly string[], templates: TextTemplates): 'markdown' | undefined {
+  return findThemeFile(dirs, templates.markdown) === undefined ? undefined : 'markdown';
+}
+
+function geminiSlot(dirs: readonly string[], templates: TextTemplates): TextFormat | undefined {
+  for (const themeDir of dirs) {
+    const nearestTheme = [themeDir];
+    if (findThemeFile(nearestTheme, templates.gemini) !== undefined) return 'gemini';
+    if (findThemeFile(nearestTheme, templates.markdown) !== undefined) return 'markdown';
   }
-  return false;
+  return undefined;
 }

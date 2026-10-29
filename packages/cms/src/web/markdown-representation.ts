@@ -44,8 +44,8 @@ import type { MarkdownChrome, MarkdownFeed, MarkdownLink, MarkdownUrl } from './
 import { representationHref } from './negotiate.ts';
 import type { TextFormat } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
-import type { ThemeText } from './render.ts';
-import { STATUS_PAGES } from './theme-templates.ts';
+import type { LayoutParts, ThemeText } from './render.ts';
+import { OPTIONAL_TEMPLATES, STATUS_PAGES, TEMPLATES } from './theme-templates.ts';
 import type { StatusPageName } from './theme-templates.ts';
 import { classifyPath } from './paths.ts';
 import { documentLabel, encodePath } from './request.ts';
@@ -98,7 +98,15 @@ export function documentMarkdown(
     namedAuthor(documentFrontMatter({ ...document, permalink: url }), writer),
     chrome,
     [rewriteMarkdownLinks(body, siteHrefFor(c, url, format))],
-    { frontPage: url === '/' ? document : undefined, document, published: document.date },
+    {
+      frontPage: url === '/' ? document : undefined,
+      document,
+      published: document.date,
+      layouts:
+        url === '/'
+          ? [OPTIONAL_TEMPLATES.frontPage, TEMPLATES.page]
+          : [document.type === 'post' ? TEMPLATES.post : TEMPLATES.page],
+    },
   );
 }
 
@@ -138,19 +146,33 @@ export function listingMarkdown(
     description: format === 'gemini' ? undefined : document.description,
   }));
   const pager = [newer, older].filter((link) => link !== undefined);
-  const { document } = archive.context;
 
-  return textPage(c, format, { title: page.title, permalink: url }, chrome, [
-    description === '' ? '' : `> ${description}`,
-    document === undefined
-      ? ''
-      : rewriteMarkdownLinks(
-          normalizeBody(document.body),
-          siteHrefFor(c, document.permalink, format),
-        ),
-    entries.length === 0 ? '' : `## Posts\n\n${entryList(entries, linkUrl)}`,
-    pager.length === 0 ? '' : `## More posts\n\n${linkList(pager, linkUrl)}`,
-  ]);
+  const { document, template } = archive.context;
+  const layouts =
+    template !== undefined
+      ? [template]
+      : document === undefined
+        ? [TEMPLATES.home]
+        : [OPTIONAL_TEMPLATES.postsPage, TEMPLATES.home];
+
+  return textPage(
+    c,
+    format,
+    { title: page.title, permalink: url },
+    chrome,
+    [
+      description === '' ? '' : `> ${description}`,
+      document === undefined
+        ? ''
+        : rewriteMarkdownLinks(
+            normalizeBody(document.body),
+            siteHrefFor(c, document.permalink, format),
+          ),
+      entries.length === 0 ? '' : `## Posts\n\n${entryList(entries, linkUrl)}`,
+      pager.length === 0 ? '' : `## More posts\n\n${linkList(pager, linkUrl)}`,
+    ],
+    { layouts },
+  );
 }
 
 export function commentMarkdown(
@@ -194,6 +216,7 @@ export function commentMarkdown(
     },
     chrome,
     [thread.comment.text],
+    { layouts: [TEMPLATES.comment] },
   );
 }
 
@@ -253,6 +276,7 @@ export function searchMarkdown(
       entries.length === 0 ? '' : `## Results\n\n${entryList(entries, linkUrl)}`,
       pager.length === 0 ? '' : `## More results\n\n${linkList(pager, linkUrl)}`,
     ],
+    { layouts: [TEMPLATES.search] },
   );
 }
 
@@ -315,10 +339,11 @@ function textPage(
     frontPage?: Document | undefined;
     document?: Document | undefined;
     published?: string | undefined;
+    layouts?: readonly string[] | undefined;
   } = {},
 ): string {
   const linkUrl = siteUrlFor(c, chrome.url, format);
-  const { header, footer } = c.var.renderer.renderMarkdownChrome(chrome, {
+  const { header, footer, layout } = c.var.renderer.renderMarkdownChrome(chrome, {
     markdownUrl: linkUrl,
     format,
     ...pages,
@@ -329,7 +354,9 @@ function textPage(
   if (format === 'markdown') {
     return markdownFile(
       { ...frontMatter, ...navigationFrontMatter(chrome, linkUrl) },
-      [header, ...body, footer].map(({ text }) => text),
+      layout === undefined
+        ? [header, ...body, footer].map(({ text }) => text)
+        : [layout.render(markdownParts(header, body, footer))],
     );
   }
 
@@ -341,9 +368,46 @@ function textPage(
     format: 'markdown' as const,
     text: day === undefined ? '' : `Published ${day}`,
   };
-  const gemtext = gemtextOf([header, dateline, ...body, footer]);
+  const gemtext =
+    layout === undefined
+      ? gemtextOf([header, dateline, ...body, footer])
+      : layout.format === 'gemini'
+        ? `${layout.render(gemtextParts(header, [dateline, ...body], footer)).trim()}\n`
+        : gemtextOf([
+            {
+              format: 'markdown',
+              text: layout.render(markdownParts(header, [dateline, ...body], footer)),
+            },
+          ]);
   const home = `=> ${linkUrl(HOME_LINK.url)} ${HOME_LINK.label}`;
   return gemtext.split('\n').includes(home) ? gemtext : `${gemtext}\n${home}\n`;
+}
+
+function markdownParts(
+  header: ThemeText,
+  content: readonly ThemeText[],
+  footer: ThemeText,
+): LayoutParts {
+  return {
+    header: header.text.trim(),
+    content: content
+      .map(({ text }) => text.trim())
+      .filter((text) => text !== '')
+      .join('\n\n'),
+    footer: footer.text.trim(),
+  };
+}
+
+function gemtextParts(
+  header: ThemeText,
+  content: readonly ThemeText[],
+  footer: ThemeText,
+): LayoutParts {
+  return {
+    header: gemtextOf([header]).trim(),
+    content: gemtextOf(content).trim(),
+    footer: gemtextOf([footer]).trim(),
+  };
 }
 
 function gemtextOf(parts: readonly ThemeText[]): string {

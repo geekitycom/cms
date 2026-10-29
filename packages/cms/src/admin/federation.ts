@@ -386,7 +386,7 @@ export interface ActorSummary {
   readonly handle: string;
   /** The display name, or the username when they have written none. */
   readonly name: string;
-  /** The summary, which is their bio. May be empty. */
+  /** The summary, which is their bio as text. May be empty. */
   readonly summary: string;
   /** The actor's ActivityStreams id, which is also their archive. */
   readonly actorId: string;
@@ -434,7 +434,7 @@ export function actorSummary(
     handle: `@${accountOf(user.username, baseUrl)}`,
     avatarUrl: profile.avatar === undefined ? null : (avatarUrl(profile.avatar, baseUrl) ?? null),
     name: profile.name,
-    summary: profile.bio ?? '',
+    summary: profile.bioText ?? '',
     actorId:
       user.actorId ??
       new URL(

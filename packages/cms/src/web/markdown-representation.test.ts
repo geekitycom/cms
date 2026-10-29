@@ -299,9 +299,7 @@ describe('the header and footer the theme draws (AC #3, #4)', () => {
 });
 
 describe('the bio (AC #5)', () => {
-  const BIO = ['Wrote the \\*first\\* program.', '', '- [Her notes](https://ada.example)'].join(
-    '\n',
-  );
+  const BIO = ['Wrote the *first* program.', '', '- [Her notes](https://ada.example)'].join('\n');
 
   it('opens the author archive', async () => {
     const cms = await site();
