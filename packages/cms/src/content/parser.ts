@@ -20,6 +20,11 @@ export interface ParseDocumentOptions {
   type?: DocumentType | undefined;
   /** The resolved fediverse handles, so a mention renders as a link. */
   handles?: HandleDirectory | undefined;
+  /**
+   * The first URL segment of the wiki, which a wiki page's permalink and a
+   * wiki link are spelled under. The default base when absent.
+   */
+  wikiBase?: string | undefined;
 }
 
 /**

@@ -31,10 +31,12 @@ export interface CreateReconcilerOptions {
   contentDir: string;
   logger: SyncLogger;
   emit: (change: DocumentChange) => Promise<void>;
+  /** The site's wiki base, asked for at each parse so a changed setting is the next one's. */
+  wikiBase?: (() => string) | undefined;
 }
 
 export function createReconciler(options: CreateReconcilerOptions): Reconciler {
-  const { store, contentDir, logger, emit } = options;
+  const { store, contentDir, logger, emit, wikiBase } = options;
   const handles = handleDirectory(contentDir);
 
   async function indexOverStaleRow(document: Document, origin: ChangeOrigin): Promise<void> {
@@ -82,7 +84,7 @@ export function createReconciler(options: CreateReconcilerOptions): Reconciler {
 
     let document: Document;
     try {
-      document = parseDocument(source, { path: relativePath, handles });
+      document = parseDocument(source, { path: relativePath, handles, wikiBase: wikiBase?.() });
     } catch (error) {
       logger.warn(`Skipping ${relativePath}: ${messageOf(error)}`);
       return 'skipped';

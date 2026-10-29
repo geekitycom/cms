@@ -270,6 +270,29 @@ describe('geekity settings', () => {
     });
   });
 
+  it('gets and sets the wiki base, refusing one that is an archive base', async () => {
+    const directory = await temporaryDir('geekity-settings-cli-');
+    const siteJson = path.join(directory, 'content', '_data', 'site.json');
+
+    const got = await runCli(['settings', 'get', 'site.wiki_base'], directory);
+    assert.equal(got.code, 0, got.stderr);
+    assert.equal(got.stdout, 'wiki\n');
+
+    const set = await runCli(['settings', 'set', 'site.wiki_base', 'notes'], directory);
+    assert.equal(set.code, 0, set.stderr);
+    assert.match(lineOf(set.stdout, 'site.wiki_base'), /^site\.wiki_base notes file /);
+    assert.equal((await readJson(siteJson))['wikiBase'], 'notes');
+
+    const clash = await runCli(['settings', 'set', 'site.wiki_base', 'tag'], directory);
+    assert.equal(clash.code, 1);
+    assert.match(clash.stderr, /The tag base and the wiki base have to be different words/);
+    assert.equal(
+      (await readJson(siteJson))['wikiBase'],
+      'notes',
+      'the refused value is not written',
+    );
+  });
+
   it('refuses a value that does not parse, an unknown setting and a missing verb, writing nothing', async () => {
     const directory = await temporaryDir('geekity-settings-cli-');
 

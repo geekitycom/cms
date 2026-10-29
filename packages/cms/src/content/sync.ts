@@ -81,6 +81,11 @@ export interface CreateContentSyncOptions {
   debounce?: WatchDebounce | undefined;
   /** Where parse failures are reported. Defaults to `console`. */
   logger?: SyncLogger | undefined;
+  /**
+   * The site's wiki base, read from the settings at each parse. Absent, the
+   * parser uses the default one.
+   */
+  wikiBase?: (() => string) | undefined;
 }
 
 /** The events a subscriber can listen for, and what each one carries. */
@@ -178,7 +183,13 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
   const logger = options.logger ?? console;
   const events = createEmitter(logger);
   const emit = (change: DocumentChange): Promise<void> => emitChange(events, store.now(), change);
-  const reconciler = createReconciler({ store, contentDir, logger, emit });
+  const reconciler = createReconciler({
+    store,
+    contentDir,
+    logger,
+    emit,
+    wikiBase: options.wikiBase,
+  });
   const tree = { store, contentDir, logger };
 
   // Watcher events are debounced per path and then handled one at a time, on

@@ -30,6 +30,7 @@ const STABLE_SITE_JSON_KEYS = [
   'licenseName',
   'tagBase',
   'categoryBase',
+  'wikiBase',
   'comments',
   'commentsOnPosts',
   'commentsOnPages',

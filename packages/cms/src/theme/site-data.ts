@@ -4,11 +4,11 @@ import path from 'node:path';
 import type { ResolvedConfig } from '../config.ts';
 import { canonicalLocale, DEFAULT_LOCALE } from '../content/locale.ts';
 import {
-  DEFAULT_TAXONOMY_BASES,
-  taxonomyBasesOrDefault,
+  DEFAULT_PERMALINK_BASES,
+  permalinkBasesOrDefault,
   taxonomyRedirectsOf,
 } from '../content/taxonomy.ts';
-import type { TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
+import type { PermalinkBases, TaxonomyRedirect } from '../content/taxonomy.ts';
 import { DEFAULT_TIMEZONE } from '../content/time.ts';
 import { isRecord } from '../util/guards.ts';
 import { COLOR_MODES, themeScheme } from './themes.ts';
@@ -77,6 +77,8 @@ export interface SiteData {
   tagBase?: string | undefined;
   /** The same for the category archives. `category` by default. */
   categoryBase?: string | undefined;
+  /** The same for the wiki pages and their index. `wiki` by default. */
+  wikiBase?: string | undefined;
   /**
    * The rssCloud and WebSub server the feeds advertise and this site pings,
    * as an absolute URL. Empty — or missing — means the site names none.
@@ -170,8 +172,9 @@ export function createSiteDataSource(
       const defaults: SiteData = {
         title: 'Geekity',
         url: config.baseUrl,
-        tagBase: DEFAULT_TAXONOMY_BASES.tag,
-        categoryBase: DEFAULT_TAXONOMY_BASES.category,
+        tagBase: DEFAULT_PERMALINK_BASES.tag,
+        categoryBase: DEFAULT_PERMALINK_BASES.category,
+        wikiBase: DEFAULT_PERMALINK_BASES.wiki,
       };
       return { ...defaults, ...fromFile() };
     },
@@ -258,7 +261,7 @@ export function frontPageSlugs(site: SiteData): FrontPageSlugs {
 }
 
 /**
- * Where this site's taxonomy archives live, from the site data.
+ * Where this site's taxonomy archives and wiki pages live, from the site data.
  *
  * A base the site could not actually be served under — an empty one, one with
  * a slash in it, one that would shadow `/admin`, or two that are the same word
@@ -266,8 +269,12 @@ export function frontPageSlugs(site: SiteData): FrontPageSlugs {
  * was refused at the settings screen, so anything that reaches here came from
  * a hand-edited `site.json`.
  */
-export function taxonomyBases(site: SiteData): TaxonomyBases {
-  return taxonomyBasesOrDefault({ tag: site['tagBase'], category: site['categoryBase'] });
+export function permalinkBases(site: SiteData): PermalinkBases {
+  return permalinkBasesOrDefault({
+    tag: site['tagBase'],
+    category: site['categoryBase'],
+    wiki: site['wikiBase'],
+  });
 }
 
 /**

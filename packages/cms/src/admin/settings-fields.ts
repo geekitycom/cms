@@ -10,7 +10,8 @@ import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from '../site/fe
 import { isLicenseUrl } from '../content/license.ts';
 import { canonicalLocale } from '../content/locale.ts';
 import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from '../site/robots.ts';
-import { taxonomyBaseProblems } from '../content/taxonomy.ts';
+import { permalinkBaseProblems } from '../content/taxonomy.ts';
+import type { PermalinkBases } from '../content/taxonomy.ts';
 import { PACKAGED_THEME, readTheme, themeNameProblem } from '../theme/themes.ts';
 import {
   EMAIL_PATTERN,
@@ -243,6 +244,10 @@ function postsPageProblem(homepage: string, posts_page: string): string | undefi
   return slugProblem(posts_page, 'A posts page');
 }
 
+function basesOf(form: SettingsForm): PermalinkBases {
+  return { tag: form.tag_base, category: form.category_base, wiki: form.wiki_base };
+}
+
 function frontPageRows(): { readonly [K in keyof FrontPage]: FormSettingRow<string> } {
   const row = (key: keyof FrontPage, field: string): FormSettingRow<string> => ({
     ...text(key, field),
@@ -310,12 +315,15 @@ const SETTING_ROWS: SettingRows = {
   }),
 
   tag_base: text('tag_base', 'tag_base', {
-    check: (form) => taxonomyBaseProblems({ tag: form.tag_base, category: form.category_base }).tag,
+    check: (form) => permalinkBaseProblems(basesOf(form)).tag,
   }),
 
   category_base: text('category_base', 'category_base', {
-    check: (form) =>
-      taxonomyBaseProblems({ tag: form.tag_base, category: form.category_base }).category,
+    check: (form) => permalinkBaseProblems(basesOf(form)).category,
+  }),
+
+  wiki_base: text('wiki_base', 'wiki_base', {
+    check: (form) => permalinkBaseProblems(basesOf(form)).wiki,
   }),
 
   comments: flag('comments', 'comments'),

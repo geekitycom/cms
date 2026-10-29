@@ -5,11 +5,11 @@ import { classifyLicense, isLicenseUrl, NO_LICENSE } from '../content/license.ts
 import { canonicalLocale } from '../content/locale.ts';
 import { LOCATION_SHARING } from '../content/location.ts';
 import {
-  DEFAULT_TAXONOMY_BASES,
-  taxonomyBaseProblems,
+  DEFAULT_PERMALINK_BASES,
+  permalinkBaseProblems,
   taxonomyRedirectsOf,
 } from '../content/taxonomy.ts';
-import type { TaxonomyRedirect } from '../content/taxonomy.ts';
+import type { PermalinkBase, TaxonomyRedirect } from '../content/taxonomy.ts';
 import { parseIconSetting } from '../images/icon-setting.ts';
 import { sourceFile } from '../images/paths.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
@@ -171,11 +171,12 @@ function emailOrEmpty(what: string) {
       : undefined;
 }
 
-function taxonomyBase(which: 'tag' | 'category') {
+function permalinkBase(which: PermalinkBase) {
   return (_value: string, after: Readonly<Record<string, unknown>>): string | undefined =>
-    taxonomyBaseProblems({
+    permalinkBaseProblems({
       tag: String(after['tag_base']),
       category: String(after['category_base']),
+      wiki: String(after['wiki_base']),
     })[which];
 }
 
@@ -288,16 +289,23 @@ export const SITE = declareNamespace({
     tag_base: {
       fileKey: 'tagBase',
       type: nonEmptyText,
-      default: DEFAULT_TAXONOMY_BASES.tag,
+      default: DEFAULT_PERMALINK_BASES.tag,
       description: 'The first URL segment of the tag archives.',
-      check: taxonomyBase('tag'),
+      check: permalinkBase('tag'),
     },
     category_base: {
       fileKey: 'categoryBase',
       type: nonEmptyText,
-      default: DEFAULT_TAXONOMY_BASES.category,
+      default: DEFAULT_PERMALINK_BASES.category,
       description: 'The first URL segment of the category archives.',
-      check: taxonomyBase('category'),
+      check: permalinkBase('category'),
+    },
+    wiki_base: {
+      fileKey: 'wikiBase',
+      type: nonEmptyText,
+      default: DEFAULT_PERMALINK_BASES.wiki,
+      description: 'The first URL segment of the wiki pages and the wiki index.',
+      check: permalinkBase('wiki'),
     },
     comments: { type: boolean, default: true, description: 'Whether the site takes comments.' },
     comments_on_posts: {

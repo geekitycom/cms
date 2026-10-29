@@ -54,6 +54,7 @@ describe('content/_data/site.json', () => {
       language: 'en',
       tagBase: 'tag',
       categoryBase: 'category',
+      wikiBase: 'wiki',
       comments: true,
       commentsOnPosts: true,
       commentsOnPages: false,

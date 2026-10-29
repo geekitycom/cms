@@ -7,7 +7,7 @@ has six pages under the Settings menu:
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **General**    | Title, tagline, author, base URL, time zone, language, the locale for dates and counts when it differs from the language, site icon, whether the header shows it, and license.                                                  |
 | **Reading**    | What the homepage displays, posts per page, and the notify server the feeds advertise.                                                                                                                                          |
-| **Permalinks** | The tag and category archive bases, and the archive redirects already recorded.                                                                                                                                                 |
+| **Permalinks** | The tag and category archive bases, the wiki base, and the archive redirects already recorded.                                                                                                                                  |
 | **Discussion** | Comments, which types take them by default, and when they close, webmentions sent and received, the Akismet key, the hCaptcha site key and secret, and how long commenter emails, address hashes and contact messages are kept. |
 | **Email**      | How the site sends mail, where a message written to the site goes, and the security contact.                                                                                                                                    |
 | **Privacy**    | What the site shares about where a post was written, and every later privacy choice.                                                                                                                                            |
@@ -64,7 +64,7 @@ The file holds these keys:
 - `postsPerPage`, `homepage`, `postsPage`
 - `timezone`, `language`, `locale` (when set), `icon` (when set), `headerIcon`
 - `license` and `licenseName` (when a license is chosen, see [License](#license))
-- `tagBase`, `categoryBase`
+- `tagBase`, `categoryBase`, `wikiBase`
 - `comments`, `commentsOnPosts`, `commentsOnPages`, `commentsCloseAfterDays`
   (see [Comments](comments.md))
 - `notifyServer`, `feedUpdatePeriod`, `feedUpdateFrequency`
@@ -187,6 +187,7 @@ Nothing is written until every field is valid. A form with a problem returns a
 | Posts per page | A whole number of one or more. It is what the home page and tag archives page by.           |
 | Tag base       | One URL-safe path segment. See below.                                                       |
 | Category base  | The same, and not the same word as the tag base.                                            |
+| Wiki base      | The same, and not the same word as the tag base or the category base.                       |
 | Relays         | One relay inbox per line, each an absolute `http://` or `https://` URL.                     |
 | Notify server  | An absolute `http://` or `https://` URL, or empty for none. See below.                      |
 | Mail provider  | `none`, `brevo` or `smtp`. See [Credentials](#credentials).                                 |
@@ -235,13 +236,17 @@ The two archive bases set where the taxonomy archives live:
 `tag` and `category`, so a site imported from WordPress keeps every archive URL
 it published.
 
-Each base is one path segment of up to 64 letters, digits, dashes or
-underscores, starting with a letter or a digit. The two cannot be the same
-word. Neither can take a path the site already uses: `page`, `feed`,
-`comments`, `admin`, `theme`, `uploads`, `nodeinfo`, `author`, `inbox` or
-`search`.
+The wiki base sets where the wiki pages live: `/{wikiBase}/{page}/`, with the
+index of them at `/{wikiBase}/`. It defaults to `wiki`.
 
-Saving a base moves these on the next request:
+Each base is one path segment of up to 64 letters, digits, dashes or
+underscores, starting with a letter or a digit. No two of the three can be the
+same word, and a clash is named on both fields. None can take a path the site
+already uses: `page`, `feed`, `comments`, `admin`, `theme`, `uploads`,
+`nodeinfo`, `author`, `inbox` or `search`. `geekity settings set
+site.wiki_base` checks the same rules and writes nothing when one fails.
+
+Saving a tag or category base moves these on the next request:
 
 - the archive and its paging
 - its feeds

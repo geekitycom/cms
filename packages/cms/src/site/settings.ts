@@ -1,6 +1,6 @@
 import type { ResolvedConfig } from '../config.ts';
 import type { CreativeCommonsKey } from '../content/license.ts';
-import type { TaxonomyBases } from '../content/taxonomy.ts';
+import type { PermalinkBases } from '../content/taxonomy.ts';
 import { defaultValues } from '../settings/declare.ts';
 import { SITE } from './namespace.ts';
 import type { SiteSettings } from './namespace.ts';
@@ -30,9 +30,9 @@ export function robotsPolicyOf(settings: SiteSettings): RobotsPolicy {
   return { aiCrawlers: settings.ai_crawlers, contentSignal, rules: settings.robots_rules };
 }
 
-/** The two archive bases the settings hold, as the URL builders want them. */
-export function taxonomyBasesFromSettings(settings: SiteSettings): TaxonomyBases {
-  return { tag: settings.tag_base, category: settings.category_base };
+/** The permalink bases the settings hold, as the URL builders want them. */
+export function permalinkBasesFromSettings(settings: SiteSettings): PermalinkBases {
+  return { tag: settings.tag_base, category: settings.category_base, wiki: settings.wiki_base };
 }
 
 /**

@@ -78,6 +78,7 @@ import {
   createRenderer,
   createSiteDataSource,
   createThemeSource,
+  permalinkBases,
   themeName,
 } from '../web/index.ts';
 import { pageSources } from '../web/page-sources.ts';
@@ -173,6 +174,7 @@ export function createServices({
     contentDir: resolved.contentDir,
     watch: resolved.watch,
     debounce: resolved.watchDebounce,
+    wikiBase: () => permalinkBases(siteData.read()).wiki,
   });
   content.onSettled(async () => {
     await followAllMovedComments(commentRecords, store);

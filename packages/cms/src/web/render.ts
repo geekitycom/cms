@@ -8,7 +8,7 @@ import type { Document } from '../content/document.ts';
 import type { SharedLocation } from '../content/location.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
-import type { TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
+import type { PermalinkBases, TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
 import type { PageFont } from '../fonts/index.ts';
 import type { AuthorContext } from '../site/authors.ts';
 import type { SiteSettings } from '../site/settings.ts';
@@ -17,8 +17,8 @@ import type { SchemeTokens } from '../theme/scheme-tokens.ts';
 import {
   createSiteDataSource,
   frontPageSlugs,
+  permalinkBases,
   postsPerPage,
-  taxonomyBases,
   termRedirects,
   themeName,
 } from '../theme/site-data.ts';
@@ -110,7 +110,10 @@ export interface SearchPage {
 export interface Renderer {
   site(): SiteData;
   pageSize(): number;
+  /** Where the tag and category archives live. */
   taxonomyBases(): TaxonomyBases;
+  /** Where the archives and the wiki pages live. */
+  permalinkBases(): PermalinkBases;
   termRedirects(): readonly TaxonomyRedirect[];
   frontPageSlugs(): FrontPageSlugs;
   renderPage(document: Document, options: RenderPageOptions): RenderedPage;
@@ -218,7 +221,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     themeColors: () => themes.current().colors,
     siteColors: () => siteColorsWithTokens(deps),
     pageSize: () => postsPerPage(siteData.read()),
-    taxonomyBases: () => taxonomyBases(siteData.read()),
+    taxonomyBases: () => permalinkBases(siteData.read()),
+    permalinkBases: () => permalinkBases(siteData.read()),
     termRedirects: () => termRedirects(siteData.read()),
     frontPageSlugs: () => frontPageSlugs(siteData.read()),
     renderPage,

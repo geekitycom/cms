@@ -9,14 +9,16 @@ import { COMMENTS_ROOT } from '../web/feeds.ts';
 import { ROBOTS_PATH } from '../web/robots.ts';
 import { SITEMAP_PATH } from '../web/sitemap.ts';
 import {
+  DEFAULT_PERMALINK_BASES,
   DEFAULT_TAXONOMY_BASES,
   forgetTerm,
   PAGE_SEGMENT,
+  PERMALINK_BASES,
+  permalinkBaseProblems,
+  permalinkBasesOrDefault,
   recordTermRename,
   redirectedTerm,
   RESERVED_TOP_LEVEL_PATHS,
-  taxonomyBaseProblems,
-  taxonomyBasesOrDefault,
   taxonomyForSegment,
   taxonomyRedirectsOf,
   termHref,
@@ -26,6 +28,10 @@ import type { TaxonomyRedirect } from './taxonomy.ts';
 describe('the default taxonomy bases', () => {
   it('are the common ones, so a migrated site keeps its URLs', () => {
     assert.deepEqual(DEFAULT_TAXONOMY_BASES, { tag: 'tag', category: 'category' });
+  });
+
+  it('sit beside a wiki base of wiki', () => {
+    assert.deepEqual(DEFAULT_PERMALINK_BASES, { tag: 'tag', category: 'category', wiki: 'wiki' });
   });
 });
 
@@ -71,35 +77,73 @@ describe('taxonomyForSegment', () => {
   });
 });
 
-describe('taxonomyBaseProblems', () => {
-  it('accepts a pair of ordinary segments', () => {
-    assert.deepEqual(taxonomyBaseProblems(DEFAULT_TAXONOMY_BASES), {});
-    assert.deepEqual(taxonomyBaseProblems({ tag: 'topics', category: 'filed-under' }), {});
+describe('permalinkBaseProblems', () => {
+  const bases = { tag: 'tag', category: 'category', wiki: 'wiki' };
+
+  it('accepts three ordinary segments', () => {
+    assert.deepEqual(permalinkBaseProblems(DEFAULT_PERMALINK_BASES), {});
+    assert.deepEqual(
+      permalinkBaseProblems({ tag: 'topics', category: 'filed-under', wiki: 'notes' }),
+      {},
+    );
   });
 
   it('refuses an empty base', () => {
-    const problems = taxonomyBaseProblems({ tag: '', category: 'category' });
+    const problems = permalinkBaseProblems({ ...bases, tag: '' });
     assert.match(problems.tag ?? '', /cannot be empty/);
     assert.equal(problems.category, undefined);
+    assert.match(permalinkBaseProblems({ ...bases, wiki: ' ' }).wiki ?? '', /wiki base cannot/);
   });
 
   it('refuses a base that is more than one segment', () => {
     for (const value of ['a/b', '/tag', 'tag/', 'tag s', 'tag.xml', 'tág']) {
-      const problems = taxonomyBaseProblems({ tag: value, category: 'category' });
-      assert.notEqual(problems.tag, undefined, `${value} should be refused`);
+      assert.notEqual(
+        permalinkBaseProblems({ ...bases, tag: value }).tag,
+        undefined,
+        `${value} should be refused`,
+      );
+      assert.notEqual(
+        permalinkBaseProblems({ ...bases, wiki: value }).wiki,
+        undefined,
+        `${value} should be refused as a wiki base`,
+      );
     }
   });
 
   it('refuses two bases that are the same word, naming both', () => {
-    const problems = taxonomyBaseProblems({ tag: 'topics', category: 'topics' });
+    const problems = permalinkBaseProblems({ ...bases, tag: 'topics', category: 'topics' });
     assert.match(problems.tag ?? '', /different/);
     assert.match(problems.category ?? '', /different/);
+    assert.equal(problems.wiki, undefined);
+  });
+
+  it('refuses a wiki base that is the tag or the category base, naming the pair', () => {
+    const withTag = permalinkBaseProblems({ ...bases, wiki: 'tag' });
+    assert.match(withTag.wiki ?? '', /tag base and the wiki base/);
+    assert.match(withTag.tag ?? '', /tag base and the wiki base/);
+    assert.equal(withTag.category, undefined);
+
+    const withCategory = permalinkBaseProblems({ ...bases, wiki: 'category' });
+    assert.match(withCategory.wiki ?? '', /category base and the wiki base/);
+    assert.match(withCategory.category ?? '', /category base and the wiki base/);
+    assert.equal(withCategory.tag, undefined);
+
+    const all = permalinkBaseProblems({ tag: 'same', category: 'same', wiki: 'same' });
+    for (const base of PERMALINK_BASES) assert.match(all[base] ?? '', /different/);
   });
 
   it('refuses a base that names a path the site already answers on', () => {
     for (const reserved of RESERVED_TOP_LEVEL_PATHS) {
-      const problems = taxonomyBaseProblems({ tag: reserved, category: 'category' });
-      assert.notEqual(problems.tag, undefined, `${reserved} should be reserved`);
+      assert.notEqual(
+        permalinkBaseProblems({ ...bases, tag: reserved }).tag,
+        undefined,
+        `${reserved} should be reserved`,
+      );
+      assert.notEqual(
+        permalinkBaseProblems({ ...bases, wiki: reserved }).wiki,
+        undefined,
+        `${reserved} should be reserved for the wiki base too`,
+      );
     }
   });
 });
@@ -130,17 +174,26 @@ describe('the reserved list', () => {
   });
 });
 
-describe('taxonomyBasesOrDefault', () => {
-  it('keeps a usable pair and falls back for anything else', () => {
-    assert.deepEqual(taxonomyBasesOrDefault({ tag: 'topics', category: 'filed' }), {
+describe('permalinkBasesOrDefault', () => {
+  it('keeps three usable bases and falls back for anything else', () => {
+    assert.deepEqual(permalinkBasesOrDefault({ tag: 'topics', category: 'filed', wiki: 'notes' }), {
       tag: 'topics',
       category: 'filed',
+      wiki: 'notes',
     });
-    assert.deepEqual(taxonomyBasesOrDefault({}), DEFAULT_TAXONOMY_BASES);
-    assert.deepEqual(taxonomyBasesOrDefault({ tag: 'a/b', category: 3 }), DEFAULT_TAXONOMY_BASES);
+    assert.deepEqual(permalinkBasesOrDefault({}), DEFAULT_PERMALINK_BASES);
     assert.deepEqual(
-      taxonomyBasesOrDefault({ tag: 'same', category: 'same' }),
-      DEFAULT_TAXONOMY_BASES,
+      permalinkBasesOrDefault({ tag: 'a/b', category: 3, wiki: 'admin' }),
+      DEFAULT_PERMALINK_BASES,
+    );
+    assert.deepEqual(
+      permalinkBasesOrDefault({ tag: 'same', category: 'same' }),
+      DEFAULT_PERMALINK_BASES,
+    );
+    assert.deepEqual(
+      permalinkBasesOrDefault({ tag: 'topics', category: 'filed', wiki: 'topics' }),
+      DEFAULT_PERMALINK_BASES,
+      'a wiki base on top of an archive base falls back with the rest',
     );
   });
 });

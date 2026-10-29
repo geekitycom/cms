@@ -1143,3 +1143,34 @@ describe('the search index (TASK-22 AC #2)', () => {
     assert.equal(index.countSearch('badgers'), 0);
   });
 });
+
+describe('the wiki base', () => {
+  it('is asked for on every parse, so a changed setting reaches the next one', async () => {
+    const dir = await contentDir({
+      'pages/about.md': markdown({ title: 'About', permalink: '/about/' }),
+      'posts/hello.md': markdown({ title: 'Hello', permalink: '/hello/', date: '2026-09-01' }),
+    });
+    const asked: string[] = [];
+    let base = 'wiki';
+    const content = createContentSync({
+      store: await store(),
+      contentDir: dir,
+      watch: false,
+      wikiBase: () => {
+        asked.push(base);
+        return base;
+      },
+    });
+    runningSyncs.push(content);
+
+    await content.sync();
+    assert.deepEqual(asked, ['wiki', 'wiki'], 'once for each file parsed');
+
+    base = 'notes';
+    await writeFiles(dir, {
+      'pages/about.md': markdown({ title: 'About us', permalink: '/about/' }),
+    });
+    await content.sync();
+    assert.equal(asked.at(-1), 'notes');
+  });
+});

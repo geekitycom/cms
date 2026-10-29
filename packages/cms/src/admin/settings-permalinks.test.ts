@@ -99,6 +99,64 @@ describe('the taxonomy bases', () => {
   });
 });
 
+describe('the wiki base', () => {
+  it('defaults to wiki and is shown on the Permalinks page', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    assert.equal((await siteSettingsIn(cms.config.contentDir)).wiki_base, 'wiki');
+
+    const html = await (await agent.get('/admin/settings/permalinks')).text();
+    assert.match(html, /<label[^>]*for="settings-wiki-base"[^>]*>\s*Wiki base/);
+    assert.match(html, /id="settings-wiki-base"[^>]*name="wiki_base"[^>]*value="wiki"/);
+  });
+
+  it('is saved with the other permalink settings and reaches site.json', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    const saved = await saveSettings(agent, 'permalinks', { wiki_base: 'notes' });
+    assert.equal(saved.status, 303);
+
+    assert.equal((await siteSettingsIn(cms.config.contentDir)).wiki_base, 'notes');
+    const mirror = JSON.parse(
+      await readFile(path.join(cms.config.contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.equal(mirror['wikiBase'], 'notes');
+  });
+
+  it('is refused by the rules the archive bases follow, with the problem on its field', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    for (const [fields, message] of [
+      [{ wiki_base: '' }, /The wiki base cannot be empty/],
+      [{ wiki_base: 'a/b' }, /A wiki base is one path segment/],
+      [{ wiki_base: 'admin' }, /already a path this site answers on/],
+      [{ wiki_base: 'tag' }, /The tag base and the wiki base have to be different words/],
+      [
+        { wiki_base: 'filed', category_base: 'filed' },
+        /The category base and the wiki base have to be different words/,
+      ],
+    ] as const) {
+      const response = await saveSettings(agent, 'permalinks', fields);
+      assert.equal(response.status, 400, `${JSON.stringify(fields)} should be refused`);
+
+      const html = await response.text();
+      const problem = /id="settings-wiki-base-error"[^>]*>([^<]*)</.exec(html);
+      assert.ok(
+        problem !== null,
+        `the wiki base field carries a problem for ${JSON.stringify(fields)}`,
+      );
+      assert.match(problem[1] ?? '', message);
+
+      const settings = await siteSettingsIn(cms.config.contentDir);
+      assert.equal(settings.wiki_base, 'wiki', 'the stored wiki base is unchanged');
+      assert.equal(settings.category_base, 'category');
+    }
+  });
+});
+
 describe('the recorded archive renames', () => {
   it('survive a save of the page they are listed on, which has no field for them', async () => {
     const cms = await box.site();
