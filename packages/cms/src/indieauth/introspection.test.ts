@@ -8,7 +8,8 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
+import { setUserProfile } from '../site/users.ts';
 import type { AuthorizationCode } from './grants.ts';
 import type { Scope } from './request.ts';
 import { ACCESS_TOKEN_LIFETIME_MS, issueTokens, listTokens } from './tokens.ts';
@@ -32,18 +33,16 @@ interface Site {
 async function site(config: { maintenance?: boolean } = {}): Promise<Site> {
   const cms = await box.site({ baseUrl: BASE, ...config });
   const { dataDir } = cms.config;
-  const ada = await createUser({
-    dataDir,
-    username: 'ada',
-    email: 'ada@blog.example',
-    password: 'correct horse battery',
-  });
+  const [ada, bob] = [{ id: 1 }, { id: 2 }];
+  writeUsers(dataDir, [
+    { id: ada.id, username: 'ada', email: 'ada@blog.example' },
+    { id: bob.id, username: 'bob' },
+  ]);
   await setUserProfile({
     dataDir,
     userId: ada.id,
     profile: { displayName: 'Ada Lovelace', avatar: '/uploads/2026/09/ada.png' },
   });
-  const bob = await createUser({ dataDir, username: 'bob', password: 'another horse battery' });
   return {
     cms,
     dataDir,

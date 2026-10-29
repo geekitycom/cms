@@ -12,7 +12,7 @@ import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { createUser } from '../site/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
 
@@ -818,12 +818,7 @@ describe('telling the moderators about it (TASK-55)', () => {
     const cms = await site({
       mail: { provider, backoffMs: () => 0, logger: { info: () => {}, warn: () => {} } },
     });
-    await createUser({
-      dataDir: cms.config.dataDir,
-      username: 'ada',
-      password: 'correct horse battery',
-      email: 'ada@example.com',
-    });
+    writeUsers(cms.config.dataDir, [{ username: 'ada', email: 'ada@example.com' }]);
     return { cms, provider };
   }
 
