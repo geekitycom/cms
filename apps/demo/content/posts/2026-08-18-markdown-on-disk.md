@@ -14,7 +14,7 @@ activitypub:
 ---
 
 Every post on this site is a file. `content/posts/2026-08-18-markdown-on-disk.md`
-is what you are reading, front matter and all. Nothing is stored in a database
+is what you are reading, [[front matter]] and all. Nothing is stored in a database
 that cannot be rebuilt by reading the directory again.
 
 ## What that buys
