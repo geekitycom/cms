@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
+import { writeSignInUsers } from './__testing__/users.ts';
 import { hashPassword } from './passwords.ts';
 import {
   ConflictingActorIdError,
@@ -286,7 +287,7 @@ describe('a user with a profile (TASK-67 AC #1)', () => {
           {
             id: 1,
             username: 'ada',
-            passwordHash: hashPassword('correct horse'),
+            passwordHash: 'not-a-hash',
             createdAt: '2026-01-01T00:00:00.000Z',
             profile: {
               displayName: 42,
@@ -323,7 +324,7 @@ describe('a user with a stored actor id (TASK-69)', () => {
             id: 1,
             username: 'ada',
             actorId,
-            passwordHash: hashPassword('correct horse'),
+            passwordHash: 'not-a-hash',
             createdAt: '2026-01-01T00:00:00.000Z',
           },
         ],
@@ -601,7 +602,7 @@ describe('a database whose users are still rows', () => {
   });
 
   it('keeps the logins the database already held', async () => {
-    const dataDir = await legacyDatabase(hashPassword('a password from before'));
+    const dataDir = await legacyDatabase('not-a-hash');
 
     const cms = await box.site({ dataDir });
 
@@ -613,7 +614,7 @@ describe('a database whose users are still rows', () => {
   });
 
   it('leaves a users.json that is already there alone, because files win', async () => {
-    const dataDir = await legacyDatabase(hashPassword('a password from before'));
+    const dataDir = await legacyDatabase('not-a-hash');
     await createUser({ dataDir, username: 'grace', password: 'a password of her own' });
 
     const cms = await box.site({ dataDir });
@@ -658,14 +659,12 @@ describe('a login and a database that may be deleted (AC #2)', () => {
   });
 
   it('refuses a session whose user the file no longer holds', async () => {
-    const cms = await box.site();
-    await signedIn(cms);
-    const grace = await createUser({
-      dataDir: cms.config.dataDir,
-      username: 'grace',
-      password: 'a password of her own',
-    });
-    const hers = await signIn(cms, { username: 'grace', password: 'a password of her own' });
+    const dataDir = await box.dir('geekity-accounts-gone-data-');
+    writeSignInUsers(dataDir, [{ username: FIRST_ADMIN.username }, { username: 'grace' }]);
+    const cms = await box.site({ dataDir });
+    const grace = findUser(dataDir, 'grace');
+    assert.ok(grace !== undefined);
+    const hers = await signIn(cms, { username: 'grace', password: FIRST_ADMIN.password });
     assert.equal((await hers.get('/admin')).status, 200);
 
     // Taken out of the file directly, which is the state a database restored
