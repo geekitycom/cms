@@ -646,8 +646,8 @@ warning that names them, and the next save in the admin drops them. The other
 keys work as they do on a page, including `description`, `lang`, `updated`,
 `draft`, `visibility` and `comments`.
 
-A post or a page cannot take a permalink under the wiki base. The save is
-refused, naming the base.
+The CMS refuses to save a post or a page with a permalink under the wiki base,
+and the refusal names the base.
 
 A published wiki page is on these parts of the site:
 

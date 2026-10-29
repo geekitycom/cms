@@ -9,7 +9,6 @@ import type { SyncLogger } from './sync.ts';
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 
-/** The directory each type of document is filed under. */
 export const DOCUMENT_DIRECTORIES: Readonly<Record<DocumentType, string>> = {
   post: 'posts',
   page: 'pages',

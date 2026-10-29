@@ -81,10 +81,6 @@ export interface CreateContentSyncOptions {
   debounce?: WatchDebounce | undefined;
   /** Where parse failures are reported. Defaults to `console`. */
   logger?: SyncLogger | undefined;
-  /**
-   * The site's wiki base, read from the settings at each parse. Absent, the
-   * parser uses the default one.
-   */
   wikiBase?: (() => string) | undefined;
 }
 

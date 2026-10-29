@@ -1,8 +1,3 @@
-/**
- * The admin's Wiki screens: the listing, the editor with only what a wiki page
- * carries, and the shared paths (autosave, preview, the comments and media
- * screens) that have to know a third type of document.
- */
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -55,7 +50,6 @@ async function html(agent: Browser, url: string): Promise<string> {
   return await response.text();
 }
 
-/** The editor's fields as a browser would post them, with some changed. */
 async function editorFields(
   agent: Browser,
   url: string,

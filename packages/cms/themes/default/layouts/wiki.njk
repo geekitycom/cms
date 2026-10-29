@@ -1,11 +1,7 @@
 {#
-  One wiki page: a linked note at the wiki base and its file name. It is
-  drawn as a page is, the same `blog-post h-entry`, with what a wiki page has
-  in place of a date: when it was last updated, and the pages that link to it.
+  One wiki page: a linked note at the wiki base and its file name.
 
-  What a wiki page does not have: a date, taxonomy, neighbours, a contact form
-  or a bio. It is a note the site keeps, not something anybody published on a
-  Tuesday, and it is reached by its links rather than by an archive.
+  A wiki page has no date, taxonomy, neighbours, contact form or bio.
 #}
 {% extends "layouts/base.njk" %}
 {% import "partials/kicker.njk" as kicker with context %}
@@ -23,13 +19,11 @@
 
   <section class="e-content">
     {{ content | safe }}
-    {#- A wiki page written by hand and never saved here has no update time,
-        and then the line is empty, which the stylesheet hides. -#}
+    {% if updated %}
     <p class="page-meta">
-      {%- if updated %}
       <a href="{{ entryUrl | url }}" class="u-url"><time class="small dt-updated" datetime="{{ updated | date("iso") }}">Last updated {{ updated | date("readable", none, lang) }}</time></a>
-      {%- endif -%}
     </p>
+    {% endif %}
   </section>
 </article>
 

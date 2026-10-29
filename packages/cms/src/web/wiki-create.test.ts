@@ -1,7 +1,3 @@
-/**
- * The 404 at a wiki page nobody has written yet: a visitor is told there is
- * nothing there, and a signed-in writer is offered the editor for it.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

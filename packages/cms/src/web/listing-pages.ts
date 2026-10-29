@@ -236,18 +236,8 @@ export function search(
   return pagedResponse(c, page, { body, documents, available, full });
 }
 
-/** What the wiki index is called, in its heading and its title. */
 const WIKI_INDEX_TITLE = 'Wiki';
 
-/**
- * The wiki index, in whichever representation the request settled on: every
- * published wiki page, A to Z by title and grouped by first letter.
- *
- * It is one page however long it grows, because a reader looks a note up by
- * its name, and a pager would hide the letter they want. Its JSON is the
- * pages in that order, in a listing's shape, and it has no feed: a wiki page
- * is a note the site keeps, not news.
- */
 export function wikiIndex(
   c: Context<GeekityEnv>,
   representation: Representation | undefined = selectFromAccept(c, LISTING_REPRESENTATIONS),

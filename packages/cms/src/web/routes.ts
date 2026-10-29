@@ -327,8 +327,6 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     return c.redirect(redirectLocation(redirect, search), redirect.status);
   }
 
-  // A wiki page nobody has written yet is how a wiki grows, so a writer who
-  // follows a link to one is offered its editor.
   return notFound(
     c,
     c.var.signedIn === undefined ? undefined : createWikiPageAt(view.bases, pathname),
@@ -392,13 +390,6 @@ function renamedTermHref(
     : feedHref(moved, feedPath.format, view.bases);
 }
 
-/**
- * Where a wiki page or the wiki index lives now when the path names it under a
- * wiki base the site used before, or `undefined` when it does not. A wiki
- * page's URL is the base and its name, so a change of base moves every one of
- * them and the index with them, and each old URL leads on to the new one as a
- * renamed term's archive does. One that leads nowhere live is left to 404.
- */
 function formerWikiHref(
   view: SiteView,
   formerBases: readonly string[],

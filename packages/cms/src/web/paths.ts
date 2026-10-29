@@ -65,12 +65,6 @@ export function canonicalHref(view: SiteView, match: PathMatch): string {
   }
 }
 
-/**
- * Whether the path is the wiki base, while a published wiki page is there to
- * list. With none, the base is a 404, as a tag nothing carries is. The base
- * takes no `page/N/` segments: the index is one page, so `/{base}/page/` is
- * the wiki page called `page`.
- */
 function isWikiIndex(view: SiteView, pathname: string): boolean {
   return pathname === wikiIndexHref(view.bases) && view.store.listWiki().length > 0;
 }

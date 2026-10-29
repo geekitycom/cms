@@ -13,7 +13,6 @@ import { serializeDocument } from './writer.ts';
 
 /** What {@link contentFilePath} needs to name a file. */
 export interface ContentFilePathInput {
-  /** Posts get a dated filename; pages and wiki pages do not. */
   type: DocumentType;
   /** The slug, already URL-safe. It becomes the tail of the filename. */
   slug: string;
@@ -50,7 +49,6 @@ export interface FreeSlugOptions extends ContentFilePathInput {
   contentDir: string;
   /** The index, consulted so a permalink another file claims is skipped too. */
   store: DocumentLookup;
-  /** The wiki base a wiki page's permalink is under. The default base when absent. */
   wikiBase?: string | undefined;
 }
 
@@ -101,7 +99,6 @@ export interface SaveDocumentOptions {
    * a caller says otherwise; the admin passes the `timezone` setting.
    */
   timezone?: string | undefined;
-  /** The wiki base a wiki page is read back under. The default base when absent. */
   wikiBase?: string | undefined;
 }
 

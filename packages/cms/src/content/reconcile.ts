@@ -31,7 +31,6 @@ export interface CreateReconcilerOptions {
   contentDir: string;
   logger: SyncLogger;
   emit: (change: DocumentChange) => Promise<void>;
-  /** The site's wiki base, asked for at each parse so a changed setting is the next one's. */
   wikiBase?: (() => string) | undefined;
 }
 
@@ -90,14 +89,7 @@ export function createReconciler(options: CreateReconcilerOptions): Reconciler {
       return 'skipped';
     }
 
-    // A wiki page's permalink is not in its file, so a new wiki base moves it
-    // with the hash unchanged, and a wiki link's href changes with it.
-    if (
-      previous !== undefined &&
-      previous.hash === document.hash &&
-      previous.permalink === document.permalink &&
-      !wikiLinksMoved(previous, document)
-    ) {
+    if (previous !== undefined && indexedRowStillCurrent(previous, document)) {
       return 'unchanged';
     }
 
@@ -148,17 +140,19 @@ function warnAboutIgnoredWikiKeys(relativePath: string, source: string, logger: 
   const ignored = ignoredWikiKeys(source);
   if (ignored.length === 0) return;
   logger.warn(
-    `${relativePath} names ${ignored.join(', ')}, which a wiki page does not have: it lives at the wiki base and its file name, undated and unfiled. The next save drops them.`,
+    `${relativePath} names ${ignored.join(', ')}, which a wiki page does not read. Its URL is the wiki base and its file name, and it has no date, tags, categories or reply target. The next save drops them.`,
   );
 }
 
-/**
- * Whether a body that may hold a wiki link renders to other HTML than it was
- * indexed with. The HTML is only compared when the body has a `[[`, so a site
- * without wiki links is not re-indexed for anything else that changes it,
- * such as a handle resolved since.
- */
-function wikiLinksMoved(previous: Document, next: Document): boolean {
+function indexedRowStillCurrent(previous: Document, next: Document): boolean {
+  return (
+    previous.hash === next.hash &&
+    previous.permalink === next.permalink &&
+    !wikiLinkHtmlStale(previous, next)
+  );
+}
+
+function wikiLinkHtmlStale(previous: Document, next: Document): boolean {
   return next.body.includes('[[') && previous.html !== next.html;
 }
 

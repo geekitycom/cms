@@ -167,7 +167,6 @@
   text-decoration-color: var(--color-primary);
 }
 
-/* `editor/wiki-links.ts` writes the `.cm-wiki-link*` classes. */
 #editor-surface .cm-wiki-link {
   color: var(--color-primary);
   text-decoration: underline;

@@ -1,8 +1,3 @@
-/**
- * Wiki pages on the public site: served at the wiki base and their file name,
- * drawn by the theme's `wiki` layout, listed where a reader looks things up and
- * kept out of everything that is about posts.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

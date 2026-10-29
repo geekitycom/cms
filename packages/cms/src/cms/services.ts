@@ -418,11 +418,7 @@ export function createServices({
   settings.watch(SITE.relays, async () => {
     await relays.sync();
   });
-  // A wiki page's URL is the wiki base and its name, read when its file is,
-  // so a new base is a scan away: every wiki page is re-read under it.
-  settings.watch(SITE.wiki_base, async () => {
-    await content.sync();
-  });
+  settings.watch(SITE.wiki_base, rescanOnWikiBaseChange(content));
   settings.watch(SITE.gemini, async ({ next }) => {
     if (next) await warnAboutGeminiCertificate(resolved, settings);
   });
@@ -641,4 +637,10 @@ function stopPlugins(plugins: PluginRegistry, ending: Ending): Promise<void> {
     case 'close':
       return plugins.close();
   }
+}
+
+function rescanOnWikiBaseChange(content: ContentSync): () => Promise<void> {
+  return async () => {
+    await content.sync();
+  };
 }

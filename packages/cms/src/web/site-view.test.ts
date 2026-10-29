@@ -17,7 +17,6 @@ after(async () => {
   await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-/** A request context over a content directory whose `site.json` holds `site`. */
 async function contextWith(site: Record<string, unknown>): Promise<Context<GeekityEnv>> {
   const contentDir = await mkdtemp(path.join(tmpdir(), 'geekity-site-view-'));
   temporaryDirs.push(contentDir);

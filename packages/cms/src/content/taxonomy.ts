@@ -57,27 +57,17 @@ export const DEFAULT_TAXONOMY_BASES: TaxonomyBases = {
   category: 'category',
 };
 
-/**
- * Every path prefix the site's settings choose: the two taxonomy archives,
- * and the wiki. They share the rules a base is checked by, and none of them
- * may be another's word, because each is the first segment the router
- * matches a whole family of URLs on.
- */
 export type PermalinkBase = Taxonomy | 'wiki';
 
-/** Every base, in the order a screen or a loop should take them. */
 export const PERMALINK_BASES: readonly PermalinkBase[] = [...TAXONOMIES, 'wiki'];
 
-/** The URL segment each family of URLs lives under. */
 export type PermalinkBases = Readonly<Record<PermalinkBase, string>>;
 
-/** The bases a site has before anybody says otherwise. */
 export const DEFAULT_PERMALINK_BASES: PermalinkBases = {
   ...DEFAULT_TAXONOMY_BASES,
   wiki: 'wiki',
 };
 
-/** The word each base is named by in a sentence. */
 const PERMALINK_BASE_LABELS: Readonly<Record<PermalinkBase, string>> = {
   tag: 'tag',
   category: 'category',
@@ -189,7 +179,6 @@ export function taxonomyForSegment(
   return undefined;
 }
 
-/** One message per base that cannot be used. An empty object is a valid set. */
 export type PermalinkBaseProblems = Partial<Record<PermalinkBase, string>>;
 
 /**
@@ -255,9 +244,6 @@ export function permalinkBasesOrDefault(
     }
   }
 
-  // Two bases that are one word would make one family of URLs unreachable, so
-  // a set that collides falls back to the defaults rather than serving half
-  // of what was asked for.
   const distinct = new Set(PERMALINK_BASES.map((base) => candidate[base])).size;
   return distinct === PERMALINK_BASES.length ? candidate : DEFAULT_PERMALINK_BASES;
 }

@@ -89,35 +89,23 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
   };
 }
 
-/**
- * The SHA-256 a {@link Document} carries: a hash of its canonical file text.
- * A wiki page's file has no permalink, so a change of wiki base leaves its hash
- * where it was.
- */
+/** The SHA-256 a {@link Document} carries: a hash of its canonical file text. */
 export function hashDocument(content: DocumentContent, type?: DocumentType): string {
   return createHash('sha256').update(serializeDocument(content, type), 'utf8').digest('hex');
 }
 
-/**
- * The front matter keys a wiki page's file carries that a wiki page does not
- * have: it is at the wiki base and its file name whatever `permalink` says, and
- * it is not dated, filed or a reply. They are not read, so the next save drops
- * them, and the sync says so.
- */
 export function ignoredWikiKeys(source: string): string[] {
   const text = source.replace(/\r\n?/g, '\n');
   if (!/^---\n/.test(text)) return [];
   return Object.keys(matter(text, {}).data).filter((key) => IGNORED_WIKI_KEYS.has(key));
 }
 
-/** The front matter a wiki page is read with: its own, less what it does not have. */
 function wikiFrontMatter(data: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(data).filter(([key]) => !IGNORED_WIKI_KEYS.has(key)));
 }
 
 const IGNORED_WIKI_KEYS = new Set(['permalink', 'date', 'tags', 'categories', 'in-reply-to']);
 
-/** A wiki page's slug: its file name, slugified, or its title when that is empty. */
 function wikiSlug(title: string, path: string): string {
   const basename = path.split('/').at(-1) ?? '';
   return slugify(basename.replace(/\.(md|markdown)$/i, '')) || slugify(title) || 'untitled';

@@ -72,10 +72,6 @@ export interface DocumentSite extends SiteRecords {
   /** The username of whoever is writing: the author a new document starts on. */
   readonly writer: string | undefined;
   readonly timezone: string;
-  /**
-   * The first URL segment of the wiki, which a wiki page is written under and
-   * no post or page may take. The default base when absent.
-   */
   readonly wikiBase?: string | undefined;
   readonly citedContext: (target: string) => Promise<CitedPage | undefined>;
   readonly storedContext: (target: string) => CitedPage | undefined;
@@ -135,16 +131,16 @@ export async function writeDocument(
   const checked = await checkForm(site, write);
   if ('outcome' in checked) return checked;
   const identity = await resolveIdentity(site, write, checked);
-  const taken = wikiTaken(site, write.kind, identity.permalink);
-  if (taken !== undefined) return taken;
+  const intrudes = refusePermalinkUnderWikiBase(site, write.kind, identity.permalink);
+  if (intrudes !== undefined) return intrudes;
   return await persist(site, write, checked, identity);
 }
 
-/**
- * The refusal for a post or page permalink under the wiki base, which the
- * wiki owns: every URL there is a wiki page's, or the wiki index.
- */
-function wikiTaken(site: DocumentSite, kind: DocumentKind, permalink: string): Refused | undefined {
+function refusePermalinkUnderWikiBase(
+  site: DocumentSite,
+  kind: DocumentKind,
+  permalink: string,
+): Refused | undefined {
   if (kind.type === 'wiki') return undefined;
   const base = site.wikiBase ?? DEFAULT_PERMALINK_BASES.wiki;
   const segments = permalink.split('/').filter((segment) => segment !== '');
@@ -707,7 +703,6 @@ function resolvePermalink(input: {
     wikiBase: input.wikiBase,
   });
 
-  // A wiki page is where its base and its name say, whatever the form asks.
   if (input.kind.type === 'wiki') return fallback;
 
   const submitted = normalizePermalink(input.form.permalink);

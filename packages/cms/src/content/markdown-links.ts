@@ -17,7 +17,6 @@ interface LinkAt {
   readonly end: number;
   readonly href: string;
   readonly bare?: string | undefined;
-  /** A wiki link, which is rewritten as a link even when `rewrite` has no answer. */
   readonly wiki?: true;
 }
 

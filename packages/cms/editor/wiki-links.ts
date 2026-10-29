@@ -4,21 +4,12 @@ import type { PluginValue, ViewUpdate } from '@codemirror/view';
 
 import { wikiLinksIn } from '../src/content/wiki-link-syntax.ts';
 
-/** Markdown nodes whose text is shown as written, where `[[` is not a link. */
-const CODE = new Set(['InlineCode', 'FencedCode', 'CodeBlock', 'CodeText', 'HTMLBlock']);
+const CODE_NODES = new Set(['InlineCode', 'FencedCode', 'CodeBlock', 'CodeText', 'HTMLBlock']);
 
 const LINK = Decoration.mark({ class: 'cm-wiki-link' });
-/** The punctuation colour the Markdown highlighting gives a link's brackets. */
 const BRACKETS = Decoration.mark({ class: 'cm-md-mark' });
-/** CodeMirror's own class, so a wiki link's brackets match like any others. */
 const MATCHED = Decoration.mark({ class: 'cm-matchingBracket' });
 
-/**
- * Mark each `[[wiki link]]` in view, underline the ones whose page `existing`
- * does not have, and match a link's `[[` with its `]]` when the cursor is at
- * either. The links are found by the same code the server renders them with,
- * so what is marked here is what becomes a link.
- */
 export function wikiLinkMarks(existing: ReadonlySet<string>): ViewPlugin<PluginValue> {
   return ViewPlugin.fromClass(
     class {
@@ -43,7 +34,6 @@ export function wikiLinkMarks(existing: ReadonlySet<string>): ViewPlugin<PluginV
   );
 }
 
-/** The slugs on `#editor-enhance`, or none when the page carries none. */
 export function wikiSlugsOf(tools: HTMLElement): Set<string> {
   try {
     const value: unknown = JSON.parse(tools.dataset['wikiSlugs'] ?? '[]');
@@ -83,10 +73,6 @@ function marks(view: EditorView, existing: ReadonlySet<string>): DecorationSet {
   return Decoration.set(found, true);
 }
 
-/**
- * The mark for a link to a page not written yet. The underline is dashed as
- * well as coloured, and the title says it in words, so it is not colour alone.
- */
 function missing(slug: string): Decoration {
   const hint = `No wiki page “${slug}” yet`;
   return Decoration.mark({
@@ -97,7 +83,7 @@ function missing(slug: string): Decoration {
 
 function inCode(state: EditorView['state'], pos: number): boolean {
   for (let node = syntaxTree(state).resolveInner(pos, 1); ;) {
-    if (CODE.has(node.name)) return true;
+    if (CODE_NODES.has(node.name)) return true;
     const parent = node.parent;
     if (parent === null) return false;
     node = parent;

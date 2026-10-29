@@ -30,7 +30,6 @@ export function robotsPolicyOf(settings: SiteSettings): RobotsPolicy {
   return { aiCrawlers: settings.ai_crawlers, contentSignal, rules: settings.robots_rules };
 }
 
-/** The permalink bases the settings hold, as the URL builders want them. */
 export function permalinkBasesFromSettings(settings: SiteSettings): PermalinkBases {
   return { tag: settings.tag_base, category: settings.category_base, wiki: settings.wiki_base };
 }

@@ -59,7 +59,6 @@ export interface LlmsIndex {
   /** The site's menus, every item once. */
   navigation: readonly LlmsEntry[];
   pages: readonly LlmsEntry[];
-  /** Every listed wiki page, by title. */
   wiki: readonly LlmsEntry[];
   /** Every listed post, newest first. */
   posts: readonly LlmsEntry[];

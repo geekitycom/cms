@@ -1,8 +1,3 @@
-/**
- * The wiki index: every published wiki page at the wiki base, A to Z by
- * title and grouped by first letter, on one page, in every representation a
- * listing has.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

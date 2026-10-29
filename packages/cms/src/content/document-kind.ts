@@ -81,10 +81,6 @@ export const PAGE_KIND: DocumentKind = {
   fields: [],
 };
 
-/**
- * Wiki pages: linked notes under `wiki/`, at the wiki base and their file
- * name. Nothing a post or a page carries beyond a title and a body.
- */
 export const WIKI_KIND: DocumentKind = {
   type: 'wiki',
   singular: 'wiki page',
@@ -99,7 +95,6 @@ export const WIKI_KIND: DocumentKind = {
   fields: [],
 };
 
-/** The kind of each type of document. */
 export const DOCUMENT_KINDS: Readonly<Record<DocumentType, DocumentKind>> = {
   post: POST_KIND,
   page: PAGE_KIND,

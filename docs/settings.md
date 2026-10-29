@@ -257,18 +257,21 @@ Saving a tag or category base moves these on the next request:
 
 The old base returns 404.
 
-Saving a wiki base moves every wiki page to `/{wikiBase}/{page}/`, because a
-wiki page's URL comes from the base and its file name and is not stored in its
-file. The site re-reads every wiki page under the new base. The old base is
-recorded in `formerWikiBases`, and a request for `/{old base}/{page}/`, or for
-its `.md`, `.gmi` or `.json` representation, returns `301` to the same page
-under the new base. `/{old base}/` returns `301` to the wiki index. A base the
-site moves back to leaves that list. Every document with a
-[wiki link](content.md#wiki-links) is rendered again, so its links point under
-the new base. A change
-made with `geekity settings set site.wiki_base` while the server is running
-reaches the wiki pages when the server next starts. A post or a page cannot
-take a permalink under the wiki base: the save is refused, naming the base.
+Saving a wiki base moves every wiki page to `/{wikiBase}/{page}/`. A wiki
+page's URL comes from the base and its file name, and is not stored in its
+file, so the site re-reads every wiki page under the new base.
+
+The old base is recorded in `formerWikiBases`. A request for
+`/{old base}/{page}/`, or for its `.md`, `.gmi` or `.json` representation,
+returns `301` to the same page under the new base. `/{old base}/` returns `301`
+to the wiki index. When the site moves back to a former base, that base leaves
+the list.
+
+Every document with a [wiki link](content.md#wiki-links) is rendered again, so
+its links point under the new base. A change made with
+`geekity settings set site.wiki_base` while the server is running reaches the
+wiki pages when the server next starts. The CMS refuses to save a post or a
+page with a permalink under the wiki base, and the refusal names the base.
 
 An archive path matches its term case-insensitively. A tag's archive lives at
 its lower-case spelling. A category's archive lives at the spelling the site

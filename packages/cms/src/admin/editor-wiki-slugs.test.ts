@@ -1,8 +1,3 @@
-/**
- * The wiki pages the editor knows about, so it can mark a `[[link]]` to one
- * that does not exist: every editor carries them, a draft counts and a page in
- * the trash does not.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

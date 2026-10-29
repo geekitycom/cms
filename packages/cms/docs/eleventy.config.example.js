@@ -78,7 +78,6 @@ import { readFileSync } from 'node:fs';
 /** The content subdirectory that holds dated posts; everything else is a page. */
 const POSTS_DIRECTORY = 'posts';
 
-/** The content subdirectory that holds wiki pages. */
 const WIKI_DIRECTORY = 'wiki';
 
 /**
@@ -279,16 +278,10 @@ function isPost(inputPath) {
   return String(inputPath).split('/').includes(POSTS_DIRECTORY);
 }
 
-/** Whether a content-relative input path is a wiki page. */
 function isWikiPage(inputPath) {
   return String(inputPath).split('/').includes(WIKI_DIRECTORY);
 }
 
-/**
- * Where the CMS serves a wiki page: under the wiki base, at its file name
- * slugified. The CMS does not read a wiki page's `permalink`, so neither does
- * this.
- */
 function wikiPermalink(data) {
   const base =
     typeof data.site?.wikiBase === 'string' && data.site.wikiBase !== ''
@@ -1047,7 +1040,6 @@ export default function (eleventyConfig) {
 
   // The CMS writes `permalink` into every file it saves, so this only matters
   // for hand-authored files. Front matter always wins.
-  // A wiki page is the exception: its URL is never in its front matter.
   eleventyConfig.addPreprocessor('geekity-permalinks', 'md', (data) => {
     if (isWikiPage(data.page?.inputPath ?? '')) {
       data.permalink = wikiPermalink(data);
@@ -1232,8 +1224,9 @@ export default function (eleventyConfig) {
 
   // Uploads are files, not templates: copy them through unchanged. The ignore
   // matters as much as the copy — the CMS only ever indexes `posts/`,
-  // `pages/` and `wiki/`, so a Markdown file that happens to be an upload is something to
-  // download, not a page Eleventy should render at a URL of its own.
+  // `pages/` and `wiki/`, so a Markdown file that happens to be an upload is
+  // something to download, not a page Eleventy should render at a URL of its
+  // own.
   eleventyConfig.addPassthroughCopy({ 'content/uploads': 'uploads' });
   eleventyConfig.ignores.add('content/uploads/**');
 

@@ -52,8 +52,9 @@ export function llmsTxt(c: Context<GeekityEnv>): Response {
 
 /**
  * Every URL the public site publishes, in the order the sitemap lists them:
- * the home archive's pages, then every post, page and wiki page, the wiki index, then every tag archive
- * and every category archive with their own pages.
+ * the home archive's pages, then every post, page and wiki page, the wiki
+ * index, then every tag archive and every category archive with their own
+ * pages.
  */
 function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   const view = siteView(c);
@@ -92,8 +93,6 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
     urls.push({ loc: document.permalink, lastmod: lastModifiedOf(document) });
   }
 
-  // The wiki index exists while a wiki page is listed, and is dated by the
-  // newest change to any of them.
   if (wiki.length > 0) urls.push({ loc: wikiIndexHref(view.bases), lastmod: latestModified(wiki) });
 
   // A taxonomy archive exists only while something public carries the term,
@@ -115,8 +114,8 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
 
 /**
  * Every post, page and wiki page the public site lists, posts newest first,
- * read in one query: what the sitemap and `/llms.txt` both publish, so the two cannot
- * disagree. The index's query already excludes drafts, the trash, documents
+ * read in one query: what the sitemap and `/llms.txt` both publish, so the two
+ * cannot disagree. The index's query already excludes drafts, the trash, documents
  * whose date has not arrived and unlisted or private ones; {@link isListed} is
  * asked again with the store's own clock so the two answers cannot drift apart.
  */
@@ -132,8 +131,8 @@ function listedDocuments(c: Context<GeekityEnv>): Record<'posts' | 'pages' | 'wi
 
 /**
  * What a generated `/llms.txt` lists: every listed page by its label, every
- * listed wiki page by its label, then every listed post, newest first, with its date and the summary the feeds
- * carry, each linked to its Markdown.
+ * listed wiki page by its label, then every listed post, newest first, with
+ * its date and the summary the feeds carry, each linked to its Markdown.
  *
  * The homepage is listed at `/`, which is where it is published; its own
  * permalink redirects there.

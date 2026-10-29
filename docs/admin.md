@@ -655,8 +655,8 @@ have:
   and the slug, so there is no **Permalink** field.
 - It has no date, tags, categories, reply, location or kind of post.
 - It keeps the description, the language, the visibility and the comments
-  choice. Comments follow no Discussion setting, so "Follow the site settings"
-  leaves them closed.
+  choice. No Discussion setting applies to wiki pages, so "Follow the site
+  settings" leaves comments closed.
 
 The editor saves to `content/wiki/{slug}.md`. It autosaves, previews through
 the theme's `layouts/wiki.njk`, and hands its draft to plugin editor actions,

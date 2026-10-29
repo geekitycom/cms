@@ -1,4 +1,4 @@
-import type { DocumentType } from './document.ts';
+import type { Document, DocumentType } from './document.ts';
 import { DEFAULT_PERMALINK_BASES } from './taxonomy.ts';
 
 /**
@@ -41,6 +41,10 @@ export function slugify(title: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+export function isCanonicalSlug(slug: string): boolean {
+  return slugify(slug) === slug;
+}
+
 /** What {@link defaultPermalink} needs to know about a document. */
 export interface DefaultPermalinkInput {
   type: DocumentType;
@@ -76,6 +80,10 @@ export function defaultPermalink(input: DefaultPermalinkInput): string {
 
   const { year, month } = yearAndMonth(input.date);
   return `/${year}/${month}/${input.slug}/`;
+}
+
+export function wikiBaseOf(document: Pick<Document, 'type' | 'permalink'>): string | undefined {
+  return document.type === 'wiki' ? document.permalink.split('/')[1] : undefined;
 }
 
 /**

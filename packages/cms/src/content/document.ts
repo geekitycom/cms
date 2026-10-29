@@ -4,7 +4,6 @@
  */
 export type DocumentType = 'post' | 'page' | 'wiki';
 
-/** Every {@link DocumentType}. */
 export const DOCUMENT_TYPES: readonly DocumentType[] = ['post', 'page', 'wiki'];
 
 export function isDocumentType(value: unknown): value is DocumentType {

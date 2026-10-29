@@ -182,10 +182,6 @@ export function listingMarkdown(
   );
 }
 
-/**
- * The wiki index as text: a heading for each first letter and its pages
- * under it, linked to their own Markdown or Gemini.
- */
 export function wikiIndexMarkdown(
   c: Context<GeekityEnv>,
   page: { href: string; title: string; groups: readonly WikiGroup<Document>[] },

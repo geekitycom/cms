@@ -3,21 +3,11 @@ import type { MarkdownIt as MarkdownItInstance } from 'markdown-it';
 import { DEFAULT_PERMALINK_BASES } from './taxonomy.ts';
 import { wikiLinkAt } from './wiki-link-syntax.ts';
 
-/** The rule's name, for a parser that wraps it to see where it matched. */
 export const WIKI_LINK_RULE = 'geekity_wiki_link';
 
 // A type rather than an interface: markdown-it's env is an index signature.
 export type WikiLinkEnv = { wikiBase?: string | undefined };
 
-/**
- * Turn `[[Target]]`, `[[Target|text]]`, `[[Target#Heading]]` and
- * `[[Target#Heading|text]]` into a link to the wiki page the target names,
- * under the wiki base the parse's env carries. The link is written whether or
- * not that page exists, so the HTML depends only on the body and the base.
- *
- * Code is never reached by an inline rule, and markdown-it's escape rule has
- * already taken a `\[`, so both stay as written.
- */
 export function wikiLinks(md: MarkdownItInstance): void {
   md.inline.ruler.before('link', WIKI_LINK_RULE, (state, silent) => {
     if (state.linkLevel > 0) return false;

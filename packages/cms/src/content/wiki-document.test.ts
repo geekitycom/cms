@@ -8,11 +8,6 @@ import { contentFilePath } from './save.ts';
 import { defaultPermalink } from './slug.ts';
 import { serializeDocument } from './writer.ts';
 
-/**
- * Wiki pages: a third document type, filed under `wiki/`, whose URL is the
- * wiki base and the file name rather than anything in the front matter.
- */
-
 describe('wiki documents', () => {
   it('describes a wiki page as undated, unfiled, unfederated and without a form', () => {
     assert.equal(WIKI_KIND.type, 'wiki');

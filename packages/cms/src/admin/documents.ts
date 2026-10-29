@@ -140,7 +140,6 @@ export const WIKI_SCREENS: DocumentScreens = {
   plural: 'Wiki',
 };
 
-/** The screens each type of document is written in. */
 export const DOCUMENT_SCREENS: Readonly<Record<DocumentType, DocumentScreens>> = {
   post: POST_SCREENS,
   page: PAGE_SCREENS,
@@ -297,7 +296,7 @@ export function mountDocumentScreens(
       document: undefined,
       form: restoring
         ? submittedForm(kind, copy.fields, c.var.config.contentDir)
-        : askedFor(c, blankForm(kind, siteTimezone(c), c.var.store.now())),
+        : prefillFromQuery(c, blankForm(kind, siteTimezone(c), c.var.store.now())),
       postKind: isPostKind(postKind) ? postKind : undefined,
       autosave: id,
       copy,
@@ -351,11 +350,7 @@ export function mountDocumentScreens(
   });
 }
 
-/**
- * A blank form with the title and slug a link to the new editor named, so a
- * link to a wiki page nobody has written yet opens the editor ready to write it.
- */
-function askedFor(c: Context<GeekityEnv>, form: EditorForm): EditorForm {
+function prefillFromQuery(c: Context<GeekityEnv>, form: EditorForm): EditorForm {
   return {
     ...form,
     title: (c.req.query('title') ?? '').trim(),
@@ -844,7 +839,8 @@ function renderUnsaved(
       const gone = copy.path !== undefined && document === undefined;
       return {
         label: copyLabel(copy),
-        kind: postKind !== undefined ? EDITOR_KINDS[postKind].label : COPY_KINDS[kind.type],
+        kind:
+          postKind !== undefined ? EDITOR_KINDS[postKind].label : KINDLESS_COPY_LABELS[kind.type],
         savedAt: copy.savedAt,
         at: formatInTimezone(copy.savedAt, siteTimezone(c)),
         of:
@@ -957,22 +953,27 @@ interface EditorAction {
   label: string;
 }
 
-/** How the comments setting names every document of a type. */
-const THESE: Readonly<Record<DocumentType, string>> = {
+const PLURAL_NOUNS: Readonly<Record<DocumentType, string>> = {
   post: 'posts',
   page: 'pages',
   wiki: 'wiki pages',
 };
 
-/** What the unsaved changes listing calls a copy that is not of a post kind. */
-const COPY_KINDS: Readonly<Record<DocumentType, string>> = {
+const KINDLESS_COPY_LABELS: Readonly<Record<DocumentType, string>> = {
   post: 'Post',
   page: PAGE_CHOICE.label,
   wiki: 'Wiki page',
 };
 
+function linkableWikiSlugs(store: CatalogReader): string[] {
+  return store
+    .listAll({ type: 'wiki', draft: undefined, trashed: false })
+    .map((page) => page.slug)
+    .sort();
+}
+
 function siteDefaultLabel(type: DocumentType, policy: CommentPolicy): string {
-  const these = THESE[type];
+  const these = PLURAL_NOUNS[type];
   if (!policy.enabled) return 'comments are off on this site';
   if (!policy.openByDefault[type]) return `closed for ${these}`;
   const days = policy.closeAfterDays;
@@ -1104,12 +1105,7 @@ async function editorModel(
     autosaveFileTime: document?.updated,
     autosaveTimezone: timezone,
     words: editorWordCounter(c, form.body),
-    // What a `[[link]]` in the body can reach, so the editor can mark one that
-    // reaches nothing. A draft is there to be linked to; the trash is not.
-    wikiSlugs: c.var.store
-      .listAll({ type: 'wiki' })
-      .map((page) => page.slug)
-      .sort(),
+    wikiSlugs: linkableWikiSlugs(c.var.store),
     resume: await resumeOffer(c, {
       kind,
       document,

@@ -234,10 +234,6 @@ export async function mintMissingIndexNowKey(
   }
 }
 
-/**
- * Remember the wiki base a change left, so its URLs lead on to where the wiki
- * is now. The base it arrived at leaves the list: the wiki lives there again.
- */
 async function recordFormerWikiBase({
   previous,
   next,
@@ -245,13 +241,17 @@ async function recordFormerWikiBase({
   settings,
 }: SettingChange<string>): Promise<void> {
   const former = await settings.get(SITE.former_wiki_bases);
-  const kept = [...former.filter((base) => base !== previous && base !== next), previous];
-  const recorded = await settings.set('site', new Map([['former_wiki_bases', kept]]), by);
+  const bases = formerBasesAfterMove(former, previous, next);
+  const recorded = await settings.set('site', new Map([['former_wiki_bases', bases]]), by);
   if (!recorded.ok) {
     console.error(
       `The old wiki base was not recorded: ${Object.values(recorded.problems).join(' ')}`,
     );
   }
+}
+
+function formerBasesAfterMove(former: readonly string[], previous: string, next: string): string[] {
+  return [...former.filter((base) => base !== previous && base !== next), previous];
 }
 
 async function mintIndexNowKey({ next, by, settings }: SettingChange<boolean>): Promise<void> {

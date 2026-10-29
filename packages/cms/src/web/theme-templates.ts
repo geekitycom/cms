@@ -19,7 +19,6 @@ export const TEMPLATES = {
   maintenance: 'layouts/503.njk',
 } as const;
 
-/** The layout each type of document is drawn with at its own URL. */
 export const DOCUMENT_TEMPLATES: Readonly<Record<DocumentType, string>> = {
   post: TEMPLATES.post,
   page: TEMPLATES.page,
