@@ -69,15 +69,9 @@ function fixture(which: number): Readonly<Record<Algorithm, string>> {
   return found;
 }
 
-/**
- * `correct horse battery` hashed with argon2id at its smallest cost. Sign-in
- * honours the cost a hash records, so it checks this in well under a
- * millisecond where the site's own cost takes tens.
- */
-export const CHEAP_PASSWORD_HASH =
+export const CORRECT_HORSE_BATTERY_HASH =
   '$argon2id$v=19$m=8,t=1,p=1$Z2Vla2l0eS10ZXN0LXNhbA$NsFbSo8eArho8Bui32EukJ/FbrTl8bMJovDFMH9DCbQ';
 
-/** One account in `data/users.json`, with a hash nobody can sign in with unless one is named. */
 export interface TestUser {
   readonly username: string;
   readonly id?: number;
@@ -137,10 +131,6 @@ export interface CliRun {
 
 const execFile = promisify(execFileCallback);
 
-/**
- * Run the installed `geekity` bin the way a site's shim runs it. Node strips
- * the types from this package's source when the site config imports it.
- */
 export async function runCli(args: readonly string[], cwd: string): Promise<CliRun> {
   const bin = fileURLToPath(import.meta.resolve('@geekity/cms/package.json')).replace(
     /package\.json$/,
