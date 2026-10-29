@@ -4,8 +4,9 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { fieldsOf, saveUrlOf } from '../admin/__testing__/editor-form.ts';
-import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
+import { signedIn } from './__testing__/users.ts';
 import { repliesKey } from '../content/guids.ts';
 import type { Cms } from '../index.ts';
 

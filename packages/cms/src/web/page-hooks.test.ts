@@ -3,7 +3,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { csrfField, sandbox } from '../admin/__testing__/harness.ts';
+import { signedIn } from './__testing__/users.ts';
 import { sessionCookieName } from './session.ts';
 import { createMailTemplates } from '../notifications/mail-templates.ts';
 import type { Cms } from '../index.ts';

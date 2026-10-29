@@ -2,6 +2,9 @@ import { argon2Sync, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { FIRST_ADMIN, signIn } from '../../admin/__testing__/harness.ts';
+import type { Browser } from '../../admin/__testing__/harness.ts';
+import type { Cms } from '../../index.ts';
 import { USERS_FILE_MODE, usersFile, usersJsonText } from '../../site/users.ts';
 import type { CreateUserInput, User, UsersFileContents } from '../../site/users.ts';
 
@@ -38,17 +41,28 @@ export async function createUser(input: CreateUserInput): Promise<User> {
   return user;
 }
 
+/**
+ * The harness's `signedIn`, without its production-cost hash: the first admin
+ * is written with {@link createUser} and signs in through the login form, which
+ * is where the setup form leaves them too.
+ */
+export async function signedIn(cms: Cms): Promise<Browser> {
+  await createUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN, now: cms.config.now() });
+  return signIn(cms);
+}
+
 function cheapHash(password: string): string {
   const salt = randomBytes(16);
-  const tag = argon2Sync('argon2id', {
-    message: Buffer.from(password, 'utf8'),
-    nonce: salt,
-    memory: 8,
-    passes: 1,
-    parallelism: 1,
-    tagLength: 32,
-  });
-  const base64 = (value: Buffer | ArrayBuffer): string =>
-    Buffer.from(value).toString('base64').replace(/=+$/, '');
+  const tag = Buffer.from(
+    argon2Sync('argon2id', {
+      message: Buffer.from(password, 'utf8'),
+      nonce: salt,
+      memory: 8,
+      passes: 1,
+      parallelism: 1,
+      tagLength: 32,
+    }),
+  );
+  const base64 = (value: Buffer): string => value.toString('base64').replace(/=+$/, '');
   return `$argon2id$v=19$m=8,t=1,p=1$${base64(salt)}$${base64(tag)}`;
 }

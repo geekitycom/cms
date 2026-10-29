@@ -9,7 +9,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 
-import { browser, csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { browser, csrfField, sandbox } from '../admin/__testing__/harness.ts';
+import { signedIn } from './__testing__/users.ts';
 import { sessionCookieName } from './session.ts';
 import type { GeekityConfig } from '../config.ts';
 import type { Cms } from '../index.ts';

@@ -3,8 +3,9 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
+import { signedIn } from './__testing__/users.ts';
 import type { Cms } from '../index.ts';
 
 const box = sandbox();

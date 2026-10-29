@@ -4,8 +4,9 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { csrfField, sandbox } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
+import { signedIn } from './__testing__/users.ts';
 import { titleCell } from '../admin/__testing__/markup.ts';
 import type { Cms } from '../index.ts';
 

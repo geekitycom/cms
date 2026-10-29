@@ -14,8 +14,9 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { csrfField, sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { signedIn } from './__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
