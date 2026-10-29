@@ -244,7 +244,6 @@ Each gate is a separate job, so each one can be a required status check:
 | `lint`         | `pnpm lint`, then `pnpm format:check`.              |
 | `typecheck`    | `pnpm typecheck`.                                   |
 | `test`         | The test suites, in a matrix described below.       |
-| `build`        | `pnpm build`.                                       |
 | `test-11ty`    | `pnpm test:11ty`, the Eleventy compatibility suite. |
 | `pack-install` | `scripts/pack-install-smoke.sh`.                    |
 | `docker-smoke` | Builds the image, then `scripts/docker-smoke.sh`.   |
@@ -256,14 +255,20 @@ The three steps every job shares live in the local composite action
 action. Do not copy the setup.
 
 `pnpm install` runs the root `prepare` script, which is `husky && pnpm build`.
-So `dist/` exists in every job before the job's own command runs. The `build`
-job still exists because a required check needs a job to name. CI sets
+So `dist/` exists in every job before the job's own command runs, and a build
+that fails fails every job. There is no separate `build` job, because the free
+plan runs 20 jobs at once and the test matrix needs the slot. CI sets
 `HUSKY=0`, because CI has no git hooks to install.
 
 `test` is a matrix of fourteen jobs. The `packages/cms` suite is split into six
-shards with `node --test --test-shard`, and each shard runs on its own runner
-through `pnpm --filter @geekity/cms test:shard` with `TEST_SHARD` set to, for
-example, `2/6`. A seventh entry runs every other package's suite. Each of the
+shards, and each shard runs on its own runner through
+`pnpm --filter @geekity/cms test:shard` with `TEST_SHARD` set to, for example,
+`2/6`. `scripts/test-shard.ts` balances the shards by the seconds each test
+file took, which `scripts/test-weights.json` records. The slowest file holds
+about a third of a shard, so a shard that gets two slow files by chance sets
+how long CI takes. After a test file gets much slower or faster, run
+`pnpm test:weights` in `packages/cms` and commit the new weights. A stale
+weight only unbalances the shards. It never skips a test. A seventh entry runs every other package's suite. Each of the
 seven runs on Node 24, the package's floor, and on Node 26, the current line.
 To run one shard locally, run `TEST_SHARD=2/6 pnpm test:shard` in
 `packages/cms`.
@@ -328,7 +333,7 @@ On GitHub, under Settings → Rules → Rulesets (or Settings → Branches), pro
   direct pushes to `main`.
 - **Require status checks to pass.** Select exactly these job names from the
   table above: `lint`, `typecheck`, each of the fourteen `test (node …)`
-  matrix entries, `build`, `test-11ty`, `pack-install`. Tick "Require branches to be up to date before
+  matrix entries, `test-11ty`, `pack-install`. Tick "Require branches to be up to date before
   merging".
 - Allow only **merge commits** in Settings → General → Pull Requests. A merge
   keeps every commit of the branch. release-please reads each one, so every

@@ -1,0 +1,23 @@
+{
+  "typical": 0.8,
+  "files": {
+    "src/admin/cited-title-slug.test.ts": 4.4,
+    "src/admin/editor.test.ts": 3.4,
+    "src/admin/item-lookup.test.ts": 3.2,
+    "src/admin/item-search.test.ts": 3.8,
+    "src/admin/posts.test.ts": 7.3,
+    "src/admin/users.test.ts": 3,
+    "src/cli-import.test.ts": 7.7,
+    "src/cli-jobs.test.ts": 11.9,
+    "src/cli-plugin-upgrade.test.ts": 3.5,
+    "src/cli-rebuild.test.ts": 3.4,
+    "src/cli-reload.test.ts": 29.8,
+    "src/cli-resend.test.ts": 3.4,
+    "src/cli-strip-metadata.test.ts": 3.7,
+    "src/docker-build-push.test.ts": 3.7,
+    "src/federation/delivery.test.ts": 15,
+    "src/release.test.ts": 20.1,
+    "src/web/gemini-listener.test.ts": 10.2,
+    "src/web/page-shell.test.ts": 4.8
+  }
+}

@@ -1,12 +1,11 @@
-# The quality gates of decision-8, one job per gate so each can be named as a
-# required status check on `main`: lint, typecheck, test and build.
+# The quality gates of decision-8: lint, typecheck, test and build.
 #
 # `pnpm install` runs the root `prepare` script, which builds every package
 # under `packages/` (core and each `plugin-*`), so every job already has
-# `dist/` before its own command runs. The root scripts run recursively, so
-# each job covers the plugin packages as it covers core. The `build` job is
-# still here on its own: it is the check a branch protection rule points at, and
-# it is the one that fails loudly when the compiler is the problem.
+# `dist/` before its own command runs, and a build that fails fails every job.
+# There is no separate build job: the free plan runs 20 jobs at once, and the
+# test matrix needs the slot. The root scripts run recursively, so each job
+# covers the plugin packages as it covers core.
 name: ci
 
 on:
@@ -79,7 +78,8 @@ jobs:
   # The cms suite is CPU-bound: `node --test` runs one file per process, three
   # at once on the four vCPUs a GitHub-hosted runner gives a public repository.
   # One runner takes about seven minutes, so the files are split across six
-  # runners with `--test-shard`, each running a sixth of them. The plugin
+  # runners by `scripts/test-shard.ts`, which balances them by the times in
+  # `scripts/test-weights.json`. The plugin
   # packages, md2gemini and the demo are small and run together in one more
   # entry. Every entry runs on Node 24, the package's floor and active LTS,
   # and again on 26, the current line, so the next LTS holds no surprises.
@@ -109,16 +109,6 @@ jobs:
         run: TEST_SHARD="${PART#cms }" pnpm --filter @geekity/cms test:shard
       - if: ${{ matrix.part == 'packages' }}
         run: pnpm --filter '!@geekity/cms' -r --no-bail test
-
-  build:
-    name: build
-    needs: already-tested
-    if: ${{ !cancelled() && needs.already-tested.outputs.skip != 'true' }}
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-workspace
-      - run: pnpm build
 
   # The Eleventy compatibility suite spins up a real Eleventy build, so it is
   # its own job and the fast suite stays fast (decision-8).
@@ -218,7 +208,7 @@ jobs:
   record-tested-tree:
     name: record-tested-tree
     if: github.event_name == 'pull_request'
-    needs: [lint, typecheck, test, build, test-11ty, fed-smoke, pack-install, docker-smoke]
+    needs: [lint, typecheck, test, test-11ty, fed-smoke, pack-install, docker-smoke]
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
