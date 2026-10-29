@@ -55,6 +55,7 @@ function commentRanges(source: ts.SourceFile): ts.CommentRange[] {
 }
 
 function idsInComments(relative: string, text: string): string[] {
+  if (text.search(ID) === -1) return [];
   const source = ts.createSourceFile(relative, text, ts.ScriptTarget.Latest, true);
   return commentRanges(source)
     .flatMap((range) =>
