@@ -26,9 +26,9 @@ import type { ActorKeyAlgorithm } from '../keys.ts';
  * one to spare. {@link seedActorKeys} hands a site the first; a test that
  * needs a second distinct identity asks for the next one by number.
  *
- * Tests whose subject *is* key generation, rotation or storage —
- * `federation/keys.test.ts` — do not use these. A test that proves a key is
- * minted has to watch one being minted.
+ * A test whose subject *is* key generation, in `federation/keys.test.ts`,
+ * does not use these. A test that proves a key is minted has to watch one
+ * being minted.
  */
 const FIXTURES: readonly Readonly<Record<ActorKeyAlgorithm, string>>[] = [
   {
