@@ -138,7 +138,7 @@ export interface Renderer {
   renderSearch(search: SearchPage): string;
   renderWikiIndex(index: WikiIndexPage): string;
   renderComment(thread: CommentThread): string;
-  renderNotFound(url: string): string;
+  renderNotFound(url: string, extra?: Record<string, unknown>): string;
   renderGone(url: string): string;
   renderServerError(url: string): string;
   renderMaintenance(url: string, until: Date | undefined): string;
@@ -238,7 +238,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       renderPage(document, { extra, viewer }).html,
     renderFrontPage: (document, extra = {}, viewer = undefined) =>
       renderPage(document, { frontPage: true, extra, viewer }).html,
-    renderNotFound: (url) => statusPage(STATUS_PAGES.notFound, url),
+    renderNotFound: (url, extra = {}) => statusPage(STATUS_PAGES.notFound, url, extra),
     renderGone: (url) => statusPage(STATUS_PAGES.gone, url),
     renderServerError: (url) => statusPage(STATUS_PAGES.serverError, url),
     renderMaintenance: (url, until) =>

@@ -26,3 +26,11 @@ export const USERS_PATH = `${ADMIN_PREFIX}/users`;
 export function editUserPath(id: number): string {
   return `${USERS_PATH}/${String(id)}`;
 }
+
+/** Root of the wiki screens. */
+export const WIKI_ADMIN_PATH = `${ADMIN_PREFIX}/wiki`;
+
+/** The wiki editor for a page not written yet, with its slug and title filled in. */
+export function newWikiPagePath(slug: string, title: string): string {
+  return `${WIKI_ADMIN_PATH}/new?${new URLSearchParams({ slug, title }).toString()}`;
+}

@@ -6,5 +6,8 @@
   {{ kicker.line("Not found") }}
   <h1 class="page-title">Content not found.</h1>
   <p>Go <a href="{{ "/" | url }}">home</a>, or <a href="{{ "/search/" | url }}">search the site</a>.</p>
+  {% if createWikiPage %}
+  <p class="create-wiki-page"><a href="{{ createWikiPage.url }}">Create {{ createWikiPage.title }}</a></p>
+  {% endif %}
 </article>
 {% endblock %}

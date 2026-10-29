@@ -61,6 +61,7 @@ import type { SiteView } from './site-view.ts';
 import { SITEMAP_CHILD_ROUTE, SITEMAP_PATH } from './sitemap.ts';
 import { redirectedTerm, termHref } from '../content/taxonomy.ts';
 import type { TaxonomyTerm } from '../content/taxonomy.ts';
+import { createWikiPageAt } from './wiki-create.ts';
 import { wikiIndexHref } from './wiki-index.ts';
 
 /**
@@ -326,7 +327,12 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     return c.redirect(redirectLocation(redirect, search), redirect.status);
   }
 
-  return notFound(c);
+  // A wiki page nobody has written yet is how a wiki grows, so a writer who
+  // follows a link to one is offered its editor.
+  return notFound(
+    c,
+    c.var.signedIn === undefined ? undefined : createWikiPageAt(view.bases, pathname),
+  );
 }
 
 function serve(c: Context<GeekityEnv>, match: PathMatch): Response {

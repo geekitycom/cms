@@ -8,10 +8,20 @@ import { CONTENT_TYPES, representationOf } from './negotiate.ts';
 import type { TextRepresentation } from './negotiate.ts';
 import type { StatusPageName } from './theme-templates.ts';
 import { requestPath } from './request.ts';
+import type { CreateWikiPage } from './wiki-create.ts';
 
-/** The theme's 404 page, for a path that resolved to nothing. */
-export function notFound(c: Context<GeekityEnv>): Response {
-  return statusPage(c, 'notFound', 404, (url) => c.var.renderer.renderNotFound(url));
+/**
+ * The theme's 404 page, for a path that resolved to nothing. `createWikiPage`
+ * is the wiki page a signed-in writer is offered to write here, drawn in the
+ * HTML only.
+ */
+export function notFound(
+  c: Context<GeekityEnv>,
+  createWikiPage: CreateWikiPage | undefined = undefined,
+): Response {
+  return statusPage(c, 'notFound', 404, (url) =>
+    c.var.renderer.renderNotFound(url, createWikiPage === undefined ? {} : { createWikiPage }),
+  );
 }
 
 /** The theme's 410 page, for the URL of a document that was deleted. */

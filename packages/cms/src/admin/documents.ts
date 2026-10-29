@@ -98,7 +98,7 @@ import { allowGeolocation } from './headers.ts';
 import { AUTOSAVE_DISCARD_JSON_PATH, AUTOSAVE_DISCARD_PATH, AUTOSAVE_PATH } from './autosave.ts';
 import { laterOrOnlyKnown } from './autosave-client.ts';
 import { PREVIEW_PATH } from './preview.ts';
-import { ADMIN_PREFIX } from '../site/admin-paths.ts';
+import { ADMIN_PREFIX, WIKI_ADMIN_PATH } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**
@@ -136,7 +136,7 @@ export const PAGE_SCREENS: DocumentScreens = {
 export const WIKI_SCREENS: DocumentScreens = {
   ...WIKI_KIND,
   section: 'wiki',
-  basePath: `${ADMIN_PREFIX}/wiki`,
+  basePath: WIKI_ADMIN_PATH,
   plural: 'Wiki',
 };
 

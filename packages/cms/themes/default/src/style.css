@@ -1296,6 +1296,12 @@
     @apply text-[1.08rem];
   }
 
+  /* The 404's offer to a signed-in writer to create the wiki page that is
+     missing, drawn as the site's other buttons are. */
+  .create-wiki-page a {
+    @apply inline-block no-underline hover:text-paper;
+  }
+
   /* Reactions: the likes, the boosts and the pages that mentioned a post, as
      rows of faces under a small label. */
   .reactions-section {
@@ -1512,7 +1518,8 @@
 
   .search-form button,
   .comment-respond .form-submit button,
-  .comment-respond .form-submit input[type='submit'] {
+  .comment-respond .form-submit input[type='submit'],
+  .create-wiki-page a {
     @apply cursor-pointer rounded-md bg-accent px-5 py-2.5 font-sans text-sm font-semibold text-paper hover:bg-ink;
     min-block-size: 24px;
     min-inline-size: 24px;
@@ -1577,7 +1584,8 @@
 @media (forced-colors: active) {
   .search-form button,
   .comment-respond .form-submit button,
-  .comment-respond .form-submit input[type='submit'] {
+  .comment-respond .form-submit input[type='submit'],
+  .create-wiki-page a {
     border: 1px solid ButtonText;
   }
 
