@@ -5,7 +5,8 @@ import { after, describe, it } from 'node:test';
 
 import { siteSettingsIn, writeSiteSettings } from '../__testing__/site-settings.ts';
 import { mintAutosaveId } from '../autosave/index.ts';
-import { createUser, findUser, setUserWritingGoals } from '../site/users.ts';
+import { findUser, setUserWritingGoals } from '../site/users.ts';
+import { addUser } from './__testing__/users.ts';
 import type { Cms } from '../index.ts';
 import { readWritingLedger } from '../writing/ledger.ts';
 import { fieldsOf } from './__testing__/editor-form.ts';
@@ -182,7 +183,7 @@ describe('crediting words on save', () => {
 describe('two users on one post', () => {
   it('credits each from their own copy', async () => {
     const { cms, ada } = await site();
-    await createUser({ dataDir: cms.config.dataDir, ...GRACE });
+    addUser({ dataDir: cms.config.dataDir, ...GRACE });
     const grace = await signIn(cms, GRACE);
     const adaFields = await editorFields(ada, EDITOR);
     const graceFields = await editorFields(grace, EDITOR);
@@ -233,7 +234,7 @@ describe('writes outside the editor and Micropub', () => {
 describe('deleting a user', () => {
   it('deletes their ledger', async () => {
     const { cms } = await site();
-    await createUser({ dataDir: cms.config.dataDir, ...GRACE });
+    addUser({ dataDir: cms.config.dataDir, ...GRACE });
     const grace = await signIn(cms, GRACE);
     await autosave(grace, { ...(await editorFields(grace, EDITOR)), body: 'One two three.' });
     const id = idOf(cms, 'grace');

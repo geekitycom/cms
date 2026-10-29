@@ -14,7 +14,8 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
+import { addUser } from './__testing__/users.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import type { Cms } from '../index.ts';
@@ -497,7 +498,7 @@ describe('the editor page', () => {
 describe('who a post says wrote it (TASK-67 AC #2)', () => {
   it('offers the users, with the signed-in one chosen, on a new post', async () => {
     const { cms, agent } = await admin();
-    await createUser({
+    addUser({
       dataDir: cms.config.dataDir,
       username: 'grace',
       password: 'a password of hers',
@@ -512,7 +513,7 @@ describe('who a post says wrote it (TASK-67 AC #2)', () => {
 
   it('writes the chosen user’s login into the file', async () => {
     const { cms, agent, token } = await admin();
-    await createUser({
+    addUser({
       dataDir: cms.config.dataDir,
       username: 'grace',
       password: 'a password of hers',

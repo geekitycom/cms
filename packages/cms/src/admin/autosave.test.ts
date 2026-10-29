@@ -6,7 +6,8 @@ import { after, describe, it } from 'node:test';
 import { siteSettingsIn, writeSiteSettings } from '../__testing__/site-settings.ts';
 import { autosaveCopies, mintAutosaveId } from '../autosave/index.ts';
 import type { AutosaveRecord } from '../autosave/index.ts';
-import { createUser, findUser } from '../site/users.ts';
+import { findUser } from '../site/users.ts';
+import { addUser } from './__testing__/users.ts';
 import { sessionCookieName } from '../web/session.ts';
 import type { Cms } from '../index.ts';
 import { fieldsOf } from './__testing__/editor-form.ts';
@@ -291,7 +292,7 @@ describe('POST /admin/autosave/discard', () => {
 describe('a copy belongs to the user who wrote it', () => {
   it('cannot be read, overwritten or discarded by another user', async () => {
     const { cms, ada } = await site();
-    await createUser({ dataDir: cms.config.dataDir, ...GRACE });
+    addUser({ dataDir: cms.config.dataDir, ...GRACE });
     const grace = await signIn(cms, GRACE);
     const adaFields = await editorFields(ada, '/admin/posts/hello', {
       autosave: POST_FILE,
@@ -317,7 +318,7 @@ describe('a copy belongs to the user who wrote it', () => {
 
   it('goes when the user is deleted', async () => {
     const { cms, ada } = await site();
-    await createUser({ dataDir: cms.config.dataDir, ...GRACE });
+    addUser({ dataDir: cms.config.dataDir, ...GRACE });
     const grace = await signIn(cms, GRACE);
     const graceId = userId(cms, 'grace');
     const fields = await editorFields(grace, '/admin/posts/hello', { autosave: POST_FILE });
@@ -358,7 +359,7 @@ describe('saving through the editor', () => {
 
   it("deletes the saver's copy when an update succeeds, and keeps other users' copies", async () => {
     const { cms, ada } = await site();
-    await createUser({ dataDir: cms.config.dataDir, ...GRACE });
+    addUser({ dataDir: cms.config.dataDir, ...GRACE });
     const grace = await signIn(cms, GRACE);
     await withCopy(cms, grace, '/admin/posts/hello', POST_FILE);
     const fields = await withCopy(cms, ada, '/admin/posts/hello', POST_FILE);

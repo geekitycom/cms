@@ -6,7 +6,7 @@ import { after, afterEach, beforeEach, describe, it, mock } from 'node:test';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin, PluginWidget } from '../plugin.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
+import { addUser } from './__testing__/users.ts';
 import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
@@ -289,7 +289,7 @@ describe('arranging the dashboard (TASK-469, TASK-479)', () => {
 
   it('keeps each user’s arrangement apart, and a new user sees the default order', async () => {
     const { cms, agent } = await site();
-    await createUser({
+    addUser({
       dataDir: cms.config.dataDir,
       username: 'grace',
       password: 'another long password',

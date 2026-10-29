@@ -12,10 +12,13 @@ import {
   cookieValue,
   csrfField,
   sandbox,
+  FIRST_ADMIN,
   setCookie,
   setUpFirstAdmin,
+  signedIn,
 } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
+import { addUser } from './__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -143,9 +146,9 @@ describe('setup', () => {
     const agent = browser(cms);
     await setUpFirstAdmin(agent);
 
-    const signedIn = await agent.get('/admin/setup');
-    assert.equal(signedIn.status, 302);
-    assert.equal(signedIn.headers.get('location'), '/admin');
+    const again = await agent.get('/admin/setup');
+    assert.equal(again.status, 302);
+    assert.equal(again.headers.get('location'), '/admin');
 
     const stranger = browser(cms);
     const anonymous = await stranger.get('/admin/setup');
@@ -157,7 +160,7 @@ describe('setup', () => {
 describe('login', () => {
   it('returns the form with an error and no session when the password is wrong', async () => {
     const cms = await site();
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const agent = browser(cms);
     const token = csrfField(await (await agent.get('/admin/login')).text());
@@ -179,7 +182,7 @@ describe('login', () => {
 
   it('says the same thing about an unknown user as about a wrong password', async () => {
     const cms = await site();
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const agent = browser(cms);
     const token = csrfField(await (await agent.get('/admin/login')).text());
@@ -197,7 +200,7 @@ describe('login', () => {
 
   it('logs a known user in and swaps the session id', async () => {
     const cms = await site();
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const agent = browser(cms);
     const token = csrfField(await (await agent.get('/admin/login')).text());
@@ -223,7 +226,7 @@ describe('login', () => {
 describe('the guard', () => {
   it('sends an anonymous visitor to the login form from anywhere under /admin', async () => {
     const cms = await site();
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     for (const url of ['/admin', '/admin/', '/admin/posts', '/admin/settings/anything']) {
       const response = await cms.app.request(url);
@@ -234,7 +237,7 @@ describe('the guard', () => {
 
   it('lets the login form itself through', async () => {
     const cms = await site();
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const response = await cms.app.request('/admin/login');
     assert.equal(response.status, 200);
@@ -242,7 +245,7 @@ describe('the guard', () => {
 
   it('refuses a mutating request that carries no session at all', async () => {
     const cms = await site();
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const response = await cms.app.request('/admin/login', {
       method: 'POST',
@@ -265,8 +268,7 @@ describe('the guard', () => {
 describe('logout', () => {
   it('invalidates the session server-side, not just in the browser', async () => {
     const cms = await site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     const sessionId = agent.session();
     assert.ok(sessionId !== undefined);
@@ -310,8 +312,7 @@ describe('the session cookie', () => {
   it('expires after the configured lifetime', async () => {
     let now = new Date('2026-09-13T12:00:00.000Z');
     const cms = await site({ sessionLifetime: 0.25, now: () => now });
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
     const sessionId = agent.session();
     assert.ok(sessionId !== undefined);
 
@@ -330,8 +331,7 @@ describe('the session cookie', () => {
 describe('security headers', () => {
   it('puts the defensive set on every admin response, whatever it is', async () => {
     const cms = await site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     const responses = [
       await agent.get('/admin'),
@@ -351,8 +351,7 @@ describe('security headers', () => {
 
   it('names the editor bundle, the preview frame and the uploads in the policy', async () => {
     const cms = await site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     const policy = (await agent.get('/admin/posts/new?kind=note')).headers.get(
       'content-security-policy',
@@ -376,8 +375,7 @@ describe('security headers', () => {
 
   it('gives each response its own style nonce and hands it to the editor bundle', async () => {
     const cms = await site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     const response = await agent.get('/admin/posts/new?kind=note');
     const policy = response.headers.get('content-security-policy') ?? '';
@@ -415,8 +413,7 @@ describe('security headers', () => {
 
   it('leaves no inline script in the admin for the policy to have to allow', async () => {
     const cms = await site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     const html = await (await agent.get('/admin/posts/new?kind=note')).text();
 
@@ -425,8 +422,7 @@ describe('security headers', () => {
 
   it('keeps its stricter values over the public ones and gains the rest', async () => {
     const cms = await site({ securityHeaders: { 'Referrer-Policy': 'unsafe-url' } });
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     const response = await agent.get('/admin/posts/new?kind=note');
 
@@ -487,7 +483,7 @@ describe('the login throttle', () => {
   it('refuses even the right password once a username has failed too often', async () => {
     const clock = movableClock();
     const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const agent = browser(cms);
     for (let i = 0; i < 3; i += 1) {
@@ -507,7 +503,7 @@ describe('the login throttle', () => {
   it('lets the right password through once the lockout has run out', async () => {
     const clock = movableClock();
     const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const agent = browser(cms);
     for (let i = 0; i < 3; i += 1) await attempt(agent, 'ada', 'not the password');
@@ -523,7 +519,7 @@ describe('the login throttle', () => {
   it('says the same thing about a username that does not exist', async () => {
     const clock = movableClock();
     const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const agent = browser(cms);
     for (let i = 0; i < 3; i += 1) await attempt(agent, 'nobody', 'guess');
@@ -536,7 +532,7 @@ describe('the login throttle', () => {
   it('lets one username go on trying while another is locked out', async () => {
     const clock = movableClock();
     const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const agent = browser(cms);
     for (let i = 0; i < 3; i += 1) await attempt(agent, 'nobody', 'guess');
@@ -549,7 +545,7 @@ describe('the login throttle', () => {
   it('starts the count over after a sign-in that worked', async () => {
     const clock = movableClock();
     const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const agent = browser(cms);
     await attempt(agent, 'ada', 'not the password');
@@ -569,7 +565,7 @@ describe('the login throttle', () => {
   it('holds the lockout longer each time it is tripped again', async () => {
     const clock = movableClock();
     const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 60 });
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const agent = browser(cms);
     for (let i = 0; i < 3; i += 1) await attempt(agent, 'ada', 'not the password');
@@ -597,8 +593,7 @@ describe('the admin menu', () => {
 
   it('lands every section on its first child, with that child marked', async () => {
     const cms = await site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     for (const section of ADMIN_SECTIONS) {
       const first = section.children[0];
@@ -621,8 +616,7 @@ describe('the admin menu', () => {
 
   it('puts a screen behind every child, each marking itself', async () => {
     const cms = await site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     for (const section of ADMIN_SECTIONS) {
       for (const child of section.children) {
@@ -638,8 +632,7 @@ describe('the admin menu', () => {
 
   it('shows the children of the open section and of no other', async () => {
     const cms = await site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     const menu = nav(await (await agent.get('/admin/posts')).text());
 
@@ -654,8 +647,7 @@ describe('the admin menu', () => {
 
   it('marks the child a screen is on rather than the first one', async () => {
     const cms = await site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     const menu = nav(await (await agent.get('/admin/tags')).text());
 
@@ -666,8 +658,7 @@ describe('the admin menu', () => {
 
   it('needs no JavaScript to expand anything', async () => {
     const cms = await site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     const menu = nav(await (await agent.get('/admin/posts/new?kind=note')).text());
 

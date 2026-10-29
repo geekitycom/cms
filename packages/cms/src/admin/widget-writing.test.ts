@@ -8,7 +8,8 @@ import { csrfField, FIRST_ADMIN, sandbox, signedIn, signIn } from './__testing__
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 import type { Cms } from '../index.ts';
-import { createUser, findUser, setUserWritingGoals } from '../site/users.ts';
+import { findUser, setUserWritingGoals } from '../site/users.ts';
+import { addUser } from './__testing__/users.ts';
 import type { WritingGoals } from '../site/writing-goals.ts';
 
 const box = sandbox();
@@ -193,7 +194,7 @@ describe('the Writing goal card (TASK-501)', () => {
 
   it('shows each of two signed-in users their own figures, never the other’s (AC #4)', async () => {
     const { cms, agent: ada } = await site();
-    await createUser({ dataDir: cms.config.dataDir, ...BOB });
+    addUser({ dataDir: cms.config.dataDir, ...BOB });
     const bob = await signIn(cms, BOB);
     await track(cms, FIRST_ADMIN.username);
     await ledger(cms, FIRST_ADMIN.username, { days: ADA_DAYS });

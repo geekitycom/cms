@@ -11,13 +11,12 @@ import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import {
   countUsers,
-  createUser,
   findUser,
   findUserById,
   setUserProfile,
   verifyUserPassword,
 } from '../site/users.ts';
-import { writeUsers } from './__testing__/users.ts';
+import { addUser, writeUsers } from './__testing__/users.ts';
 import {
   browser,
   csrfField,
@@ -121,7 +120,7 @@ describe('the users screen', () => {
   it('lists every user, marking the one who is signed in', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    await createUser({
+    addUser({
       dataDir: cms.config.dataDir,
       username: 'grace',
       password: 'a password of her own',
@@ -143,13 +142,11 @@ describe('the users list (TASK-110)', () => {
   it('holds Edit, Delete and View in its actions, the way a post listing does', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    const grace = (
-      await createUser({
-        dataDir: cms.config.dataDir,
-        username: 'grace',
-        password: 'a password of her own',
-      })
-    ).id;
+    const grace = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    }).id;
 
     const { html } = await usersScreen(agent);
     const lastRow = [...html.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].at(-1)?.[1] ?? '';
@@ -229,13 +226,11 @@ describe('the edit user screen (TASK-97 AC #1, #7)', () => {
   it('leaves the chrome saying who is signed in, not who is being edited', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    const grace = (
-      await createUser({
-        dataDir: cms.config.dataDir,
-        username: 'grace',
-        password: 'a password of her own',
-      })
-    ).id;
+    const grace = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    }).id;
 
     const { html } = await editScreen(agent, grace);
 
@@ -246,7 +241,7 @@ describe('the edit user screen (TASK-97 AC #1, #7)', () => {
   it('leaves the list with nothing on it that edits anybody', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    await createUser({
+    addUser({
       dataDir: cms.config.dataDir,
       username: 'grace',
       password: 'a password of her own',
@@ -411,13 +406,11 @@ describe('saving from the edit user screen (TASK-97 AC #3)', () => {
   it('puts the email address back on that page, showing what changed', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    const grace = (
-      await createUser({
-        dataDir: cms.config.dataDir,
-        username: 'grace',
-        password: 'a password of her own',
-      })
-    ).id;
+    const grace = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    }).id;
     const { token } = await editScreen(agent, grace);
 
     const saved = await agent.post('/admin/users/email', {
@@ -626,7 +619,7 @@ describe('a user email address (AC #1)', () => {
   it('is set and cleared on a row, including somebody else’s', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    const grace = await createUser({
+    const grace = addUser({
       dataDir: cms.config.dataDir,
       username: 'grace',
       password: 'a password of her own',
@@ -704,7 +697,7 @@ describe('a user profile (TASK-67 AC #1)', () => {
   it('is edited on somebody else’s row too, and cleared when emptied', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    const grace = await createUser({
+    const grace = addUser({
       dataDir: cms.config.dataDir,
       username: 'grace',
       password: 'a password of her own',
@@ -1021,13 +1014,11 @@ describe('changing your own password', () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
     const ada = idOf(cms.config.dataDir, 'ada');
-    const grace = (
-      await createUser({
-        dataDir: cms.config.dataDir,
-        username: 'grace',
-        password: 'a password of her own',
-      })
-    ).id;
+    const grace = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    }).id;
 
     const mine = await editScreen(agent, ada);
     assert.match(mine.html, /<h2\b[^>]*>Change your password<\/h2>/, 'on your own page');
@@ -1183,13 +1174,11 @@ describe('deleting a user', () => {
     assert.match(alone.html, /only user/, 'the refusal is on the page');
     assert.doesNotMatch(alone.html, /<button type="submit"[^>]*>Delete ada<\/button>/);
 
-    const grace = (
-      await createUser({
-        dataDir: cms.config.dataDir,
-        username: 'grace',
-        password: 'a password of her own',
-      })
-    ).id;
+    const grace = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    }).id;
 
     // Still not your own account, even now that somebody else is left.
     const mine = await editScreen(agent, ada);
@@ -1240,7 +1229,7 @@ describe('deleting a user', () => {
   it('deletes another user and takes their sessions with them', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    const grace = await createUser({
+    const grace = addUser({
       dataDir: cms.config.dataDir,
       username: 'grace',
       password: 'a password of her own',
@@ -1266,7 +1255,7 @@ describe('deleting a user', () => {
   it('refuses to delete you, even when somebody else is left', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    await createUser({
+    addUser({
       dataDir: cms.config.dataDir,
       username: 'grace',
       password: 'a password of her own',

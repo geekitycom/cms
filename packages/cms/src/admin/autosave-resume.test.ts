@@ -5,7 +5,8 @@ import { after, describe, it } from 'node:test';
 
 import { autosaveCopies, mintAutosaveId } from '../autosave/index.ts';
 import type { AutosaveRecord } from '../autosave/index.ts';
-import { createUser, findUser } from '../site/users.ts';
+import { findUser } from '../site/users.ts';
+import { addUser } from './__testing__/users.ts';
 import type { Cms } from '../index.ts';
 import { elementAt, fieldsOf } from './__testing__/editor-form.ts';
 import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
@@ -119,7 +120,7 @@ describe('the editor offers a copy back', () => {
 
   it("shows nothing for another user's copy", async () => {
     const { cms, ada, hash } = await site();
-    await createUser({
+    addUser({
       dataDir: cms.config.dataDir,
       username: 'grace',
       password: 'a password of her own',
@@ -431,7 +432,7 @@ describe('the Unsaved filter', () => {
 
   it("does not list another user's copies", async () => {
     const { cms } = await listed();
-    await createUser({
+    addUser({
       dataDir: cms.config.dataDir,
       username: 'grace',
       password: 'a password of her own',

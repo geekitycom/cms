@@ -8,7 +8,8 @@ import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { createUser, verifyUserPassword } from '../site/users.ts';
+import { verifyUserPassword } from '../site/users.ts';
+import { addUser } from './__testing__/users.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { FORGOT_PATH, RESET_PATH, resetLink } from './recovery.ts';
@@ -47,7 +48,7 @@ async function site(
     ...options.config,
   });
 
-  await createUser({
+  addUser({
     dataDir,
     username: FIRST_ADMIN.username,
     password: FIRST_ADMIN.password,
@@ -67,7 +68,7 @@ async function siteWithoutMail(): Promise<Cms> {
   });
 
   const cms = await box.open({ contentDir, dataDir, baseUrl: 'https://blog.example' });
-  await createUser({
+  addUser({
     dataDir,
     username: FIRST_ADMIN.username,
     password: FIRST_ADMIN.password,

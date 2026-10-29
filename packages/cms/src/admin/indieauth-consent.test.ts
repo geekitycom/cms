@@ -11,7 +11,7 @@ import { after, describe, it } from 'node:test';
 import { browser, csrfField, sandbox, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
+import { addUser } from './__testing__/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 
 const box = sandbox();
@@ -102,13 +102,13 @@ async function site(config: { maintenance?: boolean } = {}): Promise<Cms> {
     path.join(contentDir, '_data', 'site.json'),
     JSON.stringify({ title: 'A Site', author: 'ada' }),
   );
-  await createUser({
+  addUser({
     dataDir,
     username: 'ada',
     password: 'correct horse battery',
     email: 'ada@blog.example',
   });
-  await createUser({ dataDir, username: 'bob', password: 'another horse battery' });
+  addUser({ dataDir, username: 'bob', password: 'another horse battery' });
   const cms = await box.open(
     { contentDir, dataDir, baseUrl: BASE, hostLookup: PUBLIC, ...config },
     { actorKeys: ['ada', 'bob'] },

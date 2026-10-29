@@ -11,7 +11,9 @@ import {
   sandbox,
   setCookie,
   setUpFirstAdmin,
+  signedIn,
 } from './__testing__/harness.ts';
+import { addUser } from './__testing__/users.ts';
 
 /**
  * The session hardening of TASK-132: a `__Host-` cookie under https, Fetch
@@ -61,8 +63,7 @@ describe('the session cookie under https', () => {
 describe('a session from before the rename', () => {
   it('is signed out once, with a message saying why', async () => {
     const cms = await box.site(HTTPS);
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
     const oldId = agent.session();
     assert.ok(oldId !== undefined);
 
@@ -88,8 +89,7 @@ describe('Fetch Metadata on a state change', () => {
   for (const site of ['cross-site', 'same-site']) {
     it(`refuses an admin POST sent ${site}, even with a good token`, async () => {
       const cms = await box.site();
-      const agent = browser(cms);
-      await setUpFirstAdmin(agent);
+      const agent = await signedIn(cms);
       const sessionId = agent.session();
       assert.ok(sessionId !== undefined);
       const token = csrfField(await (await agent.get('/admin')).text());
@@ -108,7 +108,7 @@ describe('Fetch Metadata on a state change', () => {
 
   it('refuses a cross-site login attempt before the password is looked at', async () => {
     const cms = await box.site();
-    await setUpFirstAdmin(browser(cms));
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
     const agent = browser(cms);
     const token = csrfField(await (await agent.get('/admin/login')).text());
     assert.ok(token !== undefined);
@@ -125,8 +125,7 @@ describe('Fetch Metadata on a state change', () => {
   for (const site of ['same-origin', 'none']) {
     it(`lets a ${site} POST through to the token check`, async () => {
       const cms = await box.site();
-      const agent = browser(cms);
-      await setUpFirstAdmin(agent);
+      const agent = await signedIn(cms);
       const token = csrfField(await (await agent.get('/admin')).text());
       assert.ok(token !== undefined);
 
@@ -148,8 +147,7 @@ describe('Fetch Metadata on a state change', () => {
 
   it('leaves a GET alone, whoever linked to it', async () => {
     const cms = await box.site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
     const response = await cms.app.request('/admin/login', {
       headers: { 'sec-fetch-site': 'cross-site' },
@@ -164,7 +162,7 @@ describe('public endpoints that take cross-site POSTs by design', () => {
   for (const url of endpoints) {
     it(`answers a cross-site POST to ${url} exactly as it answers one with no metadata`, async () => {
       const cms = await box.site(HTTPS);
-      await setUpFirstAdmin(browser(cms));
+      addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
 
       async function post(extra: Record<string, string>): Promise<Response> {
         return await cms.app.request(url, {
@@ -186,8 +184,7 @@ describe('public endpoints that take cross-site POSTs by design', () => {
 describe('logout', () => {
   it('tells the browser to clear cookies, cache and storage for the site', async () => {
     const cms = await box.site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
     const token = csrfField(await (await agent.get('/admin')).text());
     assert.ok(token !== undefined);
 
@@ -199,8 +196,7 @@ describe('logout', () => {
 
   it('sends it only on logout', async () => {
     const cms = await box.site();
-    const agent = browser(cms);
-    await setUpFirstAdmin(agent);
+    const agent = await signedIn(cms);
 
     assert.equal((await agent.get('/admin')).headers.get('clear-site-data'), null);
   });
