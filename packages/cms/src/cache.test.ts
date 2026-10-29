@@ -97,6 +97,64 @@ describe('applyMigrations', () => {
     assert.deepEqual(applied, [1, 2]);
   });
 
+  it('carries a database at an older version forward, keeping its rows', async () => {
+    const file = databaseFile(await dataDir());
+
+    withDatabase(file, (db) => {
+      applyMigrations(db, {
+        file,
+        ledger: 'test_migrations',
+        migrations: SHIPPED.slice(0, 1),
+        now: systemClock,
+      });
+      db.prepare('INSERT INTO things (name) VALUES (?)').run('kettle');
+    });
+
+    const rows = withDatabase(file, (db) => {
+      applyMigrations(db, {
+        file,
+        ledger: 'test_migrations',
+        migrations: SHIPPED,
+        now: systemClock,
+      });
+      db.prepare('UPDATE things SET colour = ?').run('red');
+      return db
+        .prepare('SELECT name, colour FROM things')
+        .all()
+        .map((row) => ({ ...row }));
+    });
+
+    assert.deepEqual(rows, [{ name: 'kettle', colour: 'red' }]);
+  });
+
+  it('leaves the schema and the ledger as they were when a migration fails', async () => {
+    const file = databaseFile(await dataDir());
+    const broken: readonly Migration[] = [
+      ...SHIPPED,
+      { version: 3, sql: 'ALTER TABLE nothing ADD COLUMN size INTEGER' },
+    ];
+
+    const state = withDatabase(file, (db) => {
+      assert.throws(() => {
+        applyMigrations(db, {
+          file,
+          ledger: 'test_migrations',
+          migrations: broken,
+          now: systemClock,
+        });
+      });
+      return {
+        tables: db
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+          .all()
+          .map((row) => row['name']),
+        versions: db.prepare('SELECT version FROM test_migrations').all(),
+      };
+    });
+
+    assert.deepEqual(state, { tables: ['test_migrations'], versions: [] });
+  });
+
   it('refuses a ledger holding a version this package does not ship', async () => {
     const file = databaseFile(await dataDir());
 
