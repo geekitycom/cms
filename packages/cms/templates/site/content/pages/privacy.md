@@ -20,7 +20,8 @@ keeps it, and who else sees it.
 
 This site sets no cookies on your browser while you read it, and it runs no
 analytics or advertising scripts. Its fonts, styles and scripts come from this
-site, not from another server.
+site, not from another server, except the hCaptcha spam check described below
+if the owner turns it on.
 
 Pictures of other people, such as the avatar of somebody who replied from
 another site, are fetched and stored by this site and served from here. Your
