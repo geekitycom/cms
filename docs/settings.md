@@ -262,7 +262,10 @@ wiki page's URL comes from the base and its file name and is not stored in its
 file. The site re-reads every wiki page under the new base. The old base is
 recorded in `formerWikiBases`, and a request for `/{old base}/{page}/`, or for
 its `.md`, `.gmi` or `.json` representation, returns `301` to the same page
-under the new base. A base the site moves back to leaves that list. A change
+under the new base. `/{old base}/` returns `301` to the wiki index. A base the
+site moves back to leaves that list. Every document with a
+[wiki link](content.md#wiki-links) is rendered again, so its links point under
+the new base. A change
 made with `geekity settings set site.wiki_base` while the server is running
 reaches the wiki pages when the server next starts. A post or a page cannot
 take a permalink under the wiki base: the save is refused, naming the base.

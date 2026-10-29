@@ -120,6 +120,10 @@ so the form and the endpoint always agree.
 | `commentsCloseAfterDays` in `site.json`    | Days after a document's `date` that it closes, for posts and pages alike. `14` by default; `0` never closes.      |
 | `comments: true` / `false` in front matter | The document's own answer. It beats the type setting and the closing window in both directions. Drafts take none. |
 
+A wiki page has no type setting. It takes comments only when its front matter
+says `comments: true`, and the closing window does not apply, because it has
+no `date`.
+
 A document with no `date`, which most pages are, has no age and never closes.
 In the editor, "Follow the site settings" leaves the front-matter key out and
 names what the type setting currently gives, for example "Follow the site

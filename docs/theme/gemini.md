@@ -46,7 +46,10 @@ words and the footer, as before. The homepage that is a page tries
 `layouts/posts-page` and then `layouts/home`, each through all four places
 before the next.
 
-The default theme ships Gemini templates for the four status pages only.
+The default theme ships Gemini templates for the four status pages and for
+the wiki index, `layouts/wiki-index.gmi.njk`. The wiki index template writes a
+`##` heading for each letter and a link line for each page. Converting the
+Markdown one would number every link instead.
 Their Markdown ends with a sentence of two links, which converts to
 `Go home[1], or search the site[2].` over two numbered link lines. The Gemini
 templates write the sentence and then two link lines:

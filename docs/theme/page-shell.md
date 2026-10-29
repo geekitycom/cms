@@ -798,7 +798,8 @@ The category archive's header is also a `header.category-header`. It prints a
 sets one today, and the header is only the heading.
 
 `layouts/404.njk` says `Content not found.` under a `Not found` kicker and
-links home and to the search. The 500 and 503 pages below also open on a
+links home and to the search. On a missing wiki page, a signed-in user's 404
+also has `createWikiPage`. See [A wiki page and the wiki index](#a-wiki-page-and-the-wiki-index). The 500 and 503 pages below also open on a
 kicker.
 
 `layouts/410.njk` is the page at the URL of a post or page that was moved to
@@ -973,6 +974,94 @@ list on another kind of page, add the same three lines to that layout.
 
 The page's Markdown lists the same posts. See
 [The Markdown representation](markdown.md#context).
+
+## A wiki page and the wiki index
+
+[Wiki pages](../content.md#wiki-pages) have two layouts of their own:
+
+| Layout                   | The page                                 |
+| ------------------------ | ---------------------------------------- |
+| `layouts/wiki.njk`       | One wiki page, at `/{wikiBase}/{slug}/`. |
+| `layouts/wiki-index.njk` | The wiki index, at `/{wikiBase}/`.       |
+
+A theme that has neither gets the default theme's, as for any template it does
+not override.
+
+**A wiki page** has the context of a page (see
+[Template context](template-context.md)), with `type` set to `wiki`. It has no
+`date`, `tags`, `categories`, `previous` or `next`. The default
+`layouts/wiki.njk` draws it as a page is drawn, an `article.blog-post.wiki-page.h-entry`
+with a `Wiki` kicker and the title as `h1.p-name`. Under the body, where a post
+prints its date, it prints `Last updated` and the `updated` date as a
+`time.dt-updated`. A page with no `updated` key prints an empty
+`p.page-meta`, which the stylesheet hides. Then come
+[the backlinks](#backlinks), and the conversation and the comment form when the
+page has them. It has no bio, no contact form and no taxonomy.
+
+The base layout treats a wiki page as an entry, as it does a post or a page:
+`og:type` is `article`, and the JSON-LD names it an `Article`.
+
+**The wiki index** has `title`, which is `Wiki`, `url` and `page.url`, and
+`wikiGroups`: the pages, A to Z, in a group for each first letter.
+
+| Key                   | What it holds                                                                                            |
+| --------------------- | -------------------------------------------------------------------------------------------------------- |
+| `wikiGroups`          | The groups in order, `#` first when there is one.                                                        |
+| `wikiGroups[].letter` | The letter, in upper case and without its accent, or `#` for titles that start with a digit or a symbol. |
+| `wikiGroups[].pages`  | The wiki pages under that letter, A to Z, each an entry in the shape a listing's `posts` have.           |
+
+The default layout prints a `nav.wiki-index-letters` with a link to each
+letter, then one `h2` and one `ol.list-none` of links for each group, inside
+`section.archive.wiki-index`, as an archive page prints its months:
+
+```html
+<nav class="wiki-index-letters" aria-label="Jump to a letter">
+  <a href="#wiki-index-G">G</a>
+</nav>
+<section class="archive wiki-index">
+  <h2 id="wiki-index-G">G</h2>
+  <ol class="list-none">
+    <li>
+      <a href="/wiki/garden-tools/"><span>Garden tools</span></a>
+    </li>
+  </ol>
+</section>
+```
+
+Each heading's `id` is `wiki-index-` and the letter. The index has no
+`pagination`.
+
+**A wiki link** in any body is `a.wiki-link`, an ordinary link with a class
+of its own:
+
+```html
+<a class="wiki-link" href="/wiki/garden-tools/">Garden tools</a>
+```
+
+The default stylesheet draws it as any other link. A theme that wants wiki
+links to look different styles `.wiki-link`. The link is the same whether or
+not the page it names exists, so a theme cannot mark a missing target. See
+[Wiki links](../content.md#wiki-links).
+
+**The create button.** When a signed-in user gets the 404 at a wiki page's URL,
+the 404's context has `createWikiPage`:
+
+| Key                    | What it holds                                                        |
+| ---------------------- | -------------------------------------------------------------------- |
+| `createWikiPage.title` | The title the editor opens with, made from the slug: `Potting shed`. |
+| `createWikiPage.url`   | The wiki editor with the slug and the title filled in.               |
+
+It is absent for a visitor, on every other 404, and for a slug that the editor
+would save under another name. The default `layouts/404.njk` prints it as a
+button under the links:
+
+```njk
+{% if createWikiPage %}
+<p class="create-wiki-page"><a href="{{ createWikiPage.url }}">Create {{ createWikiPage.title }}</a></p>
+{% endif %}
+```
+
+The response is `private, no-store`, as every page a signed-in user gets is.
 
 ## The head
 

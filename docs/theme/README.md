@@ -13,6 +13,10 @@ themes/default/
     front-page.njk  the page the Reading setting serves at /
     post.njk     one post
     page.njk     one page
+    wiki.njk     one wiki page
+    wiki-index.njk      every wiki page A to Z, at the wiki base
+    wiki-index.md.njk   the wiki index's Markdown
+    wiki-index.gmi.njk  the wiki index's gemtext
     tag.njk      a tag archive, paginated
     category.njk a category archive, paginated
     author.njk   one person's archive, paginated
@@ -103,7 +107,7 @@ properties. See [Colours](page-shell.md#colours).
 - [The manifest](manifest.md). The `theme.json` that makes a folder a theme.
 - [Overriding a template](overriding-a-template.md). Replace one template and keep the rest.
 - [Adding to every page](adding-to-every-page.md). The head-end and body-end partials, analytics and scripts.
-- [The page shell](page-shell.md). The base layout, entries, listings, the head, colours, code and video.
+- [The page shell](page-shell.md). The base layout, entries, listings, wiki pages, the head, colours, code and video.
 - [Mail templates](mail-templates.md). The messages the site sends, and how to override them.
 - [The Markdown representation](markdown.md). The header and footer of every page's Markdown.
 - [The Gemini representation](gemini.md). Gemini templates, and the Markdown ones converted.

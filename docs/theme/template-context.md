@@ -24,7 +24,8 @@ Every template gets:
 | `signedIn`    | `true` when the visitor is signed in to the admin: a live session for a user who still exists. The server sends that page with `Cache-Control: private, no-store` and no validator, so no shared cache serves it to another visitor. `false` for every other visitor, and in the editor's preview, which sets `editorPreview` instead. |
 | `pluginTags`  | The tags the running plugins add, as `{ headEnd, bodyEnd }`, each a string of markup that prints unescaped, empty when no plugin adds a tag. See [Plugins](../plugins.md).                                                                                                                                                             |
 
-A document, which is one post, one page or one entry of a listing, adds:
+A document, which is one post, one page, one wiki page or one entry of a
+listing, adds:
 
 | Key                                         | What it holds                                                                                                                                                                                |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -41,7 +42,7 @@ A document, which is one post, one page or one entry of a listing, adds:
 | `page.date`                                 | The same `Date` as `date`.                                                                                                                                                                   |
 | `page.fileSlug`                             | The permalink's last segment.                                                                                                                                                                |
 | `page.inputPath`                            | The source file, relative to the content directory.                                                                                                                                          |
-| `type`                                      | `post` or `page`.                                                                                                                                                                            |
+| `type`                                      | `post`, `page` or `wiki`.                                                                                                                                                                    |
 | `permalink`, `slug`, `draft`, `description` | Straight from the front matter.                                                                                                                                                              |
 | `lang`                                      | The `lang` front matter as a canonical tag, such as `fr-CA`. Absent when it names none or no tag.                                                                                            |
 | `enclosure`                                 | The post's recording, parsed, with `player` (`audio` or `video`) and `transcript.captions`. Absent with none.                                                                                |
@@ -57,7 +58,7 @@ A document, which is one post, one page or one entry of a listing, adds:
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                                                                                               |
 | `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                                                                                                  |
 | `next`                                      | The published post after it. Absent on the newest post, and on a page.                                                                                                                       |
-| `backlinks`                                 | The site's listed posts and pages that link to it, newest first, each `{ title, url, date }`. Empty with none.                                                                               |
+| `backlinks`                                 | The site's listed posts, pages and wiki pages that link to it, newest first, each `{ title, url, date }`. Empty with none.                                                                   |
 | `newestPosts`                               | A function, front page only: `newestPosts(5)` is the five newest published posts, as entries.                                                                                                |
 | `postsPage`                                 | The page carrying the listing, as `{ title, url }`, on the front page only. Absent when the site names none.                                                                                 |
 | `archiveMonths`                             | Every published post as `{ month, posts }`, newest month first. Only on a page that says `archive: true`.                                                                                    |
@@ -82,6 +83,10 @@ author archive, adds:
 | `tag`                                      | The tag, on a tag archive only.                                                   |
 | `category`                                 | The category, on a category archive only.                                         |
 | `author`                                   | The person, on an author archive only. Same shape as a post's `author`.           |
+
+The wiki index adds `wikiGroups`, and the 404 at a wiki page's URL adds
+`createWikiPage` for a signed-in user. See
+[A wiki page and the wiki index](page-shell.md#a-wiki-page-and-the-wiki-index).
 
 These keys in `content/_data/site.json` set values that templates use:
 

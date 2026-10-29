@@ -141,6 +141,9 @@ through the editor:
 | edited while published                                                       | `Update` of its object    |
 | drafted, trashed, or its file deleted                                        | `Delete` of a `Tombstone` |
 
+Only posts federate. Pages and [wiki pages](content.md#wiki-pages) are never
+delivered and are not in the outbox.
+
 A full scan delivers nothing, and that includes the boot scan. A rebuilt index
 reports the whole archive as new. Deleting `data/geekity.db` must not announce
 the archive again.

@@ -1,7 +1,7 @@
 # The Markdown representation
 
-Every post, page and listing has a Markdown representation at its `.md` URL,
-and so do the search and a comment's own page. The 404, 410, 500 and 503
+Every post, page, wiki page and listing has a Markdown representation at its
+`.md` URL, and so do the search, the wiki index and a comment's own page. The 404, 410, 500 and 503
 pages answer a Markdown request in Markdown too. See
 [The Markdown](../public-site.md#the-markdown) for what it holds. The CMS
 writes the front matter, the page's own Markdown and the rewriting of the
@@ -83,10 +83,11 @@ inside it. The `markdownLinks` filter passes each of them through
 | `newestPosts`     | On the homepage, when it is a page: the function the front page layout has. See [Template context](template-context.md).                               |
 | `staticFrontPage` | True on the homepage when it is a page, false everywhere else.                                                                                         |
 | `archiveMonths`   | On a page whose front matter says `archive: true`: every published post as `{ month, posts }`, newest month first.                                     |
-| `type`            | `post`, `page`, `listing`, `comment` or `status`. The search is a `listing`, and a 404, 410, 500 or 503 is a `status`.                                 |
+| `type`            | `post`, `page`, `wiki`, `listing`, `comment` or `status`. The search and the wiki index are a `listing`, and a 404, 410, 500 or 503 is a `status`.     |
 | `categories`      | On a post: its categories, in the order the file lists them.                                                                                           |
 | `tags`            | On a post: its tags, in the order the file lists them.                                                                                                 |
-| `backlinks`       | On a post or a page: the site's posts and pages that link to it, newest first, as the HTML's Linked from list has them.                                |
+| `backlinks`       | On a post, a page or a wiki page: the site's documents that link to it, newest first, as the HTML's Linked from list has them.                         |
+| `wikiGroups`      | On the wiki index: its pages A to Z, a group for each first letter. See [The wiki index](#the-wiki-index).                                             |
 | `feeds`           | The feeds the HTML head advertises for the page, in the head's order.                                                                                  |
 | `postType`        | On a post: its kind, as the HTML has it, such as `reply`, `like`, `rsvp`, `event` or `review`.                                                         |
 | `cites`           | On a post: what it answers or cites, one entry for its reply target, then one for each like, repost and bookmark.                                      |
@@ -241,13 +242,15 @@ order. A theme that wants something else on one kind of page writes a layout
 template for it, named after the HTML layout that draws the same page. When
 the template exists, the Markdown after the front matter is what it writes.
 When no theme on the search path has one, the page is the header, its
-Markdown and the footer, as before. The default theme ships no layout
-templates.
+Markdown and the footer, as before. The default theme ships one layout
+template, `layouts/wiki-index.md.njk`.
 
 | Layout template             | The page                                                              |
 | --------------------------- | --------------------------------------------------------------------- |
 | `layouts/post.md.njk`       | A post.                                                               |
 | `layouts/page.md.njk`       | A page, and the homepage when it is a page and has no front page one. |
+| `layouts/wiki.md.njk`       | A wiki page.                                                          |
+| `layouts/wiki-index.md.njk` | The wiki index.                                                       |
 | `layouts/front-page.md.njk` | The homepage, when it is a page.                                      |
 | `layouts/home.md.njk`       | The homepage when it lists posts, and the posts page without its own. |
 | `layouts/posts-page.md.njk` | The page the Reading setting names for the posts.                     |
@@ -284,6 +287,22 @@ template can also include the partials, which render with the same context:
 The template is written as it renders, so the blank lines between its blocks
 are the template's own. Nunjucks keeps the line after a `{# comment #}`.
 Close a comment with `-#}` to drop it.
+
+### The wiki index
+
+The default theme's `layouts/wiki-index.md.njk` writes the wiki index's
+Markdown: the header, a `##` heading for each first letter with that letter's
+pages listed under it, and the footer:
+
+```markdown
+## G
+
+- [Garden tools](/wiki/garden-tools/index.md): What is in the shed.
+```
+
+The template reads `wikiGroups`. Each group is a `letter` and its `pages`, and
+each page is a `label`, a `url` and a `description`, absent when the page has
+none. `content` holds the same list as the CMS writes it without the template.
 
 ### A front page
 

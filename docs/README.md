@@ -12,7 +12,7 @@ CMS is and how to start a site.
 
 ## Write content
 
-- [Content](content.md). Documents on disk, the two directories, the index, dates, scheduling and unlisted posts.
+- [Content](content.md). Documents on disk, the two directories, the index, dates, scheduling, unlisted posts, wiki pages and wiki links.
 - [The admin](admin.md). The admin screens, the editor, users, menus, and tags and categories.
 - [Site settings](settings.md). The settings pages, `site.json`, and what the front page shows.
 - [Media](media.md). The media library, alt text, stripped metadata and image variants.

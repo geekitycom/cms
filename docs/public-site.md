@@ -6,10 +6,11 @@ Booting mounts the public site on the app. The routes are:
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `/`                                     | Published posts, newest first.                                                                                                           |
 | `/page/2/` and up                       | Later pages of the same archive.                                                                                                         |
-| a document's permalink                  | The post or the page, through the theme.                                                                                                 |
+| a document's permalink                  | The post, the page or the wiki page, through the theme. A wiki page's permalink is `/{wikiBase}/{slug}/`.                                |
 | `/tag/{tag}/`                           | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`.                                                               |
 | `/category/{name}/`                     | The second taxonomy, paginated the same way at `/category/{name}/page/2/`.                                                               |
 | `/author/{username}/`                   | One user's published posts, headed by their profile, paginated at `/author/{username}/page/2/`.                                          |
+| `/{wikiBase}/`                          | Every published wiki page, A to Z, on one page with no pagination or feed. See [The wiki index](content.md#the-wiki-index).              |
 | `/feed/`, `/feed/atom/`, `/feed/json/`  | The recent posts as RSS 2.0, Atom and JSON Feed.                                                                                         |
 | `/tag/{tag}/feed/` and its two siblings | The same, for one tag, as in `/tag/{tag}/feed/atom/`; `/category/{name}/feed/` likewise.                                                 |
 | `/author/{username}/feed/` and siblings | The same, for one person, as in `/author/ada/feed/atom/`.                                                                                |
@@ -693,7 +694,8 @@ default.
 [sitemap protocol's](https://www.sitemaps.org/protocol.html) `<urlset>`:
 
 - the home archive and each of its pages: `/`, `/page/2/` and so on
-- every published post and every page, at its permalink
+- every published post, page and wiki page, at its permalink
+- the wiki index, while a wiki page is published, dated by its newest page
 - every tag archive and every category archive, with each of their pages,
   under the site's configured bases
 
@@ -784,12 +786,13 @@ No page links to the sitemap. `robots.txt` names it, and crawlers look there.
 
 `/llms.txt` describes the site for a language model, in the
 [llms.txt](https://llmstxt.org/) format. It holds the site's title as a heading
-and its tagline as a quote. Three sections follow:
+and its tagline as a quote. Up to four sections follow:
 
 | Section    | What it lists                                                                                   |
 | ---------- | ----------------------------------------------------------------------------------------------- |
 | Navigation | Every item of the site's menus, each URL once, in the order the menus are stored.               |
 | Pages      | Every listed page, sorted by name. A page's `description` follows its link.                     |
+| Wiki       | Every listed wiki page, sorted by name, as the pages are.                                       |
 | Posts      | Every listed post, newest first. Each link is followed by the post's date and its feed summary. |
 
 Each entry links to the document's Markdown, the format a model reads best.
