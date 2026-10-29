@@ -4,10 +4,10 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
-import type { Browser } from '../admin/__testing__/harness.ts';
+import { csrfField, FIRST_ADMIN, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
+import { writeSignInUsers } from '../site/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 import { feedPathUnder } from '../web/feed-source.ts';
 import { OEMBED_PATH } from '../web/oembed.ts';
@@ -24,18 +24,18 @@ const NOW = new Date('2026-09-20T12:00:00.000Z');
 
 interface Site {
   cms: Cms;
-  agent: Browser;
   token: string;
 }
 
 async function site(): Promise<Site> {
+  const dataDir = await box.dir('geekity-micropub-kept-data-');
+  writeSignInUsers(dataDir);
   const cms = await box.open({
     contentDir: await box.dir('geekity-micropub-kept-content-'),
-    dataDir: await box.dir('geekity-micropub-kept-data-'),
+    dataDir,
     baseUrl: BASE,
     now: () => NOW,
   });
-  const agent = await signedIn(cms);
   const ada = findUser(cms.config.dataDir, FIRST_ADMIN.username);
   assert.ok(ada !== undefined);
   const { accessToken } = await issueTokens(
@@ -50,7 +50,7 @@ async function site(): Promise<Site> {
     },
     NOW,
   );
-  return { cms, agent, token: accessToken };
+  return { cms, token: accessToken };
 }
 
 async function postJson(cms: Cms, token: string, body: unknown): Promise<Response> {
@@ -422,7 +422,8 @@ describe('reading and changing what is kept (AC #2)', () => {
   });
 
   it('keeps them through an editor save, and moves them with a slug the editor renames', async () => {
-    const { cms, agent, token } = await site();
+    const { cms, token } = await site();
+    const agent = await signIn(cms);
     const url = await created(
       await postJson(cms, token, {
         type: ['h-entry'],

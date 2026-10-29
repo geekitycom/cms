@@ -5,12 +5,13 @@ import { after, describe, it } from 'node:test';
 
 import { mf2 } from 'microformats-parser';
 
-import { FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
+import { FIRST_ADMIN, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import { saveSettings } from '../admin/__testing__/settings.ts';
 import type { LocationSharing } from '../content/location.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
 import { changeSiteSettings } from '../__testing__/site-settings.ts';
+import { writeSignInUsers } from '../site/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 import { feedPathUnder } from '../web/feed-source.ts';
 import { OEMBED_PATH } from '../web/oembed.ts';
@@ -36,13 +37,14 @@ async function site(sharing: LocationSharing = 'none'): Promise<Site> {
   if (sharing !== 'none') {
     await changeSiteSettings(contentDir, { location_sharing: sharing });
   }
+  const dataDir = await box.dir('geekity-micropub-location-data-');
+  writeSignInUsers(dataDir);
   const cms = await box.open({
     contentDir,
-    dataDir: await box.dir('geekity-micropub-location-data-'),
+    dataDir,
     baseUrl: BASE,
     now: () => NOW,
   });
-  await signedIn(cms);
   const ada = findUser(cms.config.dataDir, FIRST_ADMIN.username);
   assert.ok(ada !== undefined);
   const { accessToken } = await issueTokens(

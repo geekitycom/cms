@@ -6,9 +6,10 @@ import { after, describe, it } from 'node:test';
 import matter from 'gray-matter';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { FIRST_ADMIN, sandbox } from '../admin/__testing__/harness.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
+import { writeSignInUsers } from '../site/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 
 remoteHostsDoNotExist();
@@ -31,13 +32,14 @@ async function site(): Promise<Site> {
   const contentDir = await box.dir('geekity-micropub-quill-content-');
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
   await writeFile(path.join(contentDir, '_data', 'syndicationTargets.json'), TARGETS, 'utf8');
+  const dataDir = await box.dir('geekity-micropub-quill-data-');
+  writeSignInUsers(dataDir);
   const cms = await box.open({
     contentDir,
-    dataDir: await box.dir('geekity-micropub-quill-data-'),
+    dataDir,
     baseUrl: BASE,
     now: () => NOW,
   });
-  await signedIn(cms);
   const ada = findUser(cms.config.dataDir, FIRST_ADMIN.username);
   assert.ok(ada !== undefined, 'the first admin exists');
   const { accessToken } = await issueTokens(
