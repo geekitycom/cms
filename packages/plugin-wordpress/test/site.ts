@@ -69,13 +69,22 @@ function fixture(which: number): Readonly<Record<Algorithm, string>> {
   return found;
 }
 
-/** One account in `data/users.json`, with a hash nobody can sign in with. */
+/**
+ * `correct horse battery` hashed with argon2id at its smallest cost. Sign-in
+ * honours the cost a hash records, so it checks this in well under a
+ * millisecond where the site's own cost takes tens.
+ */
+export const CHEAP_PASSWORD_HASH =
+  '$argon2id$v=19$m=8,t=1,p=1$Z2Vla2l0eS10ZXN0LXNhbA$NsFbSo8eArho8Bui32EukJ/FbrTl8bMJovDFMH9DCbQ';
+
+/** One account in `data/users.json`, with a hash nobody can sign in with unless one is named. */
 export interface TestUser {
   readonly username: string;
   readonly id?: number;
   readonly displayName?: string;
   readonly actorId?: string;
   readonly email?: string;
+  readonly passwordHash?: string;
 }
 
 /** Write `data/users.json` straight. */
@@ -87,7 +96,7 @@ export function writeUsers(dataDir: string, users: readonly TestUser[]): void {
     ...(user.displayName === undefined ? {} : { profile: { displayName: user.displayName } }),
     ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
     ...(user.email === undefined ? {} : { email: user.email }),
-    passwordHash: 'not-a-hash',
+    passwordHash: user.passwordHash ?? 'not-a-hash',
     createdAt: '2026-01-01T00:00:00.000Z',
   }));
   const nextId = written.reduce((top, user) => Math.max(top, user.id), 0) + 1;

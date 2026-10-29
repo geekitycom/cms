@@ -4,13 +4,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createCms, createUser } from '@geekity/cms';
+import { createCms } from '@geekity/cms';
 import type { Cms } from '@geekity/cms';
 import { pluginDataFolder } from '@geekity/cms/testing';
 
 import wordpress from '../src/index.ts';
 import { wordPressRecords } from '../src/records.ts';
-import { signIn, writeSite } from './site.ts';
+import { CHEAP_PASSWORD_HASH, signIn, writeSite, writeUsers } from './site.ts';
 
 /**
  * The plugin's screen under Plugins (TASK-282): when each old path was last
@@ -33,7 +33,7 @@ async function site(enabled = true): Promise<Cms> {
   const contentDir = await mkdtemp(path.join(tmpdir(), 'geekity-wp-screen-content-'));
   dirs.push(dataDir, contentDir);
   writeSite(contentDir, { baseUrl: 'http://localhost', author: ADA.username, enabled });
-  await createUser({ dataDir, ...ADA });
+  writeUsers(dataDir, [{ username: ADA.username, passwordHash: CHEAP_PASSWORD_HASH }]);
   const cms = createCms({ dataDir, contentDir, watch: false, plugins: [wordpress] });
   started.push(cms);
   return cms;
