@@ -11,7 +11,7 @@ import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
+import { createUser } from './__testing__/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { ACCESS_TOKEN_LIFETIME_MS, verifyAccessToken } from '../indieauth/tokens.ts';
 

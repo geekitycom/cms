@@ -12,7 +12,7 @@ import { Hono } from 'hono';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { GeekityEnv } from './env.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
+import { createUser } from './__testing__/users.ts';
 import { requireBearer } from './indieauth-bearer.ts';
 import type { Guard } from './indieauth-bearer.ts';
 import type { AuthorizationCode } from '../indieauth/grants.ts';

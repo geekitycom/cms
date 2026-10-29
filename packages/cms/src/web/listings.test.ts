@@ -15,7 +15,8 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
+import { createUser } from './__testing__/users.ts';
 import { createTemplateEnvironment } from '../theme/templates.ts';
 import { systemClock } from '../util/clock.ts';
 

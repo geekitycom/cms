@@ -20,7 +20,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
+import { createUser } from './__testing__/users.ts';
 import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 import type { Cms } from '../index.ts';
 

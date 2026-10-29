@@ -6,7 +6,8 @@ import { after, describe, it } from 'node:test';
 
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
+import { createUser } from './__testing__/users.ts';
 
 /**
  * The author archive and its feeds, from the outside (TASK-67).

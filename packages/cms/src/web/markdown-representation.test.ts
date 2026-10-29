@@ -7,7 +7,8 @@ import { after, describe, it } from 'node:test';
 import { LOCATIONS, dataPath } from '../files/data-files.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
+import { createUser } from './__testing__/users.ts';
 
 /**
  * A page's Markdown carries its place in the site: the front matter a Markdown

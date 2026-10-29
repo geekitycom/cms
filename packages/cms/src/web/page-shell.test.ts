@@ -29,7 +29,8 @@ import sharp from 'sharp';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
+import { createUser } from './__testing__/users.ts';
 import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 
 const box = sandbox();

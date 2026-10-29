@@ -7,7 +7,8 @@ import type { TestContext } from 'node:test';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { RECHECK_MS } from '../maintenance.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
+import { createUser } from './__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());

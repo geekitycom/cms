@@ -6,7 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
+import { createUser } from './__testing__/users.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
