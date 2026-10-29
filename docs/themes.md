@@ -106,7 +106,8 @@ them.
 Templates are Nunjucks (decision-4). The default theme lives in
 `packages/cms/themes/default` and ships inside the package:
 
-- `layouts/` holds the base layout, home, post, page, tag archive and 404.
+- `layouts/` holds the base layout, home, post, page, wiki page, wiki index,
+  tag archive and 404.
 - `partials/` holds the post list, the pager, the bio and the tag macros.
 - `static/style.css` is served at `/theme/style.css`.
 
@@ -171,6 +172,34 @@ relies on meets 3:1. A colour change that breaks either ratio fails the build.
 The kicker above each entry names its kind. Only an article has a headline, so
 a note or a reply shows just its words. The bio under an entry shows the person
 who wrote it and nothing else.
+
+## Wiki layouts
+
+[Wiki pages](content.md#wiki-pages) are drawn by two layouts that posts and
+pages do not use:
+
+- `layouts/wiki.njk` draws one wiki page. Its context is a page's, with `type`
+  set to `wiki` and no date or taxonomy. The default layout prints the title,
+  the body, `Last updated` with the `updated` date, and the backlinks.
+- `layouts/wiki-index.njk` draws the index at `/{wikiBase}/`. Its context has
+  `title` (`Wiki`) and `wikiGroups`, one `{ letter, pages }` group for each
+  first letter, A to Z. The default layout prints a line of letters to jump
+  to, then each letter as an `h2` with `id="wiki-index-{letter}"` over its
+  list of pages.
+
+A site theme that has neither falls back to the default theme's, as for any
+template. `layouts/wiki-index.md.njk` and `layouts/wiki-index.gmi.njk` write the
+index's Markdown and gemtext. See [Layout templates](theme/markdown.md#layout-templates).
+
+Every `[[wiki link]]` in a body renders as `<a class="wiki-link" href="…">`.
+Style `.wiki-link` to make wiki links look different from other links. The
+default stylesheet does not.
+
+A signed-in user's 404 at a wiki page's URL has `createWikiPage`, a `title`
+and a `url` for a button that opens the wiki editor. The default `404.njk`
+prints it as `p.create-wiki-page`. See
+[A wiki page and the wiki index](theme/page-shell.md#a-wiki-page-and-the-wiki-index)
+for the full context of all three.
 
 ## Template context
 

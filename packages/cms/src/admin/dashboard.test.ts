@@ -81,6 +81,7 @@ describe('the admin shell', () => {
       ['Dashboard', '/admin'],
       ['Posts', '/admin/posts'],
       ['Pages', '/admin/pages'],
+      ['Wiki', '/admin/wiki'],
       ['Media', '/admin/media'],
       ['Comments', '/admin/comments'],
       ['Messages', '/admin/messages'],
@@ -291,6 +292,10 @@ const COUNTED: Seed[] = [
   },
   { file: 'pages/about.md', title: 'About', permalink: '/about/' },
   { file: 'pages/now.md', title: 'Now', permalink: '/now/' },
+  { file: 'wiki/compost.md', title: 'Compost', permalink: '/wiki/compost/' },
+  { file: 'wiki/seeds.md', title: 'Seeds', permalink: '/wiki/seeds/' },
+  { file: 'wiki/beans.md', title: 'Beans', permalink: '/wiki/beans/' },
+  { file: 'wiki/unfinished.md', title: 'Unfinished', permalink: '/wiki/unfinished/', draft: true },
 ];
 
 const RECENT: Seed[] = Array.from({ length: 7 }, (_, index) => {
@@ -319,8 +324,9 @@ describe('the dashboard', async () => {
   it('counts what the index holds, each number under its label', () => {
     assert.deepEqual(counts(counted), [
       { label: 'Published posts', value: '3', href: undefined },
-      { label: 'Drafts', value: '1', href: undefined },
+      { label: 'Drafts', value: '2', href: undefined },
       { label: 'Pages', value: '2', href: undefined },
+      { label: 'Wiki pages', value: '3', href: undefined },
       { label: 'Followers', value: '0', href: '/admin/federation' },
       { label: 'Comments waiting', value: '0', href: '/admin/comments?status=pending' },
       { label: 'Messages unread', value: '0', href: '/admin/messages' },

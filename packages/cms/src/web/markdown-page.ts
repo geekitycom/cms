@@ -2,6 +2,7 @@ import { dump } from 'js-yaml';
 
 import type { AuthorContext } from '../site/authors.ts';
 import type { MarkdownCommentThread } from './markdown-conversation.ts';
+import type { WikiGroup } from './wiki-index.ts';
 
 /**
  * The Markdown representation of a page: front matter, the theme's header, the
@@ -44,7 +45,7 @@ export interface MarkdownFeed extends MarkdownLink {
 export interface MarkdownChrome {
   /** The path the page is served at, which marks the current menu item. */
   readonly url: string;
-  readonly type: 'post' | 'page' | 'listing' | 'comment' | 'status';
+  readonly type: 'post' | 'page' | 'wiki' | 'listing' | 'comment' | 'status';
   /** The heading the header writes, absent when the body opens with its own. */
   readonly title?: string | undefined;
   readonly previous?: MarkdownLink | undefined;
@@ -57,6 +58,8 @@ export interface MarkdownChrome {
   readonly feeds: readonly MarkdownFeed[];
   /** On a comment's own page: the comment and its place in the thread. */
   readonly thread?: MarkdownCommentThread | undefined;
+  /** On the wiki index: its pages A to Z, a group for each first letter. */
+  readonly wikiGroups?: readonly WikiGroup<MarkdownEntry>[] | undefined;
 }
 
 /**

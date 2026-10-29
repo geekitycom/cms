@@ -5,6 +5,7 @@ import { exists } from '../util/files.ts';
 import type { Document } from './document.ts';
 import { handleDirectory } from './handles.ts';
 import { parseDocument } from './parser.ts';
+import { wikiBaseOf } from './slug.ts';
 import { isTrashedPath, TRASH_DIRECTORY } from './store.ts';
 import type { DocumentLookup, IndexWriter } from './store.ts';
 import type { DocumentChange } from './sync.ts';
@@ -78,6 +79,7 @@ export async function moveDocumentFile(
     path: target,
     type: document.type,
     handles: handleDirectory(contentDir),
+    wikiBase: wikiBaseOf(document),
   });
   store.remove(document.path);
   store.upsert(moved);

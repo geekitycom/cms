@@ -8,6 +8,7 @@ import { stringOrEmpty } from '../util/forms.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { creditWriting } from '../writing/ledger.ts';
 import { returnPath } from './documents.ts';
+import { isDocumentType } from '../content/document.ts';
 import { flash, noteClearedAutosave } from './flash.ts';
 
 export const AUTOSAVE_PATH = `${ADMIN_PREFIX}/autosave`;
@@ -99,7 +100,7 @@ function identityOf(
 ): Pick<AutosaveRecord, 'type' | 'kind' | 'path'> | undefined {
   const kind = stringOrEmpty(body['kind']);
   if (key.kind === 'new') {
-    const type = stringOrEmpty(body['type']) === 'page' ? 'page' : 'post';
+    const type = isDocumentType(body['type']) ? body['type'] : 'post';
     return type === 'post' && kind !== '' ? { type, kind } : { type };
   }
   const document = c.var.store.getByPath(key.path);

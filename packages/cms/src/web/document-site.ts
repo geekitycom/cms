@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 
 import type { DocumentSite } from '../content/write.ts';
+import { permalinkBasesFromSettings } from '../site/settings.ts';
 import { findUserById } from '../site/users.ts';
 import type { GeekityEnv } from './env.ts';
 
@@ -37,6 +38,7 @@ export function documentSiteFrom(
     announce: variables.announce,
     writer,
     timezone: variables.siteAtRequestStart.timezone,
+    wikiBase: permalinkBasesFromSettings(variables.siteAtRequestStart).wiki,
     citedContext: (target) => variables.replyContexts.describe(target),
     storedContext: (target) => variables.replyContexts.read(target, variables.siteAtRequestStart),
     learnHandles: variables.learnHandles,

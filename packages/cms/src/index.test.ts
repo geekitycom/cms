@@ -122,6 +122,7 @@ describe('the content index', () => {
       total: 0,
       posts: 0,
       pages: 0,
+      wiki: 0,
       drafts: 0,
       scheduled: 0,
       trashed: 0,

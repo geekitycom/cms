@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 
-import type { Document } from '../content/document.ts';
+import type { Document, DocumentType } from '../content/document.ts';
 import { isListed } from '../content/served.ts';
 import { calendarDayIn } from '../content/time.ts';
 import type { GeekityEnv } from './env.ts';
@@ -20,6 +20,7 @@ import { conditionalHeaders, documentLabel, encodePath } from './request.ts';
 import { notFound } from './status-pages.ts';
 import { servedPath, siteView } from './site-view.ts';
 import { sitemapResponse } from './sitemap.ts';
+import { wikiIndexHref } from './wiki-index.ts';
 import type { SitemapUrl } from './sitemap.ts';
 
 /**
@@ -51,8 +52,9 @@ export function llmsTxt(c: Context<GeekityEnv>): Response {
 
 /**
  * Every URL the public site publishes, in the order the sitemap lists them:
- * the home archive's pages, then every post and page, then every tag archive
- * and every category archive with their own pages.
+ * the home archive's pages, then every post, page and wiki page, the wiki
+ * index, then every tag archive and every category archive with their own
+ * pages.
  */
 function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   const view = siteView(c);
@@ -70,7 +72,7 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
     }
   };
 
-  const { posts, pages: documents } = listedDocuments(c);
+  const { posts, pages: documents, wiki } = listedDocuments(c);
 
   // The listing's pages, wherever it lives: under `/`, under the posts page,
   // or nowhere at all on a site whose homepage is a page and which named no
@@ -83,13 +85,15 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   // is published at one URL, and it is this one.
   if (pages.home !== undefined) urls.push({ loc: '/', lastmod: lastModifiedOf(pages.home) });
 
-  for (const document of [...posts, ...documents]) {
+  for (const document of [...posts, ...documents, ...wiki]) {
     // The homepage answers at `/` and redirects from its own permalink, and
     // the posts page is the listing's first page, which is already listed:
     // neither is advertised twice.
     if (document.path === pages.home?.path || document.path === pages.posts?.path) continue;
     urls.push({ loc: document.permalink, lastmod: lastModifiedOf(document) });
   }
+
+  if (wiki.length > 0) urls.push({ loc: wikiIndexHref(view.bases), lastmod: latestModified(wiki) });
 
   // A taxonomy archive exists only while something public carries the term,
   // which is exactly what these two queries report.
@@ -109,27 +113,26 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
 }
 
 /**
- * Every post and every page the public site lists, posts newest first, read in
- * one query: what the sitemap and `/llms.txt` both publish, so the two cannot
- * disagree. The index's query already excludes drafts, the trash, documents
+ * Every post, page and wiki page the public site lists, posts newest first,
+ * read in one query: what the sitemap and `/llms.txt` both publish, so the two
+ * cannot disagree. The index's query already excludes drafts, the trash, documents
  * whose date has not arrived and unlisted or private ones; {@link isListed} is
  * asked again with the store's own clock so the two answers cannot drift apart.
  */
-function listedDocuments(c: Context<GeekityEnv>): { posts: Document[]; pages: Document[] } {
+function listedDocuments(c: Context<GeekityEnv>): Record<'posts' | 'pages' | 'wiki', Document[]> {
   const now = c.var.store.now();
-  const posts: Document[] = [];
-  const pages: Document[] = [];
+  const listed: Record<DocumentType, Document[]> = { post: [], page: [], wiki: [] };
   for (const document of c.var.store.listListed()) {
     if (!isListed(document, now)) continue;
-    (document.type === 'post' ? posts : pages).push(document);
+    listed[document.type].push(document);
   }
-  return { posts, pages };
+  return { posts: listed.post, pages: listed.page, wiki: listed.wiki };
 }
 
 /**
- * What a generated `/llms.txt` lists: every listed page by its label, then
- * every listed post, newest first, with its date and the summary the feeds
- * carry, each linked to its Markdown.
+ * What a generated `/llms.txt` lists: every listed page by its label, every
+ * listed wiki page by its label, then every listed post, newest first, with
+ * its date and the summary the feeds carry, each linked to its Markdown.
  *
  * The homepage is listed at `/`, which is where it is published; its own
  * permalink redirects there.
@@ -138,7 +141,7 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
   const site = c.var.renderer.site();
   const timezone = siteTimezone(site);
   const home = siteView(c).pages.home;
-  const { posts, pages } = listedDocuments(c);
+  const { posts, pages, wiki } = listedDocuments(c);
 
   const entry = (document: Document): LlmsEntry => ({
     title: documentLabel(c, document),
@@ -157,6 +160,7 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
     ),
     navigation: navigationLinks(site).map((item) => ({ title: item.label, href: item.url })),
     pages: pages.map(entry).sort((a, b) => a.title.localeCompare(b.title)),
+    wiki: wiki.map(entry).sort((a, b) => a.title.localeCompare(b.title)),
     posts: posts.map((document) => ({
       ...entry(document),
       date: document.date === undefined ? undefined : calendarDayIn(document.date, timezone),

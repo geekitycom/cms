@@ -10,7 +10,7 @@ import {
   ORIGINAL_NAME_FRONT_MATTER_KEY,
   originalOf,
 } from './original.ts';
-import { parseDocument } from './parser.ts';
+import { ignoredWikiKeys, parseDocument } from './parser.ts';
 import { replyTarget } from './post-type.ts';
 import { DuplicatePermalinkError } from './store.ts';
 import type { DocumentLookup, IndexWriter } from './store.ts';
@@ -31,10 +31,11 @@ export interface CreateReconcilerOptions {
   contentDir: string;
   logger: SyncLogger;
   emit: (change: DocumentChange) => Promise<void>;
+  wikiBase?: (() => string) | undefined;
 }
 
 export function createReconciler(options: CreateReconcilerOptions): Reconciler {
-  const { store, contentDir, logger, emit } = options;
+  const { store, contentDir, logger, emit, wikiBase } = options;
   const handles = handleDirectory(contentDir);
 
   async function indexOverStaleRow(document: Document, origin: ChangeOrigin): Promise<void> {
@@ -82,15 +83,18 @@ export function createReconciler(options: CreateReconcilerOptions): Reconciler {
 
     let document: Document;
     try {
-      document = parseDocument(source, { path: relativePath, handles });
+      document = parseDocument(source, { path: relativePath, handles, wikiBase: wikiBase?.() });
     } catch (error) {
       logger.warn(`Skipping ${relativePath}: ${messageOf(error)}`);
       return 'skipped';
     }
 
-    if (previous !== undefined && previous.hash === document.hash) return 'unchanged';
+    if (previous !== undefined && indexedRowStillCurrent(previous, document)) {
+      return 'unchanged';
+    }
 
     warnAboutIgnoredFields(relativePath, document, logger);
+    if (document.type === 'wiki') warnAboutIgnoredWikiKeys(relativePath, source, logger);
 
     try {
       await indexOverStaleRow(document, origin);
@@ -130,6 +134,26 @@ function warnAboutIgnoredFields(
       `${relativePath} names ${ORIGINAL_NAME_FRONT_MATTER_KEY} ${JSON.stringify(name)} with no absolute http or https ${ORIGINAL_FRONT_MATTER_KEY}, so it names nothing.`,
     );
   }
+}
+
+function warnAboutIgnoredWikiKeys(relativePath: string, source: string, logger: SyncLogger): void {
+  const ignored = ignoredWikiKeys(source);
+  if (ignored.length === 0) return;
+  logger.warn(
+    `${relativePath} names ${ignored.join(', ')}, which a wiki page does not read. Its URL is the wiki base and its file name, and it has no date, tags, categories or reply target. The next save drops them.`,
+  );
+}
+
+function indexedRowStillCurrent(previous: Document, next: Document): boolean {
+  return (
+    previous.hash === next.hash &&
+    previous.permalink === next.permalink &&
+    !wikiLinkHtmlStale(previous, next)
+  );
+}
+
+function wikiLinkHtmlStale(previous: Document, next: Document): boolean {
+  return next.body.includes('[[') && previous.html !== next.html;
 }
 
 async function readSource(file: string): Promise<string | undefined> {

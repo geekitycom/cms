@@ -20,6 +20,12 @@ describe('the restricted Markdown a comment is rendered with', () => {
     assert.match(html, /&lt;script&gt;/);
   });
 
+  it('leaves a wiki link as the brackets the commenter typed', () => {
+    const html = renderCommentMarkdown('See [[Some page]].');
+
+    assert.equal(html, '<p>See [[Some page]].</p>\n');
+  });
+
   it('marks every link nofollow ugc', () => {
     const html = renderCommentMarkdown('[a link](https://example.com/page)');
 

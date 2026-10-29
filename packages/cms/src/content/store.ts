@@ -91,6 +91,8 @@ export interface ArchiveReader {
    * last: what the sitemap and `llms.txt` publish, in one query.
    */
   listListed(): Document[];
+  /** Published, untrashed, listed wiki pages, in no particular order: what the wiki index lists. */
+  listWiki(): Document[];
   /**
    * The published posts either side of one by date: what a theme links as
    * previous and next under an entry.
@@ -414,9 +416,11 @@ export interface ContentCounts {
   posts: number;
   /** Published, untrashed, already-due, listed pages. */
   pages: number;
-  /** Untrashed drafts of either type. */
+  /** Published, untrashed, listed wiki pages. */
+  wiki: number;
+  /** Untrashed drafts of any type. */
   drafts: number;
-  /** Untrashed non-drafts of either type whose date has not arrived yet. */
+  /** Untrashed non-drafts of any type whose date has not arrived yet. */
   scheduled: number;
   /** Documents under `_trash/`. */
   trashed: number;

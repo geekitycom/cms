@@ -1,3 +1,4 @@
+import type { DocumentType } from '../content/document.ts';
 import { findThemeFile } from '../theme/themes.ts';
 import type { TextFormat } from './negotiate.ts';
 
@@ -5,6 +6,8 @@ export const TEMPLATES = {
   home: 'layouts/home.njk',
   post: 'layouts/post.njk',
   page: 'layouts/page.njk',
+  wiki: 'layouts/wiki.njk',
+  wikiIndex: 'layouts/wiki-index.njk',
   tag: 'layouts/tag.njk',
   category: 'layouts/category.njk',
   author: 'layouts/author.njk',
@@ -15,6 +18,12 @@ export const TEMPLATES = {
   serverError: 'layouts/500.njk',
   maintenance: 'layouts/503.njk',
 } as const;
+
+export const DOCUMENT_TEMPLATES: Readonly<Record<DocumentType, string>> = {
+  post: TEMPLATES.post,
+  page: TEMPLATES.page,
+  wiki: TEMPLATES.wiki,
+};
 
 export const OPTIONAL_TEMPLATES = {
   frontPage: 'layouts/front-page.njk',

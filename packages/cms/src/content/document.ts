@@ -1,5 +1,14 @@
-/** Posts are dated and syndicated; pages are standing content. */
-export type DocumentType = 'post' | 'page';
+/**
+ * Posts are dated and syndicated; pages are standing content; wiki pages are
+ * linked notes whose URL is the wiki base and their file name.
+ */
+export type DocumentType = 'post' | 'page' | 'wiki';
+
+export const DOCUMENT_TYPES: readonly DocumentType[] = ['post', 'page', 'wiki'];
+
+export function isDocumentType(value: unknown): value is DocumentType {
+  return DOCUMENT_TYPES.includes(value as DocumentType);
+}
 
 /**
  * Everything about how a post federates, whether its author wrote it or the
@@ -30,7 +39,7 @@ export interface ActivityPubMetadata {
  * from equivalent files compare equal.
  */
 export interface Document {
-  /** Whether the file lives under `posts/` or `pages/`. */
+  /** Whether the file lives under `posts/`, `pages/` or `wiki/`. */
   type: DocumentType;
   /** Path relative to the content directory, with `/` separators. */
   path: string;

@@ -78,6 +78,7 @@ import {
   createRenderer,
   createSiteDataSource,
   createThemeSource,
+  permalinkBases,
   themeName,
 } from '../web/index.ts';
 import { pageSources } from '../web/page-sources.ts';
@@ -173,6 +174,7 @@ export function createServices({
     contentDir: resolved.contentDir,
     watch: resolved.watch,
     debounce: resolved.watchDebounce,
+    wikiBase: () => permalinkBases(siteData.read()).wiki,
   });
   content.onSettled(async () => {
     await followAllMovedComments(commentRecords, store);
@@ -416,6 +418,7 @@ export function createServices({
   settings.watch(SITE.relays, async () => {
     await relays.sync();
   });
+  settings.watch(SITE.wiki_base, rescanOnWikiBaseChange(content));
   settings.watch(SITE.gemini, async ({ next }) => {
     if (next) await warnAboutGeminiCertificate(resolved, settings);
   });
@@ -634,4 +637,10 @@ function stopPlugins(plugins: PluginRegistry, ending: Ending): Promise<void> {
     case 'close':
       return plugins.close();
   }
+}
+
+function rescanOnWikiBaseChange(content: ContentSync): () => Promise<void> {
+  return async () => {
+    await content.sync();
+  };
 }

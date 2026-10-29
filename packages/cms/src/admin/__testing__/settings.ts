@@ -50,6 +50,7 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
   permalinks: {
     tag_base: 'tag',
     category_base: 'category',
+    wiki_base: 'wiki',
   },
   discussion: {
     comments: '1',

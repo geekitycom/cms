@@ -45,12 +45,18 @@ import { representationHref } from './negotiate.ts';
 import type { TextFormat } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
 import type { LayoutParts, ThemeText } from './render.ts';
-import { OPTIONAL_TEMPLATES, STATUS_PAGES, TEMPLATES } from './theme-templates.ts';
+import {
+  DOCUMENT_TEMPLATES,
+  OPTIONAL_TEMPLATES,
+  STATUS_PAGES,
+  TEMPLATES,
+} from './theme-templates.ts';
 import type { StatusPageName } from './theme-templates.ts';
 import { classifyPath } from './paths.ts';
 import { documentLabel, encodePath } from './request.ts';
 import { SEARCH_PATH, snippetMarkdown } from './search.ts';
 import { servedPath, siteView } from './site-view.ts';
+import type { WikiGroup } from './wiki-index.ts';
 
 export function documentMarkdown(
   c: Context<GeekityEnv>,
@@ -97,7 +103,7 @@ export function documentMarkdown(
     format,
     namedAuthor(documentFrontMatter({ ...document, permalink: url }), writer),
     chrome,
-    [rewriteMarkdownLinks(body, siteHrefFor(c, url, format))],
+    [rewriteMarkdownLinks(body, siteHrefFor(c, url, format), siteView(c).bases.wiki)],
     {
       frontPage: url === '/' ? document : undefined,
       document,
@@ -105,7 +111,7 @@ export function documentMarkdown(
       layouts:
         url === '/'
           ? [OPTIONAL_TEMPLATES.frontPage, TEMPLATES.page]
-          : [document.type === 'post' ? TEMPLATES.post : TEMPLATES.page],
+          : [DOCUMENT_TEMPLATES[document.type]],
     },
   );
 }
@@ -167,11 +173,47 @@ export function listingMarkdown(
         : rewriteMarkdownLinks(
             normalizeBody(document.body),
             siteHrefFor(c, document.permalink, format),
+            siteView(c).bases.wiki,
           ),
       entries.length === 0 ? '' : `## Posts\n\n${entryList(entries, linkUrl)}`,
       pager.length === 0 ? '' : `## More posts\n\n${linkList(pager, linkUrl)}`,
     ],
     { layouts },
+  );
+}
+
+export function wikiIndexMarkdown(
+  c: Context<GeekityEnv>,
+  page: { href: string; title: string; groups: readonly WikiGroup<Document>[] },
+  format: TextFormat,
+): string {
+  const url = page.href;
+  const linkUrl = siteUrlFor(c, url, format);
+  const wikiGroups = page.groups.map(({ letter, pages }) => ({
+    letter,
+    pages: pages.map((document) => ({
+      label: documentLabel(c, document),
+      url: document.permalink,
+      description: format === 'gemini' ? undefined : document.description,
+    })),
+  }));
+  const chrome: MarkdownChrome = {
+    url,
+    type: 'listing',
+    title: page.title,
+    feeds: siteFeeds(c.var.renderer.site().title),
+    wikiGroups,
+  };
+
+  return textPage(
+    c,
+    format,
+    { title: page.title, permalink: url },
+    chrome,
+    wikiGroups.map(
+      ({ letter, pages }) => `## ${escapeMarkdown(letter)}\n\n${entryList(pages, linkUrl)}`,
+    ),
+    { layouts: [TEMPLATES.wikiIndex] },
   );
 }
 
@@ -458,7 +500,7 @@ function siteHrefFor(
     for (const candidate of candidates) {
       const match = classifyPath(view, candidate);
       if (match?.kind === 'document') return servedPath(match.document, view.pages.home);
-      if (match?.kind === 'listing') return candidate;
+      if (match?.kind === 'listing' || match?.kind === 'wiki-index') return candidate;
     }
     for (const candidate of candidates) {
       const moved = store.getByFormerPermalink(candidate);

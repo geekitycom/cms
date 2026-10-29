@@ -30,7 +30,7 @@ A feed URL without its trailing slash redirects to the canonical one in a
 single hop.
 
 A feed holds the newest published posts, newest first. Drafts, documents in the
-trash, and pages are never in a feed. A term that no published post carries
+trash, pages and wiki pages are never in a feed. A term that no published post carries
 answers 404, not an empty feed. `feedSize` in `content/_data/site.json` sets
 how many entries a feed holds. The default is 20, which is more than an archive
 page on purpose. A feed reader that polls once a day then does not miss a post

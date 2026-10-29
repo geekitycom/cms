@@ -12,7 +12,7 @@ import { normalizeBody, serializeDocument } from './writer.ts';
 
 const KNOWN_KEYS = new Set<string>(KNOWN_FRONT_MATTER_KEYS);
 
-/** Where the file came from, which is what tells a post from a page. */
+/** Where the file came from, which is what tells a post from a page or a wiki page. */
 export interface ParseDocumentOptions {
   /** Path relative to the content directory, e.g. `posts/2026-09-02-hello.md`. */
   path: string;
@@ -20,6 +20,11 @@ export interface ParseDocumentOptions {
   type?: DocumentType | undefined;
   /** The resolved fediverse handles, so a mention renders as a link. */
   handles?: HandleDirectory | undefined;
+  /**
+   * The first URL segment of the wiki, which a wiki page's permalink and a
+   * wiki link are spelled under. The default base when absent.
+   */
+  wikiBase?: string | undefined;
 }
 
 /**
@@ -41,19 +46,21 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
   // two documents parsed from identical text never share nested data objects.
   const parsed = matter(text, {});
 
-  const data = parsed.data;
   const type = options.type ?? typeForPath(path);
+  const data = type === 'wiki' ? wikiFrontMatter(parsed.data) : parsed.data;
   const title = asString(data['title']) ?? '';
   const date = asDate(data['date'], 'date', path);
   const body = normalizeBody(parsed.content);
 
   const permalink =
-    asString(data['permalink']) ??
-    defaultPermalink({
-      type,
-      slug: fallbackSlug(title, path),
-      date,
-    });
+    type === 'wiki'
+      ? defaultPermalink({ type, slug: wikiSlug(title, path), wikiBase: options.wikiBase })
+      : (asString(data['permalink']) ??
+        defaultPermalink({
+          type,
+          slug: fallbackSlug(title, path),
+          date,
+        }));
 
   const content: DocumentContent = {
     title,
@@ -77,27 +84,46 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
     type,
     path,
     slug: slugForPermalink(permalink) ?? fallbackSlug(title, path),
-    html: renderMarkdown(body, options.handles),
-    hash: hashDocument(content),
+    html: renderMarkdown(body, options.handles, options.wikiBase),
+    hash: hashDocument(content, type),
   };
 }
 
 /** The SHA-256 a {@link Document} carries: a hash of its canonical file text. */
-export function hashDocument(content: DocumentContent): string {
-  return createHash('sha256').update(serializeDocument(content), 'utf8').digest('hex');
+export function hashDocument(content: DocumentContent, type?: DocumentType): string {
+  return createHash('sha256').update(serializeDocument(content, type), 'utf8').digest('hex');
+}
+
+export function ignoredWikiKeys(source: string): string[] {
+  const text = source.replace(/\r\n?/g, '\n');
+  if (!/^---\n/.test(text)) return [];
+  return Object.keys(matter(text, {}).data).filter((key) => IGNORED_WIKI_KEYS.has(key));
+}
+
+function wikiFrontMatter(data: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(data).filter(([key]) => !IGNORED_WIKI_KEYS.has(key)));
+}
+
+const IGNORED_WIKI_KEYS = new Set(['permalink', 'date', 'tags', 'categories', 'in-reply-to']);
+
+function wikiSlug(title: string, path: string): string {
+  const basename = path.split('/').at(-1) ?? '';
+  return slugify(basename.replace(/\.(md|markdown)$/i, '')) || slugify(title) || 'untitled';
 }
 
 /**
- * Decide whether a path holds a post or a page. Only the directory matters, so
- * a file that moves between `posts/` and `pages/` changes type with it.
+ * Decide whether a path holds a post, a page or a wiki page. Only the
+ * directory matters, so a file that moves between `posts/`, `pages/` and
+ * `wiki/` changes type with it.
  */
 export function typeForPath(path: string): DocumentType {
   for (const segment of path.split('/')) {
     if (segment === 'posts') return 'post';
     if (segment === 'pages') return 'page';
+    if (segment === 'wiki') return 'wiki';
   }
   throw new TypeError(
-    `Cannot tell the type of ${path}: it is under neither posts/ nor pages/. Pass an explicit type.`,
+    `Cannot tell the type of ${path}: it is under none of posts/, pages/ and wiki/. Pass an explicit type.`,
   );
 }
 

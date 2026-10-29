@@ -926,3 +926,8 @@ them. Each event also carries the content-relative `path` and `origin`. A
 `schedule` change carries no `previous`. No earlier event announced the post,
 so every subscriber sees its arrival as a creation. `on()` returns the function
 that unsubscribes. `once()` and `off()` also exist.
+
+A document's `type` is `post`, `page` or `wiki`. Wiki pages publish and change
+like the others, so a hook or a listener that acts on posts only checks
+`type`. An editor action's draft names the same three types. A plugin that
+switches on the type needs a case for `wiki`.

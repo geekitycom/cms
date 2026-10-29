@@ -17,8 +17,9 @@ await writeFile(file, serializeDocument({ ...document, draft: false }));
 
 `parseDocument` does four things:
 
-- It reads the type from the directory (`posts/` or `pages/`).
-- It fills in a default permalink when the file has none.
+- It reads the type from the directory (`posts/`, `pages/` or `wiki/`).
+- It fills in a default permalink when the file has none. A wiki page always
+  gets one, because it has no permalink of its own.
 - It normalises dates to ISO 8601 strings.
 - It hashes the document's canonical text.
 
@@ -28,20 +29,23 @@ document writes the same bytes, and a real edit produces a small diff.
 The admin form proposes a slug with `slugify(title)` and a permalink with
 `defaultPermalink({ type, slug, date })`:
 
-| Type | Default permalink      |
-| ---- | ---------------------- |
-| Post | `/{yyyy}/{mm}/{slug}/` |
-| Page | `/{slug}/`             |
+| Type      | Default permalink      |
+| --------- | ---------------------- |
+| Post      | `/{yyyy}/{mm}/{slug}/` |
+| Page      | `/{slug}/`             |
+| Wiki page | `/{wikiBase}/{slug}/`  |
 
 `renderMarkdown(body)` is markdown-it with Eleventy's `html: true`. It adds
-footnotes, heading ids and a language class on fenced code.
+footnotes, heading ids and a language class on fenced code. It also turns
+`[[wiki links]]` into links. See [Wiki links](#wiki-links).
 
 The fixtures that this package and the Eleventy compatibility test both build
 from are in `packages/cms/test/fixtures/content/`.
 
 ## Titles
 
-A title is optional on a post and on a page. A file with no `title`, or with
+A title is optional on a post and on a page. A wiki page needs one: the
+editor will not save it without a title. A file with no `title`, or with
 `title: ''`, parses with an empty `document.title`. A post with no title is a
 note. A page with no title suits a static homepage or a landing page with no
 heading of its own. The editor saves either one. Without a title, it takes the
@@ -69,8 +73,8 @@ or lists it uses its label.
 | Search results, `llms.txt`, backlinks, the comments feed and its link, oEmbed and the contact message records | The label.                                               |
 | A menu item that points at the page                                                                           | The item's own label. A menu never reads a page's title. |
 
-Micropub creates posts only. It refuses a page's URL on an update, so it never
-creates or edits a page.
+Micropub creates posts only. It refuses the URL of a page or a wiki page on an
+update, so it never creates or edits either.
 
 ## Two directories: `content/` and `data/`
 
@@ -83,7 +87,7 @@ the same directory reads all of it, and everything in it is public.
 
 | Path                                                 | What it holds                                                    |
 | ---------------------------------------------------- | ---------------------------------------------------------------- |
-| `content/posts/`, `content/pages/`                   | The Markdown documents, `_trash/` included.                      |
+| `content/posts/`, `content/pages/`, `content/wiki/`  | The Markdown documents, `_trash/` included.                      |
 | `content/uploads/`                                   | Uploaded files, with their location and camera metadata removed. |
 | `content/_data/site.json`                            | Every site setting.                                              |
 | `content/_data/media.json`                           | The media library's alt text, keyed by upload.                   |
@@ -232,7 +236,7 @@ cms.store.listPosts({ limit: 10, offset: 0 }); // published, newest first
 cms.store.listByTag('eleventy', { type: 'post' });
 cms.store.listByCategory('general'); // the second taxonomy, same shape
 cms.store.listAll({ draft: true }); // the admin's view
-cms.store.counts(); // { total, posts, pages, drafts, scheduled, trashed }
+cms.store.counts(); // { total, posts, pages, wiki, drafts, scheduled, trashed }
 ```
 
 A row converts back to the `Document` it came from. Optional fields stay absent
@@ -264,7 +268,7 @@ The index follows these rules:
 ## Keeping the index in step
 
 Before it listens, `serve()` scans `contentDir`. It indexes every Markdown file
-under `posts/` and `pages/` and drops index rows whose file is gone. After that,
+under `posts/`, `pages/` and `wiki/` and drops index rows whose file is gone. After that,
 a watcher keeps the index and the files in step. The index never serves a
 document that differs from its file. An edit on disk reaches the live site in
 about a second, with no restart. `cms.sync()` runs the same scan once, for
@@ -275,13 +279,13 @@ const result = await cms.sync();
 // { scanned, created, updated, removed, unchanged, failed }
 ```
 
-A scan parses every `.md` and `.markdown` file under a `posts/` or `pages/`
-directory. It writes each file whose hash differs from the indexed row, and
+A scan parses every `.md` and `.markdown` file under a `posts/`, `pages/` or
+`wiki/` directory. It writes each file whose hash differs from the indexed row, and
 drops rows whose file is gone. The watcher does the same for one path at a
 time. It debounces changes by 100 ms, so a burst of writes causes one re-parse.
 
-- **What is a document.** Only Markdown under `posts/` and `pages/`. The scan
-  skips uploads, `posts.json`, `README.md` at the top level and every other
+- **What is a document.** Only Markdown under `posts/`, `pages/` and `wiki/`.
+  The scan skips uploads, `posts.json`, `README.md` at the top level and every other
   file.
 - **Underscore directories.** Eleventy ignores them, and so does the scan, with
   one exception. `_trash/` still holds documents. They stay indexed as trashed
@@ -613,3 +617,143 @@ The page's Markdown lists the same posts after its own text. See
 [The Markdown](public-site.md#the-markdown).
 Eleventy ignores the key. A static build of the same directory publishes the
 page as an ordinary page.
+
+## Wiki pages
+
+A wiki page is a Markdown file under `content/wiki/` (decision-66). Wiki pages
+are linked notes. They have no date, tags or categories, and readers reach them
+through their links and the wiki index, not through the feeds or the archives.
+
+```markdown
+---
+title: Garden tools
+description: What is in the shed, and what each tool is for.
+---
+
+A spade, a fork and a hoe. The hoe is for [[Weeding]].
+```
+
+The URL comes from the wiki base and the file name. With the default base,
+`content/wiki/garden-tools.md` is served at `/wiki/garden-tools/`. The file
+name is slugified first, so `content/wiki/Garden Tools.md` is at the same URL.
+The URL is not stored in the file. When you change the wiki base on
+**Settings > Permalinks**, every wiki page moves at once, and the old URLs
+answer 301. See [The archive bases](settings.md#the-archive-bases).
+
+A wiki page does not read these front matter keys: `permalink`, `date`, `tags`,
+`categories` and `in-reply-to`. If a file has any of them, the scan logs a
+warning that names them, and the next save in the admin drops them. The other
+keys work as they do on a page, including `description`, `lang`, `updated`,
+`draft`, `visibility` and `comments`.
+
+The CMS refuses to save a post or a page with a permalink under the wiki base,
+and the refusal names the base.
+
+A published wiki page is on these parts of the site:
+
+| Where                                                   | A wiki page                                                                                   |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Its URL                                                 | The theme's `layouts/wiki.njk`, and the `.md`, `.gmi` and `.json` representations.            |
+| The wiki index at `/{wikiBase}/`                        | Listed A to Z by title. See [The wiki index](#the-wiki-index).                                |
+| Search                                                  | Listed, with the kicker Wiki.                                                                 |
+| The sitemap and `llms.txt`                              | Listed. `llms.txt` lists wiki pages under a `## Wiki` heading.                                |
+| Backlinks                                               | Listed under every document it links to. Its own page lists the documents that link to it.    |
+| Export                                                  | Included, as `content/wiki/`.                                                                 |
+| The home page, the archives and previous and next links | Absent.                                                                                       |
+| Every feed                                              | Absent.                                                                                       |
+| ActivityPub                                             | Absent. A wiki page is never delivered to followers and is not in the outbox.                 |
+| The comment form                                        | Closed unless the front matter says `comments: true`. No Discussion setting opens wiki pages. |
+
+A draft wiki page answers 404 to visitors and a wiki page in the trash answers
+410, as other documents do. A signed-in user sees a draft at its URL, as for a
+draft post. An unlisted wiki page is served at its URL with `noindex`,
+and is absent from the wiki index, search, the sitemap and `llms.txt`.
+
+### The wiki index
+
+`/{wikiBase}/` lists every published, listed wiki page on one page, sorted by
+title. Each letter has its own heading, with the pages whose titles start with
+it listed under it:
+
+- The sort ignores case and accents. `Éclairs` is under E.
+- A title that starts with a digit or a symbol is under `#`, which comes
+  first.
+- An untitled page is listed by its label. See [Titles](#titles).
+
+The index has no pagination and no feed. `/{wikiBase}/page/2/` and
+`/{wikiBase}/feed/` answer 404, and `/{wikiBase}/page/` is the wiki page whose
+file is `page.md`. The index has `.md`, `.gmi` and `.json` representations. The
+JSON is a list of the pages, in the same order. The sitemap lists the index,
+dated by its newest page.
+
+While no published wiki page exists, the index answers 404, as an empty tag
+archive does. After a change of wiki base, the old base's index answers 301 to
+the new one.
+
+### Creating a missing page
+
+A visitor who follows a link to a wiki page that does not exist gets the
+theme's 404. A signed-in user gets the same 404 with a **Create {title}**
+button. The button opens the wiki editor at
+`/admin/wiki/new?slug={slug}&title={title}`, with the slug filled in and a
+title made from it: `potting-shed` becomes "Potting shed". The page is sent
+with `Cache-Control: private, no-store`, so no cache serves the button to a
+visitor. The Markdown and Gemini 404s have no button.
+
+## Wiki links
+
+Write `[[Title]]` in a post, a page or a wiki page to link to the wiki page of
+that name. The CMS turns the brackets into a link when it renders the
+body:
+
+| You write                                | The link goes to                  | The link text |
+| ---------------------------------------- | --------------------------------- | ------------- |
+| `[[Garden tools]]`                       | `/wiki/garden-tools/`             | Garden tools  |
+| `[[Garden tools\|the tools]]`            | `/wiki/garden-tools/`             | the tools     |
+| `[[Garden tools#In the shed]]`           | `/wiki/garden-tools/#in-the-shed` | Garden tools  |
+| `[[Garden tools#In the shed\|the shed]]` | `/wiki/garden-tools/#in-the-shed` | the shed      |
+
+The HTML is an ordinary link with the class `wiki-link`:
+
+```html
+<a class="wiki-link" href="/wiki/garden-tools/">Garden tools</a>
+```
+
+The target is slugified as a title is, and the slug names the wiki page's file.
+`[[Garden Tools]]`, `[[garden tools]]` and `[[Garden tools!]]` all link to
+`content/wiki/garden-tools.md`. A link names the file, not the title, so if
+that file's title is "Tools in the shed", `[[Tools in the shed]]` does not
+reach it. The part after `#` is slugified as heading ids are, so it matches the
+`id` of that heading on the page.
+
+These rules decide what is a link:
+
+- The link text is plain text. `[[Garden tools|*the* tools]]` shows the
+  asterisks.
+- A target that slugifies to nothing stays as written. `[[!!]]` and
+  `[[#Heading]]` are not links. A link to a heading on the same page is an
+  ordinary Markdown link.
+- A link cannot cross a line break or contain `[` or `]`.
+- Code spans and code blocks are left alone, so `` `[[Garden tools]]` `` shows
+  the brackets. Outside code, write `\[[Garden tools]]` to show them.
+- Comments do not render wiki links. A comment shows the brackets as written.
+
+A link is written whether or not its target exists. A link to a missing page
+answers 404 until someone writes the page, and a signed-in user gets a button
+that creates it. See [Creating a missing page](#creating-a-missing-page). The
+admin editor marks a link whose target has no wiki page. See
+[Wiki links in the editor](admin.md#wiki-links-in-the-editor).
+
+The file keeps the `[[ ]]`. The CMS renders the link into the HTML it stores
+when it indexes the file, so the feeds, ActivityPub, excerpts and backlinks all
+get the real link. The `.md` representation gets an ordinary Markdown link,
+`[Garden tools](/wiki/garden-tools/index.md)`, which keeps the site path
+`/wiki/garden-tools/` when the page does not exist. The `.gmi` representation
+writes the link as a numbered link line after the paragraph.
+
+When the wiki base changes, the site renders every document that has a wiki
+link again, so each link moves with the base. The re-render is a scan change,
+so no follower is sent an `Update`.
+
+An Eleventy build of the same content does not render wiki links. See
+[Building the same content with Eleventy](eleventy.md).

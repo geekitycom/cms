@@ -10,7 +10,7 @@ import type { CommentPolicy } from './policy.ts';
 const OPEN: CommentPolicy = {
   enabled: true,
   closeAfterDays: DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
-  openByDefault: { post: true, page: false },
+  openByDefault: { post: true, page: false, wiki: false },
 };
 
 /** The moment every case below is judged at. */
@@ -77,10 +77,10 @@ describe('which types are open by default', () => {
   const DATED_PAGE = 'date: 2026-09-18T00:00:00Z\n';
   const types = { post: () => post('2026-09-18T00:00:00Z'), page: () => page(DATED_PAGE) };
   const defaults = [
-    { post: true, page: false },
-    { post: true, page: true },
-    { post: false, page: true },
-    { post: false, page: false },
+    { post: true, page: false, wiki: false },
+    { post: true, page: true, wiki: false },
+    { post: false, page: true, wiki: false },
+    { post: false, page: false, wiki: false },
   ];
 
   for (const openByDefault of defaults) {
@@ -112,18 +112,21 @@ describe('which types are open by default', () => {
   }
 
   it('closes a page that is open by default once it is past the window', () => {
-    const policy: CommentPolicy = { ...OPEN, openByDefault: { post: true, page: true } };
+    const policy: CommentPolicy = {
+      ...OPEN,
+      openByDefault: { post: true, page: true, wiki: false },
+    };
     assert.equal(commentsOpen(page('date: 2026-09-01T00:00:00Z\n'), policy, NOW), false);
     assert.equal(commentsOpen(page(), policy, NOW), true, 'an undated page has no age');
   });
 
   it('reads posts open and pages closed off a site.json that never chose', () => {
-    assert.deepEqual(commentPolicyOf({}).openByDefault, { post: true, page: false });
+    assert.deepEqual(commentPolicyOf({}).openByDefault, { post: true, page: false, wiki: false });
   });
 
   it('reads the choice off site.json', () => {
     const policy = commentPolicyOf({ commentsOnPosts: false, commentsOnPages: true });
-    assert.deepEqual(policy.openByDefault, { post: false, page: true });
+    assert.deepEqual(policy.openByDefault, { post: false, page: true, wiki: false });
   });
 
   it('keeps comments: false in site.json meaning off everywhere', () => {

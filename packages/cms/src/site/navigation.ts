@@ -242,7 +242,7 @@ export function navigationMenus(options: NavigationMenusOptions): MenuList {
 /**
  * The items of one named menu, ignoring anything that is not one.
  *
- * Tolerant on the way out, the way `taxonomyBasesOrDefault` is: the settings
+ * Tolerant on the way out, the way `permalinkBasesOrDefault` is: the settings
  * screen refuses a malformed item, so anything unreadable here came from a
  * hand-edited `site.json`, and a menu that quietly loses a line is a better
  * answer than a site that will not render.

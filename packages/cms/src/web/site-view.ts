@@ -13,7 +13,7 @@ import type {
 import type { GeekityEnv } from './env.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
-import type { TaxonomyBases } from '../content/taxonomy.ts';
+import type { PermalinkBases } from '../content/taxonomy.ts';
 
 /** The pages the Reading setting names, as documents the site would serve. */
 export interface FrontPages {
@@ -42,7 +42,7 @@ export interface AuthorListing {
 export interface SiteView {
   readonly store: DocumentLookup & ArchiveReader & TaxonomyReader & CatalogReader & IndexClock;
   readonly pages: FrontPages;
-  readonly bases: TaxonomyBases;
+  readonly bases: PermalinkBases;
   users(): readonly User[];
   author(username: string): AuthorListing | undefined;
 }
@@ -66,7 +66,7 @@ function createSiteView(c: Context<GeekityEnv>): SiteView {
   return {
     store,
     pages: frontPages(store, renderer.frontPageSlugs()),
-    bases: renderer.taxonomyBases(),
+    bases: renderer.permalinkBases(),
     users: readUsers,
     author(username) {
       const all = readUsers();

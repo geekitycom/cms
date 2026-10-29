@@ -57,6 +57,23 @@ export const DEFAULT_TAXONOMY_BASES: TaxonomyBases = {
   category: 'category',
 };
 
+export type PermalinkBase = Taxonomy | 'wiki';
+
+export const PERMALINK_BASES: readonly PermalinkBase[] = [...TAXONOMIES, 'wiki'];
+
+export type PermalinkBases = Readonly<Record<PermalinkBase, string>>;
+
+export const DEFAULT_PERMALINK_BASES: PermalinkBases = {
+  ...DEFAULT_TAXONOMY_BASES,
+  wiki: 'wiki',
+};
+
+const PERMALINK_BASE_LABELS: Readonly<Record<PermalinkBase, string>> = {
+  tag: 'tag',
+  category: 'category',
+  wiki: 'wiki',
+};
+
 /** The word each taxonomy is called on a screen. */
 export const TAXONOMY_LABELS: Readonly<Record<Taxonomy, string>> = {
   tag: 'tag',
@@ -162,71 +179,73 @@ export function taxonomyForSegment(
   return undefined;
 }
 
-/** One message per base that cannot be used. An empty object is a valid pair. */
-export type TaxonomyBaseProblems = Partial<Record<Taxonomy, string>>;
+export type PermalinkBaseProblems = Partial<Record<PermalinkBase, string>>;
 
 /**
- * What is wrong with a pair of bases, one message per taxonomy.
+ * What is wrong with a set of bases, one message per base.
  *
- * The pair is checked together rather than one at a time because two of the
- * rules are about the pair: they may not be the same word, and neither may be
- * a path the site already answers on.
+ * The set is checked together rather than one base at a time because one of
+ * the rules is about the set: no two of them may be the same word. A clash is
+ * named on both fields, so whichever one the operator meant to change, the
+ * message is beside it.
  */
-export function taxonomyBaseProblems(bases: TaxonomyBases): TaxonomyBaseProblems {
-  const problems: TaxonomyBaseProblems = {};
+export function permalinkBaseProblems(bases: PermalinkBases): PermalinkBaseProblems {
+  const problems: PermalinkBaseProblems = {};
 
-  for (const taxonomy of TAXONOMIES) {
-    const value = bases[taxonomy].trim();
-    const label = TAXONOMY_LABELS[taxonomy];
+  for (const base of PERMALINK_BASES) {
+    const value = bases[base].trim();
+    const label = PERMALINK_BASE_LABELS[base];
 
     if (value === '') {
-      problems[taxonomy] = `The ${label} base cannot be empty.`;
+      problems[base] = `The ${label} base cannot be empty.`;
     } else if (!TAXONOMY_BASE_PATTERN.test(value)) {
-      problems[taxonomy] =
+      problems[base] =
         `A ${label} base is one path segment: up to 64 letters, digits, dashes or ` +
         'underscores, starting with a letter or a digit, and no slash.';
     } else if (RESERVED_TOP_LEVEL_PATHS.includes(value.toLowerCase())) {
-      problems[taxonomy] =
+      problems[base] =
         `“${value}” is already a path this site answers on. Reserved: ` +
         `${RESERVED_TOP_LEVEL_PATHS.join(', ')}.`;
     }
   }
 
-  if (
-    problems.tag === undefined &&
-    problems.category === undefined &&
-    bases.tag.trim() === bases.category.trim()
-  ) {
-    const message = 'The tag base and the category base have to be different words.';
-    problems.tag = message;
-    problems.category = message;
-  }
+  const usable = PERMALINK_BASES.filter((base) => problems[base] === undefined);
+  usable.forEach((first, index) => {
+    for (const second of usable.slice(index + 1)) {
+      if (bases[first].trim() !== bases[second].trim()) continue;
+      const message =
+        `The ${PERMALINK_BASE_LABELS[first]} base and the ${PERMALINK_BASE_LABELS[second]} ` +
+        'base have to be different words.';
+      problems[first] ??= message;
+      problems[second] ??= message;
+    }
+  });
 
   return problems;
 }
 
 /**
- * A pair of bases as they should be stored: trimmed, and each replaced by its
+ * A set of bases as they should be stored: trimmed, and each replaced by its
  * default when it is not usable. Only for reading a value back out of storage
  * or a data file, where a bad value should not take the site down; a value on
- * its way in goes through {@link taxonomyBaseProblems} and is refused.
+ * its way in goes through {@link permalinkBaseProblems} and is refused.
  */
-export function taxonomyBasesOrDefault(bases: Partial<Record<Taxonomy, unknown>>): TaxonomyBases {
-  const candidate: Record<Taxonomy, string> = { ...DEFAULT_TAXONOMY_BASES };
+export function permalinkBasesOrDefault(
+  bases: Partial<Record<PermalinkBase, unknown>>,
+): PermalinkBases {
+  const candidate: Record<PermalinkBase, string> = { ...DEFAULT_PERMALINK_BASES };
 
-  for (const taxonomy of TAXONOMIES) {
-    const value = bases[taxonomy];
+  for (const base of PERMALINK_BASES) {
+    const value = bases[base];
     if (typeof value !== 'string') continue;
     const trimmed = value.trim();
     if (TAXONOMY_BASE_PATTERN.test(trimmed) && !RESERVED_TOP_LEVEL_PATHS.includes(trimmed)) {
-      candidate[taxonomy] = trimmed;
+      candidate[base] = trimmed;
     }
   }
 
-  // Two taxonomies at the same base would make one of the archives
-  // unreachable, so a pair that collides falls back to the defaults rather
-  // than serving half of what was asked for.
-  return candidate.tag === candidate.category ? DEFAULT_TAXONOMY_BASES : candidate;
+  const distinct = new Set(PERMALINK_BASES.map((base) => candidate[base])).size;
+  return distinct === PERMALINK_BASES.length ? candidate : DEFAULT_PERMALINK_BASES;
 }
 
 /**

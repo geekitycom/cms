@@ -1,0 +1,16 @@
+{#
+  The wiki index's gemtext: the header, a heading for each first letter, a
+  link line for each of its pages, and the footer. The context is the
+  Markdown one's; links go through `geminiUrl`.
+-#}
+{{ header }}
+
+{% for group in wikiGroups %}
+## {{ group.letter }}
+
+{% for entry in group.pages %}
+=> {{ entry.url | geminiUrl }} {{ entry.label }}
+{% endfor %}
+
+{% endfor %}
+{{ footer }}

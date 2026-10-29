@@ -17,12 +17,12 @@ import { mountWebmentions } from './webmention-routes.ts';
 import { favicon, imageVariant, themeAsset, upload } from './asset-routes.ts';
 import { THEME_ASSET_PREFIX } from '../theme/assets.ts';
 import { negotiateDocument } from './document-page.ts';
-import { goneDocumentAt, previewDocumentAt } from '../content/permalinks.ts';
+import { goneDocumentAt, previewDocumentAt, publicDocumentAt } from '../content/permalinks.ts';
 import { embedView, oEmbed } from './embed.ts';
 import { commentPage, comments, feed, repliesFeed } from './feed-routes.ts';
 import { feedPathUnder, FEED_FORMATS, REPLIES_ROOT, splitFeedPath } from './feeds.ts';
 import { indexNowKeyPath, indexNowKeyResponse } from '../site/indexnow-key.ts';
-import { listing, search } from './listing-pages.ts';
+import { listing, search, wikiIndex } from './listing-pages.ts';
 import { feedHref, SITE_POSTS } from './listing-subject.ts';
 import { LLMS_TXT_LINK, LLMS_TXT_PATH } from './llms.ts';
 import { FAVICON_PATH, manifestResponse, MANIFEST_PATH, webManifest } from './manifest.ts';
@@ -32,6 +32,7 @@ import {
   representationHref,
   splitRepresentationExtension,
 } from './negotiate.ts';
+import type { Representation } from './negotiate.ts';
 import { EMBED_PATH, OEMBED_PATH } from './oembed.ts';
 import { openSearchDescription, openSearchResponse, OPENSEARCH_PATH } from './opensearch.ts';
 import {
@@ -60,6 +61,8 @@ import type { SiteView } from './site-view.ts';
 import { SITEMAP_CHILD_ROUTE, SITEMAP_PATH } from './sitemap.ts';
 import { redirectedTerm, termHref } from '../content/taxonomy.ts';
 import type { TaxonomyTerm } from '../content/taxonomy.ts';
+import { createWikiPageAt } from './wiki-create.ts';
+import { wikiIndexHref } from './wiki-index.ts';
 
 /**
  * Register the public site on a Hono app.
@@ -276,13 +279,18 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     for (const candidate of extension.paths) {
       const found = classifyPath(view, candidate);
       if (found === undefined || found.kind === 'feed') continue;
-      if (found.kind === 'listing' && !LISTING_REPRESENTATIONS.includes(representation)) continue;
+      if (found.kind !== 'document' && !LISTING_REPRESENTATIONS.includes(representation)) continue;
 
       const href = representationHref(canonicalHref(view, found), representation);
       if (href !== here) return c.redirect(`${href}${search}`, 301);
-      return found.kind === 'listing'
-        ? listing(c, found, representation)
-        : negotiateDocument(c, found.document, representation);
+      switch (found.kind) {
+        case 'listing':
+          return listing(c, found, representation);
+        case 'wiki-index':
+          return wikiIndex(c, representation);
+        case 'document':
+          return negotiateDocument(c, found.document, representation);
+      }
     }
   }
 
@@ -290,12 +298,17 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   // it lives now. Asked only after every live lookup, which is what lets a new
   // document take an old URL over, and a term that comes back into use beat
   // the record of what it was renamed to.
+  const formerBases = c.var.siteAtRequestStart.former_wiki_bases;
   const formerly =
     movedHref(view, pathname, undefined) ??
     extension?.paths
       .map((candidate) => movedHref(view, candidate, extension.representation))
       .find((href) => href !== undefined) ??
-    renamedTermHref(c, view, pathname);
+    renamedTermHref(c, view, pathname) ??
+    formerWikiHref(view, formerBases, pathname, undefined) ??
+    extension?.paths
+      .map((candidate) => formerWikiHref(view, formerBases, candidate, extension.representation))
+      .find((href) => href !== undefined);
   if (formerly !== undefined) return c.redirect(`${formerly}${search}`, 301);
 
   const deleted = [pathname, ...(extension?.paths ?? [])].some(
@@ -314,13 +327,18 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     return c.redirect(redirectLocation(redirect, search), redirect.status);
   }
 
-  return notFound(c);
+  return notFound(
+    c,
+    c.var.signedIn === undefined ? undefined : createWikiPageAt(view.bases, pathname),
+  );
 }
 
 function serve(c: Context<GeekityEnv>, match: PathMatch): Response {
   switch (match.kind) {
     case 'listing':
       return listing(c, match);
+    case 'wiki-index':
+      return wikiIndex(c);
     case 'feed':
       return match.target.kind === 'listing'
         ? feed(c, match.format, match.target.subject)
@@ -370,4 +388,34 @@ function renamedTermHref(
   return feedPath === undefined
     ? termHref(moved, asked.pageNumber, view.bases)
     : feedHref(moved, feedPath.format, view.bases);
+}
+
+function formerWikiHref(
+  view: SiteView,
+  formerBases: readonly string[],
+  pathname: string,
+  representation: Representation | undefined,
+): string | undefined {
+  const [leading, base, slug, trailing, ...rest] = pathname.split('/');
+  if (leading !== '' || base === undefined || slug === undefined) return undefined;
+  if (base === view.bases.wiki || !formerBases.includes(base)) return undefined;
+
+  const href =
+    slug === '' && trailing === undefined
+      ? movedWikiIndexHref(view)
+      : trailing === '' && rest.length === 0 && slug !== ''
+        ? movedWikiPageHref(view, slug)
+        : undefined;
+  if (href === undefined) return undefined;
+  return representation === undefined ? href : representationHref(href, representation);
+}
+
+function movedWikiPageHref(view: SiteView, slug: string): string | undefined {
+  const document = publicDocumentAt(view.store, `/${view.bases.wiki}/${slug}/`);
+  return document?.type === 'wiki' ? encodePath(document.permalink) : undefined;
+}
+
+function movedWikiIndexHref(view: SiteView): string | undefined {
+  const href = wikiIndexHref(view.bases);
+  return classifyPath(view, href)?.kind === 'wiki-index' ? href : undefined;
 }

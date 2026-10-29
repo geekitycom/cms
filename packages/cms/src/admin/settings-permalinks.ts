@@ -1,8 +1,9 @@
 /**
- * Permalinks: the URLs the archives live at, and the ones they used to.
+ * Permalinks: the URLs the archives and the wiki live at, and the ones the
+ * archives used to.
  *
- * WordPress's own name for the page that decides URL shape. The two bases are
- * a pair — they may not be the same, and neither may take a path the site
+ * WordPress's own name for the page that decides URL shape. The three bases
+ * are a set — no two may be the same, and none may take a path the site
  * already answers on — so they are validated together and shown together.
  *
  * The recorded archive renames are here as well, read-only: they are a record
@@ -22,7 +23,7 @@ export const PERMALINKS_SETTINGS: SettingsPage = {
   label: 'Permalinks',
   path: settingsPagePath('permalinks'),
   template: ADMIN_TEMPLATES.settingsPermalinks,
-  fields: ['tag_base', 'category_base'],
+  fields: ['tag_base', 'category_base', 'wiki_base'],
 
   panels: (_c, settings) => ({
     taxonomyRedirects: settings.taxonomy_redirects.map((entry) => ({

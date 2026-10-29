@@ -80,3 +80,23 @@ export const PAGE_KIND: DocumentKind = {
   federated: false,
   fields: [],
 };
+
+export const WIKI_KIND: DocumentKind = {
+  type: 'wiki',
+  singular: 'wiki page',
+  dated: false,
+  tagged: false,
+  categorised: false,
+  excludable: false,
+  contactable: false,
+  replies: false,
+  located: false,
+  federated: false,
+  fields: [],
+};
+
+export const DOCUMENT_KINDS: Readonly<Record<DocumentType, DocumentKind>> = {
+  post: POST_KIND,
+  page: PAGE_KIND,
+  wiki: WIKI_KIND,
+};

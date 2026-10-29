@@ -27,6 +27,7 @@ import {
   newEditorPath,
   PAGE_SCREENS,
   POST_SCREENS,
+  WIKI_SCREENS,
 } from './documents.ts';
 import { mountFederationScreen } from './federation.ts';
 import { takeClearedAutosaves, takeFlash } from './flash.ts';
@@ -327,6 +328,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // form has.
   mountDocumentScreens(app, { kind: POST_SCREENS, render });
   mountDocumentScreens(app, { kind: PAGE_SCREENS, render });
+  mountDocumentScreens(app, { kind: WIKI_SCREENS, render });
 
   // The terms themselves: what is in use, and the three things — rename,
   // merge, delete — that rewrite every file carrying one.

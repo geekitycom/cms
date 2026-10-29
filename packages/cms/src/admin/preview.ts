@@ -1,6 +1,8 @@
 import type { Context, Hono } from 'hono';
 
 import { CITATION_PROPERTIES } from '../content/citation.ts';
+import { DOCUMENT_DIRECTORIES } from '../content/content-tree.ts';
+import { isDocumentType } from '../content/document.ts';
 import type { Document, DocumentType } from '../content/document.ts';
 import { splitTags } from '../content/document-form.ts';
 import { eventFrontMatter, resolveEvent, submittedEventForm } from '../content/event-form.ts';
@@ -18,8 +20,9 @@ import { listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { authorContext } from '../site/authors.ts';
 import { documentContext } from '../web/context.ts';
-import { TEMPLATES } from '../web/theme-templates.ts';
+import { DOCUMENT_TEMPLATES } from '../web/theme-templates.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
+import { permalinkBasesFromSettings } from '../site/settings.ts';
 
 /** Where the editor posts a body it wants to see rendered. */
 export const PREVIEW_PATH = `${ADMIN_PREFIX}/preview`;
@@ -30,7 +33,7 @@ export const PREVIEW_PATH = `${ADMIN_PREFIX}/preview`;
  * The point of a preview is that it is not a second renderer. This builds the
  * same {@link Document} shape the parser produces, runs the body through the
  * same {@link renderMarkdown}, hands it to the same `documentContext`, and
- * renders it through the theme's own post or page layout — so what the preview
+ * renders it through the theme's own layout for its type — so what the preview
  * shows is what publishing would put on the site, theme overrides included.
  *
  * Nothing is written and nothing is indexed: the document exists for the
@@ -39,12 +42,12 @@ export const PREVIEW_PATH = `${ADMIN_PREFIX}/preview`;
 export function mountPreview(app: Hono<GeekityEnv>): void {
   app.post(PREVIEW_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const type: DocumentType = stringOrEmpty(body['type']) === 'page' ? 'page' : 'post';
+    const type: DocumentType = isDocumentType(body['type']) ? body['type'] : 'post';
     const document = previewDocument(c, { type, body });
 
     return c.html(
       c.var.renderer.render(
-        type === 'post' ? TEMPLATES.post : TEMPLATES.page,
+        DOCUMENT_TEMPLATES[type],
         // With the site's image config, so a preview shows the `<picture>` the
         // published page would show rather than the plain image behind it, and
         // with the author resolved, so the byline reads the way the published
@@ -88,13 +91,14 @@ function previewDocument(
     type,
     // A path and a permalink the preview needs to have, because the theme
     // prints them; neither is ever written anywhere.
-    path: `${type === 'post' ? 'posts' : 'pages'}/${slug}.md`,
+    path: `${DOCUMENT_DIRECTORIES[type]}/${slug}.md`,
     slug,
     permalink: permalinkFor({
       type,
       slug,
       date: date === undefined ? undefined : (calendarDayIn(date, timezone) ?? date),
       submitted: stringOrEmpty(body['permalink']).trim(),
+      wikiBase: permalinkBasesFromSettings(c.var.siteAtRequestStart).wiki,
     }),
     title: title === '' ? 'Untitled' : title,
     ...(date === undefined ? {} : { date }),
@@ -120,7 +124,11 @@ function previewDocument(
       ...previewReview(body, c.var.config.contentDir),
     },
     body: markdown,
-    html: renderMarkdown(markdown, handleDirectory(c.var.config.contentDir)),
+    html: renderMarkdown(
+      markdown,
+      handleDirectory(c.var.config.contentDir),
+      permalinkBasesFromSettings(c.var.siteAtRequestStart).wiki,
+    ),
     // A preview is not a version of anything, so it has no hash to be
     // mistaken for one.
     hash: '',
@@ -154,10 +162,16 @@ function permalinkFor(input: {
   slug: string;
   date: string | undefined;
   submitted: string;
+  wikiBase: string;
 }): string {
-  if (input.submitted !== '') return input.submitted;
+  if (input.submitted !== '' && input.type !== 'wiki') return input.submitted;
   try {
-    return defaultPermalink({ type: input.type, slug: input.slug, date: input.date });
+    return defaultPermalink({
+      type: input.type,
+      slug: input.slug,
+      date: input.date,
+      wikiBase: input.wikiBase,
+    });
   } catch {
     return '/';
   }

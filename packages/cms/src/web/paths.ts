@@ -14,6 +14,7 @@ import { servedPath } from './site-view.ts';
 import type { SiteView } from './site-view.ts';
 import { PAGE_SEGMENT, taxonomyForSegment } from '../content/taxonomy.ts';
 import type { TaxonomyTerm } from '../content/taxonomy.ts';
+import { wikiIndexHref } from './wiki-index.ts';
 
 /** What a feed URL syndicates. */
 export type FeedTarget =
@@ -29,6 +30,7 @@ export type PathMatch =
       canonical: boolean;
     }
   | ({ kind: 'listing' } & ListingRequest)
+  | { kind: 'wiki-index' }
   | { kind: 'document'; document: Document };
 
 export function classifyPath(view: SiteView, pathname: string): PathMatch | undefined {
@@ -42,6 +44,8 @@ export function classifyPath(view: SiteView, pathname: string): PathMatch | unde
   const listing = listingAt(view, pathname);
   if (listing !== undefined) return { kind: 'listing', ...listing };
 
+  if (isWikiIndex(view, pathname)) return { kind: 'wiki-index' };
+
   const document = publicDocumentAt(view.store, pathname);
   return document === undefined ? undefined : { kind: 'document', document };
 }
@@ -54,9 +58,15 @@ export function canonicalHref(view: SiteView, match: PathMatch): string {
       return match.target.kind === 'listing'
         ? archiveOf(view, match.target.subject).feedHref(match.format)
         : commentsFeedHref(match.target.document);
+    case 'wiki-index':
+      return wikiIndexHref(view.bases);
     case 'document':
       return encodePath(servedPath(match.document, view.pages.home));
   }
+}
+
+function isWikiIndex(view: SiteView, pathname: string): boolean {
+  return pathname === wikiIndexHref(view.bases) && view.store.listWiki().length > 0;
 }
 
 function inRange(view: SiteView, request: ListingRequest, pageSize: number): boolean {

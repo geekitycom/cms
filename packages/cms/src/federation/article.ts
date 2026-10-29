@@ -48,7 +48,7 @@ import type { PostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
 import { respellTags } from '../content/tags.ts';
 import { visibilityOf } from '../content/visibility.ts';
-import { taxonomyBasesFromSettings } from '../site/settings.ts';
+import { permalinkBasesFromSettings } from '../site/settings.ts';
 import { listUsers, primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { escapeAttribute, escapeText } from '../util/html.ts';
@@ -275,7 +275,7 @@ export function postObject(
   // The archives an activity points at are wherever the site currently serves
   // them, which is a setting rather than a constant.
   const settings = context.data.site;
-  const bases = taxonomyBasesFromSettings(settings);
+  const bases = permalinkBasesFromSettings(settings);
   // The language a client filters and translates the post by: its own, else
   // the site's.
   const language =

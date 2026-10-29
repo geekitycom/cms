@@ -12,6 +12,12 @@ import { LOOK } from './look.ts';
 
 export const RESUME_ID = 'autosave-resume';
 
+const DOCUMENT_NOUNS: Readonly<Record<string, string>> = {
+  post: 'post',
+  page: 'page',
+  wiki: 'wiki page',
+};
+
 export function findOffer(
   tools: HTMLElement,
   storage: KeyValueStorage | undefined,
@@ -120,7 +126,7 @@ function browserBanner(
   const time = document.createElement('time');
   time.dateTime = copy.savedAt;
   time.textContent = formatInTimezone(copy.savedAt, tools.dataset['autosaveTimezone'] ?? 'UTC');
-  const noun = tools.dataset['kind'] === 'page' ? 'page' : 'post';
+  const noun = DOCUMENT_NOUNS[tools.dataset['kind'] ?? ''] ?? 'post';
   message.append(
     'Unsaved changes from ',
     time,

@@ -12,8 +12,8 @@ import type { ConditionalHeaders } from './negotiate.ts';
 /**
  * `/llms.txt`: the site described for a language model, in the
  * llmstxt.org shape. A heading with the site's title, its tagline as a quote,
- * then the site's navigation and every page and every post the site lists as
- * lists of links, each to the Markdown the site already serves for what it
+ * then the site's navigation and every page, wiki page and post the site lists
+ * as lists of links, each to the Markdown the site already serves for what it
  * names, which is what a model wants to read. One file however large the site:
  * the format has no pagination.
  *
@@ -59,6 +59,7 @@ export interface LlmsIndex {
   /** The site's menus, every item once. */
   navigation: readonly LlmsEntry[];
   pages: readonly LlmsEntry[];
+  wiki: readonly LlmsEntry[];
   /** Every listed post, newest first. */
   posts: readonly LlmsEntry[];
 }
@@ -82,6 +83,7 @@ export function llmsTxt(index: LlmsIndex, baseUrl: string, markdownUrl: Markdown
     `Its MCP server is at <${baseUrl}${MCP_PATH}>, described at <${baseUrl}${MCP_SERVER_CARD_PATH}>. It needs a token the site's owner approves.`,
     ...section('Navigation', index.navigation, link),
     ...section('Pages', index.pages, link),
+    ...section('Wiki', index.wiki, link),
     ...section('Posts', index.posts, link),
   ]);
 }
@@ -93,7 +95,7 @@ export function generatedLlmsTxt(
   markdownUrl: MarkdownUrl,
 ): LlmsTxtFile {
   let lastModified: Date | undefined;
-  for (const entry of [...index.pages, ...index.posts]) {
+  for (const entry of [...index.pages, ...index.wiki, ...index.posts]) {
     if (entry.lastModified === undefined) continue;
     if (lastModified === undefined || entry.lastModified > lastModified) {
       lastModified = entry.lastModified;

@@ -72,8 +72,8 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `DocumentChange`          | type     | One change to the index, as the subscriber sees it.                                                           |
 | `DocumentChangeType`      | type     | What happened to one document.                                                                                |
 | `DocumentContent`         | type     | The part of a `Document` that a file is written from.                                                         |
-| `DocumentType`            | type     | Posts are dated and syndicated; pages are standing content.                                                   |
-| `ParseDocumentOptions`    | type     | Where the file came from, which is what tells a post from a page.                                             |
+| `DocumentType`            | type     | Posts are dated and syndicated, pages are standing content, and wiki pages are linked notes.                  |
+| `ParseDocumentOptions`    | type     | Where the file came from, which is what tells a post, a page and a wiki page apart.                           |
 | `Scheduler`               | type     | Publishes a document when its date arrives.                                                                   |
 | `SearchHit`               | type     | One document a search found, and the passage it was found in.                                                 |
 | `SyncResult`              | type     | What a full scan did.                                                                                         |

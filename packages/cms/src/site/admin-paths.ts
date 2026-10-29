@@ -26,3 +26,9 @@ export const USERS_PATH = `${ADMIN_PREFIX}/users`;
 export function editUserPath(id: number): string {
   return `${USERS_PATH}/${String(id)}`;
 }
+
+export const WIKI_ADMIN_PATH = `${ADMIN_PREFIX}/wiki`;
+
+export function newWikiPagePath(slug: string, title: string): string {
+  return `${WIKI_ADMIN_PATH}/new?${new URLSearchParams({ slug, title }).toString()}`;
+}

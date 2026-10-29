@@ -8,7 +8,7 @@ import type { Document } from '../content/document.ts';
 import type { SharedLocation } from '../content/location.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
-import type { TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
+import type { PermalinkBases, TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
 import type { PageFont } from '../fonts/index.ts';
 import type { AuthorContext } from '../site/authors.ts';
 import type { SiteSettings } from '../site/settings.ts';
@@ -17,8 +17,8 @@ import type { SchemeTokens } from '../theme/scheme-tokens.ts';
 import {
   createSiteDataSource,
   frontPageSlugs,
+  permalinkBases,
   postsPerPage,
-  taxonomyBases,
   termRedirects,
   themeName,
 } from '../theme/site-data.ts';
@@ -37,6 +37,7 @@ import type { Pagination } from './pagination.ts';
 import { requestSite } from './render-scope.ts';
 import { createThemeEnvironment, siteColorsWithTokens } from './theme-environment.ts';
 import { STATUS_PAGES, untilContext } from './theme-templates.ts';
+import type { WikiGroup } from './wiki-index.ts';
 import type { StatusPage, StatusPageName } from './theme-templates.ts';
 
 export interface ThemeText {
@@ -100,6 +101,12 @@ export interface Listing {
   document?: Document | undefined;
 }
 
+export interface WikiIndexPage {
+  title: string;
+  url: string;
+  groups: readonly WikiGroup<Document>[];
+}
+
 export interface SearchPage {
   query: string;
   url: string;
@@ -110,7 +117,10 @@ export interface SearchPage {
 export interface Renderer {
   site(): SiteData;
   pageSize(): number;
+  /** Where the tag and category archives live. */
   taxonomyBases(): TaxonomyBases;
+  /** Where the archives and the wiki pages live. */
+  permalinkBases(): PermalinkBases;
   termRedirects(): readonly TaxonomyRedirect[];
   frontPageSlugs(): FrontPageSlugs;
   renderPage(document: Document, options: RenderPageOptions): RenderedPage;
@@ -126,8 +136,9 @@ export interface Renderer {
   ): string;
   renderListing(listing: Listing): string;
   renderSearch(search: SearchPage): string;
+  renderWikiIndex(index: WikiIndexPage): string;
   renderComment(thread: CommentThread): string;
-  renderNotFound(url: string): string;
+  renderNotFound(url: string, extra?: Record<string, unknown>): string;
   renderGone(url: string): string;
   renderServerError(url: string): string;
   renderMaintenance(url: string, until: Date | undefined): string;
@@ -218,7 +229,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     themeColors: () => themes.current().colors,
     siteColors: () => siteColorsWithTokens(deps),
     pageSize: () => postsPerPage(siteData.read()),
-    taxonomyBases: () => taxonomyBases(siteData.read()),
+    taxonomyBases: () => permalinkBases(siteData.read()),
+    permalinkBases: () => permalinkBases(siteData.read()),
     termRedirects: () => termRedirects(siteData.read()),
     frontPageSlugs: () => frontPageSlugs(siteData.read()),
     renderPage,
@@ -226,7 +238,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       renderPage(document, { extra, viewer }).html,
     renderFrontPage: (document, extra = {}, viewer = undefined) =>
       renderPage(document, { frontPage: true, extra, viewer }).html,
-    renderNotFound: (url) => statusPage(STATUS_PAGES.notFound, url),
+    renderNotFound: (url, extra = {}) => statusPage(STATUS_PAGES.notFound, url, extra),
     renderGone: (url) => statusPage(STATUS_PAGES.gone, url),
     renderServerError: (url) => statusPage(STATUS_PAGES.serverError, url),
     renderMaintenance: (url, until) =>

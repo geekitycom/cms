@@ -5,7 +5,7 @@ import { holdOutbound } from './dev-mode.ts';
 import type { SettingsRegistry } from './settings/types.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isFederatedDocument, isListed } from './content/served.ts';
-import { taxonomyBasesFromSettings } from './site/settings.ts';
+import { permalinkBasesFromSettings } from './site/settings.ts';
 import { SITE } from './site/namespace.ts';
 import { messageOf } from './util/errors.ts';
 import { createSerialQueue } from './util/queue.ts';
@@ -174,7 +174,7 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
       const after = inFeeds(change.next, now);
       if (before === undefined && after === undefined) return [];
 
-      const bases = taxonomyBasesFromSettings(await settings.values(SITE));
+      const bases = permalinkBasesFromSettings(await settings.values(SITE));
       const urls = new Set<string>();
 
       for (const format of FEED_FORMATS) {

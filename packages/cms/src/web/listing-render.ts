@@ -7,7 +7,7 @@ import type { User } from '../site/users.ts';
 import { documentContext } from './context.ts';
 import type { DocumentContext } from './context.ts';
 import type { PageContexts } from './page-context.ts';
-import type { Listing, RenderDeps, SearchPage } from './render.ts';
+import type { Listing, RenderDeps, SearchPage, WikiIndexPage } from './render.ts';
 import { snippetHtml } from './search.ts';
 import type { ThemeRender } from './theme-environment.ts';
 import { OPTIONAL_TEMPLATES, TEMPLATES, themeTemplate } from './theme-templates.ts';
@@ -15,6 +15,7 @@ import { OPTIONAL_TEMPLATES, TEMPLATES, themeTemplate } from './theme-templates.
 export interface ListingPages {
   renderListing(listing: Listing): string;
   renderSearch(search: SearchPage): string;
+  renderWikiIndex(index: WikiIndexPage): string;
   renderComment(thread: CommentThread): string;
 }
 
@@ -75,6 +76,20 @@ export function createListingPages(
     });
   }
 
+  function renderWikiIndex({ title, url, groups }: WikiIndexPage): string {
+    const people = users();
+    return render(TEMPLATES.wikiIndex, {
+      title,
+      url,
+      page: { url },
+      ...contexts.capsuleContext(url),
+      wikiGroups: groups.map(({ letter, pages }) => ({
+        letter,
+        pages: pages.map((document) => contexts.entryContext(document, people, { lead: false })),
+      })),
+    });
+  }
+
   function renderComment({ post, comment, ancestors }: CommentThread): string {
     const url = commentPageHref(comment.id);
     const on = contexts.entryContext(post, users(), { lead: false });
@@ -91,7 +106,7 @@ export function createListingPages(
     });
   }
 
-  return { renderListing, renderSearch, renderComment };
+  return { renderListing, renderSearch, renderWikiIndex, renderComment };
 }
 
 function listingTemplate({ themes }: Pick<RenderDeps, 'themes'>, listing: Listing): string {

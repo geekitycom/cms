@@ -69,6 +69,7 @@ async function site() {
     JSON.stringify({ title: 'Blog', plugins: { '@acme/plugin-folder': { enabled: true } } }),
   );
   await put(contentDir, 'posts/hello.md', '---\ntitle: Hello\n---\n\nHello.\n');
+  await put(contentDir, 'wiki/garden.md', '---\ntitle: Garden\n---\n\nNotes.\n');
   await put(contentDir, 'uploads/2026/10/cat.jpg', 'jpeg bytes');
   await put(contentDir, 'posts/hello.md.1a2b-3.tmp', 'half a write');
   await put(contentDir, '.geekity-watch-0f3e/probe', '');
@@ -186,6 +187,7 @@ describe('a site export', () => {
       'content/_data/site.json',
       'content/posts/hello.md',
       'content/uploads/2026/10/cat.jpg',
+      'content/wiki/garden.md',
       'data/dev-mode.json',
       'data/follower-history.jsonl',
       'data/jobs.json',

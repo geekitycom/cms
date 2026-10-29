@@ -167,6 +167,24 @@
   text-decoration-color: var(--color-primary);
 }
 
+#editor-surface .cm-wiki-link {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--color-primary);
+}
+
+/* The Markdown parser reads the inner `[...]` as a link of its own; the wiki
+ * link's one underline is drawn across the whole span instead. */
+#editor-surface .cm-wiki-link .cm-md-link {
+  text-decoration: none;
+}
+
+#editor-surface .cm-wiki-link-missing {
+  text-decoration: underline dashed var(--color-error);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
 #editor-surface .cm-md-code {
   border-radius: 0.25rem;
   background-color: var(--color-base-200);

@@ -8,7 +8,7 @@ import type { GeekityEnv } from '../web/env.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { pageCount } from '../web/pagination.ts';
 import { documentSite } from '../web/document-site.ts';
-import { documentEditorPath, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
+import { DOCUMENT_SCREENS, documentEditorPath } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
@@ -307,9 +307,7 @@ function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
         : postLabel(document, (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart)),
     postUrl: comment.permalink === '' ? null : comment.permalink,
     editUrl:
-      document === undefined
-        ? null
-        : documentEditorPath(document.type === 'page' ? PAGE_SCREENS : POST_SCREENS, document),
+      document === undefined ? null : documentEditorPath(DOCUMENT_SCREENS[document.type], document),
     inReplyTo: comment.inReplyTo,
   };
 }

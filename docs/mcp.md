@@ -209,6 +209,9 @@ them in one sign-in. The body is a JSON-RPC error that names the missing scope.
 | `update_post`       | `update`  | Changes named properties of one of your posts, as a Micropub update does. A published post also needs `publish`.                                                              |
 | `publish_post`      | `publish` | Publishes one of your drafts as the editor's Publish button does: it goes public, federates a `Create` and sends its webmentions.                                             |
 | `upload_media`      | `media`   | Stores a base64-encoded file in the media library with its alt text, and answers its address.                                                                                 |
+| `create_wiki_page`  | `create`  | Writes a new wiki page from a title, a Markdown body and an optional slug. A draft unless `draft` is false, which also needs `publish`.                                       |
+| `get_wiki_page`     | `update`  | One of your wiki pages: its title, its Markdown body, whether it is a draft, and the `hash` that `update_wiki_page` needs.                                                    |
+| `update_wiki_page`  | `update`  | Changes the title, the body or the draft state of one of your wiki pages. A published page, or publishing one, also needs `publish`.                                          |
 
 ### The inspect tools
 
@@ -363,6 +366,19 @@ An agent that reads untrusted pages can be steered by prompt injection. So
   data. The answer is the file's address, to use as a `photo` value or in a
   post's content. The request body limit in [The transport](#the-transport)
   is sized to fit the largest file.
+
+The wiki tools write wiki pages, which Micropub has no way to name. A wiki
+page is named by its slug or its address:
+
+- `create_wiki_page` takes a `title`, a Markdown `body`, an optional `slug`
+  (made from the title unless given) and an optional `draft`, which is true
+  unless given. Writing a published page needs the `publish` scope.
+- `get_wiki_page` answers the page's `title`, `body`, `draft` and `hash`.
+- `update_wiki_page` takes the page, the `hash` from `get_wiki_page`, and any
+  of `title`, `body` and `draft`. What is not given stays as it is. When the
+  page changed after it was read, the tool writes nothing and answers with an
+  error. Changing a published page, or setting `draft` to false, needs the
+  `publish` scope as well as `update`.
 
 Words written through these tools do not count toward anyone's writing
 goal. See [Writing goals](writing-goals.md#what-counts-as-writing).

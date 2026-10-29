@@ -82,6 +82,7 @@ describe('saving one settings page', () => {
     await save(agent, '/admin/settings/permalinks', {
       tag_base: 'topic',
       category_base: 'section',
+      wiki_base: 'wiki',
     });
 
     const settings = await siteSettingsIn(contentDir);

@@ -3,13 +3,12 @@ import type { Environment } from 'nunjucks';
 
 import { adminColorScheme } from '../site/admin-theme.ts';
 import { ADMIN_PREFIX, editUserPath } from '../site/admin-paths.ts';
-import { editorPath, newEditorPath, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
-import type { DocumentScreens } from './documents.ts';
+import { DOCUMENT_SCREENS, editorPath, newEditorPath, POST_SCREENS } from './documents.ts';
 import { LOGOUT_PATH } from './routes.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
 import { signedInAccount } from '../web/signed-in.ts';
 import type { SignedInAccount } from '../comments/viewer.ts';
-import type { Document, DocumentType } from '../content/document.ts';
+import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { siteLocale, siteTimezone } from '../theme/site-data.ts';
 import { hiddenReason } from '../content/served.ts';
@@ -18,12 +17,6 @@ import { PRIVATE_CACHE_CONTROL } from '../web/negotiate.ts';
 import { drawnForSignedInReader } from '../web/render-scope.ts';
 import { requestPath } from '../web/request.ts';
 import { formatDate } from '../theme/templates.ts';
-
-/** The editor screens each kind of document is written in. */
-const KINDS: Readonly<Record<DocumentType, DocumentScreens>> = {
-  post: POST_SCREENS,
-  page: PAGE_SCREENS,
-};
 
 /** Built on the first signed-in page; the admin's own is closed over by its mount. */
 let environment: Environment | undefined;
@@ -91,8 +84,8 @@ function renderBar(c: Context<GeekityEnv>, account: SignedInAccount): string {
           ? []
           : [
               {
-                label: `Edit ${capitalized(KINDS[shown.type].singular)}`,
-                url: editorPath(KINDS[shown.type], shown.slug),
+                label: `Edit ${capitalized(DOCUMENT_SCREENS[shown.type].singular)}`,
+                url: editorPath(DOCUMENT_SCREENS[shown.type], shown.slug),
               },
             ]),
       ],
@@ -112,7 +105,7 @@ function unpublishedNotice(c: Context<GeekityEnv>, document: Document): string |
 }
 
 function hiddenBecause(c: Context<GeekityEnv>, document: Document, reason: HiddenReason): string {
-  const it = `This ${document.type}`;
+  const it = `This ${DOCUMENT_SCREENS[document.type].singular}`;
   switch (reason.kind) {
     case 'trashed':
       return `${it} is in the trash`;

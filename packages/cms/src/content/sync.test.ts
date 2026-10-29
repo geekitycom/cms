@@ -1143,3 +1143,127 @@ describe('the search index (TASK-22 AC #2)', () => {
     assert.equal(index.countSearch('badgers'), 0);
   });
 });
+
+describe('the wiki base', () => {
+  it('is asked for on every parse, so a changed setting reaches the next one', async () => {
+    const dir = await contentDir({
+      'pages/about.md': markdown({ title: 'About', permalink: '/about/' }),
+      'posts/hello.md': markdown({ title: 'Hello', permalink: '/hello/', date: '2026-09-01' }),
+    });
+    const asked: string[] = [];
+    let base = 'wiki';
+    const content = createContentSync({
+      store: await store(),
+      contentDir: dir,
+      watch: false,
+      wikiBase: () => {
+        asked.push(base);
+        return base;
+      },
+    });
+    runningSyncs.push(content);
+
+    await content.sync();
+    assert.deepEqual(asked, ['wiki', 'wiki'], 'once for each file parsed');
+
+    base = 'notes';
+    await writeFiles(dir, {
+      'pages/about.md': markdown({ title: 'About us', permalink: '/about/' }),
+    });
+    await content.sync();
+    assert.equal(asked.at(-1), 'notes');
+  });
+});
+
+describe('wiki pages', () => {
+  it('index under the wiki base, and move when it changes', async () => {
+    const dir = await contentDir({
+      'wiki/some-page.md': '---\ntitle: Some page\n---\n\nHello.\n',
+    });
+    const index = await store();
+    let base = 'wiki';
+    const content = createContentSync({
+      store: index,
+      contentDir: dir,
+      watch: false,
+      wikiBase: () => base,
+      logger: { warn: () => undefined },
+    });
+    runningSyncs.push(content);
+
+    await content.sync();
+    assert.equal(index.getByPath('wiki/some-page.md')?.permalink, '/wiki/some-page/');
+
+    base = 'notes';
+    const result = await content.sync();
+    assert.equal(result.updated, 1, 'the unchanged file is re-indexed under the new base');
+    assert.equal(index.getByPath('wiki/some-page.md')?.permalink, '/notes/some-page/');
+    assert.equal(index.getByPermalink('/wiki/some-page/'), undefined);
+  });
+
+  it('warn about a permalink in the front matter, which is ignored', async () => {
+    const dir = await contentDir({
+      'wiki/moved.md': '---\ntitle: Moved\npermalink: /elsewhere/\n---\n',
+    });
+    const warnings: string[] = [];
+    const index = await store();
+    const content = createContentSync({
+      store: index,
+      contentDir: dir,
+      watch: false,
+      logger: { warn: (message) => warnings.push(message) },
+    });
+    runningSyncs.push(content);
+
+    await content.sync();
+    assert.equal(index.getByPath('wiki/moved.md')?.permalink, '/wiki/moved/');
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0] ?? '', /wiki\/moved\.md/);
+    assert.match(warnings[0] ?? '', /permalink/);
+  });
+});
+
+describe('documents with wiki links', () => {
+  it('re-render under a new wiki base, and the others stay as they were', async () => {
+    const dir = await contentDir({
+      'posts/linking.md': markdown({
+        title: 'Linking',
+        permalink: '/linking/',
+        date: '2026-09-01',
+        body: 'See [[Some page]].',
+      }),
+      'posts/plain.md': markdown({
+        title: 'Plain',
+        permalink: '/plain/',
+        date: '2026-09-01',
+        body: 'No [links] here.',
+      }),
+    });
+    const index = await store();
+    let base = 'wiki';
+    const changed: string[] = [];
+    const content = createContentSync({
+      store: index,
+      contentDir: dir,
+      watch: false,
+      wikiBase: () => base,
+    });
+    runningSyncs.push(content);
+    content.events.on('change', (change) => {
+      changed.push(change.path);
+    });
+
+    await content.sync();
+    assert.match(index.getByPath('posts/linking.md')?.html ?? '', /href="\/wiki\/some-page\/"/);
+
+    changed.length = 0;
+    base = 'notes';
+    const result = await content.sync();
+    assert.equal(result.updated, 1);
+    assert.deepEqual(changed, ['posts/linking.md']);
+    assert.match(index.getByPath('posts/linking.md')?.html ?? '', /href="\/notes\/some-page\/"/);
+
+    changed.length = 0;
+    assert.equal((await content.sync()).updated, 0, 'and once is enough');
+  });
+});

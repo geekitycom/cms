@@ -5,11 +5,11 @@ import { classifyLicense, isLicenseUrl, NO_LICENSE } from '../content/license.ts
 import { canonicalLocale } from '../content/locale.ts';
 import { LOCATION_SHARING } from '../content/location.ts';
 import {
-  DEFAULT_TAXONOMY_BASES,
-  taxonomyBaseProblems,
+  DEFAULT_PERMALINK_BASES,
+  permalinkBaseProblems,
   taxonomyRedirectsOf,
 } from '../content/taxonomy.ts';
-import type { TaxonomyRedirect } from '../content/taxonomy.ts';
+import type { PermalinkBase, TaxonomyRedirect } from '../content/taxonomy.ts';
 import { parseIconSetting } from '../images/icon-setting.ts';
 import { sourceFile } from '../images/paths.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
@@ -138,6 +138,17 @@ const taxonomyRedirects: SettingType<readonly TaxonomyRedirect[]> = jsonValue(
   (value) => value.map((entry) => ({ ...entry })),
 );
 
+const formerWikiBases: SettingType<readonly string[]> = jsonValue(
+  (raw) =>
+    Array.isArray(raw)
+      ? {
+          ok: true,
+          value: raw.filter((base): base is string => typeof base === 'string' && base !== ''),
+        }
+      : { ok: false, problem: 'must be a list of words' },
+  (value) => (value.length === 0 ? undefined : [...value]),
+);
+
 const clientsWithoutPkce: SettingType<readonly string[]> = jsonValue(
   (raw) =>
     Array.isArray(raw)
@@ -171,11 +182,12 @@ function emailOrEmpty(what: string) {
       : undefined;
 }
 
-function taxonomyBase(which: 'tag' | 'category') {
+function permalinkBase(which: PermalinkBase) {
   return (_value: string, after: Readonly<Record<string, unknown>>): string | undefined =>
-    taxonomyBaseProblems({
+    permalinkBaseProblems({
       tag: String(after['tag_base']),
       category: String(after['category_base']),
+      wiki: String(after['wiki_base']),
     })[which];
 }
 
@@ -220,6 +232,26 @@ export async function mintMissingIndexNowKey(
   if (!minted.ok) {
     console.error(`No IndexNow key was minted: ${Object.values(minted.problems).join(' ')}`);
   }
+}
+
+async function recordFormerWikiBase({
+  previous,
+  next,
+  by,
+  settings,
+}: SettingChange<string>): Promise<void> {
+  const former = await settings.get(SITE.former_wiki_bases);
+  const bases = formerBasesAfterMove(former, previous, next);
+  const recorded = await settings.set('site', new Map([['former_wiki_bases', bases]]), by);
+  if (!recorded.ok) {
+    console.error(
+      `The old wiki base was not recorded: ${Object.values(recorded.problems).join(' ')}`,
+    );
+  }
+}
+
+function formerBasesAfterMove(former: readonly string[], previous: string, next: string): string[] {
+  return [...former.filter((base) => base !== previous && base !== next), previous];
 }
 
 async function mintIndexNowKey({ next, by, settings }: SettingChange<boolean>): Promise<void> {
@@ -288,16 +320,30 @@ export const SITE = declareNamespace({
     tag_base: {
       fileKey: 'tagBase',
       type: nonEmptyText,
-      default: DEFAULT_TAXONOMY_BASES.tag,
+      default: DEFAULT_PERMALINK_BASES.tag,
       description: 'The first URL segment of the tag archives.',
-      check: taxonomyBase('tag'),
+      check: permalinkBase('tag'),
     },
     category_base: {
       fileKey: 'categoryBase',
       type: nonEmptyText,
-      default: DEFAULT_TAXONOMY_BASES.category,
+      default: DEFAULT_PERMALINK_BASES.category,
       description: 'The first URL segment of the category archives.',
-      check: taxonomyBase('category'),
+      check: permalinkBase('category'),
+    },
+    wiki_base: {
+      fileKey: 'wikiBase',
+      type: nonEmptyText,
+      default: DEFAULT_PERMALINK_BASES.wiki,
+      description: 'The first URL segment of the wiki pages and the wiki index.',
+      check: permalinkBase('wiki'),
+      onChange: recordFormerWikiBase,
+    },
+    former_wiki_bases: {
+      fileKey: 'formerWikiBases',
+      type: formerWikiBases,
+      default: [],
+      description: 'The wiki bases the site used before, whose URLs redirect to the wiki.',
     },
     comments: { type: boolean, default: true, description: 'Whether the site takes comments.' },
     comments_on_posts: {

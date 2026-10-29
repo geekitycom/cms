@@ -619,3 +619,188 @@ async function png(): Promise<Buffer> {
     .png()
     .toBuffer();
 }
+
+describe('the wiki tools', () => {
+  it('are listed with output that fits their schema', async () => {
+    const { cms, token } = await authoringSite(EVERY);
+    const { body } = await rpc(cms, token, 'tools/list');
+    const listed = (body['result'] as { tools: Row[] }).tools;
+
+    const created = await call(cms, token, 'create_wiki_page', { title: 'Seeds', body: 'Beans.' });
+    const read = await call(cms, token, 'get_wiki_page', { page: 'seeds' });
+    const updated = await call(cms, token, 'update_wiki_page', {
+      page: 'seeds',
+      hash: read.structured['hash'],
+      body: 'Peas.',
+    });
+    for (const [name, structured] of [
+      ['create_wiki_page', created.structured],
+      ['get_wiki_page', read.structured],
+      ['update_wiki_page', updated.structured],
+    ] as const) {
+      const tool = listed.find((entry) => entry['name'] === name);
+      assert.ok(tool !== undefined, `${name} is listed`);
+      assert.deepEqual(problemsWith(tool['outputSchema'] as JsonSchema, structured), [], name);
+    }
+    assert.equal(
+      (listed.find((entry) => entry['name'] === 'get_wiki_page')?.['annotations'] as Row)[
+        'readOnlyHint'
+      ],
+      true,
+    );
+  });
+
+  it('write a new wiki page as a draft under wiki/, at the wiki base', async () => {
+    const { cms, token } = await authoringSite();
+
+    const answer = await call(cms, token, 'create_wiki_page', {
+      title: 'Compost heap',
+      body: 'Turn it **monthly**.',
+    });
+
+    assert.equal(answer.isError, false, answer.text);
+    assert.deepEqual(answer.structured, {
+      url: `${BASE}/wiki/compost-heap/`,
+      slug: 'compost-heap',
+      draft: true,
+    });
+    const document = cms.store.getByPath('wiki/compost-heap.md');
+    assert.equal(document?.type, 'wiki');
+    assert.equal(document.draft, true);
+    const file = await readFile(
+      path.join(cms.config.contentDir, 'wiki', 'compost-heap.md'),
+      'utf8',
+    );
+    assert.match(file, /title: Compost heap/);
+    assert.match(file, /Turn it \*\*monthly\*\*\./);
+    assert.doesNotMatch(file, /permalink:/);
+  });
+
+  it('take a slug of their own and publish at once with the publish scope', async () => {
+    const { cms, token } = await authoringSite(EVERY);
+
+    const answer = await call(cms, token, 'create_wiki_page', {
+      title: 'Rain barrel',
+      slug: 'water-butt',
+      body: 'Collects rain.',
+      draft: false,
+    });
+
+    assert.equal(answer.isError, false, answer.text);
+    assert.equal(answer.structured['url'], `${BASE}/wiki/water-butt/`);
+    assert.equal(answer.structured['draft'], false);
+    assert.equal((await cms.app.request('/wiki/water-butt/')).status, 200);
+  });
+
+  it('need the publish scope to write a published wiki page', async () => {
+    const { cms, token } = await authoringSite();
+
+    const { status } = await rpc(cms, token, 'tools/call', {
+      name: 'create_wiki_page',
+      arguments: { title: 'Public', body: 'Out.', draft: false },
+    });
+
+    assert.equal(status, 403);
+    assert.equal(cms.store.getByPath('wiki/public.md'), undefined);
+  });
+
+  it('read a wiki page back with its title, body and hash, by slug or URL', async () => {
+    const { cms, token } = await authoringSite();
+    await call(cms, token, 'create_wiki_page', { title: 'Seeds', body: 'Beans and peas.' });
+
+    for (const page of ['seeds', `${BASE}/wiki/seeds/`]) {
+      const answer = await call(cms, token, 'get_wiki_page', { page });
+      assert.equal(answer.isError, false, answer.text);
+      assert.deepEqual(answer.structured, {
+        url: `${BASE}/wiki/seeds/`,
+        slug: 'seeds',
+        title: 'Seeds',
+        body: 'Beans and peas.',
+        draft: true,
+        hash: cms.store.getByPath('wiki/seeds.md')?.hash,
+      });
+    }
+  });
+
+  it('do not read or write a post or a page as a wiki page', async () => {
+    const { cms, token } = await authoringSite();
+
+    const answer = await call(cms, token, 'get_wiki_page', { page: 'hello' });
+
+    assert.equal(answer.isError, true);
+    assert.match(answer.text, /No wiki page answers to hello\./);
+    assert.equal(cms.store.getBySlug('hello')?.type, 'post');
+  });
+
+  it('update a wiki page’s title and body, refusing a stale hash', async () => {
+    const { cms, token } = await authoringSite();
+    await call(cms, token, 'create_wiki_page', { title: 'Seeds', body: 'Beans.' });
+    const { structured } = await call(cms, token, 'get_wiki_page', { page: 'seeds' });
+
+    const updated = await call(cms, token, 'update_wiki_page', {
+      page: 'seeds',
+      hash: structured['hash'],
+      title: 'Seed list',
+      body: 'Beans and peas.',
+    });
+    assert.equal(updated.isError, false, updated.text);
+    assert.deepEqual(updated.structured, {
+      url: `${BASE}/wiki/seeds/`,
+      slug: 'seeds',
+      draft: true,
+    });
+    const file = await readFile(path.join(cms.config.contentDir, 'wiki', 'seeds.md'), 'utf8');
+    assert.match(file, /title: Seed list/);
+    assert.match(file, /Beans and peas\./);
+
+    const stale = await call(cms, token, 'update_wiki_page', {
+      page: 'seeds',
+      hash: structured['hash'],
+      body: 'Overwritten.',
+    });
+    assert.equal(stale.isError, true);
+    assert.match(stale.text, /changed since it was read/);
+    assert.doesNotMatch(
+      await readFile(path.join(cms.config.contentDir, 'wiki', 'seeds.md'), 'utf8'),
+      /Overwritten/,
+    );
+  });
+
+  it('need the publish scope to publish a wiki page through an update', async () => {
+    const { cms, token } = await authoringSite();
+    await call(cms, token, 'create_wiki_page', { title: 'Seeds', body: 'Beans.' });
+    const { structured } = await call(cms, token, 'get_wiki_page', { page: 'seeds' });
+
+    const { status } = await rpc(cms, token, 'tools/call', {
+      name: 'update_wiki_page',
+      arguments: { page: 'seeds', hash: structured['hash'], draft: false },
+    });
+    assert.equal(status, 403);
+    assert.equal(cms.store.getByPath('wiki/seeds.md')?.draft, true);
+
+    const { cms: other, token: publisher } = await authoringSite(EVERY);
+    await call(other, publisher, 'create_wiki_page', { title: 'Seeds', body: 'Beans.' });
+    const read = await call(other, publisher, 'get_wiki_page', { page: 'seeds' });
+    const published = await call(other, publisher, 'update_wiki_page', {
+      page: 'seeds',
+      hash: read.structured['hash'],
+      draft: false,
+    });
+    assert.equal(published.isError, false, published.text);
+    assert.equal(published.structured['draft'], false);
+    assert.equal((await other.app.request('/wiki/seeds/')).status, 200);
+  });
+
+  it('leave Micropub as it was: a wiki page is not a post to it', async () => {
+    const { cms, token } = await authoringSite();
+    await call(cms, token, 'create_wiki_page', { title: 'Seeds', body: 'Beans.' });
+
+    const response = await cms.app.request(
+      `/_geekity/micropub?q=source&url=${encodeURIComponent(`${BASE}/wiki/seeds/`)}`,
+      { headers: { authorization: `Bearer ${await micropubToken(cms)}` } },
+    );
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /is not a post on this site/);
+  });
+});

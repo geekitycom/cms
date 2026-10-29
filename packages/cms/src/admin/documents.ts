@@ -24,7 +24,7 @@ import {
   splitTags,
 } from '../content/document-form.ts';
 import type { EditorForm, ResolvedMedia } from '../content/document-form.ts';
-import { PAGE_KIND, POST_KIND } from '../content/document-kind.ts';
+import { PAGE_KIND, POST_KIND, WIKI_KIND } from '../content/document-kind.ts';
 import type { DocumentKind } from '../content/document-kind.ts';
 import { enclosureOf, TRANSCRIPT_TYPES } from '../content/enclosure.ts';
 import { ENCLOSURE_FIELDS, resolveEnclosure } from '../content/enclosure-form.ts';
@@ -44,6 +44,7 @@ import { syndicateToField } from '../content/post-fields.ts';
 import { firstWords, postLabel } from '../content/post-type.ts';
 import { RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
 import { scheduledFor } from '../content/schedule.ts';
+import { slugify } from '../content/slug.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { CatalogReader, DocumentLookup, ListAllOptions } from '../content/store.ts';
 import type { Respelling } from '../content/tags.ts';
@@ -97,16 +98,17 @@ import { allowGeolocation } from './headers.ts';
 import { AUTOSAVE_DISCARD_JSON_PATH, AUTOSAVE_DISCARD_PATH, AUTOSAVE_PATH } from './autosave.ts';
 import { laterOrOnlyKnown } from './autosave-client.ts';
 import { PREVIEW_PATH } from './preview.ts';
-import { ADMIN_PREFIX } from '../site/admin-paths.ts';
+import { ADMIN_PREFIX, WIKI_ADMIN_PATH } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**
- * Everything that differs between the posts screens and the pages screens.
+ * Everything that differs between the posts, pages and wiki screens.
  *
- * Posts and pages are the same screens over the same store with two knobs
- * turned: a post carries a date and taxonomy, a page carries neither. Keeping the
- * difference in data rather than in two copies of the code is what lets
- * `/admin/pages` be one call to {@link mountDocumentScreens}.
+ * Posts, pages and wiki pages are the same screens over the same store with a
+ * few knobs turned: a post carries a date and taxonomy, a page and a wiki page
+ * carry neither. Keeping the difference in data rather than in copies of the
+ * code is what lets `/admin/pages` and `/admin/wiki` each be one call to
+ * {@link mountDocumentScreens}.
  */
 export interface DocumentScreens extends DocumentKind {
   /** The navigation section they mark as current. */
@@ -129,6 +131,19 @@ export const PAGE_SCREENS: DocumentScreens = {
   section: 'pages',
   basePath: `${ADMIN_PREFIX}/pages`,
   plural: 'Pages',
+};
+
+export const WIKI_SCREENS: DocumentScreens = {
+  ...WIKI_KIND,
+  section: 'wiki',
+  basePath: WIKI_ADMIN_PATH,
+  plural: 'Wiki',
+};
+
+export const DOCUMENT_SCREENS: Readonly<Record<DocumentType, DocumentScreens>> = {
+  post: POST_SCREENS,
+  page: PAGE_SCREENS,
+  wiki: WIKI_SCREENS,
 };
 
 /** A submitted Comments field, or the site default for anything else. */
@@ -223,7 +238,7 @@ export interface MountDocumentScreensOptions {
 /**
  * Register the listing and the editor for one kind of document.
  *
- * Both `/admin/posts` and `/admin/pages` are this function with a different
+ * `/admin/posts`, `/admin/pages` and `/admin/wiki` are this function with a different
  * {@link DocumentScreens}: the screens, the templates and the write path are
  * shared, and the kind decides what a file is called, whether the form has a
  * date and a taxonomy, and which section of the navigation marks itself.
@@ -281,7 +296,7 @@ export function mountDocumentScreens(
       document: undefined,
       form: restoring
         ? submittedForm(kind, copy.fields, c.var.config.contentDir)
-        : blankForm(kind, siteTimezone(c), c.var.store.now()),
+        : prefillFromQuery(c, blankForm(kind, siteTimezone(c), c.var.store.now())),
       postKind: isPostKind(postKind) ? postKind : undefined,
       autosave: id,
       copy,
@@ -333,6 +348,14 @@ export function mountDocumentScreens(
       saveFromForm(c, { kind, render, document, body })
     );
   });
+}
+
+function prefillFromQuery(c: Context<GeekityEnv>, form: EditorForm): EditorForm {
+  return {
+    ...form,
+    title: (c.req.query('title') ?? '').trim(),
+    slug: slugify(c.req.query('slug') ?? ''),
+  };
 }
 
 interface RestoreCopyOptions {
@@ -817,11 +840,7 @@ function renderUnsaved(
       return {
         label: copyLabel(copy),
         kind:
-          postKind !== undefined
-            ? EDITOR_KINDS[postKind].label
-            : kind.type === 'page'
-              ? PAGE_CHOICE.label
-              : 'Post',
+          postKind !== undefined ? EDITOR_KINDS[postKind].label : KINDLESS_COPY_LABELS[kind.type],
         savedAt: copy.savedAt,
         at: formatInTimezone(copy.savedAt, siteTimezone(c)),
         of:
@@ -934,8 +953,27 @@ interface EditorAction {
   label: string;
 }
 
+const PLURAL_NOUNS: Readonly<Record<DocumentType, string>> = {
+  post: 'posts',
+  page: 'pages',
+  wiki: 'wiki pages',
+};
+
+const KINDLESS_COPY_LABELS: Readonly<Record<DocumentType, string>> = {
+  post: 'Post',
+  page: PAGE_CHOICE.label,
+  wiki: 'Wiki page',
+};
+
+function linkableWikiSlugs(store: CatalogReader): string[] {
+  return store
+    .listAll({ type: 'wiki', draft: undefined, trashed: false })
+    .map((page) => page.slug)
+    .sort();
+}
+
 function siteDefaultLabel(type: DocumentType, policy: CommentPolicy): string {
-  const these = type === 'post' ? 'posts' : 'pages';
+  const these = PLURAL_NOUNS[type];
   if (!policy.enabled) return 'comments are off on this site';
   if (!policy.openByDefault[type]) return `closed for ${these}`;
   const days = policy.closeAfterDays;
@@ -1067,6 +1105,7 @@ async function editorModel(
     autosaveFileTime: document?.updated,
     autosaveTimezone: timezone,
     words: editorWordCounter(c, form.body),
+    wikiSlugs: linkableWikiSlugs(c.var.store),
     resume: await resumeOffer(c, {
       kind,
       document,

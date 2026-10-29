@@ -32,11 +32,12 @@ export function sourceSite(site: ToolSite): SourceSite {
 export function unsaved(
   written: Exclude<WriteOutcome, { outcome: 'saved' }>,
   slug: string,
+  reader = 'get_post_source',
 ): Refused {
   return written.outcome === 'refused'
     ? refused(written.message)
     : refused(
-        `${slug} changed since it was read. Read it again with get_post_source and update from what it holds now.`,
+        `${slug} changed since it was read. Read it again with ${reader} and update from what it holds now.`,
       );
 }
 

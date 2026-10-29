@@ -9,7 +9,7 @@ import type { Taxonomy } from '../content/taxonomy.ts';
 import { calendarDayIn } from '../content/time.ts';
 import { siteAuthorContext } from '../site/authors.ts';
 import { navigationLinks, navigationMenus } from '../site/navigation.ts';
-import { siteTimezone, taxonomyBases } from '../theme/site-data.ts';
+import { siteTimezone, permalinkBases } from '../theme/site-data.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { webmentionEndpointFor } from '../webmention/endpoint.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
@@ -163,7 +163,7 @@ function markdownLinksContext(
   if (document === undefined) return {};
 
   const site = siteData.read();
-  const bases = taxonomyBases(site);
+  const bases = permalinkBases(site);
   const timezone = siteTimezone(site);
   const terms = (taxonomy: Taxonomy, names: readonly string[]): MarkdownLink[] =>
     document.type === 'post'

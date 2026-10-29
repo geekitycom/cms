@@ -35,6 +35,8 @@
  *     and `fediverseHandle` — and `newestPosts(count)` for a front page, so
  *     the default theme's layouts and partials build, and so does a site
  *     theme's override of them.
+ * 15. A wiki page under `content/wiki/` is built at `/{wikiBase}/{slug}/`,
+ *     the slug being its file name, whatever its front matter says.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
  * says `"layout": "post"`, `pages.json` says `"layout": "page"` — so
@@ -75,6 +77,8 @@ import { readFileSync } from 'node:fs';
 
 /** The content subdirectory that holds dated posts; everything else is a page. */
 const POSTS_DIRECTORY = 'posts';
+
+const WIKI_DIRECTORY = 'wiki';
 
 /**
  * `content/_data/site.json`, which the settings screen mirrors, or `{}` when
@@ -272,6 +276,23 @@ function categoriesOf(data) {
 /** Whether a content-relative input path is a post rather than a page. */
 function isPost(inputPath) {
   return String(inputPath).split('/').includes(POSTS_DIRECTORY);
+}
+
+function isWikiPage(inputPath) {
+  return String(inputPath).split('/').includes(WIKI_DIRECTORY);
+}
+
+function wikiPermalink(data) {
+  const base =
+    typeof data.site?.wikiBase === 'string' && data.site.wikiBase !== ''
+      ? data.site.wikiBase
+      : 'wiki';
+  const file = String(data.page?.inputPath ?? '')
+    .split('/')
+    .at(-1)
+    .replace(/\.(md|markdown)$/i, '');
+  const slug = slugify(file) || slugify(data.title ?? '') || 'untitled';
+  return `/${base}/${slug}/`;
 }
 
 /**
@@ -1020,6 +1041,10 @@ export default function (eleventyConfig) {
   // The CMS writes `permalink` into every file it saves, so this only matters
   // for hand-authored files. Front matter always wins.
   eleventyConfig.addPreprocessor('geekity-permalinks', 'md', (data) => {
+    if (isWikiPage(data.page?.inputPath ?? '')) {
+      data.permalink = wikiPermalink(data);
+      return;
+    }
     if (typeof data.permalink === 'string' && data.permalink !== '') return;
 
     const permalink = defaultPermalink(data);
@@ -1198,9 +1223,10 @@ export default function (eleventyConfig) {
   eleventyConfig.setTemplateFormats(['md', 'njk', 'html']);
 
   // Uploads are files, not templates: copy them through unchanged. The ignore
-  // matters as much as the copy — the CMS only ever indexes `posts/` and
-  // `pages/`, so a Markdown file that happens to be an upload is something to
-  // download, not a page Eleventy should render at a URL of its own.
+  // matters as much as the copy — the CMS only ever indexes `posts/`,
+  // `pages/` and `wiki/`, so a Markdown file that happens to be an upload is
+  // something to download, not a page Eleventy should render at a URL of its
+  // own.
   eleventyConfig.addPassthroughCopy({ 'content/uploads': 'uploads' });
   eleventyConfig.ignores.add('content/uploads/**');
 
