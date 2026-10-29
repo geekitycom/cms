@@ -60,10 +60,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
-      - run: pnpm lint
       # Formatting is a check, not a fixup: CI never rewrites files, it fails
-      # and leaves `pnpm format` to the author.
-      - run: pnpm format:check
+      # and leaves `pnpm format` to the author. The two checks run side by side
+      # because neither needs the other, and the job fails if either does.
+      - shell: bash
+        run: |
+          pnpm format:check &
+          format=$!
+          pnpm lint
+          wait "$format"
 
   typecheck:
     name: typecheck
