@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateKeyPairSync } from 'node:crypto';
+import { KeyObject } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,7 +9,7 @@ import { listUsers } from '@geekity/cms';
 
 import { importSummary } from '../src/command.ts';
 import type { ImportWordPressActorReport } from '../src/import.ts';
-import { runCli, writeConfigWithPlugin } from './site.ts';
+import { runCli, testKeyPair, writeConfigWithPlugin, writeUsers } from './site.ts';
 
 const temporaryDirs: string[] = [];
 
@@ -21,6 +21,15 @@ async function temporaryDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
   temporaryDirs.push(dir);
   return dir;
+}
+
+/** A fixture RSA pair as the PEM files `wp option get` hands over. */
+async function pemPair(which: number): Promise<{ privateKey: string; publicKey: string }> {
+  const pair = await testKeyPair(which);
+  return {
+    privateKey: KeyObject.from(pair.privateKey).export({ type: 'pkcs8', format: 'pem' }).toString(),
+    publicKey: KeyObject.from(pair.publicKey).export({ type: 'spki', format: 'pem' }).toString(),
+  };
 }
 
 async function exists(file: string): Promise<boolean> {
@@ -81,14 +90,9 @@ describe('geekity import wordpress-actor', () => {
     const directory = await temporaryDir(prefix);
     writeConfigWithPlugin(directory);
     const dataDir = path.join(directory, 'data');
-    const run = await runCli(['user', 'add', 'ada', '--password', 'hunter22'], directory);
-    assert.equal(run.code, 0, run.stderr);
+    writeUsers(dataDir, [{ username: 'ada' }]);
 
-    const pair = generateKeyPairSync('rsa', {
-      modulusLength: 2048,
-      publicKeyEncoding: { type: 'spki', format: 'pem' },
-      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-    });
+    const pair = await pemPair(0);
     const privateKey = path.join(directory, 'ada.private.pem');
     const publicKey = path.join(directory, 'ada.public.pem');
     const followers = path.join(directory, 'followers.json');
@@ -137,7 +141,7 @@ describe('geekity import wordpress-actor', () => {
     ];
   }
 
-  it('writes the key files, both ids and the followers, and says what it did', async () => {
+  it('writes the key files, both ids and the followers, says what it did, and changes nothing the second time', async () => {
     const site = await siteToImportInto('geekity-import-');
 
     const run = await runCli(importArgs(site), site.directory);
@@ -177,27 +181,22 @@ describe('geekity import wordpress-actor', () => {
 
     assert.match(run.stdout, /ada/);
     assert.match(run.stdout, /1 added/);
-  });
 
-  it('changes nothing the second time, and says so', async () => {
-    const site = await siteToImportInto('geekity-import-again-');
-    assert.equal((await runCli(importArgs(site), site.directory)).code, 0);
+    const again = await runCli(importArgs(site), site.directory);
 
-    const run = await runCli(importArgs(site), site.directory);
-
-    assert.equal(run.code, 0, run.stderr);
-    assert.match(run.stdout, /[Nn]othing to change/);
+    assert.equal(again.code, 0, again.stderr);
+    assert.match(
+      again.stdout,
+      /[Nn]othing to change/,
+      'the second run changes nothing, and says so',
+    );
   });
 
   it('refuses to import over a different key pair unless told to', async () => {
     const site = await siteToImportInto('geekity-import-force-');
     assert.equal((await runCli(importArgs(site), site.directory)).code, 0);
 
-    const other = generateKeyPairSync('rsa', {
-      modulusLength: 2048,
-      publicKeyEncoding: { type: 'spki', format: 'pem' },
-      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-    });
+    const other = await pemPair(1);
     await fs.writeFile(site.privateKey, other.privateKey);
     await fs.writeFile(site.publicKey, other.publicKey);
 

@@ -129,8 +129,8 @@ export interface CliRun {
 const execFile = promisify(execFileCallback);
 
 /**
- * Run the installed `geekity` bin, the way a site's shim runs it, under tsx so
- * the site config can import this package's source.
+ * Run the installed `geekity` bin the way a site's shim runs it. Node strips
+ * the types from this package's source when the site config imports it.
  */
 export async function runCli(args: readonly string[], cwd: string): Promise<CliRun> {
   const bin = fileURLToPath(import.meta.resolve('@geekity/cms/package.json')).replace(
@@ -138,11 +138,7 @@ export async function runCli(args: readonly string[], cwd: string): Promise<CliR
     path.join('dist', 'cli.js'),
   );
   try {
-    const { stdout, stderr } = await execFile(
-      process.execPath,
-      ['--import', import.meta.resolve('tsx'), bin, ...args],
-      { cwd },
-    );
+    const { stdout, stderr } = await execFile(process.execPath, [bin, ...args], { cwd });
     return { code: 0, stdout, stderr };
   } catch (error) {
     const failure = error as { code?: number; stdout?: string; stderr?: string };
