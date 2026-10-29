@@ -76,34 +76,39 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - run: pnpm typecheck
 
-  # The suite is CPU-bound and `node --test` runs one file per process with a
-  # concurrency of cores minus one, so on the four vCPUs a standard
-  # GitHub-hosted runner gives a public repository, three files run at once.
+  # The cms suite is CPU-bound: `node --test` runs one file per process, three
+  # at once on the four vCPUs a GitHub-hosted runner gives a public repository.
+  # One runner takes about seven minutes, so the files are split across six
+  # runners with `--test-shard`, each running a sixth of them. The plugin
+  # packages, md2gemini and the demo are small and run together in one more
+  # entry. Every entry runs on Node 24, the package's floor and active LTS,
+  # and again on 26, the current line, so the next LTS holds no surprises.
   test:
-    name: test
+    name: test (node ${{ matrix.node.name }}, ${{ matrix.part }})
     needs: already-tested
     if: ${{ !cancelled() && needs.already-tested.outputs.skip != 'true' }}
     runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-workspace
-      - run: pnpm test
-
-  # The package's floor is Node 24, the active LTS, which is what `test` runs
-  # on. This job runs the same suite on the current line so the next LTS holds
-  # no surprises. A separate job rather than a matrix so the check above keeps
-  # the plain name `test`.
-  test-node-26:
-    name: test-node-26
-    needs: already-tested
-    if: ${{ !cancelled() && needs.already-tested.outputs.skip != 'true' }}
-    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - { name: '24', version: '' }
+          - { name: '26', version: '26' }
+        part: [cms 1/6, cms 2/6, cms 3/6, cms 4/6, cms 5/6, cms 6/6, packages]
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
         with:
-          node-version: '26'
-      - run: pnpm test
+          node-version: ${{ matrix.node.version }}
+      # `pnpm install` has already built every package, so neither command
+      # runs the root `test` script, which would build them again.
+      - if: ${{ startsWith(matrix.part, 'cms ') }}
+        env:
+          PART: ${{ matrix.part }}
+        shell: bash
+        run: TEST_SHARD="${PART#cms }" pnpm --filter @geekity/cms test:shard
+      - if: ${{ matrix.part == 'packages' }}
+        run: pnpm --filter '!@geekity/cms' -r --no-bail test
 
   build:
     name: build
@@ -213,8 +218,7 @@ jobs:
   record-tested-tree:
     name: record-tested-tree
     if: github.event_name == 'pull_request'
-    needs:
-      [lint, typecheck, test, test-node-26, build, test-11ty, fed-smoke, pack-install, docker-smoke]
+    needs: [lint, typecheck, test, build, test-11ty, fed-smoke, pack-install, docker-smoke]
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7

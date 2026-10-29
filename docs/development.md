@@ -243,8 +243,7 @@ Each gate is a separate job, so each one can be a required status check:
 | -------------- | --------------------------------------------------- |
 | `lint`         | `pnpm lint`, then `pnpm format:check`.              |
 | `typecheck`    | `pnpm typecheck`.                                   |
-| `test`         | `pnpm test` on Node 24.                             |
-| `test-node-26` | The same suite on Node 26, the current line.        |
+| `test`         | The test suites, in a matrix described below.       |
 | `build`        | `pnpm build`.                                       |
 | `test-11ty`    | `pnpm test:11ty`, the Eleventy compatibility suite. |
 | `pack-install` | `scripts/pack-install-smoke.sh`.                    |
@@ -260,6 +259,14 @@ action. Do not copy the setup.
 So `dist/` exists in every job before the job's own command runs. The `build`
 job still exists because a required check needs a job to name. CI sets
 `HUSKY=0`, because CI has no git hooks to install.
+
+`test` is a matrix of fourteen jobs. The `packages/cms` suite is split into six
+shards with `node --test --test-shard`, and each shard runs on its own runner
+through `pnpm --filter @geekity/cms test:shard` with `TEST_SHARD` set to, for
+example, `2/6`. A seventh entry runs every other package's suite. Each of the
+seven runs on Node 24, the package's floor, and on Node 26, the current line.
+To run one shard locally, run `TEST_SHARD=2/6 pnpm test:shard` in
+`packages/cms`.
 
 `pack-install` is the one job that does not test the workspace. Every other job
 reaches `@geekity/cms` through a symlink. A symlink exposes the whole source
@@ -320,8 +327,8 @@ On GitHub, under Settings → Rules → Rulesets (or Settings → Branches), pro
 - **Require a pull request before merging.** The release flow assumes no
   direct pushes to `main`.
 - **Require status checks to pass.** Select exactly these job names from the
-  table above: `lint`, `typecheck`, `test`, `test-node-26`, `build`,
-  `test-11ty`, `pack-install`. Tick "Require branches to be up to date before
+  table above: `lint`, `typecheck`, each of the fourteen `test (node …)`
+  matrix entries, `build`, `test-11ty`, `pack-install`. Tick "Require branches to be up to date before
   merging".
 - Allow only **merge commits** in Settings → General → Pull Requests. A merge
   keeps every commit of the branch. release-please reads each one, so every
