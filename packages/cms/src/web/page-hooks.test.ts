@@ -12,6 +12,7 @@ import { deleteUser } from '../admin/users.ts';
 import { listUsers } from '../site/users.ts';
 import { createThemeSource } from '../theme/themes.ts';
 import { systemClock } from '../util/clock.ts';
+import { shared } from './__testing__/shared.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -62,6 +63,9 @@ async function siteWithHooks(): Promise<{ cms: Cms; themesDir: string }> {
   return { cms, themesDir };
 }
 
+/** {@link siteWithHooks}, for a test that only reads from it. */
+const sharedSiteWithHooks = shared(siteWithHooks);
+
 function headOf(html: string): string {
   return html.slice(html.indexOf('<head>'), html.indexOf('</head>'));
 }
@@ -72,7 +76,7 @@ function bodyOf(html: string): string {
 
 describe('the hook partials a site theme fills (TASK-298)', () => {
   it('puts the head snippets in the head of every public page, and keeps the packaged templates (AC #1, #2)', async () => {
-    const { cms } = await siteWithHooks();
+    const { cms } = await sharedSiteWithHooks();
 
     for (const pathname of ['/', '/2026/09/hello/', '/about/', '/tag/notes/', '/nothing-here/']) {
       const html = await (await cms.app.request(pathname)).text();
@@ -90,7 +94,7 @@ describe('the hook partials a site theme fills (TASK-298)', () => {
   });
 
   it('puts the body snippet last in the body of every public page', async () => {
-    const { cms } = await siteWithHooks();
+    const { cms } = await sharedSiteWithHooks();
 
     for (const pathname of ['/', '/2026/09/hello/', '/nothing-here/']) {
       const html = await (await cms.app.request(pathname)).text();
@@ -121,7 +125,7 @@ describe('the hook partials a site theme fills (TASK-298)', () => {
   });
 
   it('keeps the snippets out of every other representation (AC #3)', async () => {
-    const { cms } = await siteWithHooks();
+    const { cms } = await sharedSiteWithHooks();
 
     const requests: [string, Record<string, string>][] = [
       ['/2026/09/hello/', { accept: 'text/markdown' }],
@@ -235,6 +239,9 @@ async function siteWithGuardedAnalytics(
   return { cms, dataDir };
 }
 
+/** {@link siteWithGuardedAnalytics}, for a test that only reads from it. */
+const sharedSiteWithGuardedAnalytics = shared(siteWithGuardedAnalytics);
+
 const PUBLIC_PAGES = [
   '/',
   '/2026/09/hello/',
@@ -246,7 +253,7 @@ const PUBLIC_PAGES = [
 
 describe('devMode and signedIn on the context, for a theme to leave analytics out (TASK-342)', () => {
   it('prints the guarded snippet for an anonymous reader on a live site', async () => {
-    const { cms } = await siteWithGuardedAnalytics();
+    const { cms } = await sharedSiteWithGuardedAnalytics();
 
     for (const pathname of PUBLIC_PAGES) {
       const html = await (await cms.app.request(pathname)).text();
@@ -266,7 +273,7 @@ describe('devMode and signedIn on the context, for a theme to leave analytics ou
   });
 
   it("reads both keys from the site, never from a page's front matter", async () => {
-    const { cms } = await siteWithGuardedAnalytics();
+    const { cms } = await sharedSiteWithGuardedAnalytics();
 
     const html = await (await cms.app.request('/spoof/')).text();
     assert.ok(headOf(html).includes(UMAMI), 'front matter switched the analytics off');
@@ -283,7 +290,7 @@ describe('devMode and signedIn on the context, for a theme to leave analytics ou
   });
 
   it('leaves it out while dev mode is on from the config (AC #1)', async () => {
-    const { cms } = await siteWithGuardedAnalytics({ devMode: true });
+    const { cms } = await sharedSiteWithGuardedAnalytics({ devMode: true });
 
     for (const pathname of PUBLIC_PAGES) {
       const html = await (await cms.app.request(pathname)).text();
