@@ -44,7 +44,6 @@ async function site(siteJson: Record<string, unknown> = {}): Promise<Cms> {
   return instance;
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 /** The served robots file. */

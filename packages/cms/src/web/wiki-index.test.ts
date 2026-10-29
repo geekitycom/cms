@@ -53,7 +53,6 @@ async function site(content: Record<string, string> = WIKI): Promise<Cms> {
   });
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 async function body(cms: Cms, pathname: string, init?: RequestInit): Promise<string> {

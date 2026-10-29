@@ -63,7 +63,6 @@ async function site(
   return { cms: instance, contentDir };
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 /** Point the site's feeds at another notify server, or at none. */

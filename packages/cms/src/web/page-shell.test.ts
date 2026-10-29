@@ -123,7 +123,6 @@ async function siteWearingAnAvatar(settings: Record<string, unknown> = {}): Prom
   return cms;
 }
 
-/** {@link site} and {@link siteWearingAnAvatar}, for a test that only reads. */
 const sharedSite = shared(site);
 const sharedAvatarSite = shared(siteWearingAnAvatar);
 

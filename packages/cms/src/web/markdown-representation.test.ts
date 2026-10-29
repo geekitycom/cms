@@ -135,7 +135,6 @@ async function site(
   return instance;
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 async function markdown(cms: Cms, url: string): Promise<string> {

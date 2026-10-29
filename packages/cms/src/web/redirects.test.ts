@@ -58,7 +58,6 @@ async function site(files: Record<string, string>): Promise<{ cms: Cms; contentD
   return { cms, contentDir };
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 async function redirectOf(

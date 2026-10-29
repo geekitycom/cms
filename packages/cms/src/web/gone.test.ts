@@ -86,7 +86,6 @@ async function site(files: Record<string, string>): Promise<Site> {
   return { cms: await boot(contentDir, dataDir), contentDir, dataDir };
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 function post(

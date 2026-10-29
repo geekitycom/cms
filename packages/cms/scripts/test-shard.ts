@@ -10,8 +10,8 @@
  *
  * `node scripts/test-shard.ts --measure` times every file, four at a time as on
  * a CI runner, and rewrites test-weights.json. Wall time, not CPU, because
- * several files spend theirs in the processes they start. The weights only steer the deal, so a stale or missing
- * entry costs balance, never a test.
+ * several files spend theirs in the processes they start. The weights only
+ * steer the deal, so a stale or missing entry costs balance, never a test.
  */
 import { spawn } from 'node:child_process';
 import { globSync, readFileSync, writeFileSync } from 'node:fs';

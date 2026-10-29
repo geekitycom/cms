@@ -39,7 +39,6 @@ async function site(files: Record<string, string>): Promise<Cms> {
   return cms;
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 function post(frontMatter: string[], body = ''): string {

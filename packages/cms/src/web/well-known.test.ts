@@ -50,7 +50,6 @@ async function site(siteJson?: Record<string, unknown>): Promise<Site> {
   };
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 function field(body: string, name: string): string[] {

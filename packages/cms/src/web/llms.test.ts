@@ -105,7 +105,6 @@ async function site(options: SiteOptions = {}): Promise<{ cms: Cms; contentDir: 
   return { cms, contentDir };
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 /** The served file, after checking it is served as Markdown. */

@@ -62,7 +62,6 @@ async function siteWithHooks(): Promise<{ cms: Cms; themesDir: string }> {
   return { cms, themesDir };
 }
 
-/** {@link siteWithHooks}, for a test that only reads from it. */
 const sharedSiteWithHooks = shared(siteWithHooks);
 
 function headOf(html: string): string {
@@ -238,7 +237,6 @@ async function siteWithGuardedAnalytics(
   return { cms, dataDir };
 }
 
-/** {@link siteWithGuardedAnalytics}, for a test that only reads from it. */
 const sharedSiteWithGuardedAnalytics = shared(siteWithGuardedAnalytics);
 
 const PUBLIC_PAGES = [

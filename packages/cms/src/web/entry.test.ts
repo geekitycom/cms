@@ -129,7 +129,6 @@ async function site(
   return cms;
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 /** GET a path and read the body. */

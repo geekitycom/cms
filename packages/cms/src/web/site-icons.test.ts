@@ -50,7 +50,6 @@ async function site(
   return box.open({ contentDir, dataDir, ...config });
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 /** A square PNG of one colour. */

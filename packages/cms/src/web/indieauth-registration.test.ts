@@ -46,7 +46,6 @@ async function site(): Promise<Cms> {
   return await box.open({ contentDir, dataDir, baseUrl: BASE, hostLookup: PUBLIC });
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 async function register(

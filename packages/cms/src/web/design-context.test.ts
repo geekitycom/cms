@@ -155,7 +155,6 @@ async function site(
   });
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 /** Give the site a user with a profile, the way the users screen would. */

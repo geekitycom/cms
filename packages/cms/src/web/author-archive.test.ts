@@ -120,7 +120,6 @@ async function site(
   return instance;
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 describe('the author archive (AC #3)', () => {

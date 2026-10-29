@@ -64,7 +64,6 @@ async function site(theme?: Record<string, string>): Promise<Cms> {
   return cms;
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 async function maintenance(cms: Cms, until?: Date): Promise<void> {

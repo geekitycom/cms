@@ -51,7 +51,6 @@ async function site(
   return { cms: instance, contentDir };
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 /** The file text of the one post every test in here negotiates over. */

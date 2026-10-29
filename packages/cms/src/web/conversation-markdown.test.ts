@@ -228,7 +228,6 @@ async function site(theme?: Record<string, string>): Promise<Cms> {
   return cms;
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 function logReply(cms: Cms, options: { id: string; content: string; url: string }): void {

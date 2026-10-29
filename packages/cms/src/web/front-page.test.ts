@@ -73,7 +73,6 @@ async function site(
   return { cms: instance, contentDir };
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 /** Three published posts and two pages: the shape every test here starts from. */

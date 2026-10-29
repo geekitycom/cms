@@ -93,7 +93,6 @@ async function site(
   });
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 /** Write an image of one size to an upload path, and derive its variants so its size is recorded. */

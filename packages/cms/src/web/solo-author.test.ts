@@ -99,7 +99,6 @@ async function site(
   return instance;
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 async function body(cms: Cms, pathname: string): Promise<string> {

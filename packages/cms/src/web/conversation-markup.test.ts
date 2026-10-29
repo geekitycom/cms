@@ -228,7 +228,6 @@ async function site(): Promise<Cms> {
   return cms;
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 /** Log one fediverse reply, the way the inbox logs one. */

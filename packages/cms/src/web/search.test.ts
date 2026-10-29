@@ -49,7 +49,6 @@ async function site(files: Record<string, string>): Promise<Cms> {
   return cms;
 }
 
-/** {@link site}, for a test that only reads from it. */
 const sharedSite = shared(site);
 
 /** A post file, dated before the stopped clock unless `date` says otherwise. */
