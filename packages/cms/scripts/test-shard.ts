@@ -1,18 +1,5 @@
-/**
- * Run one shard of the cms suite: `TEST_SHARD=2/6 node scripts/test-shard.ts`.
- *
- * `node --test --test-shard` deals files out by their index in name order, so
- * the slowest files can land in one shard by accident of their names, and that
- * shard sets how long CI takes. Here each file is weighed by the seconds it
- * took when last measured, and the files are dealt heaviest first to the shard
- * with the least work so far. test-weights.json lists the files of three
- * seconds or more, and the median file, which any file not listed counts as.
- *
- * `node scripts/test-shard.ts --measure` times every file, four at a time as on
- * a CI runner, and rewrites test-weights.json. Wall time, not CPU, because
- * several files spend theirs in the processes they start. The weights only
- * steer the deal, so a stale or missing entry costs balance, never a test.
- */
+// `node --test --test-shard` deals files out by name order, so slow files can
+// land in one shard together; this deals them out by test-weights.json.
 import { spawn } from 'node:child_process';
 import { globSync, readFileSync, writeFileSync } from 'node:fs';
 

@@ -163,7 +163,6 @@ const HELLO = {
 
 const sharedSites = new Map<Record<string, string>, Promise<Cms>>();
 
-/** One site over `files`, booted once and shared by the tests that only read it. */
 function sharedSite(files: Record<string, string>): Promise<Cms> {
   let found = sharedSites.get(files);
   if (found === undefined) {

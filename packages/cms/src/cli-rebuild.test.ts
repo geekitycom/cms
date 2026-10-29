@@ -78,7 +78,6 @@ describe('geekity rebuild', () => {
     assert.equal(run.code, 0, run.stderr);
   });
 
-  /** A copy of the federated site after a `geekity sync`, its database built. */
   async function syncedSite(): Promise<string> {
     const directory = await temporaryDir('geekity-rebuild-');
     await fs.cp(synced, directory, { recursive: true });

@@ -4,17 +4,6 @@ import { writeUsers } from '../../admin/__testing__/users.ts';
 import type { Cms } from '../../index.ts';
 import { listUsers } from '../../site/users.ts';
 
-/**
- * A browser holding a signed-in session for `username`, the session the setup
- * or login form would have left behind, without either form.
- *
- * Both forms run argon2, a few hundred milliseconds of CPU that proves nothing
- * about federation, webmention or IndieAuth and that every test in these files
- * would otherwise spend. The admin tests walk the forms themselves.
- *
- * A site with no accounts gets `username` as its first one, as the setup form
- * would make it; a site that has accounts must already have this one.
- */
 export function signedInAs(cms: Cms, username: string): Browser {
   const users = listUsers(cms.config.dataDir);
   if (users.length === 0) writeUsers(cms.config.dataDir, [{ username }]);

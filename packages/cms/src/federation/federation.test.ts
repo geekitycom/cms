@@ -87,7 +87,6 @@ async function site(
 
 let shared: Promise<Cms> | undefined;
 
-/** One default {@link site}, booted once and shared by the tests that only read it. */
 function sharedSite(): Promise<Cms> {
   shared ??= site();
   return shared;

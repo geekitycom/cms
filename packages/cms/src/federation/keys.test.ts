@@ -39,11 +39,6 @@ async function dataDir(): Promise<string> {
   return dir;
 }
 
-/**
- * A data directory already holding fixture keys for {@link ADA}, for a test
- * about what happens to keys that exist rather than about minting them: an
- * RSA-4096 pair costs a quarter of a second to generate.
- */
 async function seededDir(): Promise<string> {
   const dir = await dataDir();
   seedActorKeys(dir, ADA);
@@ -66,7 +61,6 @@ async function exported(pairs: readonly CryptoKeyPair[]): Promise<string[]> {
 }
 
 describe('loadActorKeyPairs', () => {
-  /** One first call on an empty directory, which the tests below only read. */
   let minted: { dir: string; pairs: CryptoKeyPair[] };
   before(async () => {
     const dir = await dataDir();

@@ -23,7 +23,6 @@ async function temporaryDir(prefix: string): Promise<string> {
   return dir;
 }
 
-/** A fixture RSA pair as the PEM files `wp option get` hands over. */
 async function pemPair(which: number): Promise<{ privateKey: string; publicKey: string }> {
   const pair = await testKeyPair(which);
   return {

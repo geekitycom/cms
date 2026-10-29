@@ -5,27 +5,16 @@ import { USERS_FILE_MODE, findUser, usersFile, usersJsonText } from '../../site/
 import type { User, UserProfile, UsersFileContents } from '../../site/users.ts';
 import { FIRST_ADMIN } from './harness.ts';
 
-/** One account for {@link writeUsers}. */
 export interface TestUser {
   username: string;
   id?: number;
   email?: string;
-  /** Defaults to {@link FIRST_ADMIN}'s, so every account written can sign in. */
   password?: string;
   profile?: UserProfile;
-  /** The id this person was published under elsewhere. */
   actorId?: string;
   createdAt?: string;
 }
 
-/**
- * Write `data/users.json` straight, for a site that already has its accounts
- * when it boots. Defaults to the first admin alone.
- *
- * Every user is an actor, so most federation, Micropub and comment tests need
- * accounts before the CMS starts, and the setup form only answers for a site
- * with none. Passwords are hashed with {@link cheapPasswordHash}.
- */
 export function writeUsers(
   dataDir: string,
   users: readonly TestUser[] = [{ username: FIRST_ADMIN.username }],
@@ -52,11 +41,6 @@ export function writeUsers(
   );
 }
 
-/**
- * Add one user to a site that may already have some, the way `createUser`
- * would, but with {@link cheapPasswordHash}. For a test whose subject is what
- * a second account sees or may do, not how an account is made.
- */
 export function addUser(input: {
   dataDir: string;
   username: string;
@@ -86,13 +70,6 @@ export function addUser(input: {
   return user;
 }
 
-/**
- * A real argon2id hash of `password` at the smallest cost argon2 allows.
- *
- * Sign-in reads the cost out of the stored hash, so this verifies through the
- * same code as a production hash while costing a fraction of a millisecond
- * instead of tens of them.
- */
 function cheapPasswordHash(password: string): string {
   const salt = randomBytes(16);
   const tag = Buffer.from(

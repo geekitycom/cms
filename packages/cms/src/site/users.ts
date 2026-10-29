@@ -655,9 +655,6 @@ function withoutHash(user: StoredUser): User {
 /**
  * A hash of a password no user has, so a login attempt for an unknown
  * username costs the same as one for a known name with the wrong password.
- *
- * Made on first use rather than at import: every process that loads the app
- * would otherwise spend an argon2 run on it, most of them never seeing a login.
  */
 let dummyHash: string | undefined;
 

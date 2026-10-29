@@ -134,8 +134,6 @@ export interface MigrationLedger {
  *
  * Applying is idempotent, and every pending migration runs in one transaction,
  * so a failure part-way leaves the ledger describing exactly the schema on disk.
- * One transaction rather than one per migration because a fresh database has
- * every migration pending, and each commit is a write to the log.
  */
 export function applyMigrations(db: DatabaseSync, ledger: MigrationLedger): void {
   db.exec(`

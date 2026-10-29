@@ -32,10 +32,6 @@ interface Site {
 
 const sites = new Map<boolean, Promise<Site>>();
 
-/**
- * The site for a mode, booted once and shared: every test issues tokens of
- * its own, so none can see another's.
- */
 function site(config: { maintenance?: boolean } = {}): Promise<Site> {
   const maintenance = config.maintenance === true;
   let found = sites.get(maintenance);

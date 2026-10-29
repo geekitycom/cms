@@ -68,7 +68,6 @@ async function site(scopes: Scope[] = ['create'], config: GeekityConfig = {}): P
   return { cms, token: accessToken };
 }
 
-/** A site the first admin is signed in to, for writing the same post through the editor. */
 async function editorSite(): Promise<EditorSite> {
   const { cms } = await site();
   return { cms, agent: await signIn(cms) };
