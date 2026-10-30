@@ -3,12 +3,12 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
-import type { Browser } from '../admin/__testing__/harness.ts';
+import { csrfField, FIRST_ADMIN, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { LocationSharing } from '../content/location.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
 import { changeSiteSettings } from '../__testing__/site-settings.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 import { feedPathUnder } from '../web/feed-source.ts';
 import { OEMBED_PATH } from '../web/oembed.ts';
@@ -23,7 +23,6 @@ const NOW = new Date('2026-09-20T12:00:00.000Z');
 
 interface Site {
   cms: Cms;
-  agent: Browser;
   token: string;
 }
 
@@ -32,13 +31,14 @@ async function site(sharing: LocationSharing = 'none'): Promise<Site> {
   if (sharing !== 'none') {
     await changeSiteSettings(contentDir, { location_sharing: sharing });
   }
+  const dataDir = await box.dir('geekity-micropub-checkin-data-');
+  writeUsers(dataDir);
   const cms = await box.open({
     contentDir,
-    dataDir: await box.dir('geekity-micropub-checkin-data-'),
+    dataDir,
     baseUrl: BASE,
     now: () => NOW,
   });
-  const agent = await signedIn(cms);
   const ada = findUser(cms.config.dataDir, FIRST_ADMIN.username);
   assert.ok(ada !== undefined);
   const { accessToken } = await issueTokens(
@@ -53,7 +53,7 @@ async function site(sharing: LocationSharing = 'none'): Promise<Site> {
     },
     NOW,
   );
-  return { cms, agent, token: accessToken };
+  return { cms, token: accessToken };
 }
 
 async function postJson(cms: Cms, token: string, body: unknown): Promise<Response> {
@@ -295,7 +295,8 @@ describe('reading and changing a checkin (AC #2)', () => {
   });
 
   it('stays a checkin through an editor save, and goes when its box is unticked', async () => {
-    const { cms, agent, token } = await site();
+    const { cms, token } = await site();
+    const agent = await signIn(cms);
     const url = await created(
       await postJson(cms, token, {
         ...ROCKS_204,

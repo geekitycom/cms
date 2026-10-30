@@ -83,9 +83,12 @@ export interface WordPressComment {
 }
 
 export class NotAWordPressExportError extends Error {
-  constructor(readonly problems: readonly string[]) {
+  readonly problems: readonly string[];
+
+  constructor(problems: readonly string[]) {
     super(problems.join('\n'));
     this.name = 'NotAWordPressExportError';
+    this.problems = problems;
   }
 }
 
@@ -202,12 +205,14 @@ function readMeta(element: XmlElement, name: string): WordPressMeta[] {
 
 class FieldReader {
   failed = false;
+  readonly element: XmlElement;
+  readonly label: string;
+  readonly problems: string[];
 
-  constructor(
-    readonly element: XmlElement,
-    readonly label: string,
-    readonly problems: string[],
-  ) {
+  constructor(element: XmlElement, label: string, problems: string[]) {
+    this.element = element;
+    this.label = label;
+    this.problems = problems;
     const title = child(element, 'title')?.text;
     if (title !== undefined && title !== '') this.label = `${label} ("${title}")`;
   }

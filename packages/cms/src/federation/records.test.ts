@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { signIn } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { openAdminStore } from '../store/admin-store.ts';
@@ -16,6 +15,7 @@ import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { deliveryTargets } from './delivery.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
 import { readFollowerChanges } from './follower-history.ts';
+import { signedInAs } from './__testing__/session.ts';
 import {
   addFollower,
   appendInboxActivity,
@@ -55,10 +55,6 @@ const ADA = 'https://remote.example/users/ada';
 
 /** The user every follower in this file follows (decision-14). */
 const BLOG = 'blog';
-
-/** What that account signs in with, for the tests that read the admin screen. */
-const PASSWORD = 'correct horse battery';
-const CREDENTIALS = { username: BLOG, password: PASSWORD };
 
 /** One follower, as a `Follow` from Ada's instance would describe her. */
 function ada(overrides: Partial<NewFollower> = {}): Omit<NewFollower, 'username'> {
@@ -669,7 +665,7 @@ async function federatedDirs(): Promise<{ contentDir: string; dataDir: string }>
     },
   });
   // decision-14: the actor is a user, so the followers belong to one.
-  writeUsers(dataDir, [{ username: BLOG, password: PASSWORD }]);
+  writeUsers(dataDir, [{ username: BLOG }]);
   return { contentDir, dataDir };
 }
 
@@ -724,7 +720,7 @@ describe('a site whose database is thrown away', () => {
     const before = {
       collection: await followersCollection(first),
       targets: deliveryTargets(first.admin, BLOG),
-      screen: await federationScreen(await signIn(first, CREDENTIALS)),
+      screen: await federationScreen(signedInAs(first, BLOG)),
     };
 
     // The comparison below is only worth making over a screen and a collection
@@ -741,7 +737,7 @@ describe('a site whose database is thrown away', () => {
 
     assert.deepEqual(await followersCollection(second), before.collection);
     assert.deepEqual(deliveryTargets(second.admin, BLOG), before.targets);
-    assert.equal(await federationScreen(await signIn(second, CREDENTIALS)), before.screen);
+    assert.equal(await federationScreen(signedInAs(second, BLOG)), before.screen);
   });
 });
 

@@ -5,11 +5,11 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { browser, sandbox, signIn } from '../admin/__testing__/harness.ts';
+import { FIRST_ADMIN, browser, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { writeUsers } from '../admin/__testing__/users.ts';
 import type { Document } from '../content/document.ts';
 import type { Cms } from '../index.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { commentsFile } from './records.ts';
 import { COMMENT_FIELDS } from './submission.ts';
@@ -32,7 +32,7 @@ after(() => box.cleanup());
 const BASE_URL = 'https://blog.example';
 const NOW = new Date('2026-09-20T12:00:00.000Z');
 const POST_URL = '/2026/09/hello-world/';
-const ADA = { username: 'ada', password: 'correct horse battery', displayName: 'Ada Lovelace' };
+const ADA = { username: 'ada', password: FIRST_ADMIN.password, displayName: 'Ada Lovelace' };
 
 const NATIVE = '00000000000000a1';
 const WEBMENTION = '00000000000000b1';
@@ -94,9 +94,7 @@ async function site(extra: Record<string, string> = {}): Promise<Cms> {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  writeUsers(dataDir, [
-    { username: ADA.username, password: ADA.password, profile: { displayName: ADA.displayName } },
-  ]);
+  writeUsers(dataDir, [{ username: ADA.username, profile: { displayName: ADA.displayName } }]);
 
   const cms = await box.open({ contentDir, dataDir, baseUrl: BASE_URL, now: () => NOW });
   logNote(cms, { id: NOTE, url: NOTE_URL, inReplyTo: `${BASE_URL}${POST_URL}` });

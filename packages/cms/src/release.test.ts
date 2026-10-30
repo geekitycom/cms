@@ -417,9 +417,26 @@ function tagsOf(versions: Versions): string[] {
   return [`v${versions.cms}`, `plugin-a-v${versions.a}`, `plugin-b-v${versions.b}`];
 }
 
+const templates = new Map<string, string>();
+
 function repository(versions: Versions = RELEASED, tags = tagsOf(versions)): string {
-  const repo = temp('geekity-release-');
-  fs.mkdirSync(path.join(repo, 'scripts'));
+  const key = JSON.stringify([versions, tags]);
+  let template = templates.get(key);
+  if (template === undefined) {
+    template = templateRepository(versions, tags);
+    templates.set(key, template);
+  }
+  const root = temp('geekity-release-');
+  fs.cpSync(template, root, { recursive: true });
+  const config = path.join(root, 'repo', '.git', 'config');
+  fs.writeFileSync(config, fs.readFileSync(config, 'utf8').replaceAll(template, root));
+  return path.join(root, 'repo');
+}
+
+function templateRepository(versions: Versions, tags: string[]): string {
+  const root = temp('geekity-release-template-');
+  const repo = path.join(root, 'repo');
+  fs.mkdirSync(path.join(repo, 'scripts'), { recursive: true });
   fs.copyFileSync(path.join(SCRIPTS, 'release.ts'), path.join(repo, 'scripts', 'release.ts'));
   fs.copyFileSync(
     path.join(SCRIPTS, 'docker-build-push.sh'),
@@ -434,7 +451,8 @@ function repository(versions: Versions = RELEASED, tags = tagsOf(versions)): str
   git(repo, 'commit', '-q', '-m', 'chore(release): release main');
   for (const tag of tags) git(repo, 'tag', tag);
 
-  const origin = temp('geekity-origin-');
+  const origin = path.join(root, 'origin');
+  fs.mkdirSync(origin);
   git(origin, 'init', '-q', '--bare');
   git(repo, 'remote', 'add', 'origin', origin);
   git(repo, 'push', '-q', '-u', 'origin', 'main');
@@ -446,7 +464,7 @@ function repository(versions: Versions = RELEASED, tags = tagsOf(versions)): str
   }
   const home = path.join(repo, '.stub-home');
   writeJson(path.join(home, '.docker', 'config.json'), { auths: { 'ghcr.io': {} } });
-  return repo;
+  return root;
 }
 
 function allReleased(versions: Versions = RELEASED): Options {

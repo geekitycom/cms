@@ -7,7 +7,7 @@ import { after, before, describe, it } from 'node:test';
 import { exportJwk, importJwk, signRequest } from '@fedify/fedify';
 import { Accept, Application, CryptographicKey, Follow, Reject } from '@fedify/vocab';
 
-import { csrfField, signIn } from '../admin/__testing__/harness.ts';
+import { csrfField } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { saveSettings as saveSettingsPage } from '../admin/__testing__/settings.ts';
 import { createCms } from '../index.ts';
@@ -18,13 +18,12 @@ import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import type { Delivery } from '../store/admin-store.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
+import { signedInAs } from './__testing__/session.ts';
 
 /** The site under test. Fedify answers by origin, so every request uses this one. */
 const BASE_URL = 'https://blog.example';
 /** The one account this site has: decision-14 makes it the relay subscriber. */
 const LOCAL_USER = 'blog';
-/** What that account signs in with; the setup form is no use once one exists. */
-const PASSWORD = 'correct horse battery';
 const SITE_ACTOR = `${BASE_URL}/author/${LOCAL_USER}/`;
 const SITE_INBOX = `${SITE_ACTOR}inbox/`;
 
@@ -158,7 +157,7 @@ async function site(
       relays: options.relays ?? [],
     },
   });
-  writeUsers(dataDir, [{ username: LOCAL_USER, password: PASSWORD }]);
+  writeUsers(dataDir, [{ username: LOCAL_USER }]);
   // Before the site boots, so nothing here spends a quarter of a second
   // minting an actor key whose value no test in this file reads.
   seedActorKeys(dataDir, LOCAL_USER);
@@ -229,7 +228,7 @@ function reject(followId: string, reason: string): Reject {
 describe('adding a relay on the settings screen', () => {
   it('sends a signed Follow of the Public collection to its inbox (AC #1)', async () => {
     const { cms } = await site();
-    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    const agent = signedInAs(cms, LOCAL_USER);
 
     const response = await saveSettings(agent, { relays: RELAY_INBOX });
     assert.equal(response.status, 303, await response.text());
@@ -249,7 +248,7 @@ describe('adding a relay on the settings screen', () => {
 
   it('records the subscription as pending, with the follow it sent', async () => {
     const { cms } = await site();
-    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    const agent = signedInAs(cms, LOCAL_USER);
 
     await saveSettings(agent, { relays: RELAY_INBOX });
     await cms.relays.settled();
@@ -264,7 +263,7 @@ describe('adding a relay on the settings screen', () => {
 describe('the follow as a delivery to the relay', () => {
   it('records the Follow it sent against the relay inbox', async () => {
     const { cms } = await site();
-    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    const agent = signedInAs(cms, LOCAL_USER);
     await saveSettings(agent, { relays: RELAY_INBOX });
     await cms.relays.settled();
 
@@ -279,7 +278,7 @@ describe('the follow as a delivery to the relay', () => {
     try {
       const { cms } = await site({ queued: true });
       await cms.serve();
-      const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+      const agent = signedInAs(cms, LOCAL_USER);
       await saveSettings(agent, { relays: RELAY_INBOX });
       await cms.relays.settled();
 
@@ -304,7 +303,7 @@ describe('the follow as a delivery to the relay', () => {
 describe('the relay’s answer', () => {
   it('marks the subscription accepted (AC #2)', async () => {
     const { cms } = await site();
-    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    const agent = signedInAs(cms, LOCAL_USER);
     await saveSettings(agent, { relays: RELAY_INBOX });
     await cms.relays.settled();
     const followId = String(ofType('Follow')[0]?.body['id']);
@@ -319,7 +318,7 @@ describe('the relay’s answer', () => {
 
   it('marks it rejected, keeping the reason (AC #2)', async () => {
     const { cms } = await site();
-    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    const agent = signedInAs(cms, LOCAL_USER);
     await saveSettings(agent, { relays: RELAY_INBOX });
     await cms.relays.settled();
     const followId = String(ofType('Follow')[0]?.body['id']);
@@ -333,7 +332,7 @@ describe('the relay’s answer', () => {
 
   it('takes one whose follow id it no longer holds, because only one subscription on that host is waiting', async () => {
     const { cms } = await site();
-    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    const agent = signedInAs(cms, LOCAL_USER);
     await saveSettings(agent, { relays: RELAY_INBOX });
     await cms.relays.settled();
 
@@ -344,7 +343,7 @@ describe('the relay’s answer', () => {
 
   it('will not guess when two subscriptions on the same host are both waiting', async () => {
     const { cms } = await site();
-    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    const agent = signedInAs(cms, LOCAL_USER);
     await saveSettings(agent, { relays: `${RELAY_INBOX}\n${OTHER_RELAY_INBOX}` });
     await cms.relays.settled();
 
@@ -358,7 +357,7 @@ describe('the relay’s answer', () => {
 describe('removing a relay', () => {
   it('sends Undo of the follow and drops the record (AC #4)', async () => {
     const { cms } = await site();
-    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    const agent = signedInAs(cms, LOCAL_USER);
     await saveSettings(agent, { relays: RELAY_INBOX });
     await cms.relays.settled();
     const followId = String(ofType('Follow')[0]?.body['id']);
@@ -375,7 +374,7 @@ describe('removing a relay', () => {
 
   it('leaves the relays that stayed on the list alone', async () => {
     const { cms } = await site();
-    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    const agent = signedInAs(cms, LOCAL_USER);
     await saveSettings(agent, { relays: `${RELAY_INBOX}\n${OTHER_RELAY_INBOX}` });
     await cms.relays.settled();
     assert.equal(ofType('Follow').length, 2);
@@ -460,7 +459,7 @@ describe('delivering to a relay', () => {
     await cms.relays.settled();
     const followId = String(ofType('Follow')[0]?.body['id']);
     await deliver(cms, accept(followId));
-    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    const agent = signedInAs(cms, LOCAL_USER);
     sent.length = 0;
     return { cms, agent };
   }
@@ -521,7 +520,7 @@ describe('delivering to a relay', () => {
     const { cms } = await site({ relays: [RELAY_INBOX, OTHER_RELAY_INBOX] });
     await cms.relays.settled();
     await deliver(cms, reject(String(ofType('Follow')[0]?.body['id']), 'No thanks.'));
-    const agent = await signIn(cms, { username: LOCAL_USER, password: PASSWORD });
+    const agent = signedInAs(cms, LOCAL_USER);
     sent.length = 0;
 
     assert.equal((await publishNewPost(agent)).status, 303);

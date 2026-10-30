@@ -10,7 +10,7 @@
     "directory": "packages/cms"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -55,11 +55,13 @@
     "build:theme": "tailwindcss -i themes/default/src/style.css -o themes/default/static/style.css --optimize",
     "dev": "tsc -p tsconfig.build.json --watch",
     "pretest": "tsc -p tsconfig.build.json && pnpm build:theme && pnpm build:admin",
-    "test": "tsx --import ./src/__testing__/offline.ts --test \"src/**/*.test.ts\"",
-    "test:11ty": "tsx --test \"test/*.test.ts\"",
+    "test": "node --import ./src/__testing__/offline.ts --test \"src/**/*.test.ts\"",
+    "test:shard": "node scripts/test-shard.ts",
+    "test:weights": "node scripts/test-shard.ts --measure",
+    "test:11ty": "node --test \"test/*.test.ts\"",
     "fed:smoke": "tsx scripts/fed-smoke.ts",
     "pretest:coverage": "tsc -p tsconfig.build.json && pnpm build:theme && pnpm build:admin",
-    "test:coverage": "tsx --import ./src/__testing__/offline.ts --test --experimental-test-coverage \"src/**/*.test.ts\"",
+    "test:coverage": "node --import ./src/__testing__/offline.ts --test --experimental-test-coverage \"src/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p editor/tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"

@@ -20,9 +20,11 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
 import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 import type { Cms } from '../index.ts';
+import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -120,12 +122,14 @@ async function site(
   const cms = await box.open({ contentDir, dataDir, now: () => new Date(NOW) });
 
   if (profile !== null) {
-    const user = await createUser({ dataDir, username: 'ada', password: 'a password of hers' });
+    const user = addUser({ dataDir, username: 'ada', password: 'a password of hers' });
     await setUserProfile({ dataDir, userId: user.id, profile });
   }
 
   return cms;
 }
+
+const sharedSite = shared(site);
 
 /** GET a path and read the body. */
 async function body(cms: Cms, pathname: string): Promise<string> {
@@ -157,7 +161,7 @@ function pageFooter(html: string): string {
 
 describe('the entry (AC #1)', () => {
   it('is a blog-post h-entry with the title as its p-name', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
 
     assert.match(html, /<article class="blog-post h-entry">/, 'not the source design’s article');
     assert.match(
@@ -168,7 +172,7 @@ describe('the entry (AC #1)', () => {
   });
 
   it('puts the body and the Published line in one section.e-content', async () => {
-    const inside = eContent(await body(await site(), '/2026/09/hello/'));
+    const inside = eContent(await body(await sharedSite(), '/2026/09/hello/'));
 
     assert.match(inside, /<p>Body <strong>text<\/strong>\.<\/p>/, 'the body is not in the section');
     assert.match(
@@ -179,7 +183,7 @@ describe('the entry (AC #1)', () => {
   });
 
   it('prints an Updated line only when the day is a different one', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const updated = eContent(await body(cms, '/2026/09/hello/'));
     assert.match(
@@ -196,7 +200,7 @@ describe('the entry (AC #1)', () => {
   });
 
   it('ends with a rule and a footer holding the bio', async () => {
-    const inside = entry(await body(await site(), '/2026/09/hello/'));
+    const inside = entry(await body(await sharedSite(), '/2026/09/hello/'));
 
     assert.match(
       inside,
@@ -210,7 +214,7 @@ describe('the entry (AC #1)', () => {
     // and nothing to print. The paragraph is still there — one hook, wherever
     // it is — and the stylesheet hides it with `:empty`, which only works when
     // the layout leaves no whitespace in it.
-    const html = await body(await site(), '/about/');
+    const html = await body(await sharedSite(), '/about/');
 
     assert.match(html, /<p class="page-meta"><\/p>/, 'the empty meta line is not empty');
     assert.match(
@@ -221,7 +225,7 @@ describe('the entry (AC #1)', () => {
   });
 
   it('renders a page the same way, with no taxonomy and no neighbours', async () => {
-    const html = await body(await site(), '/about/');
+    const html = await body(await sharedSite(), '/about/');
     const inside = entry(html);
 
     assert.match(inside, /<h1 class="p-name">About<\/h1>/);
@@ -234,7 +238,7 @@ describe('the entry (AC #1)', () => {
 
 describe('the bio (AC #2)', () => {
   it('is the author’s h-card, with their photo, what they do and where they are', async () => {
-    const inside = bio(await body(await site(), '/2026/09/hello/'));
+    const inside = bio(await body(await sharedSite(), '/2026/09/hello/'));
 
     assert.match(
       inside,
@@ -254,7 +258,7 @@ describe('the bio (AC #2)', () => {
   });
 
   it('leaves out what the profile does not say', async () => {
-    const cms = await site({}, { displayName: 'Ada Lovelace' });
+    const cms = await sharedSite({}, { displayName: 'Ada Lovelace' });
     const inside = bio(await body(cms, '/2026/09/hello/'));
 
     assert.match(inside, /Written by/, 'a profile with only a name has no bio at all');
@@ -264,13 +268,13 @@ describe('the bio (AC #2)', () => {
   });
 
   it('credits the site’s author on a post whose front matter names nobody', async () => {
-    const inside = bio(await body(await site(), '/2026/09/nobody/'));
+    const inside = bio(await body(await sharedSite(), '/2026/09/nobody/'));
 
     assert.match(inside, /Ada Lovelace/, 'a post naming nobody on a site by somebody has no bio');
   });
 
   it('omits the bio, the rule and the footer when nobody is left to credit', async () => {
-    const anonymous = await site({ author: 'Joe Blog' }, null);
+    const anonymous = await sharedSite({ author: 'Joe Blog' }, null);
 
     for (const pathname of ['/2026/09/nobody/', '/about/']) {
       const inside = entry(await body(anonymous, pathname));
@@ -281,7 +285,7 @@ describe('the bio (AC #2)', () => {
   });
 
   it('names a person this site does not have without linking them', async () => {
-    const cms = await site({ author: 'Joe Blog' }, null);
+    const cms = await sharedSite({ author: 'Joe Blog' }, null);
     const inside = bio(await body(cms, '/2026/09/hello/'));
 
     assert.match(inside, /Written by\s*<strong class="p-name">Ada Lovelace<\/strong>/, 'no name');
@@ -294,7 +298,7 @@ describe('the bio (AC #2)', () => {
     // the page footer already carried the site's identity links. It does not
     // any more, so a reader who has just read somebody finds that person's
     // own links right under what they read.
-    const inside = bio(await body(await site(), '/2026/09/hello/'));
+    const inside = bio(await body(await sharedSite(), '/2026/09/hello/'));
 
     assert.match(
       inside,
@@ -313,7 +317,7 @@ describe('the bio (AC #2)', () => {
     // front of it: the box is for the profiles that are you, so the value is
     // there whether or not anybody typed it, and typing it is not a second
     // one.
-    const cms = await site(
+    const cms = await sharedSite(
       {},
       {
         displayName: 'Ada Lovelace',
@@ -349,7 +353,7 @@ describe('the bio (AC #2)', () => {
     // way in, not on the way out: a profile written under an older version
     // still renders, because a page that dropped somebody's link — or refused
     // to render at all — would break a site on upgrade to report a typo.
-    const cms = await site(
+    const cms = await sharedSite(
       {},
       {
         displayName: 'Ada Lovelace',
@@ -369,7 +373,7 @@ describe('the bio (AC #2)', () => {
 
 describe('the site menu (AC #2, TASK-105)', () => {
   it('is in the header, and in neither the bio nor the page footer', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     // Every shape of page the theme draws: the two that used to read the menu
     // out of a bio, and the three that used to read it out of the footer.
@@ -404,7 +408,7 @@ describe('the site menu (AC #2, TASK-105)', () => {
 
 describe('the IndieNews link (AC #3, as a TASK-155 syndication target)', () => {
   it('opens the Published line of a post tagged indienews and of no other', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     assert.match(
       eContent(await body(cms, '/2026/09/hello/')),
@@ -426,7 +430,7 @@ describe('the IndieNews link (AC #3, as a TASK-155 syndication target)', () => {
 
 describe('the neighbouring posts (AC #4)', () => {
   it('links the post either side of this one, each card labelled', async () => {
-    const html = await body(await site(), '/2026/09/hello/');
+    const html = await body(await sharedSite(), '/2026/09/hello/');
     const nav =
       /<nav class="blog-post-nav" aria-label="Neighbouring posts">([\s\S]*?)<\/nav>/.exec(
         html,
@@ -445,7 +449,7 @@ describe('the neighbouring posts (AC #4)', () => {
   });
 
   it('prints one end of the archive with one link and a lone post with none', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const oldest = await body(cms, '/2026/09/older/');
     assert.doesNotMatch(oldest, /rel="prev"/, 'the oldest post has something before it');
@@ -459,7 +463,7 @@ describe('the neighbouring posts (AC #4)', () => {
 
 describe('categories and tags under the entry (AC #5)', () => {
   it('prints the categories in the kicker and the tags under the words, all p-category', async () => {
-    const inside = entry(await body(await site(), '/2026/09/hello/'));
+    const inside = entry(await body(await sharedSite(), '/2026/09/hello/'));
     const kicker = /<p class="kicker">([\s\S]*?)<\/p>/.exec(inside)?.[1] ?? '';
     const printed = [...inside.matchAll(/<p class="post-categories">([\s\S]*?)<\/p>/g)].map(
       (match) => match[1] ?? '',

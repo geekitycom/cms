@@ -11,9 +11,10 @@ import { after, describe, it } from 'node:test';
 import matter from 'gray-matter';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { FIRST_ADMIN, resolvePublic, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { FIRST_ADMIN, resolvePublic, sandbox } from '../admin/__testing__/harness.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 
 remoteHostsDoNotExist();
@@ -47,14 +48,15 @@ async function site(files: Readonly<Record<string, string>> = {}): Promise<Site>
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
+  const dataDir = await box.dir('geekity-micropub-syndicate-data-');
+  writeUsers(dataDir);
   const cms = await box.open({
     contentDir,
-    dataDir: await box.dir('geekity-micropub-syndicate-data-'),
+    dataDir,
     baseUrl: BASE,
     now: () => NOW,
     hostLookup: resolvePublic,
   });
-  await signedIn(cms);
   const ada = findUser(cms.config.dataDir, FIRST_ADMIN.username);
   assert.ok(ada !== undefined, 'the first admin exists');
   const { accessToken } = await issueTokens(

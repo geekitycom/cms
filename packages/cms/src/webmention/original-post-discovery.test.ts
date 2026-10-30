@@ -5,9 +5,10 @@ import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { csrfField, FIRST_ADMIN, signedIn } from '../admin/__testing__/harness.ts';
+import { csrfField, FIRST_ADMIN } from '../admin/__testing__/harness.ts';
 import { updateComment } from '../comments/records.ts';
 import { seedActorKeys } from '../federation/__testing__/keys.ts';
+import { signedInAs } from '../federation/__testing__/session.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
@@ -201,7 +202,7 @@ async function site(files: Record<string, string> = {}): Promise<Cms> {
 }
 
 async function publishReply(cms: Cms, inReplyTo: string): Promise<void> {
-  const agent = await signedIn(cms);
+  const agent = signedInAs(cms, FIRST_ADMIN.username);
   const html = await (await agent.get('/admin/posts/new')).text();
   const token = csrfField(html);
   assert.ok(token !== undefined);

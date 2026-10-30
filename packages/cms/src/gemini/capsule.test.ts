@@ -9,7 +9,7 @@ import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { RECHECK_MS } from '../maintenance.ts';
 import { readGeminiCertificate } from './certificate.ts';
-import { freePort, gemini, refuses } from './__testing__/client.ts';
+import { gemini, refuses } from './__testing__/client.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -107,23 +107,28 @@ describe('turning the listener on and off (AC #1)', () => {
   });
 
   it('starts nothing while Gemini is off, and starts and stops with the setting', async (t) => {
-    const port = await freePort();
-    const { cms: off } = await site({}, { geminiPort: port });
+    const { cms: off } = await site({});
     const served = await off.serve();
     assert.equal(served.geminiPort, undefined);
-    assert.ok(await refuses(port));
+    assert.equal(off.geminiPort(), undefined);
 
     await off.settings.set('site', new Map([['gemini', true]]), 'admin');
-    assert.equal((await gemini(port, '/')).status, 20, 'turning it on started the listener');
+    const first = off.geminiPort();
+    assert.ok(first !== undefined, 'turning it on started the listener');
+    assert.equal((await gemini(first, '/')).status, 20);
 
     t.mock.method(console, 'warn', () => undefined);
     await off.settings.set('site', new Map([['gemini', false]]), 'admin');
-    assert.ok(await refuses(port), 'turning it off stopped it');
+    assert.equal(off.geminiPort(), undefined);
+    assert.ok(await refuses(first), 'turning it off stopped it');
 
     await off.settings.set('site', new Map([['gemini', true]]), 'admin');
-    assert.equal((await gemini(port, '/')).status, 20);
+    const second = off.geminiPort();
+    assert.ok(second !== undefined);
+    assert.equal((await gemini(second, '/')).status, 20);
     await off.close();
-    assert.ok(await refuses(port), 'close() closed it');
+    assert.equal(off.geminiPort(), undefined);
+    assert.ok(await refuses(second), 'close() closed it');
   });
 });
 

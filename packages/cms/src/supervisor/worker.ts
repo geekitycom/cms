@@ -26,8 +26,13 @@ export interface SupervisedCms {
 
 export interface SupervisedWorker {
   readonly supervision: Supervision;
-  /** The CMS listens: tell the supervisor, and do what it says from here on. */
-  serving(cms: SupervisedCms): void;
+  /**
+   * The CMS listens: tell the supervisor, and do what it says from here on.
+   * The supervisor prints the announcement when it takes this worker on, so
+   * nothing says the site is up while the supervisor would still count this
+   * worker's exit as a failed start.
+   */
+  serving(cms: SupervisedCms, announcement: string): void;
 }
 
 export function superviseWorker(options: {
@@ -67,7 +72,7 @@ export function superviseWorker(options: {
   return {
     supervision,
 
-    serving(cms) {
+    serving(cms, announcement) {
       let closing: Promise<void> | undefined;
       let exitCode: number | undefined;
       let disconnected = false;
@@ -133,7 +138,11 @@ export function superviseWorker(options: {
         if (exitCode === undefined) void close();
         else exit(exitCode);
       });
-      channel.send({ type: 'ready', pluginsFingerprint: pluginsFingerprint(options.loaded) });
+      channel.send({
+        type: 'ready',
+        pluginsFingerprint: pluginsFingerprint(options.loaded),
+        announcement,
+      });
     },
   };
 }

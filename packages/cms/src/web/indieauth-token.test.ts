@@ -11,9 +11,9 @@ import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { ACCESS_TOKEN_LIFETIME_MS, verifyAccessToken } from '../indieauth/tokens.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 
@@ -55,7 +55,7 @@ async function site(config: { maintenance?: boolean } = {}): Promise<Site> {
     path.join(contentDir, '_data', 'site.json'),
     JSON.stringify({ title: 'A Site', author: 'ada' }),
   );
-  await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   const cms = await box.open({ contentDir, dataDir, baseUrl: BASE, hostLookup: PUBLIC, ...config });
   return { cms, contentDir, dataDir };
 }

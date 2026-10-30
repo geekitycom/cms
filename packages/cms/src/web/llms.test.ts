@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { shared } from './__testing__/shared.ts';
 
 /**
  * `/llms.txt` (TASK-149): an index of the site for language models, in the
@@ -104,6 +105,8 @@ async function site(options: SiteOptions = {}): Promise<{ cms: Cms; contentDir: 
   return { cms, contentDir };
 }
 
+const sharedSite = shared(site);
+
 /** The served file, after checking it is served as Markdown. */
 async function llms(cms: Cms): Promise<string> {
   const response = await cms.app.request('/llms.txt');
@@ -125,13 +128,13 @@ const LINK_ELEMENT = /<link rel="describedby" type="text\/markdown" href="\/llms
 
 describe('what /llms.txt lists (AC #1)', () => {
   it('opens with the site title and its description', async () => {
-    const { cms } = await site();
+    const { cms } = await sharedSite();
     const body = await llms(cms);
     assert.match(body, /^# Field Notes\n\n> Notes from the field\.\n/);
   });
 
   it('lists every page and every post, newest first, each linked to its .md URL', async () => {
-    const { cms } = await site();
+    const { cms } = await sharedSite();
     const body = await llms(cms);
 
     const pages = body.slice(body.indexOf('## Pages'), body.indexOf('## Posts'));
@@ -151,7 +154,7 @@ describe('what /llms.txt lists (AC #1)', () => {
   });
 
   it('gives a page its description and a post its date and the excerpt the feeds carry', async () => {
-    const { cms } = await site();
+    const { cms } = await sharedSite();
     const body = await llms(cms);
     assert.match(body, /^- \[About\]\(\S+\): Who writes this\.$/m);
     assert.match(body, /^- \[Colophon\]\(\S+\)$/m, 'a page without a description');
@@ -161,12 +164,12 @@ describe('what /llms.txt lists (AC #1)', () => {
   });
 
   it('dates a post by its day in the site’s timezone', async () => {
-    const { cms } = await site({ siteJson: { timezone: 'America/Chicago' } });
+    const { cms } = await sharedSite({ siteJson: { timezone: 'America/Chicago' } });
     assert.match(await llms(cms), /^- \[First post\]\(\S+\): 2025-12-31\. Body of first\.$/m);
   });
 
   it('leaves out what the sitemap leaves out', async () => {
-    const { cms } = await site();
+    const { cms } = await sharedSite();
     const body = await llms(cms);
     for (const hidden of [
       'Secret draft',
@@ -192,7 +195,7 @@ describe('what /llms.txt lists (AC #1)', () => {
   });
 
   it('links only URLs that serve that document as Markdown', async () => {
-    const { cms } = await site();
+    const { cms } = await sharedSite();
     for (const { url } of links(await llms(cms))) {
       const response = await cms.app.request(new URL(url).pathname);
       assert.equal(response.status, 200, url);
@@ -201,13 +204,13 @@ describe('what /llms.txt lists (AC #1)', () => {
   });
 
   it('lists every post however few the feeds carry', async () => {
-    const { cms } = await site({ siteJson: { feedSize: 2 } });
+    const { cms } = await sharedSite({ siteJson: { feedSize: 2 } });
     const body = await llms(cms);
     assert.equal(links(body.slice(body.indexOf('## Posts'))).length, 4);
   });
 
   it('links a static homepage at the front page’s own Markdown URL', async () => {
-    const { cms } = await site({ siteJson: { homepage: 'about' } });
+    const { cms } = await sharedSite({ siteJson: { homepage: 'about' } });
     const body = await llms(cms);
     assert.match(body, /^- \[About\]\(https:\/\/example\.com\/index\.md\)/m);
     const response = await cms.app.request('/index.md');
@@ -218,21 +221,21 @@ describe('what /llms.txt lists (AC #1)', () => {
 
 describe('how the home page advertises it (AC #2)', () => {
   it('in a Link header and a link element on the latest-posts home page', async () => {
-    const { cms } = await site();
+    const { cms } = await sharedSite();
     const response = await cms.app.request('/');
     assert.ok(response.headers.get('link')?.includes(DESCRIBEDBY), 'the Link header names it');
     assert.match(await response.text(), LINK_ELEMENT);
   });
 
   it('in both on a static homepage too', async () => {
-    const { cms } = await site({ siteJson: { homepage: 'about' } });
+    const { cms } = await sharedSite({ siteJson: { homepage: 'about' } });
     const response = await cms.app.request('/');
     assert.ok(response.headers.get('link')?.includes(DESCRIBEDBY));
     assert.match(await response.text(), LINK_ELEMENT);
   });
 
   it('nowhere but the home page', async () => {
-    const { cms } = await site();
+    const { cms } = await sharedSite();
     const response = await cms.app.request('/third/');
     assert.equal(response.headers.get('link')?.includes('describedby'), false);
     assert.doesNotMatch(await response.text(), /rel="describedby"/);
@@ -241,7 +244,7 @@ describe('how the home page advertises it (AC #2)', () => {
 
 describe('validators (AC #3)', () => {
   it('carries an ETag, a Last-Modified and no-cache, and answers a match with a 304', async () => {
-    const { cms } = await site();
+    const { cms } = await sharedSite();
     const response = await cms.app.request('/llms.txt');
     const etag = response.headers.get('etag');
     const lastModified = response.headers.get('last-modified');
@@ -261,9 +264,9 @@ describe('validators (AC #3)', () => {
   });
 
   it('changes its ETag when what it says changes', async () => {
-    const one = await (await site()).cms.app.request('/llms.txt');
+    const one = await (await sharedSite()).cms.app.request('/llms.txt');
     const two = await (
-      await site({ siteJson: { tagline: 'Different words.' } })
+      await sharedSite({ siteJson: { tagline: 'Different words.' } })
     ).cms.app.request('/llms.txt');
     assert.notEqual(one.headers.get('etag'), two.headers.get('etag'));
   });
@@ -271,7 +274,7 @@ describe('validators (AC #3)', () => {
 
 describe('a site that turns it off or writes its own (AC #4)', () => {
   it('is a 404, advertised nowhere, when the setting is off', async () => {
-    const { cms } = await site({ siteJson: { llmsTxt: false } });
+    const { cms } = await sharedSite({ siteJson: { llmsTxt: false } });
     assert.equal((await cms.app.request('/llms.txt')).status, 404);
 
     const home = await cms.app.request('/');
@@ -281,7 +284,7 @@ describe('a site that turns it off or writes its own (AC #4)', () => {
 
   it('serves content/llms.txt as it is written, validated and advertised', async () => {
     const own = '# My own index\n\n> Written by hand.\n';
-    const { cms } = await site({ ownFile: own });
+    const { cms } = await sharedSite({ ownFile: own });
     assert.equal(await llms(cms), own);
 
     const response = await cms.app.request('/llms.txt');
@@ -295,7 +298,7 @@ describe('a site that turns it off or writes its own (AC #4)', () => {
   });
 
   it('serves nothing, not even the site’s own file, when the setting is off', async () => {
-    const { cms } = await site({ siteJson: { llmsTxt: false }, ownFile: '# Mine\n' });
+    const { cms } = await sharedSite({ siteJson: { llmsTxt: false }, ownFile: '# Mine\n' });
     assert.equal((await cms.app.request('/llms.txt')).status, 404);
   });
 });

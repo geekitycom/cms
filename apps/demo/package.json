@@ -11,9 +11,9 @@
     "start": "tsx server.ts",
     "reset": "tsx playground.ts --reset",
     "build:11ty": "eleventy",
-    "test": "tsx --import ../../packages/cms/src/__testing__/offline.ts --test \"test/site.test.ts\"",
+    "test": "node --import ../../packages/cms/src/__testing__/offline.ts --test \"test/site.test.ts\"",
     "pretest:11ty": "pnpm --filter @geekity/cms build",
-    "test:11ty": "tsx --test \"test/eleventy.test.ts\"",
+    "test:11ty": "node --test \"test/eleventy.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"

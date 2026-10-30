@@ -8,15 +8,7 @@
 # CI uses and there is only one place to bump it. It has to run before
 # `setup-node`, because `cache: pnpm` shells out to `pnpm store path`.
 name: Set up the workspace
-description: Installs the pinned pnpm and the requested Node, then runs a frozen install.
-
-inputs:
-  node-version:
-    description: >-
-      Node version to install, overriding `.node-version`. Leave it empty for
-      the development target that file pins; `26` resolves to the latest 26.x.
-    required: false
-    default: ''
+description: Installs the pinned pnpm and Node, then runs a frozen install.
 
 runs:
   using: composite
@@ -25,8 +17,6 @@ runs:
 
     - uses: actions/setup-node@v7
       with:
-        # `node-version` wins when both are set, so the input overrides the file.
-        node-version: ${{ inputs.node-version }}
         node-version-file: .node-version
         cache: pnpm
 

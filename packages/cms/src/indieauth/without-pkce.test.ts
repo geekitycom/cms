@@ -4,10 +4,11 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { csrfField, sandbox, signIn } from '../admin/__testing__/harness.ts';
+import { csrfField, sandbox } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
+import { signedInAs } from '../federation/__testing__/session.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { readActivityLog } from '../web/indieauth-activity-log.ts';
 
@@ -51,9 +52,9 @@ async function site(clientsWithoutPkce: string[] = [IA_WRITER]): Promise<Cms & {
     path.join(contentDir, '_data', 'site.json'),
     JSON.stringify({ title: 'A Site', author: 'ada', clientsWithoutPkce }),
   );
-  await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  writeUsers(dataDir, [{ username: 'ada' }]);
   const cms = await box.open({ contentDir, dataDir, baseUrl: BASE, hostLookup: PUBLIC });
-  return Object.assign(cms, { agent: await signIn(cms) });
+  return Object.assign(cms, { agent: signedInAs(cms, 'ada') });
 }
 
 function iaWriterQuery(changes: Record<string, string | undefined> = {}): string {

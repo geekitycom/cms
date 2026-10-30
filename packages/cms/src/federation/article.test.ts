@@ -161,9 +161,20 @@ const HELLO = {
   }),
 };
 
+const sharedSites = new Map<Record<string, string>, Promise<Cms>>();
+
+function sharedSite(files: Record<string, string>): Promise<Cms> {
+  let found = sharedSites.get(files);
+  if (found === undefined) {
+    found = site(files);
+    sharedSites.set(files, found);
+  }
+  return found;
+}
+
 describe('the post object', () => {
   it('serves an Article whose content is the HTML and whose source is the Markdown', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     const response = await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS);
 
@@ -180,7 +191,7 @@ describe('the post object', () => {
   });
 
   it('carries the permalink, the dates, the actor and the addressing doc-4 asks for', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     const article = (await (
       await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS)
@@ -214,7 +225,7 @@ describe('the post object', () => {
   });
 
   it('publishes one Hashtag per tag and per category, pointing at their archives', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     const article = (await (
       await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS)
@@ -421,7 +432,7 @@ describe('image attachments (TASK-141 AC #5)', () => {
   });
 
   it('attaches nothing to a post with no images', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     const article = (await (
       await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS)
@@ -638,7 +649,7 @@ describe('the quote policy (TASK-125 AC #1)', () => {
   });
 
   it('carries the same policy on the Create the outbox lists', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     const outbox = (await (
       await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
@@ -978,7 +989,7 @@ describe('the object type', () => {
   });
 
   it('is an Article for a titled post, with its name and summary', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     const article = await articleAt(instance, '/2026/09/hello/');
 
@@ -1198,7 +1209,7 @@ describe('the outbox', () => {
   });
 
   it('wraps each post in a Create whose id is derived from the article', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     const outbox = (await (
       await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
@@ -1306,7 +1317,7 @@ describe('the outbox', () => {
 
 describe('a post permalink asked for as ActivityStreams', () => {
   it('answers with an Article whose id is the permalink (decision-13)', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     const response = await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS);
 
@@ -1325,13 +1336,13 @@ describe('a post permalink asked for as ActivityStreams', () => {
   });
 
   it('no longer answers at the old /ap/posts/{slug} object URL', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     assert.equal((await get(instance, '/ap/posts/hello', ACTIVITY_STREAMS)).status, 404);
   });
 
   it('answers the profiled application/ld+json spelling too', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     const response = await get(
       instance,
@@ -1347,7 +1358,7 @@ describe('a post permalink asked for as ActivityStreams', () => {
   });
 
   it('leaves the HTML, Markdown and JSON representations alone', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     const html = await get(
       instance,
@@ -1408,7 +1419,7 @@ describe('a post whose file already names an activitypub.id', () => {
   };
 
   it('keeps the stored id as the object id at its permalink', async () => {
-    const instance = await site(MIGRATED);
+    const instance = await sharedSite(MIGRATED);
 
     const article = (await (
       await get(instance, '/2011/06/old-news/', ACTIVITY_STREAMS)
@@ -1420,7 +1431,7 @@ describe('a post whose file already names an activitypub.id', () => {
   });
 
   it('serves the Article at the stored id, query string and all', async () => {
-    const instance = await site(MIGRATED);
+    const instance = await sharedSite(MIGRATED);
 
     const response = await get(instance, '/?p=813', ACTIVITY_STREAMS);
 
@@ -1432,7 +1443,7 @@ describe('a post whose file already names an activitypub.id', () => {
   });
 
   it('redirects a browser from the stored id to the permalink', async () => {
-    const instance = await site(MIGRATED);
+    const instance = await sharedSite(MIGRATED);
 
     const response = await get(instance, '/?p=813', 'text/html');
 
@@ -1501,7 +1512,7 @@ describe('a post whose file already names an activitypub.id', () => {
   });
 
   it('leaves the home page alone when no query string names a post', async () => {
-    const instance = await site(MIGRATED);
+    const instance = await sharedSite(MIGRATED);
 
     assert.equal((await get(instance, '/', 'text/html')).status, 200);
     assert.equal((await get(instance, '/?p=999', 'text/html')).status, 200);
@@ -1560,7 +1571,7 @@ describe('a post federated again under a fresh id (TASK-417 AC #3)', () => {
   };
 
   it('answers the page URL, and the id itself, with the current id', async () => {
-    const instance = await site(FILES);
+    const instance = await sharedSite(FILES);
 
     for (const pathname of ['/2026/09/hello/', '/2026/09/hello/?v=2']) {
       const response = await get(instance, pathname, ACTIVITY_STREAMS);
@@ -1572,7 +1583,7 @@ describe('a post federated again under a fresh id (TASK-417 AC #3)', () => {
   });
 
   it('serves a reissued stored id, query string and all', async () => {
-    const instance = await site(FILES);
+    const instance = await sharedSite(FILES);
 
     const response = await get(instance, '/?p=813&v=2', ACTIVITY_STREAMS);
     assert.equal(response.status, 200);
@@ -1580,7 +1591,7 @@ describe('a post federated again under a fresh id (TASK-417 AC #3)', () => {
   });
 
   it('lists the current id in the outbox', async () => {
-    const instance = await site(FILES);
+    const instance = await sharedSite(FILES);
 
     const outbox = (await (
       await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
@@ -1596,7 +1607,7 @@ describe('a post federated again under a fresh id (TASK-417 AC #3)', () => {
   });
 
   it('finds the post by every id it has had, and by no other', async () => {
-    const instance = await site(FILES);
+    const instance = await sharedSite(FILES);
 
     for (const id of [PERMALINK_ID, REISSUED, MIGRATED_ID, `${MIGRATED_ID}&v=2`]) {
       assert.ok(postByObjectId(instance.store, id, instance.config) !== undefined, id);
@@ -1611,7 +1622,7 @@ describe('a post federated again under a fresh id (TASK-417 AC #3)', () => {
   });
 
   it('advertises the current id on the page', async () => {
-    const instance = await site(FILES);
+    const instance = await sharedSite(FILES);
 
     const html = await (await get(instance, '/2026/09/hello/', 'text/html')).text();
 
@@ -1677,7 +1688,7 @@ describe('a damaged objectIds.json (TASK-417)', () => {
 
 describe('the HTML post page', () => {
   it('links to the ActivityStreams object with rel=alternate', async () => {
-    const instance = await site(HELLO);
+    const instance = await sharedSite(HELLO);
 
     const response = await get(instance, '/2026/09/hello/', 'text/html');
     const html = await response.text();

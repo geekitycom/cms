@@ -5,7 +5,8 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -28,7 +29,7 @@ async function site(bio: string): Promise<Cms> {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  const ada = addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   await setUserProfile({ dataDir, userId: ada.id, profile: { displayName: 'Ada Lovelace', bio } });
   return box.open(
     { contentDir, dataDir, baseUrl: BASE_URL, now: () => new Date('2026-09-28T12:00:00Z') },

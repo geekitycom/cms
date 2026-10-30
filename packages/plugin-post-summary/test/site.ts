@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { createCms, createUser } from '@geekity/cms';
+import { createCms } from '@geekity/cms';
 import type { Cms, Plugin } from '@geekity/cms';
 
 /**
@@ -13,6 +13,8 @@ import type { Cms, Plugin } from '@geekity/cms';
  */
 
 const ADA = { username: 'ada', password: 'correct horse battery' };
+const ADA_PASSWORD_HASH =
+  '$argon2id$v=19$m=8,t=1,p=1$Z2Vla2l0eS10ZXN0LXNhbA$NsFbSo8eArho8Bui32EukJ/FbrTl8bMJovDFMH9DCbQ';
 export const SUMMARY = '@geekity/plugin-post-summary';
 export const LLM = '@geekity/plugin-llm';
 
@@ -80,7 +82,7 @@ export async function summarySite(
       mode: 0o600,
     });
   }
-  await createUser({ dataDir, ...ADA });
+  writeAda(dataDir);
   const cms = createCms({
     dataDir,
     contentDir,
@@ -134,4 +136,17 @@ export function buttonsOn(html: string): string[] {
       /data-editor-action="[^"]*"[^>]*>\s*<button type="button"[^>]*hidden>([^<]*)<\/button>/g,
     ),
   ].map(([, label]) => label ?? '');
+}
+
+function writeAda(dataDir: string): void {
+  mkdirSync(dataDir, { recursive: true });
+  const ada = {
+    id: 1,
+    username: ADA.username,
+    passwordHash: ADA_PASSWORD_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  writeFileSync(path.join(dataDir, 'users.json'), JSON.stringify({ users: [ada], nextId: 2 }), {
+    mode: 0o600,
+  });
 }

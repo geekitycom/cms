@@ -46,11 +46,13 @@ export interface InitSiteResult {
 /** Thrown when the target directory already holds something. */
 export class DirectoryNotEmptyError extends Error {
   override readonly name = 'DirectoryNotEmptyError';
+  readonly directory: string;
 
-  constructor(readonly directory: string) {
+  constructor(directory: string) {
     super(
       `${directory} is not empty. geekity init only writes into a new or empty directory, so it can never overwrite a site you already have.`,
     );
+    this.directory = directory;
   }
 }
 

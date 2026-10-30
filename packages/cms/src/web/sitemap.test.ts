@@ -10,6 +10,7 @@ import { child, childrenNamed, parseXml } from './__testing__/xml.ts';
 import type { XmlElement } from './__testing__/xml.ts';
 import { sitemapResponse, SITEMAP_NAMESPACE } from './sitemap.ts';
 import type { SitemapUrl } from './sitemap.ts';
+import { shared } from './__testing__/shared.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -57,6 +58,8 @@ async function site(
   await instance.sync();
   return { cms: instance, contentDir };
 }
+
+const sharedSite = shared(site);
 
 /** A post file. */
 function post(
@@ -119,7 +122,7 @@ describe('robots.txt', () => {
 
 describe('the sitemap', () => {
   it('lists the home page, every public post and every public page', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/newer.md': post('Newer', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/2026/09/newer/',
@@ -146,7 +149,7 @@ describe('the sitemap', () => {
   });
 
   it('dates each URL by its `updated`, falling back to its `date`', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/edited.md': post('Edited', {
         date: '2026-08-01T09:00:00Z',
         updated: '2026-09-03T11:30:00Z',
@@ -182,7 +185,7 @@ describe('the sitemap', () => {
   });
 
   it('leaves out drafts, the trash and posts whose date has not arrived', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/live.md': post('Live', { date: '2026-09-01T09:00:00Z', permalink: '/live/' }),
       'posts/draft.md': post('Draft', {
         date: '2026-09-01T09:00:00Z',
@@ -212,7 +215,7 @@ describe('the sitemap', () => {
   });
 
   it('lists every page of the archive and of every taxonomy it has', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'Paged', postsPerPage: 2 }),
       'posts/one.md': post('One', {
         date: '2026-09-03T09:00:00Z',
@@ -253,7 +256,7 @@ describe('the sitemap', () => {
   });
 
   it('follows the taxonomy bases the site is configured with', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'Rebased', tagBase: 'topics' }),
       'posts/one.md': post('One', {
         date: '2026-09-03T09:00:00Z',
@@ -283,7 +286,7 @@ describe('the sitemap', () => {
   });
 
   it('has no child sitemaps while the whole thing fits in one file', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/one.md': post('One', { date: '2026-09-03T09:00:00Z', permalink: '/one/' }),
     });
 
@@ -350,7 +353,7 @@ describe('a sitemap too big for one file', () => {
 
 describe('polling the sitemap and the robots file', () => {
   it('answers a matching If-None-Match with 304, headers and all', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/one.md': post('One', { date: '2026-09-03T09:00:00Z', permalink: '/one/' }),
     });
 
@@ -367,7 +370,7 @@ describe('polling the sitemap and the robots file', () => {
   });
 
   it('answers an If-Modified-Since later than everything it lists with 304', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/one.md': post('One', { date: '2026-09-03T09:00:00Z', permalink: '/one/' }),
     });
 
@@ -418,8 +421,8 @@ describe('polling the sitemap and the robots file', () => {
   });
 
   it('gives the robots file a validator that follows the site it names', async () => {
-    const { cms } = await site({});
-    const { cms: elsewhere } = await site({}, { baseUrl: 'https://elsewhere.example' });
+    const { cms } = await sharedSite({});
+    const { cms: elsewhere } = await sharedSite({}, { baseUrl: 'https://elsewhere.example' });
 
     const here = await cms.app.request('/robots.txt');
     const there = await elsewhere.app.request('/robots.txt');

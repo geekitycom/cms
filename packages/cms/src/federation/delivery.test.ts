@@ -10,7 +10,7 @@ import { exportJwk, importJwk, InProcessMessageQueue, ParallelMessageQueue } fro
 import type { MessageQueue } from '@fedify/fedify';
 import { CryptographicKey, Endpoints, Image, Note, Person } from '@fedify/vocab';
 
-import { csrfField, signedIn } from '../admin/__testing__/harness.ts';
+import { csrfField } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { createCms } from '../index.ts';
@@ -22,6 +22,7 @@ import { listUsers } from '../site/users.ts';
 import { queuedMessages } from '../__testing__/federation-queue.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
+import { signedInAs } from './__testing__/session.ts';
 import { addFollower } from './records.ts';
 import { retryDeliveriesJob } from './retry-job.ts';
 import { SITE } from '../site/namespace.ts';
@@ -547,7 +548,7 @@ ${body}
 describe('publishing a post from the admin', () => {
   it('delivers a Create of the Article to the follower’s shared inbox', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     const response = await publishNewPost(agent);
     assert.equal(response.status, 303, await response.text());
@@ -567,7 +568,7 @@ describe('publishing a post from the admin', () => {
 
   it('writes the first-published time, and no id, into the post’s front matter', async () => {
     const { cms, contentDir } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     await publishNewPost(agent);
     await cms.delivery.settled();
@@ -593,7 +594,7 @@ describe('an unlisted post (TASK-227 AC #3)', () => {
 
   it('delivers a Create addressed to the followers, with Public in cc', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     assert.equal((await publishNewPost(agent, { visibility: 'unlisted' })).status, 303);
     await cms.delivery.settled();
@@ -609,7 +610,7 @@ describe('an unlisted post (TASK-227 AC #3)', () => {
 
   it('delivers an Update with the new addressing when a post is unlisted, and back', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     deliveries.length = 0;
@@ -637,7 +638,7 @@ describe('an unlisted post (TASK-227 AC #3)', () => {
 describe('a post whose visibility the site does not recognize (TASK-227)', () => {
   it('is withdrawn with a Delete, as a post taken back to a draft is', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     deliveries.length = 0;
@@ -660,7 +661,7 @@ describe('a scheduled post', () => {
   it('federates nothing while its date is ahead, then one Create when it arrives', async () => {
     let now = new Date('2026-09-03T12:00:00Z');
     const { cms } = await site({ now: () => now });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await cms.scheduler.start();
 
     const response = await publishNewPost(agent, { date: '2026-09-04T09:00:00.000Z' });
@@ -690,7 +691,7 @@ describe('a scheduled post', () => {
   it('withdraws a published post whose date is pushed into the future', async () => {
     const now = new Date('2026-09-03T12:00:00Z');
     const { cms } = await site({ now: () => now });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent, { date: '2026-09-03T09:00:00.000Z' });
     await cms.delivery.settled();
     assert.equal(delivered('Create').length, 1);
@@ -708,7 +709,7 @@ describe('a scheduled post', () => {
   it('federates once, on the next boot, a post that came due while nothing was running', async () => {
     const now = new Date('2026-09-03T12:00:00Z');
     const { cms, dataDir, contentDir } = await site({ now: () => now });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await cms.scheduler.start();
     await publishNewPost(agent, { date: '2026-09-04T09:00:00.000Z' });
     await cms.delivery.settled();
@@ -756,7 +757,7 @@ describe('a scheduled post', () => {
 
   it('publishes on its own timer, with no restart and nothing prompting it', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await cms.scheduler.start();
 
     const due = new Date(Date.now() + 1000).toISOString();
@@ -802,7 +803,7 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
 
   it('sends a delivery queued by a CMS that stopped before sending it once the next one starts (AC #1)', async () => {
     const queued = await site({ queued: true });
-    const agent = await signedIn(queued.cms);
+    const agent = signedInAs(queued.cms, ADA);
     const response = await publishNewPost(agent);
     assert.equal(response.status, 303, await response.text());
     await queued.cms.delivery.settled();
@@ -820,7 +821,7 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
     rejectingEveryPost = true;
     const queued = await site({ queued: true });
     await queued.cms.serve();
-    const agent = await signedIn(queued.cms);
+    const agent = signedInAs(queued.cms, ADA);
     await publishNewPost(agent);
     await waitForRefusal();
     await queued.cms.close();
@@ -837,7 +838,7 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
   it('finishes the delivery in hand as the worker drains, and the next worker sends it no more (AC #3)', async () => {
     const queued = await site({ queued: true });
     await queued.cms.serve();
-    const agent = await signedIn(queued.cms);
+    const agent = signedInAs(queued.cms, ADA);
     let release = (): void => undefined;
     inboxes = new Promise((resolve) => {
       release = resolve;
@@ -871,7 +872,7 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
 
   it('holds a delivery left in the queue when the next CMS boots in dev mode (AC #4)', async () => {
     const queued = await site({ queued: true });
-    const agent = await signedIn(queued.cms);
+    const agent = signedInAs(queued.cms, ADA);
     await publishNewPost(agent);
     await queued.cms.delivery.settled();
     await queued.cms.close();
@@ -917,7 +918,7 @@ describe('how a queued delivery settles in the delivery log', () => {
   it('records a delivery the inbox accepted as sent', async () => {
     const { cms } = await site({ queued: true });
     await cms.serve();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
 
     const settled = await settledAt(cms, REMOTE_SHARED_INBOX, (one) => one.status !== 'queued');
@@ -930,7 +931,7 @@ describe('how a queued delivery settles in the delivery log', () => {
     rejectingEveryPost = true;
     const { cms } = await site({ queued: true });
     await cms.serve();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
 
     const settled = await settledAt(cms, REMOTE_SHARED_INBOX, (one) => one.error !== null);
@@ -943,7 +944,7 @@ describe('how a queued delivery settles in the delivery log', () => {
     refusalStatus = 410;
     const { cms } = await site({ queued: true });
     await cms.serve();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
 
     const settled = await settledAt(cms, REMOTE_SHARED_INBOX, (one) => one.status !== 'queued');
@@ -956,7 +957,7 @@ describe('a queue the site passes in (TASK-382)', () => {
   it('sends a delivery queued just before the drain before the drain resolves', async () => {
     const { cms } = await site({ queue: new InProcessMessageQueue() });
     await cms.serve();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     const response = await publishNewPost(agent);
     assert.equal(response.status, 303, await response.text());
@@ -970,7 +971,7 @@ describe('a queue the site passes in (TASK-382)', () => {
       queue: new ParallelMessageQueue(new InProcessMessageQueue(), 2),
     });
     await cms.serve();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     const response = await publishNewPost(agent);
     assert.equal(response.status, 303, await response.text());
@@ -992,7 +993,7 @@ describe('a queue the site passes in (TASK-382)', () => {
     };
     const { cms } = await site({ queue });
     await cms.serve();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     assert.ok(listening.length > 0, 'the site listened on the queue it was given');
@@ -1008,7 +1009,7 @@ describe('a queue the site passes in (TASK-382)', () => {
 describe('unpublishing a post', () => {
   it('delivers a Delete of a Tombstone that keeps the object’s id', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     deliveries.length = 0;
@@ -1033,7 +1034,7 @@ describe('unpublishing a post', () => {
 
   it('stops serving the object, so a peer that refetches sees it is gone', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
 
@@ -1051,7 +1052,7 @@ describe('likes, reposts and bookmarks (TASK-169 AC #3)', () => {
   /** Publish a note citing `target` under `property`, and wait for what it sent. */
   async function cite(property: string, target: string): Promise<Site & { agent: Browser }> {
     const published = await site();
-    const agent = await signedIn(published.cms);
+    const agent = signedInAs(published.cms, ADA);
     const response = await publishNewPost(agent, {
       title: '',
       slug: 'cited',
@@ -1182,7 +1183,7 @@ describe('a reply to a fediverse status (TASK-240)', () => {
     fields: Record<string, string> = {},
   ): Promise<Site & { agent: Browser }> {
     const published = await site();
-    const agent = await signedIn(published.cms);
+    const agent = signedInAs(published.cms, ADA);
     const response = await publishNewPost(agent, {
       title: '',
       slug: 'answer',
@@ -1375,7 +1376,7 @@ describe('pinning a post (TASK-207 AC #3)', () => {
 
   async function publishedThenCleared(): Promise<{ cms: Cms; agent: Browser }> {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     deliveries.length = 0;
@@ -1420,7 +1421,7 @@ describe('pinning a post (TASK-207 AC #3)', () => {
 
   it('sends a Create then an Add for a post published already pinned', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     await publishNewPost(agent, { pinned: '1' });
     await cms.delivery.settled();
@@ -1456,7 +1457,7 @@ describe('a post that comes back after its Delete (TASK-417)', () => {
 
   it('announces a post restored from the trash under an id it never deleted (AC #1)', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     assert.equal(objectOf(delivered('Create')[0])['id'], PERMALINK_ID);
@@ -1483,7 +1484,7 @@ describe('a post that comes back after its Delete (TASK-417)', () => {
 
   it('announces a post published again from a draft under a fresh id each time (AC #1)', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
 
@@ -1503,7 +1504,7 @@ describe('a post that comes back after its Delete (TASK-417)', () => {
 
   it('keeps the fresh id for the edits, the Delete and the page after it', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
@@ -1535,7 +1536,7 @@ describe('a post that comes back after its Delete (TASK-417)', () => {
 
   it('keeps the permalink as the id of a post that was never deleted (AC #4)', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     await submitEditor(agent, '/admin/posts/hello-world', { body: 'Edited.' });
@@ -1551,7 +1552,7 @@ describe('a post that comes back after its Delete (TASK-417)', () => {
 
   it('remembers what it deleted across a restart over the same directories', async () => {
     const first = await site();
-    const agent = await signedIn(first.cms);
+    const agent = signedInAs(first.cms, ADA);
     await publishNewPost(agent);
     await first.cms.delivery.settled();
     await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
@@ -1609,7 +1610,7 @@ describe('a Delete sent before objectIds.json kept a record of it (TASK-417)', (
 
   it('learns the ids from the delivery log at boot, once', async () => {
     const first = await site();
-    const agent = await signedIn(first.cms);
+    const agent = signedInAs(first.cms, ADA);
     await publishNewPost(agent);
     await first.cms.delivery.settled();
     await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
@@ -1737,7 +1738,7 @@ describe('the object type across a post’s life', () => {
 
   it('names a Note in the Create, the Update and the Delete of an untitled post', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     await publishNewPost(agent, { title: '', body: 'A thought with no title.' });
     await cms.delivery.settled();
@@ -1757,7 +1758,7 @@ describe('the object type across a post’s life', () => {
 
   it('keeps an author-written activitypub.type through an admin save, and sends it', async () => {
     const { cms, contentDir } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
 
@@ -1793,7 +1794,7 @@ describe('the object type across a post’s life', () => {
 describe('the delivery log', () => {
   it('records how every follower behind a shared inbox fared', async () => {
     const { cms } = await site({ followers: 2 });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     await publishNewPost(agent);
     await cms.delivery.settled();
@@ -1834,7 +1835,7 @@ describe('the delivery log', () => {
       iconUrl: null,
       url: null,
     });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     await publishNewPost(agent);
     await cms.delivery.settled();
@@ -1939,7 +1940,7 @@ describe('with the clock pinned through createCms', () => {
 
   it('stamps every recorded delivery with the pinned instant', async () => {
     const { cms } = await site({ now: pinned, followers: 2 });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
 
@@ -1954,7 +1955,7 @@ describe('with the clock pinned through createCms', () => {
 
   it('names a resent Update of an edited post by the pinned instant', async () => {
     const { cms, contentDir } = await site({ now: pinned });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
 
@@ -1996,7 +1997,7 @@ describe('resending a post', () => {
 
   it('sends an Update built from the file as it now reads (AC #1)', async () => {
     const { cms, contentDir } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     const announced = String((delivered('Create')[0] as Delivery).body['id']);
@@ -2033,7 +2034,7 @@ describe('resending a post', () => {
   it('gives two resends of an unchanged post two activity ids (AC #1)', async () => {
     let now = new Date('2026-03-05T10:00:00.000Z');
     const { cms } = await site({ now: () => now });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
 
@@ -2075,7 +2076,7 @@ describe('resending a post', () => {
 
   it('sends a Delete of a Tombstone for a post in the trash (AC #3)', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
 
@@ -2100,7 +2101,7 @@ describe('resending a post', () => {
 
   it('sends a Delete of a Tombstone for a post that has become a draft (AC #3)', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
@@ -2116,7 +2117,7 @@ describe('resending a post', () => {
 
   it('records the outcome per follower, exactly as a publish does', async () => {
     const { cms } = await site({ followers: 2 });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
 
@@ -2162,7 +2163,7 @@ describe('retrying a failed delivery', () => {
 
   it('sends a recipient whose Create failed the Create, for the post as it now reads', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     rejectingEveryPost = true;
     await publishNewPost(agent);
     await cms.delivery.settled();
@@ -2181,7 +2182,7 @@ describe('retrying a failed delivery', () => {
 
   it('sends a recipient whose Update failed an Update, when its Create arrived', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     rejectingEveryPost = true;
@@ -2200,7 +2201,7 @@ describe('retrying a failed delivery', () => {
 
   it('sends the Create when the Create and the Update after it both failed', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     rejectingEveryPost = true;
     await publishNewPost(agent);
     await cms.delivery.settled();
@@ -2221,7 +2222,7 @@ describe('renaming a post that has already been announced (TASK-127)', () => {
 
   it('keeps the object id its followers hold and sends them an Update', async () => {
     const { cms, contentDir } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
     deliveries.length = 0;
@@ -2243,7 +2244,7 @@ describe('renaming a post that has already been announced (TASK-127)', () => {
 
   it('answers a peer at the old URL with the object and a browser with a redirect', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await publishNewPost(agent);
     await cms.delivery.settled();
 
@@ -2330,7 +2331,7 @@ describe('a user’s own profile', () => {
 
   it('delivers an Update of the actor when the profile is saved (AC #4)', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     const response = await saveProfile(agent, {
       display_name: 'Ada Lovelace',
@@ -2380,7 +2381,7 @@ describe('a user’s own profile', () => {
     // Mastodon hands an Update's embedded actor straight to the code that
     // reads `attributionDomains`, and an actor without it clears the list.
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     assert.equal((await saveProfile(agent, { display_name: 'Ada Lovelace' })).status, 303);
     await cms.delivery.settled();
@@ -2402,7 +2403,7 @@ describe('a user’s own profile', () => {
 
   it('delivers another Update when the avatar is taken off again', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
 
     await saveProfile(agent, { avatar: '/uploads/2026/09/me.png' });
     await cms.delivery.settled();
@@ -2421,7 +2422,7 @@ describe('a user’s own profile', () => {
 
   it('tells nobody about a setting that is the site’s own business', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     const token = csrfField(await (await agent.get('/admin/settings')).text());
     assert.ok(token !== undefined, 'the settings screen carried a CSRF token');
 
@@ -2450,7 +2451,7 @@ describe('a cited page in a delivered note (TASK-262)', () => {
 
   async function bookmark(target: string): Promise<Site & { agent: Browser }> {
     const published = await site({ files: { '_data/replyContexts.json': CONTEXTS } });
-    const agent = await signedIn(published.cms);
+    const agent = signedInAs(published.cms, ADA);
     const response = await publishNewPost(agent, {
       title: '',
       slug: 'cited',
@@ -2527,7 +2528,7 @@ describe('a cited page whose context is stored after the Create (TASK-263)', () 
 
   it('sends an Update naming the page to the inbox the host-form Create went to (AC #1)', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     const open = holdSlowPage();
     await bookmarkSlowPage(agent);
     await cms.delivery.settled();
@@ -2553,7 +2554,7 @@ describe('a cited page whose context is stored after the Create (TASK-263)', () 
     const { cms, contentDir } = await site({
       files: { '_data/replyContexts.json': JSON.stringify(contexts) },
     });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     await bookmarkSlowPage(agent);
     await cms.delivery.settled();
     assert.equal(contentOf(delivered('Create')[0]), line('A slow page'));
@@ -2578,7 +2579,7 @@ describe('a cited page whose context is stored after the Create (TASK-263)', () 
 
   it('sends nothing to a post whose Create was built after the context landed (AC #2)', async () => {
     const { cms } = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     const openPage = holdSlowPage();
     const openInboxes = holdInboxes();
 
@@ -2627,7 +2628,7 @@ bookmark-of: ${SLOW_PAGE}
   ] as const) {
     it(`sends nothing to ${hidden} (AC #3)`, async () => {
       const { cms } = await site();
-      const agent = await signedIn(cms);
+      const agent = signedInAs(cms, ADA);
       const open = holdSlowPage();
       await bookmarkSlowPage(agent);
       await cms.delivery.settled();
@@ -2725,7 +2726,7 @@ describe('a post that mentions a fediverse handle (TASK-194)', () => {
 
   async function mention(): Promise<Site & { agent: Browser }> {
     const published = await site();
-    const agent = await signedIn(published.cms);
+    const agent = signedInAs(published.cms, ADA);
     webfingerLookups.length = 0;
     const response = await publishNewPost(agent, { title: '', slug: 'thanks', body: BODY });
     assert.equal(response.status, 303, await response.text());
@@ -2811,7 +2812,7 @@ comments: true
 Words.
 `;
     const { cms } = await site({ files: { 'posts/2026-03-04-watched.md': post } });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, ADA);
     cms.admin.logInboxActivity({
       activityId: `${STATUS_ID}/activity`,
       activityType: 'Create',

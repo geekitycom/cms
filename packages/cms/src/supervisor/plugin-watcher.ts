@@ -8,6 +8,7 @@ export const PLUGIN_SETTLE_MS = 5_000;
 
 export interface PluginWatcherOptions {
   watch: PluginWatch | undefined;
+  settleMs?: number | undefined;
   schedule(task: () => void, ms: number): { cancel(): void };
   now(): number;
   log(line: string): void;
@@ -25,7 +26,7 @@ export interface PluginWatcher {
 }
 
 export function createPluginWatcher(options: PluginWatcherOptions): PluginWatcher {
-  const { watch } = options;
+  const { watch, settleMs = PLUGIN_SETTLE_MS } = options;
   let loaded: string | undefined;
   let reloading: string | undefined;
   let failed: string | undefined;
@@ -56,14 +57,14 @@ export function createPluginWatcher(options: PluginWatcherOptions): PluginWatche
       if (!changing) {
         changing = true;
         options.log(
-          `The plugins folder is changing; it loads once it has stood still for ${String(PLUGIN_SETTLE_MS / 1000)} s.`,
+          `The plugins folder is changing; it loads once it has stood still for ${String(settleMs / 1000)} s.`,
         );
       }
       seen = { signature, since: now };
       return false;
     }
     if (signature === undefined) return false;
-    if (now - seen.since < PLUGIN_SETTLE_MS) return false;
+    if (now - seen.since < settleMs) return false;
     changing = false;
     return true;
   }

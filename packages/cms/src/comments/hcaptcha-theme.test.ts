@@ -5,14 +5,14 @@ import { fileURLToPath } from 'node:url';
 import { after, describe, it } from 'node:test';
 import vm from 'node:vm';
 
-import { sandbox, signIn } from '../admin/__testing__/harness.ts';
-import { writeUsers } from '../admin/__testing__/users.ts';
+import { FIRST_ADMIN, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import { settingsOver } from '../__testing__/settings.ts';
 import { contactForm, contactFormFor, CONTACT_FIELDS, CONTACT_POST_PATH } from '../contact/form.ts';
 import { parseDocument } from '../content/parser.ts';
 import type { ChallengeWidget, FormChallenge } from '../forms/challenge.ts';
 import { challengeWidgetOf } from '../forms/challenge.ts';
 import type { Cms } from '../index.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { COMMENT_POST_PATH, commentForm, signedInCommentForm } from './form.ts';
 import type { CommentViewer } from './form.ts';
 import { HCAPTCHA_RESPONSE_FIELD, HCAPTCHA_SCRIPT_URL } from './hcaptcha.ts';
@@ -60,7 +60,7 @@ contact: true
 Write to me.
 `;
 
-const ADMIN = { username: 'ada', password: 'correct horse battery', email: 'ada@example.com' };
+const ADMIN = { username: 'ada', password: FIRST_ADMIN.password, email: 'ada@example.com' };
 
 describe('the form contexts and a challenge (AC #1)', () => {
   const post = parseDocument(POST, { path: 'posts/2026-09-19-hello-world.md' });
@@ -115,7 +115,7 @@ async function site(options: { paired?: boolean; status?: string } = {}): Promis
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  writeUsers(dataDir, [ADMIN]);
+  writeUsers(dataDir, [{ username: ADMIN.username, email: ADMIN.email }]);
   if (options.paired !== false) {
     await settingsOver({ contentDir, dataDir }).set(
       'hcaptcha',

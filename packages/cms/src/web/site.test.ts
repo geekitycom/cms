@@ -10,6 +10,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
+import { shared } from './__testing__/shared.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -73,6 +74,8 @@ async function site(
   return { cms: instance, contentDir };
 }
 
+const sharedSite = shared(site);
+
 /** A post file. */
 function post(
   title: string,
@@ -102,7 +105,7 @@ function page(title: string, permalink: string, body = 'Body.'): string {
 
 describe('the home page', () => {
   it('lists published posts newest first', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-newer.md': post('Newer', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/2026/09/newer/',
@@ -127,7 +130,7 @@ describe('the home page', () => {
   });
 
   it('splits the archive into pages and links the next one', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'Paged', postsPerPage: 2 }),
       'posts/one.md': post('One', { date: '2026-09-03T09:00:00Z', permalink: '/one/' }),
       'posts/two.md': post('Two', { date: '2026-09-02T09:00:00Z', permalink: '/two/' }),
@@ -152,7 +155,7 @@ describe('the home page', () => {
   });
 
   it('404s a page past the end of the archive', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/one.md': post('One', { date: '2026-09-03T09:00:00Z', permalink: '/one/' }),
     });
 
@@ -160,7 +163,7 @@ describe('the home page', () => {
   });
 
   it('sends /page/1/ back to the home page, which is the same listing', async () => {
-    const { cms } = await site({});
+    const { cms } = await sharedSite({});
 
     const response = await cms.app.request('/page/1/');
 
@@ -169,7 +172,7 @@ describe('the home page', () => {
   });
 
   it('renders with no posts at all rather than failing', async () => {
-    const { cms } = await site({});
+    const { cms } = await sharedSite({});
 
     const response = await cms.app.request('/');
 
@@ -180,7 +183,7 @@ describe('the home page', () => {
 
 describe('a single document', () => {
   it('renders a post with its title, date, tags and body HTML', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-hello.md': post('Hello, World!', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/2026/09/hello/',
@@ -206,7 +209,7 @@ describe('a single document', () => {
   });
 
   it('renders a page through the page template, which has no date line', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'pages/about.md': page('About', '/about/', 'Who runs this site.'),
     });
 
@@ -220,7 +223,7 @@ describe('a single document', () => {
   });
 
   it('404s a draft, which the public site must not show', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-secret.md': post('Secret', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/2026/09/secret/',
@@ -235,7 +238,7 @@ describe('a single document', () => {
   });
 
   it('answers 410 for a trashed document (TASK-195)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_trash/posts/2026-09-02-gone.md': post('Gone', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/2026/09/gone/',
@@ -247,7 +250,7 @@ describe('a single document', () => {
   });
 
   it('404s a path no document claims, through the theme', async () => {
-    const { cms } = await site({});
+    const { cms } = await sharedSite({});
 
     const response = await cms.app.request('/nothing-here/');
 
@@ -277,7 +280,7 @@ describe('a tag archive', () => {
   };
 
   it('lists the posts carrying that tag and nothing else', async () => {
-    const { cms } = await site(tagged);
+    const { cms } = await sharedSite(tagged);
 
     const response = await cms.app.request('/tag/eleventy/');
     const html = await response.text();
@@ -290,7 +293,7 @@ describe('a tag archive', () => {
   });
 
   it('leaves drafts out of the archive', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...tagged,
       'posts/hidden.md': post('Hidden', {
         date: '2026-08-04T09:00:00Z',
@@ -306,7 +309,7 @@ describe('a tag archive', () => {
   });
 
   it('paginates, at /tag/{tag}/page/N/', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...tagged,
       '_data/site.json': JSON.stringify({ title: 'Paged', postsPerPage: 1 }),
     });
@@ -323,13 +326,13 @@ describe('a tag archive', () => {
   });
 
   it('404s a tag nothing carries', async () => {
-    const { cms } = await site(tagged);
+    const { cms } = await sharedSite(tagged);
 
     assert.equal((await cms.app.request('/tag/nobody-uses-this/')).status, 404);
   });
 
   it('is not at the old /tags/ base', async () => {
-    const { cms } = await site(tagged);
+    const { cms } = await sharedSite(tagged);
 
     assert.equal((await cms.app.request('/tags/eleventy/')).status, 404);
   });
@@ -437,7 +440,7 @@ describe('a category archive', () => {
   };
 
   it('lists the posts filed under that category and nothing else', async () => {
-    const { cms } = await site(filed);
+    const { cms } = await sharedSite(filed);
 
     const response = await cms.app.request('/category/general/');
     const html = await response.text();
@@ -450,14 +453,14 @@ describe('a category archive', () => {
   });
 
   it('is a different archive from the tag of the same name', async () => {
-    const { cms } = await site(filed);
+    const { cms } = await sharedSite(filed);
 
     assert.equal((await cms.app.request('/tag/general/')).status, 404);
     assert.equal((await cms.app.request('/category/eleventy/')).status, 404);
   });
 
   it('leaves drafts and the trash out of the archive', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...filed,
       'posts/hidden.md': post('Hidden', {
         date: '2026-08-04T09:00:00Z',
@@ -481,7 +484,7 @@ describe('a category archive', () => {
   });
 
   it('paginates, at /category/{slug}/page/N/', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...filed,
       '_data/site.json': JSON.stringify({ title: 'Paged', postsPerPage: 1 }),
     });
@@ -498,7 +501,7 @@ describe('a category archive', () => {
   });
 
   it('301s the archive URL that arrived without its trailing slash', async () => {
-    const { cms } = await site(filed);
+    const { cms } = await sharedSite(filed);
 
     const response = await cms.app.request('/category/general');
 
@@ -507,14 +510,14 @@ describe('a category archive', () => {
   });
 
   it('404s a category nothing is filed under', async () => {
-    const { cms } = await site(filed);
+    const { cms } = await sharedSite(filed);
 
     assert.equal((await cms.app.request('/category/nobody-files-here/')).status, 404);
     assert.equal((await cms.app.request('/category/nobody-files-here/page/2/')).status, 404);
   });
 
   it('serves the archive as JSON at /category/{slug}/index.json', async () => {
-    const { cms } = await site(filed);
+    const { cms } = await sharedSite(filed);
 
     const response = await cms.app.request('/category/general/index.json');
     const body = (await response.json()) as { url: string }[];
@@ -528,7 +531,7 @@ describe('a category archive', () => {
   });
 
   it('links a post to every category it is filed under', async () => {
-    const { cms } = await site(filed);
+    const { cms } = await sharedSite(filed);
 
     const html = await (await cms.app.request('/notes/')).text();
 
@@ -617,7 +620,7 @@ describe('canonical URLs', () => {
   };
 
   it('301s a document URL that arrived without its trailing slash', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const response = await cms.app.request('/about');
 
@@ -626,7 +629,7 @@ describe('canonical URLs', () => {
   });
 
   it('301s a listing URL that arrived without its trailing slash', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     for (const [requested, canonical] of [
       ['/tag/eleventy', '/tag/eleventy/'],
@@ -639,7 +642,7 @@ describe('canonical URLs', () => {
   });
 
   it('keeps the query string when it redirects', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const response = await cms.app.request('/about?utm_source=elsewhere');
 
@@ -648,7 +651,7 @@ describe('canonical URLs', () => {
   });
 
   it('404s rather than redirecting when the canonical URL is empty too', async () => {
-    const { cms } = await site(files);
+    const { cms } = await sharedSite(files);
 
     const response = await cms.app.request('/nothing-here');
 
@@ -656,7 +659,7 @@ describe('canonical URLs', () => {
   });
 
   it('does not redirect a draft into existence', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/secret.md': post('Secret', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/secret/',
@@ -915,7 +918,7 @@ describe('the conversation under a post', () => {
       'partials/conversation.njk':
         '<p class="my-own">{{ conversation.counts.total }} interactions</p>\n',
     });
-    const { cms } = await site(
+    const { cms } = await sharedSite(
       { ...files, ...choosing() },
       { baseUrl: 'https://example.com', themesDir },
     );
@@ -930,7 +933,7 @@ describe('the conversation under a post', () => {
 
 describe('theme assets', () => {
   it('serves the default theme stylesheet from /theme/ with cache headers', async () => {
-    const { cms } = await site({});
+    const { cms } = await sharedSite({});
 
     const response = await cms.app.request('/theme/style.css');
 
@@ -943,7 +946,7 @@ describe('theme assets', () => {
   });
 
   it('answers 304 when the ETag still matches', async () => {
-    const { cms } = await site({});
+    const { cms } = await sharedSite({});
     const first = await cms.app.request('/theme/style.css');
     const etag = first.headers.get('etag') ?? '';
 
@@ -957,7 +960,7 @@ describe('theme assets', () => {
 
   it('prefers an asset the chosen theme ships over the packaged one', async () => {
     const themesDir = await fixtureTheme({ 'static/style.css': 'body { color: rebeccapurple }\n' });
-    const { cms } = await site(choosing(), { themesDir });
+    const { cms } = await sharedSite(choosing(), { themesDir });
 
     const response = await cms.app.request('/theme/style.css');
 
@@ -965,7 +968,7 @@ describe('theme assets', () => {
   });
 
   it('refuses to walk out of the theme directory', async () => {
-    const { cms } = await site({});
+    const { cms } = await sharedSite({});
 
     for (const attempt of [
       '/theme/../../package.json',
@@ -979,7 +982,7 @@ describe('theme assets', () => {
   });
 
   it('404s an asset neither theme has', async () => {
-    const { cms } = await site({});
+    const { cms } = await sharedSite({});
 
     assert.equal((await cms.app.request('/theme/nope.css')).status, 404);
   });
@@ -995,7 +998,7 @@ async function stylesheetHref(cms: Cms, pathname = '/'): Promise<string> {
 
 describe('fingerprinted theme assets (TASK-138)', () => {
   it('links the stylesheet and the script at URLs carrying a content hash', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-code.md': post('Code', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/2026/09/code/',
@@ -1010,22 +1013,22 @@ describe('fingerprinted theme assets (TASK-138)', () => {
   });
 
   it('hashes the file the chosen theme ships, so two themes get two URLs', async () => {
-    const packaged = await stylesheetHref((await site({})).cms);
+    const packaged = await stylesheetHref((await sharedSite({})).cms);
     const themesDir = await fixtureTheme({ 'static/style.css': 'body { color: teal }\n' });
-    const themed = await stylesheetHref((await site(choosing(), { themesDir })).cms);
+    const themed = await stylesheetHref((await sharedSite(choosing(), { themesDir })).cms);
 
     assert.notEqual(themed, packaged);
     assert.match(themed, /^\/theme\/style\.css\?v=[0-9a-f]{12}$/);
   });
 
   it('puts the base path in front of a hashed URL', async () => {
-    const { cms } = await site({}, { baseUrl: 'https://example.com/blog/' });
+    const { cms } = await sharedSite({}, { baseUrl: 'https://example.com/blog/' });
 
     assert.match(await stylesheetHref(cms), /^\/blog\/theme\/style\.css\?v=[0-9a-f]{12}$/);
   });
 
   it('serves the hashed URL for a year, immutable', async () => {
-    const { cms } = await site({});
+    const { cms } = await sharedSite({});
     const href = await stylesheetHref(cms);
 
     const response = await cms.app.request(href);
@@ -1039,7 +1042,7 @@ describe('fingerprinted theme assets (TASK-138)', () => {
   });
 
   it('keeps the unhashed URL working at a short lifetime', async () => {
-    const { cms } = await site({});
+    const { cms } = await sharedSite({});
 
     const response = await cms.app.request('/theme/style.css');
 
@@ -1048,7 +1051,7 @@ describe('fingerprinted theme assets (TASK-138)', () => {
   });
 
   it('does not pin a stale hash to the bytes the file holds now', async () => {
-    const { cms } = await site({});
+    const { cms } = await sharedSite({});
 
     const response = await cms.app.request('/theme/style.css?v=000000000000');
 
@@ -1110,7 +1113,7 @@ describe('the HTML validator (TASK-181)', () => {
 
 describe('uploads', () => {
   it('serves a file from content/uploads at the URL Eleventy copies it to', async () => {
-    const { cms } = await site({ 'uploads/2026/09/notes.txt': 'Attached.\n' });
+    const { cms } = await sharedSite({ 'uploads/2026/09/notes.txt': 'Attached.\n' });
 
     const response = await cms.app.request('/uploads/2026/09/notes.txt');
 
@@ -1122,7 +1125,7 @@ describe('uploads', () => {
   });
 
   it('answers 304 when the ETag still matches', async () => {
-    const { cms } = await site({ 'uploads/2026/09/notes.txt': 'Attached.\n' });
+    const { cms } = await sharedSite({ 'uploads/2026/09/notes.txt': 'Attached.\n' });
     const first = await cms.app.request('/uploads/2026/09/notes.txt');
 
     const second = await cms.app.request('/uploads/2026/09/notes.txt', {
@@ -1134,7 +1137,7 @@ describe('uploads', () => {
   });
 
   it('refuses to walk out of the uploads directory', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/secret.md': post('Secret', { date: '2026-09-03', permalink: '/secret/' }),
     });
 
@@ -1152,13 +1155,13 @@ describe('uploads', () => {
   });
 
   it('404s an upload that is not there', async () => {
-    const { cms } = await site({});
+    const { cms } = await sharedSite({});
 
     assert.equal((await cms.app.request('/uploads/2026/09/nope.png')).status, 404);
   });
 
   it('404s a temporary file a metadata sweep left beside an upload (TASK-401)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'uploads/2026/09/beach.jpg': 'stripped',
       'uploads/2026/09/beach.jpg.geekity-strip': 'half written',
     });
@@ -1184,7 +1187,7 @@ describe('overriding one template', () => {
     const themesDir = await fixtureTheme({
       'layouts/post.njk': '<!doctype html><h1>overridden: {{ title }}</h1>{{ content | safe }}',
     });
-    const { cms } = await site({ ...files, ...choosing() }, { themesDir });
+    const { cms } = await sharedSite({ ...files, ...choosing() }, { themesDir });
 
     const overridden = await (await cms.app.request('/notes/')).text();
     assert.ok(overridden.includes('overridden: Notes'), 'the site post layout rendered');
@@ -1203,7 +1206,7 @@ describe('overriding one template', () => {
   });
 
   it('is fine with a themes directory that does not exist', async () => {
-    const { cms } = await site(files, { themesDir: '/definitely/not/a/directory' });
+    const { cms } = await sharedSite(files, { themesDir: '/definitely/not/a/directory' });
 
     assert.equal((await cms.app.request('/notes/')).status, 200);
     assert.equal((await cms.app.request('/theme/style.css')).status, 200);
@@ -1225,7 +1228,7 @@ describe('overriding one template', () => {
         '<div id="content">{{ content | safe }}</div>',
       ].join('\n'),
     });
-    const { cms } = await site(
+    const { cms } = await sharedSite(
       {
         ...choosing({ title: 'Fixture Site' }),
         'posts/2026-09-02-hello.md': [
@@ -1285,7 +1288,7 @@ describe('the site menu', () => {
   }
 
   it('renders menus.primary in order on every page, marking the current one (AC #1)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({
         title: 'Menu Site',
         menus: {
@@ -1328,7 +1331,7 @@ describe('the site menu', () => {
   });
 
   it('shows no menu at all for a site.json that names none (AC #3)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({ title: 'Old Site', tagline: 'from before the setting' }),
       'pages/about.md': page('About', '/about/'),
     });
@@ -1339,7 +1342,7 @@ describe('the site menu', () => {
   });
 
   it('leaves out a page whose front matter still says navigation (TASK-106 AC #2)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({
         title: 'Menu Site',
         menus: { primary: [{ label: 'Home', url: '/' }] },
@@ -1358,7 +1361,7 @@ describe('the site menu', () => {
   });
 
   it('links the page serving as the front page by typing Home | / (TASK-106 AC #5)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       '_data/site.json': JSON.stringify({
         title: 'Menu Site',
         homepage: 'welcome',
@@ -1406,7 +1409,7 @@ describe('the timezone setting as a lens on the dates', () => {
   }
 
   it('changes what a page shows without changing a file', async () => {
-    const { cms, contentDir } = await site(files);
+    const { cms, contentDir } = await sharedSite(files);
     const file = path.join(contentDir, 'posts', '2026-09-02-just-after-midnight.md');
     const before = await readFile(file, 'utf8');
 

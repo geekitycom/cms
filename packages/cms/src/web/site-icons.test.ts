@@ -13,6 +13,7 @@ import sharp from 'sharp';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { shared } from './__testing__/shared.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -48,6 +49,8 @@ async function site(
 
   return box.open({ contentDir, dataDir, ...config });
 }
+
+const sharedSite = shared(site);
 
 /** A square PNG of one colour. */
 async function png(size: number, background = { r: 179, g: 57, b: 0 }): Promise<Buffer> {
@@ -95,7 +98,7 @@ function icoFrames(bytes: Buffer): { width: number; height: number; image: Buffe
 
 describe('/favicon.ico (TASK-147 AC #1)', () => {
   it('serves an ICO of 16, 32 and 48 pixel frames derived from the icon source', async () => {
-    const cms = await site({ avatar: AVATAR }, { [AVATAR]: await png(240) });
+    const cms = await sharedSite({ avatar: AVATAR }, { [AVATAR]: await png(240) });
 
     const response = await get(cms, '/favicon.ico');
     assert.equal(response.status, 200);
@@ -118,14 +121,14 @@ describe('/favicon.ico (TASK-147 AC #1)', () => {
   });
 
   it('answers 404 when the site has nothing to derive one from', async () => {
-    const cms = await site({});
+    const cms = await sharedSite({});
     assert.equal((await get(cms, '/favicon.ico')).status, 404);
   });
 });
 
 describe('an SVG icon, and an icon apart from the avatar (TASK-147 AC #2)', () => {
   it('links the icon setting rather than the avatar when the site sets one', async () => {
-    const cms = await site(
+    const cms = await sharedSite(
       { avatar: AVATAR, icon: LOGO_PNG },
       { [AVATAR]: await png(240), [LOGO_PNG]: await png(240, { r: 11, g: 95, b: 255 }) },
     );
@@ -148,7 +151,7 @@ describe('an SVG icon, and an icon apart from the avatar (TASK-147 AC #2)', () =
   });
 
   it('links an SVG icon as itself, ahead of the PNGs rasterised from it', async () => {
-    const cms = await site({ icon: LOGO }, { [LOGO]: SVG });
+    const cms = await sharedSite({ icon: LOGO }, { [LOGO]: SVG });
 
     const icons = (await headLinks(cms)).filter((link) => link['rel']?.includes('icon'));
     assert.deepEqual(
@@ -170,7 +173,7 @@ describe('an SVG icon, and an icon apart from the avatar (TASK-147 AC #2)', () =
   });
 
   it('links no SVG for a raster icon', async () => {
-    const cms = await site({ avatar: AVATAR }, { [AVATAR]: await png(240) });
+    const cms = await sharedSite({ avatar: AVATAR }, { [AVATAR]: await png(240) });
     const types = (await headLinks(cms))
       .filter((link) => link['rel']?.includes('icon'))
       .map((link) => link['type']);
@@ -203,7 +206,7 @@ describe('the maskable icon (TASK-147 AC #3)', () => {
       .composite([{ input: await png(160, { r: 255, g: 255, b: 255 }), top: 20, left: 20 }])
       .png()
       .toBuffer();
-    const cms = await site({ avatar: AVATAR }, { [AVATAR]: avatar });
+    const cms = await sharedSite({ avatar: AVATAR }, { [AVATAR]: avatar });
 
     const icons = (await manifest(cms))['icons'] as ManifestIcon[];
     const maskable = icons.find((icon) => icon.purpose === 'maskable');
@@ -262,7 +265,7 @@ describe('the web app manifest colours (TASK-493)', () => {
     ['dark', SLATE.dark],
   ] as const) {
     it(`are the chosen scheme's ${mode === 'dark' ? 'dark' : 'light'} theme colour in ${mode} mode (AC #1)`, async () => {
-      const body = await manifest(await site({ colorScheme: 'slate', colorMode: mode }));
+      const body = await manifest(await sharedSite({ colorScheme: 'slate', colorMode: mode }));
       assert.equal(body['theme_color'], expected);
       assert.equal(body['background_color'], expected);
     });
@@ -293,7 +296,7 @@ describe('the web app manifest colours (TASK-493)', () => {
 
 describe('the web app manifest (TASK-147 AC #4)', () => {
   it('is served with the name, the icons, the start URL, the colours and the display', async () => {
-    const cms = await site({ avatar: AVATAR }, { [AVATAR]: await png(240) });
+    const cms = await sharedSite({ avatar: AVATAR }, { [AVATAR]: await png(240) });
     const body = await manifest(cms);
 
     assert.equal(body['name'], 'A Site of Words');
@@ -317,18 +320,18 @@ describe('the web app manifest (TASK-147 AC #4)', () => {
   });
 
   it('lists an SVG icon at any size', async () => {
-    const cms = await site({ icon: LOGO }, { [LOGO]: SVG });
+    const cms = await sharedSite({ icon: LOGO }, { [LOGO]: SVG });
     const icons = (await manifest(cms))['icons'] as ManifestIcon[];
     assert.deepEqual(icons[0], { src: LOGO, sizes: 'any', type: 'image/svg+xml' });
   });
 
   it('is served, without icons, by a site with nothing to derive them from', async () => {
-    const body = await manifest(await site({}));
+    const body = await manifest(await sharedSite({}));
     assert.deepEqual(body['icons'], []);
   });
 
   it('answers a repeat request with 304', async () => {
-    const cms = await site({});
+    const cms = await sharedSite({});
     const first = await get(cms, '/manifest.webmanifest');
     const etag = first.headers.get('etag');
     assert.ok(etag !== null);
@@ -339,7 +342,7 @@ describe('the web app manifest (TASK-147 AC #4)', () => {
   });
 
   it('is linked from the head of every page', async () => {
-    const cms = await site({});
+    const cms = await sharedSite({});
     const manifests = (await headLinks(cms)).filter((link) => link['rel'] === 'manifest');
     assert.deepEqual(
       manifests.map((link) => link['href']),

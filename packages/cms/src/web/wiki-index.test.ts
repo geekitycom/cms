@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { saveSettings } from '../admin/__testing__/settings.ts';
 import type { Cms } from '../index.ts';
+import { shared } from './__testing__/shared.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -52,6 +53,8 @@ async function site(content: Record<string, string> = WIKI): Promise<Cms> {
   });
 }
 
+const sharedSite = shared(site);
+
 async function body(cms: Cms, pathname: string, init?: RequestInit): Promise<string> {
   const response = await cms.app.request(pathname, init);
   assert.equal(response.status, 200, `GET ${pathname} answered ${String(response.status)}`);
@@ -72,7 +75,7 @@ function order(text: string, needles: readonly string[]): void {
 
 describe('the wiki index', () => {
   it('lists every published wiki page A to Z, grouped by first letter, on one page', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const html = await body(cms, '/wiki/');
 
     assert.match(html, /<h1 class="page-title">Wiki<\/h1>/);
@@ -98,7 +101,7 @@ describe('the wiki index', () => {
   });
 
   it('is served as Markdown under a heading for each letter', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const markdown = await body(cms, '/wiki/index.md');
     assert.match(markdown, /^# Wiki$/m);
     order(markdown, [
@@ -118,7 +121,7 @@ describe('the wiki index', () => {
   });
 
   it('is served as Gemini text with a link line for each page', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const gemini = await body(cms, '/wiki/index.gmi');
     assert.match(gemini, /^# Wiki$/m);
     order(gemini, [
@@ -131,7 +134,7 @@ describe('the wiki index', () => {
   });
 
   it('is served as JSON, the pages A to Z', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const json = JSON.parse(await body(cms, '/wiki/index.json')) as { url?: string }[];
     assert.deepEqual(
       json.map((entry) => entry.url),
@@ -142,7 +145,7 @@ describe('the wiki index', () => {
   });
 
   it('is negotiated at the base, and the base without its slash redirects to it', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const asked = await cms.app.request('/wiki/', { headers: { accept: 'text/markdown' } });
     assert.equal(asked.status, 200);
     assert.match(asked.headers.get('content-type') ?? '', /text\/markdown/);
@@ -153,7 +156,7 @@ describe('the wiki index', () => {
   });
 
   it('leaves a wiki page called page at its own URL, and has no pages or feed of its own', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.match(await body(cms, '/wiki/page/'), /A wiki page called page/);
     assert.equal((await cms.app.request('/wiki/page/2/')).status, 404);
     assert.equal((await cms.app.request('/wiki/feed/')).status, 404);
@@ -178,12 +181,12 @@ describe('the wiki index', () => {
   });
 
   it('is in the sitemap', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.match(await body(cms, '/sitemap.xml'), /<loc>https:\/\/blog\.example\/wiki\/<\/loc>/);
   });
 
   it('is linked from Markdown as its own .md', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       ...WIKI,
       'pages/index-link.md':
         '---\ntitle: Index link\npermalink: /index-link/\n---\n\nSee [the wiki](/wiki/).\n',
@@ -194,14 +197,14 @@ describe('the wiki index', () => {
 
 describe('the wiki index with no published wiki pages', () => {
   it('is a 404 in every representation', async () => {
-    const cms = await site(NO_WIKI);
+    const cms = await sharedSite(NO_WIKI);
     for (const pathname of ['/wiki/', '/wiki/index.md', '/wiki/index.gmi', '/wiki/index.json']) {
       assert.equal((await cms.app.request(pathname)).status, 404, pathname);
     }
   });
 
   it('is not in the sitemap', async () => {
-    const cms = await site(NO_WIKI);
+    const cms = await sharedSite(NO_WIKI);
     assert.doesNotMatch(await body(cms, '/sitemap.xml'), /\/wiki\//);
   });
 

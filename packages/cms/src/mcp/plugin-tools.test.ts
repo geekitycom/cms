@@ -4,12 +4,13 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import type { Cms } from '../index.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import { setPluginEnabled } from '../plugins/enabled.ts';
-import { createUser, findUser } from '../site/users.ts';
+import { findUser } from '../site/users.ts';
 import { readActivityLog } from '../web/indieauth-activity-log.ts';
 import { MCP_CALLS_PER_WINDOW } from './endpoint.ts';
 import { JSON_RPC_ERRORS } from './protocol.ts';
@@ -96,7 +97,7 @@ async function site(): Promise<Site> {
       plugins: { [ECHO]: { enabled: true } },
     }),
   );
-  await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  writeUsers(dataDir, [{ username: 'ada' }]);
   const cms = await box.open({ contentDir, dataDir, baseUrl: BASE, plugins: [echo] });
   return {
     cms,

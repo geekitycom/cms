@@ -11,13 +11,14 @@ import matter from 'gray-matter';
 import sharp from 'sharp';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { csrfField, FIRST_ADMIN, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { postTypeOf } from '../content/post-type.ts';
 import { addFollower } from '../federation/records.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 
 remoteHostsDoNotExist();
@@ -31,20 +32,25 @@ const NOW = new Date('2026-09-20T12:00:00.000Z');
 
 interface Site {
   cms: Cms;
-  agent: Browser;
   token: string;
+}
+
+interface EditorSite {
+  cms: Cms;
+  agent: Browser;
 }
 
 /** A site whose first admin, ada, holds a token with `scopes`. */
 async function site(scopes: Scope[] = ['create'], config: GeekityConfig = {}): Promise<Site> {
+  const dataDir = await box.dir('geekity-micropub-create-data-');
+  writeUsers(dataDir);
   const cms = await box.open({
     contentDir: await box.dir('geekity-micropub-create-content-'),
-    dataDir: await box.dir('geekity-micropub-create-data-'),
+    dataDir,
     baseUrl: BASE,
     now: () => NOW,
     ...config,
   });
-  const agent = await signedIn(cms);
   const ada = findUser(cms.config.dataDir, FIRST_ADMIN.username);
   assert.ok(ada !== undefined, 'the first admin exists');
   const { accessToken } = await issueTokens(
@@ -59,7 +65,12 @@ async function site(scopes: Scope[] = ['create'], config: GeekityConfig = {}): P
     },
     NOW,
   );
-  return { cms, agent, token: accessToken };
+  return { cms, token: accessToken };
+}
+
+async function editorSite(): Promise<EditorSite> {
+  const { cms } = await site();
+  return { cms, agent: await signIn(cms) };
 }
 
 async function postForm(cms: Cms, token: string, fields: [string, string][]): Promise<Response> {
@@ -158,11 +169,11 @@ describe('creating a post (AC #1)', () => {
 
 describe('what a Micropub post is (AC #2)', () => {
   it('writes the same file the editor writes for the same content', async () => {
-    const editorSite = await site();
-    const html = await (await editorSite.agent.get('/admin/posts/new')).text();
+    const editor = await editorSite();
+    const html = await (await editor.agent.get('/admin/posts/new')).text();
     const csrf = csrfField(html);
     assert.ok(csrf !== undefined);
-    const saved = await editorSite.agent.post('/admin/posts/new', {
+    const saved = await editor.agent.post('/admin/posts/new', {
       csrf_token: csrf,
       title: '',
       slug: '',
@@ -189,16 +200,16 @@ describe('what a Micropub post is (AC #2)', () => {
     ]);
     assert.equal(created.status, 201);
 
-    const [editorFile] = await postFiles(editorSite.cms);
+    const [editorFile] = await postFiles(editor.cms);
     const [micropubFile] = await postFiles(micropubSite.cms);
     assert.ok(editorFile !== undefined && micropubFile !== undefined);
     assert.equal(micropubFile, editorFile);
     assert.equal(
       await fileAt(micropubSite.cms, `posts/${micropubFile}`),
-      await fileAt(editorSite.cms, `posts/${editorFile}`),
+      await fileAt(editor.cms, `posts/${editorFile}`),
     );
 
-    const editorPost = editorSite.cms.store.getByPath(`posts/${editorFile}`);
+    const editorPost = editor.cms.store.getByPath(`posts/${editorFile}`);
     const micropubPost = micropubSite.cms.store.getByPath(`posts/${micropubFile}`);
     assert.ok(editorPost !== undefined && micropubPost !== undefined);
     assert.equal(postTypeOf(micropubPost), 'reply');
@@ -206,11 +217,11 @@ describe('what a Micropub post is (AC #2)', () => {
   });
 
   it('writes the same photo post the editor writes (TASK-166)', async () => {
-    const editorSite = await site();
-    const html = await (await editorSite.agent.get('/admin/posts/new')).text();
+    const editor = await editorSite();
+    const html = await (await editor.agent.get('/admin/posts/new')).text();
     const csrf = csrfField(html);
     assert.ok(csrf !== undefined);
-    const saved = await editorSite.agent.post('/admin/posts/new', {
+    const saved = await editor.agent.post('/admin/posts/new', {
       csrf_token: csrf,
       date: '2026-09-19T09:00:00Z',
       'photo-url-0': 'https://peer.example/a.jpg',
@@ -231,13 +242,13 @@ describe('what a Micropub post is (AC #2)', () => {
     });
     assert.equal(created.status, 201);
 
-    const [editorFile] = await postFiles(editorSite.cms);
+    const [editorFile] = await postFiles(editor.cms);
     const [micropubFile] = await postFiles(micropubSite.cms);
     assert.ok(editorFile !== undefined && micropubFile !== undefined);
     assert.equal(micropubFile, editorFile);
     assert.equal(
       await fileAt(micropubSite.cms, `posts/${micropubFile}`),
-      await fileAt(editorSite.cms, `posts/${editorFile}`),
+      await fileAt(editor.cms, `posts/${editorFile}`),
     );
   });
 
@@ -623,11 +634,11 @@ describe('a like, a repost and a bookmark (TASK-169 AC #5)', () => {
   });
 
   it('writes the same like the editor writes for the same post', async () => {
-    const editorSite = await site();
-    const html = await (await editorSite.agent.get('/admin/posts/new')).text();
+    const editor = await editorSite();
+    const html = await (await editor.agent.get('/admin/posts/new')).text();
     const csrf = csrfField(html);
     assert.ok(csrf !== undefined);
-    const saved = await editorSite.agent.post('/admin/posts/new', {
+    const saved = await editor.agent.post('/admin/posts/new', {
       csrf_token: csrf,
       date: '2026-09-19T09:00:00Z',
       'like-of': target,
@@ -645,13 +656,13 @@ describe('a like, a repost and a bookmark (TASK-169 AC #5)', () => {
     ]);
     assert.equal(created.status, 201);
 
-    const [editorFile] = await postFiles(editorSite.cms);
+    const [editorFile] = await postFiles(editor.cms);
     const [micropubFile] = await postFiles(micropubSite.cms);
     assert.ok(editorFile !== undefined && micropubFile !== undefined);
     assert.equal(micropubFile, editorFile);
     assert.equal(
       await fileAt(micropubSite.cms, `posts/${micropubFile}`),
-      await fileAt(editorSite.cms, `posts/${editorFile}`),
+      await fileAt(editor.cms, `posts/${editorFile}`),
     );
   });
 

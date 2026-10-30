@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 
 import { exportJwk } from '@fedify/fedify';
 
@@ -12,6 +12,7 @@ import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
+import { seedActorKeys } from './__testing__/keys.ts';
 import { ACTOR_KEY_ALGORITHMS, actorKeyFile, actorKeysDir, loadActorKeyPairs } from './keys.ts';
 
 /**
@@ -38,6 +39,12 @@ async function dataDir(): Promise<string> {
   return dir;
 }
 
+async function seededDir(): Promise<string> {
+  const dir = await dataDir();
+  seedActorKeys(dir, ADA);
+  return dir;
+}
+
 /**
  * Key pairs as comparable JSON.
  *
@@ -54,10 +61,14 @@ async function exported(pairs: readonly CryptoKeyPair[]): Promise<string[]> {
 }
 
 describe('loadActorKeyPairs', () => {
-  it('generates both algorithms on the first call', async () => {
+  let minted: { dir: string; pairs: CryptoKeyPair[] };
+  before(async () => {
     const dir = await dataDir();
+    minted = { dir, pairs: await loadActorKeyPairs(dir, ADA) };
+  });
 
-    const pairs = await loadActorKeyPairs(dir, ADA);
+  it('generates both algorithms on the first call', () => {
+    const { pairs } = minted;
 
     assert.equal(pairs.length, 2);
     assert.deepEqual(
@@ -75,9 +86,7 @@ describe('loadActorKeyPairs', () => {
   });
 
   it('writes one JWK file per algorithm, named after the user (AC #1)', async () => {
-    const dir = await dataDir();
-
-    await loadActorKeyPairs(dir, ADA);
+    const { dir } = minted;
 
     const rsa = JSON.parse(
       await readFile(actorKeyFile(dir, ADA, 'RSASSA-PKCS1-v1_5'), 'utf8'),
@@ -101,9 +110,7 @@ describe('loadActorKeyPairs', () => {
   });
 
   it('keeps the key files and their directory private (AC #1)', async () => {
-    const dir = await dataDir();
-
-    await loadActorKeyPairs(dir, ADA);
+    const { dir } = minted;
 
     assert.equal((await stat(actorKeysDir(dir))).mode & 0o777, 0o700, 'data/keys is the owner’s');
     for (const algorithm of ['RSASSA-PKCS1-v1_5', 'Ed25519'] as const) {
@@ -118,9 +125,8 @@ describe('loadActorKeyPairs', () => {
   it('reads the same keys back rather than generating new ones (AC #2)', async () => {
     // The whole point of the files: an actor whose key changes on every boot
     // is an actor no follower can verify.
-    const dir = await dataDir();
+    const { dir, pairs: first } = minted;
 
-    const first = await loadActorKeyPairs(dir, ADA);
     const written = await Promise.all(
       ACTOR_KEY_ALGORITHMS.map((algorithm) => readFile(actorKeyFile(dir, ADA, algorithm), 'utf8')),
     );
@@ -139,7 +145,7 @@ describe('loadActorKeyPairs', () => {
   });
 
   it('generates one algorithm without touching the other', async () => {
-    const dir = await dataDir();
+    const dir = await seededDir();
     const both = await loadActorKeyPairs(dir, ADA);
     await rm(actorKeyFile(dir, ADA, 'Ed25519'));
 
@@ -152,12 +158,9 @@ describe('loadActorKeyPairs', () => {
   });
 
   it('keeps one identifier’s keys away from another’s', async () => {
-    const dir = await dataDir();
+    const other = await loadActorKeyPairs(minted.dir, 'other');
 
-    const ada = await loadActorKeyPairs(dir, ADA);
-    const other = await loadActorKeyPairs(dir, 'other');
-
-    assert.notDeepEqual(await exported(other), await exported(ada));
+    assert.notDeepEqual(await exported(other), await exported(minted.pairs));
   });
 
   it('two callers racing on a fresh directory agree on one key (AC #1)', async () => {
@@ -180,8 +183,7 @@ describe('loadActorKeyPairs', () => {
   });
 
   it('reports a key file that will not import rather than replacing it (AC #5)', async () => {
-    const dir = await dataDir();
-    await loadActorKeyPairs(dir, ADA);
+    const dir = await seededDir();
     const rsaFile = actorKeyFile(dir, ADA, 'RSASSA-PKCS1-v1_5');
     const rsa = await readFile(rsaFile, 'utf8');
     const file = actorKeyFile(dir, ADA, 'Ed25519');
@@ -205,8 +207,7 @@ describe('loadActorKeyPairs', () => {
   });
 
   it('reports a key file whose JWK is not a key it can use (AC #5)', async () => {
-    const dir = await dataDir();
-    await loadActorKeyPairs(dir, ADA);
+    const dir = await seededDir();
     const file = actorKeyFile(dir, ADA, 'RSASSA-PKCS1-v1_5');
     await writeFile(file, JSON.stringify({ kty: 'RSA', alg: 'RS256', n: 'nonsense', e: 'AQAB' }));
 
@@ -264,7 +265,7 @@ describe('the actor’s keys across boots', () => {
     // on answering — silently unverifiable to every follower. Boot is
     // therefore where it is caught, and refusing to start is the report.
     const contentDir = await dataDir();
-    const dir = await dataDir();
+    const dir = await seededDir();
     const first = await site({ contentDir, dataDir: dir });
     await publishedKeys(first);
     await first.close();
@@ -285,7 +286,7 @@ describe('the actor’s keys across boots', () => {
 
   it('answers the actor with an error rather than no key at all (AC #5)', async () => {
     const contentDir = await dataDir();
-    const dir = await dataDir();
+    const dir = await seededDir();
     const instance = await site({ contentDir, dataDir: dir });
     await publishedKeys(instance);
 
@@ -321,7 +322,7 @@ describe('the actor’s keys across boots', () => {
 
   it('publishes the identical keys after a restart (AC #2)', async () => {
     const contentDir = await dataDir();
-    const dir = await dataDir();
+    const dir = await seededDir();
 
     const before = await publishedKeys(await site({ contentDir, dataDir: dir }));
     const after_ = await publishedKeys(await site({ contentDir, dataDir: dir }));
@@ -331,7 +332,7 @@ describe('the actor’s keys across boots', () => {
 
   it('keeps its keys when the database is deleted (AC #4)', async () => {
     const contentDir = await dataDir();
-    const dir = await dataDir();
+    const dir = await seededDir();
 
     const first = await site({ contentDir, dataDir: dir });
     const before = await publishedKeys(first);
@@ -360,7 +361,7 @@ describe('the actor’s keys across boots', () => {
 
   it('writes an older database’s rows out as files and drops the table (AC #3)', async () => {
     const contentDir = await dataDir();
-    const dir = await dataDir();
+    const dir = await seededDir();
 
     // A site as this version leaves it, so the keys under test are real ones.
     const first = await site({ contentDir, dataDir: dir });
@@ -411,7 +412,7 @@ describe('the actor’s keys across boots', () => {
 
   it('leaves a key file alone when the old table still holds a row for it', async () => {
     const contentDir = await dataDir();
-    const dir = await dataDir();
+    const dir = await seededDir();
 
     const first = await site({ contentDir, dataDir: dir });
     const before = await publishedKeys(first);
@@ -443,7 +444,7 @@ describe('the actor’s keys across boots', () => {
   });
 
   it('drops the table on a database this version created, where it was never used', async () => {
-    const dir = await dataDir();
+    const dir = await seededDir();
 
     const instance = await site({ dataDir: dir });
     await instance.close();

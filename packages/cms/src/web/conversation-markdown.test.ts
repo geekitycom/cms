@@ -13,6 +13,7 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
+import { shared } from './__testing__/shared.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -227,6 +228,8 @@ async function site(theme?: Record<string, string>): Promise<Cms> {
   return cms;
 }
 
+const sharedSite = shared(site);
+
 function logReply(cms: Cms, options: { id: string; content: string; url: string }): void {
   const actor = 'https://remote.example/users/bob';
   const activityId = `${options.id}/activity`;
@@ -321,7 +324,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
   });
 
   it('leaves out everything the HTML hides (AC #3)', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const markdown = await text(cms, '/2026/09/hello/index.md');
     for (const hidden of ['Held words', 'Held Back', 'Pending', 'Spam', 'Withdrawn words']) {
       assert.doesNotMatch(markdown, new RegExp(hidden), `${hidden} reached the Markdown`);
@@ -329,7 +332,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
   });
 
   it('lists the likes, boosts and mentions as the HTML’s facepiles do (AC #2)', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.equal(
       sectionFrom(await text(cms, '/2026/09/hello/index.md'), '## Likes', '## 5 replies'),
       [
@@ -370,7 +373,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
   });
 
   it('says comments are closed under a closed post’s replies, and offers no form', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const closed = await text(cms, '/2026/09/closed/index.md');
     assert.equal(
       sectionFrom(closed, '## One reply'),
@@ -388,7 +391,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
   });
 
   it('says where the contact form is and links the HTML page (AC #4)', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.equal(
       sectionFrom(await text(cms, '/write/index.md'), '## Send a message'),
       [
@@ -426,7 +429,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
   });
 
   it('is a new Markdown when a reply arrives, and is never a stale 304 (caching)', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const first = await get(cms, '/2026/09/hello/index.md');
     const etag = first.headers.get('etag');
     assert.ok(etag !== null);
@@ -449,7 +452,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
 
 describe('a comment’s own page in Markdown (TASK-477)', () => {
   it('answers .md and Accept text/markdown with the comment and its place in the thread', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const byPath = await get(cms, `/comment/${GRACE}/index.md`);
     const byAccept = await get(cms, `/comment/${GRACE}/`, { accept: 'text/markdown' });
     for (const response of [byPath, byAccept]) {
@@ -493,7 +496,7 @@ describe('a comment’s own page in Markdown (TASK-477)', () => {
   });
 
   it('lists the replies to the comment as the HTML does', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const html = await text(cms, `/comment/${ADA}/`);
     assert.match(html, /<h2 class="comments-title">Replies<\/h2>/);
 
@@ -514,7 +517,7 @@ describe('a comment’s own page in Markdown (TASK-477)', () => {
   });
 
   it('stands a hidden comment in the thread without its words', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const markdown = await text(cms, `/comment/${UNDER_HELD}/index.md`);
     assert.match(
       markdown,
@@ -524,7 +527,7 @@ describe('a comment’s own page in Markdown (TASK-477)', () => {
   });
 
   it('advertises its Markdown, and answers as the HTML does for a comment nobody may see', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const html = await get(cms, `/comment/${GRACE}/`);
     assert.equal(
       html.headers.get('link'),

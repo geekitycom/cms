@@ -62,6 +62,7 @@ function namesDataDir(argument: ts.Expression | undefined): boolean {
 }
 
 function dataDirJoins(relative: string, text: string): string[] {
+  if (!text.includes('dataDir')) return [];
   const source = ts.createSourceFile(relative, text, ts.ScriptTarget.Latest, true);
   const found: string[] = [];
   const visit = (node: ts.Node): void => {

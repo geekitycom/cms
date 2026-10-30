@@ -8,6 +8,7 @@ import { resolveNothing } from '../admin/__testing__/harness.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { child, childrenNamed, parseXml } from './__testing__/xml.ts';
+import { shared } from './__testing__/shared.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -37,6 +38,8 @@ async function site(files: Record<string, string>): Promise<Cms> {
   await cms.sync();
   return cms;
 }
+
+const sharedSite = shared(site);
 
 function post(frontMatter: string[], body = ''): string {
   return [
@@ -73,7 +76,7 @@ interface JsonItems {
 
 describe('a photo-only post in the feeds (TASK-215)', () => {
   it('shows every photo, absolute and with its alt text, in the RSS content', async () => {
-    const cms = await site(PHOTO_ONLY);
+    const cms = await sharedSite(PHOTO_ONLY);
 
     const feed = parseXml(await (await cms.app.request('/feed/')).text());
     const item = child(child(feed, 'channel'), 'item');
@@ -83,7 +86,7 @@ describe('a photo-only post in the feeds (TASK-215)', () => {
   });
 
   it('shows every photo, absolute and with its alt text, in the Atom content', async () => {
-    const cms = await site(PHOTO_ONLY);
+    const cms = await sharedSite(PHOTO_ONLY);
 
     const feed = parseXml(await (await cms.app.request('/feed/atom/')).text());
     const entry = child(feed, 'entry');
@@ -96,7 +99,7 @@ describe('a photo-only post in the feeds (TASK-215)', () => {
   });
 
   it('shows every photo in content_html and names the first as the JSON Feed image', async () => {
-    const cms = await site(PHOTO_ONLY);
+    const cms = await sharedSite(PHOTO_ONLY);
 
     const feed = (await (await cms.app.request('/feed/json/')).json()) as JsonItems;
     const [item] = feed.items;
@@ -111,7 +114,7 @@ describe('a photo-only post summarised by its alt text (TASK-462)', () => {
   const SUMMARY = 'Waves breaking at dusk · A dog asleep on the sand';
 
   it('carries the alt text as the RSS description', async () => {
-    const cms = await site(PHOTO_ONLY);
+    const cms = await sharedSite(PHOTO_ONLY);
 
     const feed = parseXml(await (await cms.app.request('/feed/')).text());
 
@@ -119,7 +122,7 @@ describe('a photo-only post summarised by its alt text (TASK-462)', () => {
   });
 
   it('carries the alt text as the Atom summary', async () => {
-    const cms = await site(PHOTO_ONLY);
+    const cms = await sharedSite(PHOTO_ONLY);
 
     const feed = parseXml(await (await cms.app.request('/feed/atom/')).text());
 
@@ -127,7 +130,7 @@ describe('a photo-only post summarised by its alt text (TASK-462)', () => {
   });
 
   it('carries the alt text as the JSON Feed summary', async () => {
-    const cms = await site(PHOTO_ONLY);
+    const cms = await sharedSite(PHOTO_ONLY);
 
     const feed = (await (await cms.app.request('/feed/json/')).json()) as {
       items: { summary?: string }[];
@@ -137,7 +140,7 @@ describe('a photo-only post summarised by its alt text (TASK-462)', () => {
   });
 
   it('keeps the body as the summary of a photo post with words', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'posts/2026-10-01-beach.md': post(
         ['photo:', '  - url: /uploads/2026/10/beach.jpg', '    alt: Waves breaking at dusk'],
         'Went to the beach.',
@@ -154,7 +157,7 @@ describe('a photo-only post summarised by its alt text (TASK-462)', () => {
 
 describe('photos beside a body, an image and a recording (TASK-215)', () => {
   it('prints the photos before the body, as the page does', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'posts/2026-10-01-beach.md': post(
         ['title: Beach day', 'photo: /uploads/2026/10/beach.jpg'],
         'Went to the beach.',
@@ -171,7 +174,7 @@ describe('photos beside a body, an image and a recording (TASK-215)', () => {
   });
 
   it('keeps the post’s own image as the JSON Feed image', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'posts/2026-10-01-beach.md': post([
         'image: /uploads/2026/10/cover.jpg',
         'photo: /uploads/2026/10/beach.jpg',
@@ -184,7 +187,9 @@ describe('photos beside a body, an image and a recording (TASK-215)', () => {
   });
 
   it('names no JSON Feed image for a post with neither', async () => {
-    const cms = await site({ 'posts/2026-10-01-beach.md': post(['title: Words'], 'Only words.') });
+    const cms = await sharedSite({
+      'posts/2026-10-01-beach.md': post(['title: Words'], 'Only words.'),
+    });
 
     const feed = (await (await cms.app.request('/feed/json/')).json()) as JsonItems;
 
@@ -192,7 +197,7 @@ describe('photos beside a body, an image and a recording (TASK-215)', () => {
   });
 
   it('keeps the recording as the only enclosure when a post also has photos', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'posts/2026-10-01-beach.md': post([
         'title: Episode one',
         'photo: /uploads/2026/10/beach.jpg',
@@ -235,10 +240,10 @@ describe('the feed validator and the media library (TASK-215)', () => {
       'posts/2026-10-01-beach.md': post(['photo: /uploads/2026/10/dog.jpg']),
       '_data/media.json': JSON.stringify({ '2026/10/dog.jpg': { alt: 'A dog' } }),
     };
-    const before = (await (await site(files)).app.request('/feed/')).headers.get('etag');
+    const before = (await (await sharedSite(files)).app.request('/feed/')).headers.get('etag');
     const after = (
       await (
-        await site({
+        await sharedSite({
           ...files,
           '_data/media.json': JSON.stringify({ '2026/10/dog.jpg': { alt: 'A dog on a rug' } }),
         })

@@ -15,7 +15,9 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
+import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -153,9 +155,15 @@ async function site(
   });
 }
 
+const sharedSite = shared(site);
+
 /** Give the site a user with a profile, the way the users screen would. */
-async function addUser(cms: Cms, username: string, profile: Record<string, string>): Promise<void> {
-  const user = await createUser({
+async function addProfiledUser(
+  cms: Cms,
+  username: string,
+  profile: Record<string, string>,
+): Promise<void> {
+  const user = addUser({
     dataDir: cms.config.dataDir,
     username,
     password: 'a password of theirs',
@@ -190,7 +198,7 @@ function entries(html: string): string[] {
 describe('siteAuthor, on every page (AC #1)', () => {
   it('is the profile behind the site author setting wherever the site is read', async () => {
     const cms = await site({ author: 'Ada Lovelace' });
-    await addUser(cms, 'ada', {
+    await addProfiledUser(cms, 'ada', {
       displayName: 'Ada Lovelace',
       jobTitle: 'Analyst',
       location: 'London',
@@ -215,8 +223,8 @@ describe('siteAuthor, on every page (AC #1)', () => {
 
   it('is the entry’s own author on a post that names somebody else', async () => {
     const cms = await site({ author: 'grace' });
-    await addUser(cms, 'grace', { displayName: 'Grace Hopper', jobTitle: 'Rear Admiral' });
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace', location: 'London' });
+    await addProfiledUser(cms, 'grace', { displayName: 'Grace Hopper', jobTitle: 'Rear Admiral' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace', location: 'London' });
 
     assert.equal(
       siteAuthorOf(await body(cms, '/posts/beta/')),
@@ -232,14 +240,14 @@ describe('siteAuthor, on every page (AC #1)', () => {
 
   it('is the archive’s user on an author archive', async () => {
     const cms = await site({ author: 'grace' });
-    await addUser(cms, 'grace', { displayName: 'Grace Hopper' });
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace', jobTitle: 'Analyst' });
+    await addProfiledUser(cms, 'grace', { displayName: 'Grace Hopper' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace', jobTitle: 'Analyst' });
 
     assert.equal(siteAuthorOf(await body(cms, '/author/ada/')), 'Ada Lovelace|ada|Analyst|');
   });
 
   it('is absent altogether when the setting names nobody this site has', async () => {
-    const cms = await site({ author: 'Joe Blog' });
+    const cms = await sharedSite({ author: 'Joe Blog' });
 
     assert.equal(siteAuthorOf(await body(cms, '/')), 'nobody');
     assert.equal(siteAuthorOf(await body(cms, '/posts/alpha/')), 'nobody');
@@ -247,7 +255,7 @@ describe('siteAuthor, on every page (AC #1)', () => {
 
   it('is absent when the site names no author at all', async () => {
     const cms = await site();
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace' });
 
     assert.equal(siteAuthorOf(await body(cms, '/')), 'nobody');
   });
@@ -255,7 +263,7 @@ describe('siteAuthor, on every page (AC #1)', () => {
 
 describe('summary, on every listing entry (AC #2)', () => {
   it('is the description the author wrote, else the excerpt the feeds print', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     assert.deepEqual(entries(await body(cms, '/')), [
       'true:Alpha|What Alpha is about.',
@@ -272,7 +280,7 @@ describe('summary, on every listing entry (AC #2)', () => {
   });
 
   it('is an empty string rather than a missing key for a post with neither', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const listed = entries(await body(cms, '/'));
     assert.ok(
@@ -283,7 +291,7 @@ describe('summary, on every listing entry (AC #2)', () => {
 
   it('is on the entries of a taxonomy archive and an author archive too', async () => {
     const cms = await site();
-    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace' });
 
     assert.deepEqual(entries(await body(cms, '/tag/shared/')), [
       'true:Gamma|Body of gamma.',
@@ -295,7 +303,7 @@ describe('summary, on every listing entry (AC #2)', () => {
   });
 
   it('is on a rendered post as well, so a head can print it', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     assert.equal(printed(await body(cms, '/posts/alpha/'), 'summary'), 'What Alpha is about.');
   });
@@ -303,7 +311,7 @@ describe('summary, on every listing entry (AC #2)', () => {
 
 describe('previous and next, on a post (AC #3)', () => {
   it('link the published posts either side of one by date', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const html = await body(cms, '/posts/beta/');
 
     assert.equal(printed(html, 'previous'), 'Gamma|/posts/gamma/', 'the older post');
@@ -311,7 +319,7 @@ describe('previous and next, on a post (AC #3)', () => {
   });
 
   it('are absent at the ends of the archive rather than wrapping round', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const newest = await body(cms, '/posts/alpha/');
     assert.equal(printed(newest, 'next'), 'none');
@@ -323,7 +331,7 @@ describe('previous and next, on a post (AC #3)', () => {
   });
 
   it('never name a draft or a post whose date has not arrived', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     // `Drafted` is dated after Alpha and `Later` after that; neither is a page
     // a reader could open, so neither is a link.
@@ -346,7 +354,7 @@ describe('newestPosts, on the front page (TASK-317 AC #3)', () => {
   }
 
   it('is as many of the newest posts as the theme asks for, as listing entries', async () => {
-    const cms = await site(READING, withCount('2'));
+    const cms = await sharedSite(READING, withCount('2'));
 
     assert.equal(
       printed(await body(cms, '/'), 'newest-posts'),
@@ -356,7 +364,7 @@ describe('newestPosts, on the front page (TASK-317 AC #3)', () => {
   });
 
   it('leaves out a draft and a post whose date has not arrived', async () => {
-    const cms = await site(READING, withCount('10'));
+    const cms = await sharedSite(READING, withCount('10'));
 
     assert.equal(
       printed(await body(cms, '/'), 'newest-posts'),
@@ -377,7 +385,7 @@ describe('newestPosts, on the front page (TASK-317 AC #3)', () => {
         `2026-09-${day}T09:00:00Z`,
       );
     }
-    const cms = await site(READING, monthly);
+    const cms = await sharedSite(READING, monthly);
 
     assert.equal(
       printed(await body(cms, '/'), 'newest-posts')
@@ -388,20 +396,20 @@ describe('newestPosts, on the front page (TASK-317 AC #3)', () => {
   });
 
   it('refuses a count that is not a whole number of posts', async () => {
-    const cms = await site(READING, withCount('0'));
+    const cms = await sharedSite(READING, withCount('0'));
 
     const response = await cms.app.request('/');
     assert.equal(response.status, 500, 'newestPosts(0) asked the index for every post');
   });
 
   it('replaces recentPosts, which no page carries any more', async () => {
-    const cms = await site(READING, withCount('2'));
+    const cms = await sharedSite(READING, withCount('2'));
 
     assert.equal(printed(await body(cms, '/'), 'recent-posts'), 'false');
   });
 
   it('is on the front page only, and not on a listing or an ordinary page', async () => {
-    const cms = await site(READING, withCount('2'));
+    const cms = await sharedSite(READING, withCount('2'));
 
     assert.equal(printed(await body(cms, '/archive/'), 'newest-posts'), 'none');
     assert.equal(printed(await body(cms, '/posts/alpha/'), 'newest-posts'), 'none');

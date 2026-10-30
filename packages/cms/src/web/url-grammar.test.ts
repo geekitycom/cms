@@ -6,7 +6,8 @@ import { after, describe, it } from 'node:test';
 
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
+import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -47,12 +48,14 @@ async function site(files: Record<string, string> = CONTENT): Promise<Cms> {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   const instance = createCms({ contentDir, dataDir, watch: false });
   started.push(instance);
   await instance.sync();
   return instance;
 }
+
+const sharedSite = shared(site);
 
 async function answer(cms: Cms, url: string): Promise<[number, string | null]> {
   const response = await cms.app.request(url);
@@ -61,7 +64,7 @@ async function answer(cms: Cms, url: string): Promise<[number, string | null]> {
 
 describe('a path more than one thing could answer', () => {
   it('is the archive while a post carries the term, and the page otherwise', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const archive = await (await cms.app.request('/tag/shared/')).text();
     assert.ok(archive.includes('/2026/09/three/'));
@@ -73,7 +76,7 @@ describe('a path more than one thing could answer', () => {
   });
 
   it('is a page under the author base when the username is nobody’s', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const response = await cms.app.request('/author/nobody/');
     assert.equal(response.status, 200);
     assert.ok((await response.text()).includes('Not a person.'));
@@ -82,7 +85,7 @@ describe('a path more than one thing could answer', () => {
 
 describe('a listing page past the end', () => {
   it('404s with or without its slash, and in any representation', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.deepEqual(await answer(cms, '/tag/shared/page/2/'), [200, null]);
     assert.deepEqual(await answer(cms, '/tag/shared/page/3/'), [404, null]);
     assert.deepEqual(await answer(cms, '/tag/shared/page/3'), [404, null]);
@@ -91,7 +94,7 @@ describe('a listing page past the end', () => {
   });
 
   it('redirects a page in range that arrived without its slash', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.deepEqual(await answer(cms, '/tag/shared/page/2'), [301, '/tag/shared/page/2/']);
     assert.deepEqual(await answer(cms, '/tag/shared/page/1/'), [301, '/tag/shared/']);
     assert.deepEqual(await answer(cms, '/author/ada/page/1/'), [301, '/author/ada/']);
@@ -100,7 +103,7 @@ describe('a listing page past the end', () => {
 
 describe('an extension on a listing', () => {
   it('serves the listing’s Markdown and JSON, and sends the short spelling to index', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     const markdown = await cms.app.request('/tag/shared/index.md');
     assert.equal(markdown.status, 200);
@@ -116,7 +119,7 @@ describe('an extension on a listing', () => {
   });
 
   it('serves a page’s Markdown at a term nothing carries', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const response = await cms.app.request('/tag/lonely/index.md');
     assert.equal(response.status, 200);
     assert.ok((await response.text()).includes('A page.'));
@@ -125,7 +128,7 @@ describe('an extension on a listing', () => {
 
 describe('a moved permalink', () => {
   it('leads to where the document lives now, in the representation asked for', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.deepEqual(await answer(cms, '/old-three/'), [301, '/2026/09/three/']);
     assert.deepEqual(await answer(cms, '/old-three'), [301, '/2026/09/three/']);
     assert.deepEqual(await answer(cms, '/old-three/index.md'), [301, '/2026/09/three/index.md']);
@@ -135,7 +138,7 @@ describe('a moved permalink', () => {
 
 describe('a feed spelled another way', () => {
   it('lands on the canonical feed in one hop', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.deepEqual(await answer(cms, '/tag/shared/feed'), [301, '/tag/shared/feed/']);
     assert.deepEqual(await answer(cms, '/tag/shared/feed/rss/'), [301, '/tag/shared/feed/']);
     assert.deepEqual(await answer(cms, '/tag/SHARED/feed/atom/'), [301, '/tag/shared/feed/atom/']);
@@ -146,7 +149,7 @@ describe('a feed spelled another way', () => {
 
 describe('one grammar for every representation', () => {
   it('answers the archive’s Markdown where a page is shadowed by the archive', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const response = await cms.app.request('/tag/shared/index.md');
     assert.equal(response.status, 200);
     const body = await response.text();
@@ -155,13 +158,13 @@ describe('one grammar for every representation', () => {
   });
 
   it('embeds no page that an archive shadows', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const url = encodeURIComponent('http://localhost:3000/tag/shared/');
     assert.equal((await cms.app.request(`/_geekity/oembed?url=${url}`)).status, 404);
   });
 
   it('sends a listing’s representation to the canonical spelling of the listing', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.deepEqual(await answer(cms, '/tag/SHARED/index.md'), [301, '/tag/shared/index.md']);
     assert.deepEqual(await answer(cms, '/tag/shared/page/1/index.json'), [
       301,
@@ -170,7 +173,7 @@ describe('one grammar for every representation', () => {
   });
 
   it('keeps the query on every canonical redirect of a listing', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     assert.deepEqual(await answer(cms, '/author/ada/page/1/?full=1'), [301, '/author/ada/?full=1']);
     assert.deepEqual(await answer(cms, '/tag/SHARED/?full=1'), [301, '/tag/shared/?full=1']);
   });
@@ -190,7 +193,7 @@ describe('the home listing’s pages on a site with a posts page', () => {
   };
 
   it('lands on the posts page’s pages in one hop, in every spelling', async () => {
-    const cms = await site(files);
+    const cms = await sharedSite(files);
     assert.deepEqual(await answer(cms, '/page/2/'), [301, '/news/page/2/']);
     assert.deepEqual(await answer(cms, '/page/2'), [301, '/news/page/2/']);
     assert.deepEqual(await answer(cms, '/page/1/'), [301, '/news/']);

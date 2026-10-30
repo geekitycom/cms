@@ -12,7 +12,7 @@ import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
+import { addUser } from './__testing__/users.ts';
 import type { AuthorizationCode } from '../indieauth/grants.ts';
 import { issueTokens, listTokens, recordUse } from '../indieauth/tokens.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
@@ -105,7 +105,7 @@ describe('the connected apps screen', () => {
   it('shows nobody else’s connections', async () => {
     const { cms, agent } = await site();
     const { dataDir } = cms.config;
-    const bob = await createUser({ dataDir, username: 'bob', password: 'another horse battery' });
+    const bob = addUser({ dataDir, username: 'bob', password: 'another horse battery' });
     await issueTokens(dataDir, QUILL, ISSUED);
     await issueTokens(dataDir, { ...QUILL, clientName: 'Bobs Reader', userId: bob.id }, ISSUED);
 
@@ -184,7 +184,7 @@ describe('revoking a connection', () => {
   it('cannot revoke somebody else’s connection', async () => {
     const { cms, agent } = await site();
     const { dataDir } = cms.config;
-    const bob = await createUser({ dataDir, username: 'bob', password: 'another horse battery' });
+    const bob = addUser({ dataDir, username: 'bob', password: 'another horse battery' });
     const bobs = await issueTokens(dataDir, { ...QUILL, userId: bob.id }, new Date());
 
     const csrf = csrfField(await screen(agent)) ?? '';

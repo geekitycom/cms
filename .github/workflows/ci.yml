@@ -1,12 +1,6 @@
-# The quality gates of decision-8, one job per gate so each can be named as a
-# required status check on `main`: lint, typecheck, test and build.
-#
 # `pnpm install` runs the root `prepare` script, which builds every package
 # under `packages/` (core and each `plugin-*`), so every job already has
-# `dist/` before its own command runs. The root scripts run recursively, so
-# each job covers the plugin packages as it covers core. The `build` job is
-# still here on its own: it is the check a branch protection rule points at, and
-# it is the one that fails loudly when the compiler is the problem.
+# `dist/` before its own command runs, and a build that fails fails every job.
 name: ci
 
 on:
@@ -61,10 +55,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
-      - run: pnpm lint
       # Formatting is a check, not a fixup: CI never rewrites files, it fails
       # and leaves `pnpm format` to the author.
-      - run: pnpm format:check
+      - shell: bash
+        run: |
+          pnpm format:check &
+          format=$!
+          pnpm lint
+          wait "$format"
 
   typecheck:
     name: typecheck
@@ -76,44 +74,25 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - run: pnpm typecheck
 
-  # The suite is CPU-bound and `node --test` runs one file per process with a
-  # concurrency of cores minus one, so on the four vCPUs a standard
-  # GitHub-hosted runner gives a public repository, three files run at once.
   test:
-    name: test
+    name: test (${{ matrix.part }})
     needs: already-tested
     if: ${{ !cancelled() && needs.already-tested.outputs.skip != 'true' }}
     runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [cms 1/6, cms 2/6, cms 3/6, cms 4/6, cms 5/6, cms 6/6, packages]
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
-      - run: pnpm test
-
-  # The package's floor is Node 24, the active LTS, which is what `test` runs
-  # on. This job runs the same suite on the current line so the next LTS holds
-  # no surprises. A separate job rather than a matrix so the check above keeps
-  # the plain name `test`.
-  test-node-26:
-    name: test-node-26
-    needs: already-tested
-    if: ${{ !cancelled() && needs.already-tested.outputs.skip != 'true' }}
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-workspace
-        with:
-          node-version: '26'
-      - run: pnpm test
-
-  build:
-    name: build
-    needs: already-tested
-    if: ${{ !cancelled() && needs.already-tested.outputs.skip != 'true' }}
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-workspace
-      - run: pnpm build
+      - if: ${{ startsWith(matrix.part, 'cms ') }}
+        env:
+          PART: ${{ matrix.part }}
+        shell: bash
+        run: TEST_SHARD="${PART#cms }" pnpm --filter @geekity/cms test:shard
+      - if: ${{ matrix.part == 'packages' }}
+        run: pnpm --filter '!@geekity/cms' -r --no-bail test
 
   # The Eleventy compatibility suite spins up a real Eleventy build, so it is
   # its own job and the fast suite stays fast (decision-8).
@@ -213,8 +192,7 @@ jobs:
   record-tested-tree:
     name: record-tested-tree
     if: github.event_name == 'pull_request'
-    needs:
-      [lint, typecheck, test, test-node-26, build, test-11ty, fed-smoke, pack-install, docker-smoke]
+    needs: [lint, typecheck, test, test-11ty, fed-smoke, pack-install, docker-smoke]
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7

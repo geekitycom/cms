@@ -5,7 +5,7 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const BASE_URL = 'https://blog.example';
 
@@ -73,7 +73,7 @@ async function site(): Promise<Cms> {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, source, 'utf8');
   }
-  await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   return await box.open({ contentDir, dataDir, baseUrl: BASE_URL });
 }
 

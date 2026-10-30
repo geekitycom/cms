@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { shared } from './__testing__/shared.ts';
 
 /**
  * WordPress's Reading choice, from the outside: a site whose `/` is a page
@@ -72,6 +73,8 @@ async function site(
   return { cms: instance, contentDir };
 }
 
+const sharedSite = shared(site);
+
 /** Three published posts and two pages: the shape every test here starts from. */
 const CONTENT: Record<string, string> = {
   'posts/2026-09-02-newest.md': post('Newest', '09', 'newest'),
@@ -83,7 +86,7 @@ const CONTENT: Record<string, string> = {
 
 describe('a site whose homepage is a page', () => {
   it('serves that page at / instead of the latest posts (AC #2)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/site.json': siteJson({ homepage: 'welcome' }),
     });
@@ -99,7 +102,7 @@ describe('a site whose homepage is a page', () => {
   });
 
   it('redirects the page’s own permalink to / so there is one front page (AC #2)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/site.json': siteJson({ homepage: 'welcome' }),
     });
@@ -115,7 +118,7 @@ describe('a site whose homepage is a page', () => {
   });
 
   it('serves its other representations at / as well (doc-3)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/site.json': siteJson({ homepage: 'welcome' }),
     });
@@ -133,7 +136,7 @@ describe('a site whose homepage is a page', () => {
   });
 
   it('names itself / in its Markdown and its JSON, as its HTML does (TASK-345)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/site.json': siteJson({ homepage: 'welcome' }),
     });
@@ -169,7 +172,7 @@ describe('a site whose homepage is a page', () => {
   });
 
   it('sends each representation at its own permalink to / in one hop (TASK-345)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/site.json': siteJson({ homepage: 'welcome' }),
     });
@@ -190,7 +193,7 @@ describe('a site whose homepage is a page', () => {
   });
 
   it('leaves a page that is not the homepage at its own URLs (TASK-345)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       'pages/about.md': page('About', 'about', 'About me.'),
       '_data/site.json': siteJson({ homepage: 'welcome' }),
@@ -285,7 +288,7 @@ describe('a site whose homepage is a page', () => {
   });
 
   it('is the latest posts again when nothing is picked', async () => {
-    const { cms } = await site({ ...CONTENT, '_data/site.json': siteJson({}) });
+    const { cms } = await sharedSite({ ...CONTENT, '_data/site.json': siteJson({}) });
 
     const html = await (await cms.app.request('/')).text();
     assert.match(html, /Newest/);
@@ -322,7 +325,7 @@ describe('the sitemap and the site menu of a site with both picks', () => {
   });
 
   it('links the homepage at / and the posts page at its own URL (AC #5)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       'posts/2026-09-02-newest.md': post('Newest', '09', 'newest'),
       'pages/welcome.md': `---\ntitle: Welcome\npermalink: /welcome/\n---\n\nHello.\n`,
       'pages/news.md': `---\ntitle: News\npermalink: /news/\n---\n\nThe latest.\n`,
@@ -355,7 +358,7 @@ describe('the sitemap and the site menu of a site with both picks', () => {
 
 describe('a pick whose page is not published any more', () => {
   it('falls the site back to its latest posts (AC #4)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/site.json': siteJson({ homepage: 'gone', postsPage: 'news', postsPerPage: 2 }),
     });
@@ -455,7 +458,7 @@ describe('a site with a posts page', () => {
   });
 
   it('prints the page’s own words in its Markdown, as its HTML does (TASK-472)', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       'pages/news.md': `---\ntitle: News\ndescription: What is new.\npermalink: /news/\n---\n\nEverything as it happens, from [the newest one](/2026/09/newest/).\n`,
       '_data/site.json': siteJson({ homepage: 'welcome', postsPage: 'news', postsPerPage: 2 }),
@@ -475,7 +478,10 @@ describe('a site with a posts page', () => {
   });
 
   it('has no page words in the Markdown of a root listing (TASK-472)', async () => {
-    const { cms } = await site({ ...CONTENT, '_data/site.json': siteJson({ postsPerPage: 2 }) });
+    const { cms } = await sharedSite({
+      ...CONTENT,
+      '_data/site.json': siteJson({ postsPerPage: 2 }),
+    });
 
     for (const path of ['/index.md', '/page/2/index.md']) {
       const body = await (await cms.app.request(path)).text();
@@ -511,7 +517,7 @@ describe('a site with a posts page', () => {
   });
 
   it('has no listing at all when a homepage is set without one', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/site.json': siteJson({ homepage: 'welcome', postsPerPage: 2 }),
     });
@@ -521,7 +527,7 @@ describe('a site with a posts page', () => {
   });
 
   it('is ignored when it has no homepage beside it', async () => {
-    const { cms } = await site({
+    const { cms } = await sharedSite({
       ...CONTENT,
       '_data/site.json': siteJson({ postsPage: 'news' }),
     });

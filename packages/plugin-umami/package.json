@@ -10,7 +10,7 @@
     "directory": "packages/plugin-umami"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -35,7 +35,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ../../scripts/build-plugin-bundle.js",
-    "test": "tsx --import ../cms/src/__testing__/offline.ts --test \"test/*.test.ts\"",
+    "test": "node --import ../cms/src/__testing__/offline.ts --test \"test/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"

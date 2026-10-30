@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { PLUGIN_POLL_MS, PLUGIN_SETTLE_MS } from './plugin-watcher.ts';
 import { createSupervisor } from './primary.ts';
 import type { WorkerHandle } from './primary.ts';
-import type { SupervisorMessage } from './protocol.ts';
+import type { SupervisorMessage, WorkerMessage } from './protocol.ts';
 import type { ReloadOutcome } from './supervision.ts';
 
 /** A worker that records what it was told, and whether it was killed. */
@@ -18,12 +18,17 @@ interface FakeFolder {
   fingerprint: string;
 }
 
+function ready(pluginsFingerprint: string, announcement = ''): WorkerMessage {
+  return { type: 'ready', pluginsFingerprint, announcement };
+}
+
 /** A supervisor over fake workers and a clock the test moves. */
 function harness(options: { folder?: FakeFolder; watchOff?: boolean } = {}) {
   const { folder } = options;
   const workers: FakeWorker[] = [];
   const timers: { at: number; task: () => void; cancelled: boolean }[] = [];
   const lines: string[] = [];
+  const announced: string[] = [];
   const exits: number[] = [];
   let now = 0;
 
@@ -53,6 +58,7 @@ function harness(options: { folder?: FakeFolder; watchOff?: boolean } = {}) {
     },
     now: () => now,
     log: (line) => lines.push(line),
+    announce: (text) => announced.push(text),
     exit: (code) => exits.push(code),
     watch:
       options.watchOff === true
@@ -72,6 +78,7 @@ function harness(options: { folder?: FakeFolder; watchOff?: boolean } = {}) {
     supervisor,
     workers,
     lines,
+    announced,
     exits,
     worker,
     advance(ms: number) {
@@ -98,10 +105,7 @@ function harness(options: { folder?: FakeFolder; watchOff?: boolean } = {}) {
 function serving(options: { folder?: FakeFolder; watchOff?: boolean } = {}) {
   const h = harness(options);
   h.supervisor.start();
-  h.supervisor.message(h.worker(1), {
-    type: 'ready',
-    pluginsFingerprint: options.folder?.fingerprint ?? '',
-  });
+  h.supervisor.message(h.worker(1), ready(options.folder?.fingerprint ?? ''));
   return h;
 }
 
@@ -117,7 +121,7 @@ describe('the supervisor', () => {
     assert.equal(h.workers.length, 2, 'the new worker boots once the old one writes nothing');
     assert.deepEqual(h.worker(1).told, ['drain'], 'the old worker serves until the new one does');
 
-    h.supervisor.message(h.worker(2), { type: 'ready', pluginsFingerprint: '' });
+    h.supervisor.message(h.worker(2), ready(''));
     assert.deepEqual(h.worker(1).told, ['drain', 'retire']);
 
     h.supervisor.exited(h.worker(1), 0);
@@ -132,7 +136,7 @@ describe('the supervisor', () => {
     const h = serving();
     h.supervisor.message(h.worker(1), { type: 'reload' });
     h.supervisor.message(h.worker(1), { type: 'drained' });
-    h.supervisor.message(h.worker(2), { type: 'ready', pluginsFingerprint: '' });
+    h.supervisor.message(h.worker(2), ready(''));
     h.supervisor.message(h.worker(1), { type: 'closed' });
     assert.deepEqual(h.worker(1).told, ['drain', 'retire', 'exit']);
   });
@@ -188,6 +192,26 @@ describe('the supervisor', () => {
     assert.equal(h.workers.length, 2);
   });
 
+  it('announces a worker only once it has taken the worker on', () => {
+    const h = harness();
+    h.supervisor.start();
+    assert.deepEqual(h.announced, [], 'a booting worker is not yet serving');
+    h.supervisor.message(h.worker(1), ready('', 'Serving on port 1.'));
+    assert.deepEqual(h.announced, ['Serving on port 1.']);
+
+    h.supervisor.message(h.worker(1), { type: 'reload' });
+    h.supervisor.message(h.worker(1), { type: 'drained' });
+    h.advance(10 * 60_000);
+    h.supervisor.message(h.worker(2), ready('', 'Serving on port 2.'));
+    assert.deepEqual(h.announced, ['Serving on port 1.'], 'a worker given up on is not announced');
+
+    h.supervisor.exited(h.worker(2), null);
+    h.supervisor.message(h.worker(1), { type: 'reload' });
+    h.supervisor.message(h.worker(1), { type: 'drained' });
+    h.supervisor.message(h.worker(3), ready('', 'Serving on port 3.'));
+    assert.deepEqual(h.announced, ['Serving on port 1.', 'Serving on port 3.']);
+  });
+
   it('respawns a worker that crashes, backing off while it keeps crashing', () => {
     const h = serving();
 
@@ -197,14 +221,14 @@ describe('the supervisor', () => {
     h.advance(first);
     assert.equal(h.workers.length, 2);
 
-    h.supervisor.message(h.worker(2), { type: 'ready', pluginsFingerprint: '' });
+    h.supervisor.message(h.worker(2), ready(''));
     h.supervisor.exited(h.worker(2), 1);
     const second = h.nextTimer();
     assert.ok(second !== undefined && second > first, 'a second crash waits longer');
     h.advance(second);
     assert.equal(h.workers.length, 3);
 
-    h.supervisor.message(h.worker(3), { type: 'ready', pluginsFingerprint: '' });
+    h.supervisor.message(h.worker(3), ready(''));
     h.advance(10 * 60_000);
     h.supervisor.exited(h.worker(3), 1);
     assert.equal(h.nextTimer(), first, 'a worker that stayed up resets the backoff');
@@ -258,7 +282,7 @@ describe('the supervisor', () => {
 
 function completeReload(h: ReturnType<typeof harness>, old: number, plugins: string): void {
   h.supervisor.message(h.worker(old), { type: 'drained' });
-  h.supervisor.message(h.worker(h.workers.length), { type: 'ready', pluginsFingerprint: plugins });
+  h.supervisor.message(h.worker(h.workers.length), ready(plugins));
 }
 
 const CHANGING = `The plugins folder is changing; it loads once it has stood still for ${String(PLUGIN_SETTLE_MS / 1000)} s.`;
@@ -375,7 +399,7 @@ describe('the supervisor watching the plugins folder', () => {
     h.advance(PLUGIN_SETTLE_MS * 2);
     assert.equal(h.workers.length, 2, 'nothing more boots while a reload runs');
 
-    h.supervisor.message(h.worker(2), { type: 'ready', pluginsFingerprint: 'B' });
+    h.supervisor.message(h.worker(2), ready('B'));
     assert.deepEqual(await first, { ok: true });
     assert.deepEqual(h.worker(2).told, ['drain'], 'the reload asked for during it follows');
     completeReload(h, 2, 'C');

@@ -5,7 +5,9 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
+import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -90,7 +92,7 @@ async function site(
       ...theme,
     });
   }
-  const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  const ada = addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   await setUserProfile({
     dataDir,
     userId: ada.id,
@@ -109,6 +111,8 @@ async function site(
   });
 }
 
+const sharedSite = shared(site);
+
 async function text(cms: Cms, url: string): Promise<string> {
   const response = await cms.app.request(url);
   assert.equal(response.status, 200, url);
@@ -121,7 +125,7 @@ async function afterFrontMatter(cms: Cms, url: string): Promise<string> {
 
 describe('a theme’s layout Markdown template (AC #1, #2)', () => {
   it('builds a post’s Markdown from layouts/post.md.njk, which includes the header and leaves the footer out', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'layouts/post.md.njk': [
         '{% include "partials/markdown-header.md.njk" %}',
         'Before the words.',
@@ -155,7 +159,7 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
   });
 
   it('gives the header and footer already written, to place in any order', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'layouts/post.md.njk': '{{ footer }}\n\n{{ content }}\n\n{{ header }}\n',
     });
 
@@ -171,7 +175,7 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
     for (const name of ['post', 'page', 'home', 'tag', 'category', 'author', 'search', 'comment']) {
       theme[`layouts/${name}.md.njk`] = `Slot ${name}: {{ type }}\n\n{{ content }}\n`;
     }
-    const cms = await site(theme);
+    const cms = await sharedSite(theme);
 
     const opens = async (url: string, slot: string, words: RegExp): Promise<void> => {
       const written = await afterFrontMatter(cms, url);
@@ -189,7 +193,7 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
   });
 
   it('uses front-page.md.njk on a homepage that is a page, else page.md.njk', async () => {
-    const both = await site(
+    const both = await sharedSite(
       {
         'layouts/front-page.md.njk': 'Front: {{ content }}\n',
         'layouts/page.md.njk': 'Page: {{ content }}\n',
@@ -199,7 +203,7 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
     assert.equal(await afterFrontMatter(both, '/index.md'), '\nFront: Who writes this.\n');
     assert.equal(await afterFrontMatter(both, '/blog/index.md'), '\nPage: The blog.\n');
 
-    const pageOnly = await site(
+    const pageOnly = await sharedSite(
       { 'layouts/page.md.njk': 'Page: {{ content }}\n' },
       {
         homepage: 'about',
@@ -209,7 +213,7 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
   });
 
   it('uses posts-page.md.njk on the posts page, else home.md.njk', async () => {
-    const both = await site(
+    const both = await sharedSite(
       {
         'layouts/posts-page.md.njk': 'Posts page\n\n{{ content }}\n',
         'layouts/home.md.njk': 'Home\n\n{{ content }}\n',
@@ -221,7 +225,7 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
       /^\nPosts page\n\nThe blog\.\n\n## Posts\n/,
     );
 
-    const homeOnly = await site(
+    const homeOnly = await sharedSite(
       { 'layouts/home.md.njk': 'Home\n\n{{ content }}\n' },
       { homepage: 'about', postsPage: 'blog' },
     );
@@ -231,7 +235,7 @@ describe('a theme’s layout Markdown template (AC #1, #2)', () => {
 
 describe('a static front page’s Markdown with the author’s card and the newest posts (AC #5)', () => {
   it('prints both from the layout through the shared partials, between the package’s header and footer', async () => {
-    const cms = await site(
+    const cms = await sharedSite(
       {
         'layouts/front-page.md.njk': [
           '{{ header }}',
@@ -301,7 +305,7 @@ describe('a static front page’s Markdown with the author’s card and the newe
 
 describe('a layout’s gemtext (AC #4)', () => {
   it('writes a theme’s layouts/post.gmi.njk as it is, with the header, footer and words as gemtext', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'partials/markdown-footer.md.njk': '- [About]({{ "/about/" | markdownUrl }})\n',
       'layouts/post.gmi.njk': '{{ header }}\n\n## Words\n{{ content }}\n\n{{ footer }}\n',
     });
@@ -327,7 +331,7 @@ describe('a layout’s gemtext (AC #4)', () => {
   });
 
   it('converts a theme’s layouts/post.md.njk when it has no .gmi.njk', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'layouts/post.md.njk': 'Before [about]({{ "/about/" | markdownUrl }}).\n\n{{ content }}\n',
     });
 
@@ -352,7 +356,7 @@ describe('a layout’s gemtext (AC #4)', () => {
   });
 
   it('writes a static front page’s newest posts from layouts/front-page.gmi.njk', async () => {
-    const cms = await site(
+    const cms = await sharedSite(
       {
         'layouts/front-page.gmi.njk': [
           '{{ content }}',
@@ -384,7 +388,7 @@ describe('a layout’s gemtext (AC #4)', () => {
   });
 
   it('prefers the theme’s .gmi.njk to its .md.njk, and leaves the Markdown to the .md.njk', async () => {
-    const cms = await site({
+    const cms = await sharedSite({
       'layouts/post.gmi.njk': 'From the gemtext.\n',
       'layouts/post.md.njk': 'From the Markdown.\n',
     });
@@ -396,8 +400,8 @@ describe('a layout’s gemtext (AC #4)', () => {
 
 describe('a page with no layout template (AC #3)', () => {
   it('writes the Markdown and gemtext a theme without layout templates writes', async () => {
-    const plain = await site({ 'partials/head-end.njk': '' });
-    const posts = await site({ 'layouts/post.md.njk': '{{ content }}\n' });
+    const plain = await sharedSite({ 'partials/head-end.njk': '' });
+    const posts = await sharedSite({ 'layouts/post.md.njk': '{{ content }}\n' });
 
     for (const url of [
       '/index.md',

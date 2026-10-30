@@ -5,7 +5,7 @@ build unchanged. One Node process serves both the editor and the public
 website. SQLite holds a derived index plus the data that has no natural file
 form.
 
-Requires Node 24 or newer, the active LTS line.
+Requires Node 26 or newer, the active LTS line.
 
 ## A new site
 

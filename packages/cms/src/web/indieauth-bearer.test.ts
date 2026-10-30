@@ -12,7 +12,6 @@ import { Hono } from 'hono';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { GeekityEnv } from './env.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
 import { requireBearer } from './indieauth-bearer.ts';
 import type { Guard } from './indieauth-bearer.ts';
 import type { AuthorizationCode } from '../indieauth/grants.ts';
@@ -24,6 +23,7 @@ import {
   revokeToken,
 } from '../indieauth/tokens.ts';
 import { INDIEAUTH_TOKENS, dataPath } from '../files/data-files.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -39,7 +39,7 @@ interface Site {
 
 async function site(): Promise<Site> {
   const cms = await box.site({ baseUrl: BASE });
-  const ada = await createUser({
+  const ada = addUser({
     dataDir: cms.config.dataDir,
     username: 'ada',
     password: 'correct horse battery',

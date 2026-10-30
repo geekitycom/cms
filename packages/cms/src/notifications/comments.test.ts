@@ -15,7 +15,8 @@ import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { createUser, setUserNotification } from '../site/users.ts';
+import { setUserNotification } from '../site/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 
 /**
  * The notices a comment sets off, and the links they carry.
@@ -101,12 +102,9 @@ async function site(
   started.push(cms);
   await cms.sync();
 
-  await createUser({
-    dataDir,
-    username: 'ada',
-    password: 'correct horse battery',
-    ...(options.email === undefined ? {} : { email: options.email }),
-  });
+  writeUsers(dataDir, [
+    { username: 'ada', ...(options.email === undefined ? {} : { email: options.email }) },
+  ]);
 
   return { cms, provider, contentDir, dataDir };
 }

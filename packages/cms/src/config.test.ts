@@ -159,6 +159,16 @@ describe('resolveConfig', () => {
     );
   });
 
+  it('waits five seconds for the plugins folder to settle unless told otherwise', () => {
+    const cwd = '/srv/site';
+    assert.equal(resolveConfig({}, { cwd, env: {} }).pluginSettle, 5);
+    assert.equal(resolveConfig({ pluginSettle: 30 }, { cwd, env: {} }).pluginSettle, 30);
+    assert.equal(
+      resolveConfig({}, { cwd, env: { GEEKITY_PLUGIN_SETTLE: '0.5' } }).pluginSettle,
+      0.5,
+    );
+  });
+
   // decision-15 replaced the single `theme/` directory with a `themes/`
   // directory of named themes, and replaced rather than aliased the names: an
   // environment still setting the old one is a deployment that has to be
@@ -770,6 +780,7 @@ describe('what the environment and config may say', () => {
       pluginsDir: undefined,
       pluginInstall: true,
       pluginWatch: true,
+      pluginSettle: 5,
       geminiCert: undefined,
       geminiKey: undefined,
       geminiPort: 1965,

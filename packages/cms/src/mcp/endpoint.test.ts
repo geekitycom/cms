@@ -4,8 +4,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
-import { createUser } from '../site/users.ts';
 import type { AuthorizationCode } from '../indieauth/grants.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { createToken, issueTokens } from '../indieauth/tokens.ts';
@@ -29,7 +29,7 @@ async function site(config: GeekityConfig = {}): Promise<Cms> {
     path.join(contentDir, '_data', 'site.json'),
     JSON.stringify({ title: 'A Site', author: 'ada' }),
   );
-  await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  writeUsers(dataDir, [{ username: 'ada' }]);
   return await box.open({ contentDir, dataDir, baseUrl: BASE, ...config });
 }
 

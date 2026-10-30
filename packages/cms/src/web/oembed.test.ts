@@ -19,11 +19,13 @@ import sharp from 'sharp';
 import { sandbox, signIn } from '../admin/__testing__/harness.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
 import { schemeTokens } from '../theme/scheme-tokens.ts';
 import type { SchemeTokens } from '../theme/scheme-tokens.ts';
 import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 import { child, parseXml } from './__testing__/xml.ts';
+import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -79,7 +81,7 @@ async function site(
     await writeFile(file, contents);
   }
 
-  const user = await createUser({ dataDir, username: 'ada', password: 'a password of hers' });
+  const user = addUser({ dataDir, username: 'ada', password: 'a password of hers' });
   await setUserProfile({ dataDir, userId: user.id, profile: { displayName: 'Ada Lovelace' } });
 
   return box.open({
@@ -90,6 +92,8 @@ async function site(
     ...config,
   });
 }
+
+const sharedSite = shared(site);
 
 /** Write an image of one size to an upload path, and derive its variants so its size is recorded. */
 async function upload(cms: Cms, at: string, width: number, height: number): Promise<void> {
@@ -131,7 +135,7 @@ async function discoveryLinks(cms: Cms, pathname: string): Promise<Record<string
 
 describe('the discovery link (TASK-205 AC #1)', () => {
   it('is on each post and page, and names that page to the endpoint', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     for (const pathname of ['/2026/09/hello/', '/2026/09/note/', '/about/']) {
       const links = await discoveryLinks(cms, pathname);
       const json = links['application/json+oembed'];
@@ -152,14 +156,14 @@ describe('the discovery link (TASK-205 AC #1)', () => {
   });
 
   it('is not on a listing, the search page or the 404', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     for (const pathname of ['/', '/page/2/', '/search/?q=fish', '/no-such-page/']) {
       assert.deepEqual(await discoveryLinks(cms, pathname), {}, pathname);
     }
   });
 
   it('carries the base path of a site served from a subdirectory', async () => {
-    const cms = await site({}, { baseUrl: 'https://example.com/blog' });
+    const cms = await sharedSite({}, { baseUrl: 'https://example.com/blog' });
     const json = (await discoveryLinks(cms, '/2026/09/hello/'))['application/json+oembed'];
     assert.ok(json !== undefined);
     const href = new URL(json);
@@ -223,7 +227,7 @@ describe('the endpoint (TASK-205 AC #2)', () => {
   });
 
   it('answers the same embed as XML when asked', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const response = await cms.app.request(
       endpoint('https://blog.example/2026/09/hello/', { format: 'xml' }),
     );
@@ -238,7 +242,7 @@ describe('the endpoint (TASK-205 AC #2)', () => {
   });
 
   it('refuses a format it does not serve with 501', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const response = await cms.app.request(
       endpoint('https://blog.example/2026/09/hello/', { format: 'yaml' }),
     );
@@ -246,7 +250,7 @@ describe('the endpoint (TASK-205 AC #2)', () => {
   });
 
   it('answers a repeat request with 304', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const at = endpoint('https://blog.example/2026/09/hello/');
     const etag = (await cms.app.request(at)).headers.get('etag');
     assert.ok(etag !== null, 'the embed carries no validator');
@@ -276,7 +280,7 @@ describe('the card (TASK-205 AC #3)', () => {
 
 describe('what may be embedded (TASK-205 AC #4)', () => {
   it('answers 404 for anything that is not a published post or page', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     for (const url of [
       'https://blog.example/no-such-post/',
       'https://blog.example/2026/09/secret/',
@@ -296,7 +300,7 @@ describe('what may be embedded (TASK-205 AC #4)', () => {
   });
 
   it('never advertises a draft', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const links = await discoveryLinks(cms, '/2026/09/secret/');
     assert.deepEqual(links, {});
   });
@@ -383,7 +387,7 @@ describe('the embed view (TASK-208)', () => {
   });
 
   it('answers 404, framed by nobody else, for anything oEmbed would not embed', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     for (const url of [
       'https://blog.example/2026/09/secret/',
       'https://blog.example/2026/12/later/',
@@ -401,7 +405,7 @@ describe('the embed view (TASK-208)', () => {
   });
 
   it('may be framed by any site, loading only its own inline style and script', async () => {
-    const cms = await site({}, { securityHeaders: { 'X-Frame-Options': 'DENY' } });
+    const cms = await sharedSite({}, { securityHeaders: { 'X-Frame-Options': 'DENY' } });
     const { response, html } = await embedViewOf(cms, 'https://blog.example/2026/09/hello/');
     const policy = directives(response);
 
@@ -416,8 +420,8 @@ describe('the embed view (TASK-208)', () => {
   });
 
   it('leaves every other response framable by the site alone', async () => {
-    const cms = await site({}, { securityHeaders: { 'X-Frame-Options': 'DENY' } });
-    const plain = await site();
+    const cms = await sharedSite({}, { securityHeaders: { 'X-Frame-Options': 'DENY' } });
+    const plain = await sharedSite();
     const post = 'https://blog.example/2026/09/hello/';
 
     assertNotFramable(await plain.app.request('/2026/09/hello/'), 'a post');
@@ -473,7 +477,7 @@ describe('the embed view (TASK-208)', () => {
   });
 
   it('answers a repeat request with 304', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const at = embedView('https://blog.example/2026/09/hello/');
     const etag = (await cms.app.request(at)).headers.get('etag');
     assert.ok(etag !== null, 'the page carries no validator');
@@ -500,7 +504,10 @@ function framedScript(script: string, hash: string) {
     listeners.set(type, [...(listeners.get(type) ?? []), listener]);
   };
   class Element {
-    constructor(readonly href?: string) {}
+    readonly href: string | undefined;
+    constructor(href?: string) {
+      this.href = href;
+    }
     closest(): Element | null {
       return this.href === undefined ? null : this;
     }
@@ -554,7 +561,7 @@ describe('the embed view in the colour scheme and mode the site chooses (TASK-48
   }
 
   it('draws the first scheme in both modes when the site chooses neither', async () => {
-    const { html } = await embedViewOf(await site(), POST);
+    const { html } = await embedViewOf(await sharedSite(), POST);
     const style = inline(html, 'style');
     const paper = tokensOf('paper');
 
@@ -569,7 +576,7 @@ describe('the embed view in the colour scheme and mode the site chooses (TASK-48
   });
 
   it('draws the chosen scheme in the dark mode alone', async () => {
-    const cms = await site({ colorScheme: 'slate', colorMode: 'dark' });
+    const cms = await sharedSite({ colorScheme: 'slate', colorMode: 'dark' });
     const { response, html } = await embedViewOf(cms, POST);
     const style = inline(html, 'style');
 
@@ -584,7 +591,7 @@ describe('the embed view in the colour scheme and mode the site chooses (TASK-48
 
   it('draws the chosen scheme in the light mode alone', async () => {
     const { html } = await embedViewOf(
-      await site({ colorScheme: 'ink', colorMode: 'light' }),
+      await sharedSite({ colorScheme: 'ink', colorMode: 'light' }),
       POST,
     );
     const style = inline(html, 'style');
@@ -596,7 +603,7 @@ describe('the embed view in the colour scheme and mode the site chooses (TASK-48
   });
 
   it('falls back to the first scheme for one the theme does not declare', async () => {
-    const { html } = await embedViewOf(await site({ colorScheme: 'neon' }), POST);
+    const { html } = await embedViewOf(await sharedSite({ colorScheme: 'neon' }), POST);
     assert.equal(htmlTag(html), '<html lang="en" data-scheme="paper" data-mode="system">');
     assert.ok(inline(html, 'style').includes(paperOf('paper').light));
   });

@@ -8,7 +8,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
-import { createUser } from '../site/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { deleteUser } from '../admin/users.ts';
 import type { AuthorizationCode } from './grants.ts';
 import {
@@ -397,8 +397,11 @@ describe('recording when a connection was last used', () => {
 describe('deleting a user', () => {
   it('revokes every token they hold and nobody else’s', async () => {
     const dir = await dataDir();
-    const ada = await createUser({ dataDir: dir, username: 'ada', password: 'correct horse b' });
-    const bob = await createUser({ dataDir: dir, username: 'bob', password: 'another horse b' });
+    const [ada, bob] = [{ id: 1 }, { id: 2 }];
+    writeUsers(dir, [
+      { id: ada.id, username: 'ada' },
+      { id: bob.id, username: 'bob' },
+    ]);
     const adas = [
       await issueTokens(dir, { ...GRANT, userId: ada.id }, T0),
       await issueTokens(dir, { ...GRANT, userId: ada.id, resource: MCP.resource }, T0),

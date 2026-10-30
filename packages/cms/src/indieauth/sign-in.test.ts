@@ -6,9 +6,13 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { createServer } from 'node:net';
+import { createServer } from 'node:http';
+import type { Server } from 'node:http';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+import type { TestContext } from 'node:test';
+
+import { getRequestListener } from '@hono/node-server';
 
 import { cookieValue, csrfField, sandbox } from '../admin/__testing__/harness.ts';
 import { sessionCookieName } from '../web/session.ts';
@@ -41,13 +45,20 @@ after(async () => {
 
 const PUBLIC: HostLookup = () => Promise.resolve(['203.0.113.7']);
 
-async function freePort(): Promise<number> {
+/**
+ * An HTTP server already bound to a port of its own, so the site can be built
+ * with that port in its base URL before it is handed the requests.
+ */
+async function listening(t: TestContext): Promise<{ server: Server; port: number }> {
   const server = createServer();
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
-  await new Promise<void>((resolve) => server.close(() => resolve()));
   assert.ok(address !== null && typeof address === 'object');
-  return address.port;
+  return { server, port: address.port };
 }
 
 /** The `rel="indieauth-metadata"` URL a page's `Link` header names. */
@@ -64,8 +75,8 @@ async function discover(url: string): Promise<{ issuer: string; authorization_en
 }
 
 describe('a client signing a person in with their own site', () => {
-  it('goes from the typed URL through consent to a redeemed me on the same host', async () => {
-    const port = await freePort();
+  it('goes from the typed URL through consent to a redeemed me on the same host', async (t) => {
+    const { server, port } = await listening(t);
     const base = `http://127.0.0.1:${String(port)}`;
     const contentDir = await box.dir('geekity-sign-in-content-');
     const dataDir = await box.dir('geekity-sign-in-data-');
@@ -75,8 +86,9 @@ describe('a client signing a person in with their own site', () => {
       JSON.stringify({ title: 'A Site', author: 'ada' }),
     );
     await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
-    const cms = await box.open({ contentDir, dataDir, baseUrl: base, port, hostLookup: PUBLIC });
-    await cms.serve();
+    const cms = await box.open({ contentDir, dataDir, baseUrl: base, hostLookup: PUBLIC });
+    const handle = getRequestListener(cms.app.fetch);
+    server.on('request', (request, response) => void handle(request, response));
 
     const cookieName = sessionCookieName(cms.config);
     let session = '';

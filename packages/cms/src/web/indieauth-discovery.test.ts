@@ -13,7 +13,7 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { createUser } from '../site/users.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -57,7 +57,7 @@ async function site(settings: Record<string, unknown> = {}): Promise<Cms> {
       "---\ntitle: Hello\ndate: '2026-09-02T09:00:00Z'\npermalink: /2026/09/hello/\nauthor: ada\n---\n\nHello.\n",
     'pages/welcome.md': '---\ntitle: Welcome\npermalink: /welcome/\n---\n\nWelcome.\n',
   });
-  await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  addUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   return box.open({ contentDir, dataDir, themesDir, baseUrl: BASE });
 }
 

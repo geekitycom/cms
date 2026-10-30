@@ -13,7 +13,7 @@ import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import { createMailService } from '../notifications/mail-service.ts';
 import { createCommentNotifier } from '../notifications/comments.ts';
-import { createUser } from '../site/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import {
   addComment,
   commentEmailsFile,
@@ -769,12 +769,7 @@ async function intakeSite(): Promise<IntakeSite> {
     config: { baseUrl: BASE_URL, dataDir, now: () => new Date('2026-09-04T12:00:00.000Z') },
   });
 
-  await createUser({
-    dataDir,
-    username: 'moderator',
-    password: 'correct horse battery',
-    email: 'moderator@example.com',
-  });
+  writeUsers(dataDir, [{ username: 'moderator', email: 'moderator@example.com' }]);
 
   const records: CommentRecords = { admin, contentDir, dataDir };
 

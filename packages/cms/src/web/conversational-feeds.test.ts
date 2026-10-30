@@ -155,9 +155,7 @@ before(async () => {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
-  writeUsers(dataDir, [
-    { username: 'ada', password: 'correct horse battery', profile: { displayName: 'Ada' } },
-  ]);
+  writeUsers(dataDir, [{ username: 'ada', profile: { displayName: 'Ada' } }]);
   cms = await box.open({
     contentDir,
     dataDir,

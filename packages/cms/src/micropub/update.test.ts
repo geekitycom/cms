@@ -10,13 +10,14 @@ import { after, describe, it } from 'node:test';
 import sharp from 'sharp';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
-import type { Browser } from '../admin/__testing__/harness.ts';
+import { csrfField, FIRST_ADMIN, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import { addFollower } from '../federation/records.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
-import { createUser, findUser } from '../site/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
+import type { TestUser } from '../admin/__testing__/users.ts';
+import { findUser } from '../site/users.ts';
 
 remoteHostsDoNotExist();
 
@@ -30,7 +31,6 @@ const ALL: Scope[] = ['create', 'update', 'delete'];
 
 interface Site {
   cms: Cms;
-  agent: Browser;
   token: string;
 }
 
@@ -39,6 +39,7 @@ async function site(
   scopes: Scope[] = ALL,
   config: GeekityConfig = {},
   files: Readonly<Record<string, string>> = {},
+  users: readonly TestUser[] = [{ username: FIRST_ADMIN.username }],
 ): Promise<Site> {
   const contentDir = await box.dir('geekity-micropub-update-content-');
   for (const [relative, contents] of Object.entries(files)) {
@@ -46,15 +47,16 @@ async function site(
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, contents, 'utf8');
   }
+  const dataDir = await box.dir('geekity-micropub-update-data-');
+  writeUsers(dataDir, users);
   const cms = await box.open({
     contentDir,
-    dataDir: await box.dir('geekity-micropub-update-data-'),
+    dataDir,
     baseUrl: BASE,
     now: () => NOW,
     ...config,
   });
-  const agent = await signedIn(cms);
-  return { cms, agent, token: await tokenFor(cms, FIRST_ADMIN.username, scopes) };
+  return { cms, token: await tokenFor(cms, FIRST_ADMIN.username, scopes) };
 }
 
 async function tokenFor(cms: Cms, username: string, scopes: Scope[]): Promise<string> {
@@ -502,12 +504,8 @@ describe('which post a URL names (AC #4)', () => {
           "---\ntitle: Grace's\ndate: '2026-09-01T09:00:00Z'\npermalink: /2026/09/graces/\nauthor: grace\n---\n\nHers.\n",
         'pages/about.md': '---\ntitle: About\npermalink: /about/\n---\n\nA page.\n',
       },
+      [{ username: FIRST_ADMIN.username }, { username: 'grace' }],
     );
-    await createUser({
-      dataDir: made.cms.config.dataDir,
-      username: 'grace',
-      password: 'another horse battery',
-    });
     return { ...made, grace: `${BASE}/2026/09/graces/`, page: `${BASE}/about/` };
   }
 
@@ -591,7 +589,8 @@ describe('scopes (AC #5)', () => {
 
 describe('an editor with the post open (AC #6)', () => {
   it('reports the conflict when the post was updated over Micropub', async () => {
-    const { cms, agent, token } = await site();
+    const { cms, token } = await site();
+    const agent = await signIn(cms);
     const url = await created(cms, token, { content: ['What the editor loaded.'] });
     const slug = documentAt(cms, url).slug;
 

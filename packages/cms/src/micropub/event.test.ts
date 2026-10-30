@@ -10,12 +10,12 @@ import { after, describe, it } from 'node:test';
 import matter from 'gray-matter';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
-import type { Browser } from '../admin/__testing__/harness.ts';
+import { csrfField, FIRST_ADMIN, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import { postTypeOf } from '../content/post-type.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { findUser } from '../site/users.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
@@ -30,15 +30,16 @@ const NOW = new Date('2026-09-20T12:00:00.000Z');
 
 interface Site {
   cms: Cms;
-  agent: Browser;
   token: string;
 }
 
 async function site(timezone = 'UTC'): Promise<Site> {
   const contentDir = await box.dir('geekity-micropub-event-content-');
+  const dataDir = await box.dir('geekity-micropub-event-data-');
+  writeUsers(dataDir);
   const cms = await box.open({
     contentDir,
-    dataDir: await box.dir('geekity-micropub-event-data-'),
+    dataDir,
     baseUrl: BASE,
     now: () => NOW,
   });
@@ -46,7 +47,6 @@ async function site(timezone = 'UTC'): Promise<Site> {
     contentDir,
     settings: { ...(await siteSettingsIn(contentDir)), timezone },
   });
-  const agent = await signedIn(cms);
   const ada = findUser(cms.config.dataDir, FIRST_ADMIN.username);
   assert.ok(ada !== undefined, 'the first admin exists');
   const { accessToken } = await issueTokens(
@@ -61,7 +61,7 @@ async function site(timezone = 'UTC'): Promise<Site> {
     },
     NOW,
   );
-  return { cms, agent, token: accessToken };
+  return { cms, token: accessToken };
 }
 
 async function postJson(cms: Cms, token: string, body: unknown): Promise<Response> {
@@ -134,10 +134,11 @@ const CAMP = {
 describe('creating an event (AC #1)', () => {
   it('writes the same file the editor writes for the same event', async () => {
     const editorSite = await site('America/Chicago');
-    const html = await (await editorSite.agent.get('/admin/posts/new')).text();
+    const agent = await signIn(editorSite.cms);
+    const html = await (await agent.get('/admin/posts/new')).text();
     const csrf = csrfField(html);
     assert.ok(csrf !== undefined);
-    const saved = await editorSite.agent.post('/admin/posts/new', {
+    const saved = await agent.post('/admin/posts/new', {
       csrf_token: csrf,
       title: 'IndieWeb Camp Chicago',
       date: '2026-09-19T09:00:00Z',

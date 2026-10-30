@@ -3,10 +3,10 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { Sandbox } from '../../../admin/__testing__/harness.ts';
+import { writeUsers } from '../../../admin/__testing__/users.ts';
 import type { Cms, GeekityConfig } from '../../../index.ts';
 import type { Scope } from '../../../indieauth/request.ts';
 import { issueTokens } from '../../../indieauth/tokens.ts';
-import { createUser } from '../../../site/users.ts';
 
 export const BASE = 'https://blog.example';
 export const MCP = '/_geekity/mcp';
@@ -54,7 +54,7 @@ export async function fixtureSite(box: Sandbox, config: GeekityConfig = {}): Pro
       },
     ]),
   );
-  await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  writeUsers(dataDir, [{ username: 'ada' }]);
   const cms = await box.open({ ...config, contentDir, dataDir, baseUrl: BASE });
 
   const { admin } = cms;

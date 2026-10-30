@@ -24,6 +24,7 @@ export async function serveCommand({ configPath }: ParsedArgs): Promise<number> 
     dataDir: resolved.dataDir,
     pluginsDir: resolved.pluginsDir,
     pluginWatch: resolved.pluginWatch,
+    pluginSettle: resolved.pluginSettle,
   });
   return 0;
 }
@@ -52,18 +53,18 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
       supervision: worker.supervision,
     });
     const { port, geminiPort } = await cms.serve();
+    let announcement = '';
     if (await cms.settings.get(DEV_MODE.on)) {
-      process.stdout.write(
+      announcement +=
         'Dev mode is on: ActivityPub, webmentions, feed pings, IndexNow and email are held ' +
-          'and recorded in data/dev-mode.jsonl. `geekity dev-mode off` takes the site live.\n',
-      );
+        'and recorded in data/dev-mode.jsonl. `geekity dev-mode off` takes the site live.\n';
     }
-    process.stdout.write(`Geekity CMS is serving ${cms.config.baseUrl} on port ${String(port)}\n`);
+    announcement += `Geekity CMS is serving ${cms.config.baseUrl} on port ${String(port)}\n`;
     if (geminiPort !== undefined) {
       const host = geminiHost(cms.config, await cms.settings.values(SITE));
-      process.stdout.write(`Gemini is on port ${String(geminiPort)} for ${host}\n`);
+      announcement += `Gemini is on port ${String(geminiPort)} for ${host}\n`;
     }
-    worker.serving(cms);
+    worker.serving(cms, announcement);
   } catch (error) {
     const message = messageOf(error);
     channel.send({ type: 'boot-failed', error: message }, () => process.exit(1));

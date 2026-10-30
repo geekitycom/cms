@@ -15,9 +15,11 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
 import { createTemplateEnvironment } from '../theme/templates.ts';
 import { systemClock } from '../util/clock.ts';
+import { shared } from './__testing__/shared.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -102,6 +104,8 @@ async function site(
   return box.open({ contentDir, dataDir, ...config });
 }
 
+const sharedSite = shared(site);
+
 /** GET a path and read the body. */
 async function body(cms: Cms, pathname: string): Promise<string> {
   const response = await cms.app.request(pathname);
@@ -134,7 +138,7 @@ const EXCERPT = /<div class="feed-excerpt p-summary">([\s\S]*?)<\/div>/;
 
 describe('a listing’s feed (AC #1)', () => {
   it('is an h-feed of h-entry items separated by rules', async () => {
-    const html = await body(await site(), '/');
+    const html = await body(await sharedSite(), '/');
 
     assert.match(html, /<div class="feed h-feed">/, 'the listing is not an h-feed');
 
@@ -151,7 +155,7 @@ describe('a listing’s feed (AC #1)', () => {
   });
 
   it('gives each entry a kicker, a linked p-name, an excerpt and Continue reading', async () => {
-    const [hello] = items(await body(await site(), '/'));
+    const [hello] = items(await body(await sharedSite(), '/'));
     assert.ok(hello !== undefined, 'the newest post is not in the feed');
 
     assert.match(
@@ -181,7 +185,7 @@ describe('a listing’s feed (AC #1)', () => {
   });
 
   it('links the categories as p-category in the kicker and prints no tags', async () => {
-    const [hello] = items(await body(await site(), '/'));
+    const [hello] = items(await body(await sharedSite(), '/'));
     assert.ok(hello !== undefined);
 
     assert.match(
@@ -216,7 +220,7 @@ describe('a listing’s feed (AC #1)', () => {
 
 describe('the excerpt an entry carries (AC #2)', () => {
   it('cuts a long summary at a word boundary near 280 characters', async () => {
-    const [, long] = items(await body(await site(), '/'));
+    const [, long] = items(await body(await sharedSite(), '/'));
     assert.ok(long !== undefined, 'the long post is not in the feed');
 
     const excerpt = text(long, EXCERPT);
@@ -231,7 +235,7 @@ describe('the excerpt an entry carries (AC #2)', () => {
   });
 
   it('prints a description shorter than the cut whole', async () => {
-    const [hello] = items(await body(await site(), '/'));
+    const [hello] = items(await body(await sharedSite(), '/'));
     assert.ok(hello !== undefined);
 
     assert.equal(
@@ -244,7 +248,7 @@ describe('the excerpt an entry carries (AC #2)', () => {
 
 describe('what heads a listing (AC #3)', () => {
   it('heads every archive with a kicker naming its kind over its name, and counts nothing', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
 
     for (const [pathname, kind, name] of [
       ['/tag/introductions/', 'Tag', 'introductions'],
@@ -266,7 +270,7 @@ describe('what heads a listing (AC #3)', () => {
   // with the site title, and the listing's own title is that same title, so it
   // heads itself with nothing (TASK-96).
   it('leaves the home page to the site header, which has already said it', async () => {
-    const html = await body(await site(), '/');
+    const html = await body(await sharedSite(), '/');
 
     assert.doesNotMatch(main(html), /<h1/, 'the home listing heads itself a second time');
     assert.match(
@@ -278,7 +282,7 @@ describe('what heads a listing (AC #3)', () => {
   });
 
   it('heads a category archive with a header, and no description when it has none', async () => {
-    const inside = main(await body(await site(), '/category/notes/'));
+    const inside = main(await body(await sharedSite(), '/category/notes/'));
 
     assert.match(
       inside,
@@ -319,7 +323,7 @@ describe('what heads a listing (AC #3)', () => {
 
   it('keeps the h-card on an author archive', async () => {
     const cms = await site(POSTS, {}, {}, async (dataDir) => {
-      const user = await createUser({ dataDir, username: 'ada', password: 'a password of hers' });
+      const user = addUser({ dataDir, username: 'ada', password: 'a password of hers' });
       await setUserProfile({
         dataDir,
         userId: user.id,
@@ -353,7 +357,7 @@ describe('what heads a listing (AC #3)', () => {
 
 describe('paging and the page that is not there (AC #4)', () => {
   it('pages with two arrows, and prints no pager on a listing of one page', async () => {
-    const cms = await site(POSTS, { postsPerPage: 1 });
+    const cms = await sharedSite(POSTS, { postsPerPage: 1 });
 
     const first = await body(cms, '/');
     assert.match(first, /<nav class="pagination" aria-label="Pagination">/, 'no pager on page one');
@@ -372,18 +376,22 @@ describe('paging and the page that is not there (AC #4)', () => {
     );
     assert.doesNotMatch(second, /pagination-next/, 'the last page links to a page after it');
 
-    assert.doesNotMatch(await body(await site(), '/'), /pagination/, 'one page carries a pager');
+    assert.doesNotMatch(
+      await body(await sharedSite(), '/'),
+      /pagination/,
+      'one page carries a pager',
+    );
   });
 
   it('says no posts were found rather than showing an empty feed', async () => {
-    const inside = main(await body(await site({}), '/'));
+    const inside = main(await body(await sharedSite({}), '/'));
 
     assert.match(inside, /No posts found/, 'an empty listing says nothing');
     assert.doesNotMatch(inside, /feed-item/, 'an empty listing prints an entry');
   });
 
   it('says content is not found, with a link home and to the search', async () => {
-    const cms = await site();
+    const cms = await sharedSite();
     const response = await cms.app.request('/nothing-here/');
     const inside = main(await response.text());
 

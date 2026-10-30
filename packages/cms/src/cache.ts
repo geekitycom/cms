@@ -132,8 +132,8 @@ export interface MigrationLedger {
  *   database away rather than to stop.
  * - **Empty.** A new database, whatever the oldest shipped version is.
  *
- * Applying is idempotent, and each migration is its own transaction, so a
- * failure part-way leaves the ledger describing exactly the schema on disk.
+ * Applying is idempotent, and every pending migration runs in one transaction,
+ * so a failure part-way leaves the ledger describing exactly the schema on disk.
  */
 export function applyMigrations(db: DatabaseSync, ledger: MigrationLedger): void {
   db.exec(`
@@ -174,19 +174,20 @@ export function applyMigrations(db: DatabaseSync, ledger: MigrationLedger): void
 
   const record = db.prepare(`INSERT INTO ${ledger.ledger} (version, applied_at) VALUES (?, ?)`);
 
-  for (const migration of ledger.migrations) {
-    if (applied.has(migration.version)) continue;
+  const pending = ledger.migrations.filter((migration) => !applied.has(migration.version));
+  if (pending.length === 0) return;
 
-    db.exec('BEGIN');
-    try {
+  db.exec('BEGIN');
+  try {
+    for (const migration of pending) {
       db.exec(migration.sql);
       migration.run?.(db);
       record.run(migration.version, ledger.now().toISOString());
-      db.exec('COMMIT');
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
     }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
   }
 }
 

@@ -5,9 +5,10 @@ import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { csrfField, FIRST_ADMIN, signedIn } from '../admin/__testing__/harness.ts';
+import { csrfField, FIRST_ADMIN } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { seedActorKeys } from '../federation/__testing__/keys.ts';
+import { signedInAs } from '../federation/__testing__/session.ts';
 import { RESEND_JOB } from '../federation/resend-job.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
@@ -246,7 +247,7 @@ async function publish(
 describe('sending webmentions when a post is published', () => {
   it('tells every external page the post links to, and records what came of each', async () => {
     const cms = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     const response = await publish(
       agent,
@@ -293,7 +294,7 @@ describe('sending webmentions when a post is published', () => {
 
   it('sends none at all when the setting is off', async () => {
     const cms = await site({ webmentionsSend: false });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     await publish(agent, `A friendly [one](${FRIENDLY}).`);
     await cms.webmentions.settled();
@@ -307,7 +308,7 @@ describe('with the clock pinned through createCms', () => {
   it('stamps every sent webmention with the pinned instant', async () => {
     const PINNED = '2026-05-06T07:08:09.000Z';
     const cms = await site({ now: () => new Date(PINNED) });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     await publish(agent, `A friendly [one](${FRIENDLY}) and a [quiet one](${QUIET}).`);
     await cms.webmentions.settled();
@@ -324,7 +325,7 @@ describe('with the clock pinned through createCms', () => {
 describe('sending to an endpoint inside this network', () => {
   it('posts nothing to an advertised endpoint that resolves to a private address', async () => {
     const cms = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     await publish(agent, `A [sneaky one](${SNEAKY}).`);
     await cms.webmentions.settled();
@@ -338,7 +339,7 @@ describe('sending to an endpoint inside this network', () => {
 
   it('does not follow an endpoint that redirects to a private address', async () => {
     const cms = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     await publish(agent, `A [bouncing one](${BOUNCE}).`);
     await cms.webmentions.settled();
@@ -354,7 +355,7 @@ describe('sending to an endpoint inside this network', () => {
 describe('sending webmentions to a bare URL (TASK-194 AC #5)', () => {
   it('tells a page the post names by its URL alone, as it tells a link', async () => {
     const cms = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     const response = await publish(agent, `Worth reading: ${FRIENDLY}`);
     assert.equal(response.status, 303, 'the post was published');
@@ -370,7 +371,7 @@ describe('sending webmentions to a bare URL (TASK-194 AC #5)', () => {
 describe('sending a webmention for a reply', () => {
   it('tells the post it replies to, though the body links nowhere', async () => {
     const cms = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     const response = await publish(agent, 'Completely agree with this.', {
       'in-reply-to': FRIENDLY,
@@ -391,7 +392,7 @@ describe('sending a webmention for a reply', () => {
 
   it('tells it once when the body links to it as well', async () => {
     const cms = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     await publish(agent, `Agree with [this](${FRIENDLY}).`, { 'in-reply-to': FRIENDLY });
     await cms.webmentions.settled();
@@ -404,7 +405,7 @@ describe('sending a webmention for a reply', () => {
 
   it('sends nothing for a reply when the setting is off', async () => {
     const cms = await site({ webmentionsSend: false });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     await publish(agent, 'Completely agree with this.', { 'in-reply-to': FRIENDLY });
     await cms.webmentions.settled();
@@ -417,7 +418,7 @@ describe('sending a webmention for a like, a repost or a bookmark (TASK-169 AC #
   for (const property of ['like-of', 'repost-of', 'bookmark-of']) {
     it(`tells the page a post's ${property} cites, though the body links nowhere`, async () => {
       const cms = await site();
-      const agent = await signedIn(cms);
+      const agent = signedInAs(cms, FIRST_ADMIN.username);
 
       const response = await publish(agent, 'Worth it.', { [property]: FRIENDLY });
       assert.equal(response.status, 303, 'the post was published');
@@ -434,7 +435,7 @@ describe('sending a webmention for a like, a repost or a bookmark (TASK-169 AC #
 describe('sending a webmention for an RSVP (TASK-198 AC #2)', () => {
   it('tells the event it answers, though the body links nowhere', async () => {
     const cms = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     const response = await publish(agent, '', { 'in-reply-to': FRIENDLY, rsvp: 'yes' });
     assert.equal(response.status, 303, 'the RSVP was published');
@@ -451,7 +452,7 @@ describe('sending a webmention for an RSVP (TASK-198 AC #2)', () => {
 describe('sending webmentions when a post is deleted', () => {
   it('tells the pages it linked to, which find it gone when they verify (TASK-195)', async () => {
     const cms = await site();
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
     assert.equal((await publish(agent, `A friendly [one](${FRIENDLY}).`)).status, 303);
     await cms.webmentions.settled();
     sent.length = 0;
@@ -535,7 +536,7 @@ async function copiesOf(cms: Cms): Promise<unknown> {
 describe('syndicating a post to the site’s targets', () => {
   it('tells a target the post selects by tag, and keeps the copy it answers with', async () => {
     const cms = await site({ files: { '_data/syndicationTargets.json': TARGETS_FILE } });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     const response = await publish(agent, 'Nothing linked in the body.', { tags: 'news' });
     assert.equal(response.status, 303, 'the post was published');
@@ -553,7 +554,7 @@ describe('syndicating a post to the site’s targets', () => {
 
   it('tells a target the post lists in syndicate-to', async () => {
     const cms = await site({ files: { '_data/syndicationTargets.json': TARGETS_FILE } });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     await publish(agent, 'Nothing linked.', { 'syndicate-to-friend': '1' });
     await cms.webmentions.settled();
@@ -567,7 +568,7 @@ describe('syndicating a post to the site’s targets', () => {
 
   it('tells a deselected target again and forgets its copy', async () => {
     const cms = await site({ files: { '_data/syndicationTargets.json': TARGETS_FILE } });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
     await publish(agent, 'Nothing linked.', { tags: 'news' });
     await cms.webmentions.settled();
     sent.length = 0;
@@ -593,7 +594,7 @@ describe('syndicating a post to the site’s targets', () => {
 
   it('keeps a moved post’s copies under its new permalink only', async () => {
     const cms = await site({ files: { '_data/syndicationTargets.json': TARGETS_FILE } });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
     await publish(agent, 'Nothing linked.', { tags: 'news' });
     await cms.webmentions.settled();
 
@@ -648,7 +649,7 @@ describe('syndicating to a target per language (TASK-156)', () => {
 
   it('tells the German page about a German post and keeps its copy under that page', async () => {
     const cms = await site({ files: { '_data/syndicationTargets.json': PER_LANGUAGE } });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     await publish(agent, 'Nichts verlinkt.', { tags: 'news', lang: 'de' });
     await cms.webmentions.settled();
@@ -664,7 +665,7 @@ describe('syndicating to a target per language (TASK-156)', () => {
 
   it('tells the English page about a post in the site’s language', async () => {
     const cms = await site({ files: { '_data/syndicationTargets.json': PER_LANGUAGE } });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     await publish(agent, 'Nothing linked.', { tags: 'news' });
     await cms.webmentions.settled();
@@ -679,7 +680,7 @@ describe('syndicating to a target per language (TASK-156)', () => {
 
   it('neither links to nor tells a target about a post in a language it does not list', async () => {
     const cms = await site({ files: { '_data/syndicationTargets.json': PER_LANGUAGE } });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
 
     await publish(agent, 'Rien de lié.', { tags: 'news', lang: 'fr' });
     await cms.webmentions.settled();
@@ -691,7 +692,7 @@ describe('syndicating to a target per language (TASK-156)', () => {
 
   it('tells the German page the link is gone when the post turns English, and forgets its copy', async () => {
     const cms = await site({ files: { '_data/syndicationTargets.json': PER_LANGUAGE } });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
     await publish(agent, 'Nichts verlinkt.', { tags: 'news', lang: 'de' });
     await cms.webmentions.settled();
     sent.length = 0;
@@ -739,7 +740,7 @@ describe('declaring syndication targets (TASK-155 AC #1)', () => {
 describe('syndication on the federation screen (TASK-155 AC #9)', () => {
   it('shows each selected target’s outcome and copy, and Resend sends to it again', async () => {
     const cms = await site({ files: { '_data/syndicationTargets.json': TARGETS_FILE } });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
     await publish(agent, 'Nothing linked.', { tags: 'news', 'syndicate-to-friend': '1' });
     await cms.webmentions.settled();
 
@@ -806,7 +807,7 @@ describe('a reply from the thread to a webmention (TASK-300 AC #5)', () => {
         }),
       },
     });
-    const agent = await signedIn(cms);
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
     const html = await (await agent.get('/2026/03/hello-world/')).text();
     const token = csrfField(html);
     assert.ok(token !== undefined, 'the thread offers the signed-in form');

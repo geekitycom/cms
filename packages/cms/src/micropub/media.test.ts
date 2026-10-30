@@ -15,7 +15,8 @@ import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
 import { listUploads } from '../media/library.ts';
-import { createUser } from '../site/users.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
+import { findUser } from '../site/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -33,10 +34,12 @@ interface Site {
 async function site(scopes: Scope[] = ['media'], config: GeekityConfig = {}): Promise<Site> {
   const contentDir = await box.dir('geekity-micropub-media-content-');
   const dataDir = await box.dir('geekity-micropub-media-data-');
+  writeUsers(dataDir, [{ username: 'ada' }, { username: 'grace' }]);
   const cms = await box.open({ contentDir, dataDir, baseUrl: BASE, ...config });
   const tokens = { ada: '', grace: '' };
   for (const username of ['ada', 'grace'] as const) {
-    const user = await createUser({ dataDir, username, password: 'correct horse battery' });
+    const user = findUser(dataDir, username);
+    assert.ok(user !== undefined);
     const issued = await issueTokens(
       dataDir,
       {

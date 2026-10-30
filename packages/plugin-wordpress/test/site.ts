@@ -69,13 +69,16 @@ function fixture(which: number): Readonly<Record<Algorithm, string>> {
   return found;
 }
 
-/** One account in `data/users.json`, with a hash nobody can sign in with. */
+export const CORRECT_HORSE_BATTERY_HASH =
+  '$argon2id$v=19$m=8,t=1,p=1$Z2Vla2l0eS10ZXN0LXNhbA$NsFbSo8eArho8Bui32EukJ/FbrTl8bMJovDFMH9DCbQ';
+
 export interface TestUser {
   readonly username: string;
   readonly id?: number;
   readonly displayName?: string;
   readonly actorId?: string;
   readonly email?: string;
+  readonly passwordHash?: string;
 }
 
 /** Write `data/users.json` straight. */
@@ -87,7 +90,7 @@ export function writeUsers(dataDir: string, users: readonly TestUser[]): void {
     ...(user.displayName === undefined ? {} : { profile: { displayName: user.displayName } }),
     ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
     ...(user.email === undefined ? {} : { email: user.email }),
-    passwordHash: 'not-a-hash',
+    passwordHash: user.passwordHash ?? 'not-a-hash',
     createdAt: '2026-01-01T00:00:00.000Z',
   }));
   const nextId = written.reduce((top, user) => Math.max(top, user.id), 0) + 1;
@@ -128,21 +131,13 @@ export interface CliRun {
 
 const execFile = promisify(execFileCallback);
 
-/**
- * Run the installed `geekity` bin, the way a site's shim runs it, under tsx so
- * the site config can import this package's source.
- */
 export async function runCli(args: readonly string[], cwd: string): Promise<CliRun> {
   const bin = fileURLToPath(import.meta.resolve('@geekity/cms/package.json')).replace(
     /package\.json$/,
     path.join('dist', 'cli.js'),
   );
   try {
-    const { stdout, stderr } = await execFile(
-      process.execPath,
-      ['--import', import.meta.resolve('tsx'), bin, ...args],
-      { cwd },
-    );
+    const { stdout, stderr } = await execFile(process.execPath, [bin, ...args], { cwd });
     return { code: 0, stdout, stderr };
   } catch (error) {
     const failure = error as { code?: number; stdout?: string; stderr?: string };

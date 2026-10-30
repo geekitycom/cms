@@ -5,7 +5,8 @@ import { after, describe, it } from 'node:test';
 
 import sharp from 'sharp';
 
-import { createUser, setUserProfile } from '../site/users.ts';
+import { setUserProfile } from '../site/users.ts';
+import { addUser } from './__testing__/users.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { saveSettings, SETTINGS_PAGE_FORMS } from './__testing__/settings.ts';
@@ -288,7 +289,7 @@ async function twoUsers(siteJsonFields: Record<string, unknown> = {}) {
   );
   const cms = await box.site({ contentDir });
   const agent = await signedIn(cms);
-  const grace = await createUser({
+  const grace = addUser({
     dataDir: cms.config.dataDir,
     username: 'grace',
     password: 'correct horse battery',

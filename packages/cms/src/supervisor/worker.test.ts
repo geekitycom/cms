@@ -36,7 +36,7 @@ function drainingWorker(writes: number) {
     exit: () => undefined,
     log: (line) => lines.push(line),
   });
-  worker.serving(cms);
+  worker.serving(cms, '');
   return { lines, sent, drainedSent, tell: (message: SupervisorMessage) => tell(message) };
 }
 
