@@ -52,6 +52,7 @@ import { permalinkBasesFromSettings } from '../site/settings.ts';
 import { listUsers, primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { escapeAttribute, escapeText } from '../util/html.ts';
+import { absoluteHtmlUrls } from '../util/absolute-urls.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { userForAuthor } from '../content/authors.ts';
 import { permalinkOfObjectId } from '../content/permalinks.ts';
@@ -289,12 +290,16 @@ export function postObject(
   let library: AltTextLibrary | undefined;
   const altTexts = (): AltTextLibrary => (library ??= readAltTexts(context.data.config.contentDir));
   const review = reviewOf(document.extra);
+  const permalink = absoluteUrl(document.permalink, baseUrl);
+  // Mastodon drops a link whose href is not absolute, and a wiki link is
+  // always written root-relative.
+  const html = absoluteHtmlUrls(document.html, permalink, baseUrl);
   const common = {
     id: articleObjectId(context, document),
     // On either type, so an activitypub.type override never breaks a thread.
     replyTarget:
       replyTo?.id ?? (inReplyTo === undefined ? null : replyTargetId(context, inReplyTo)),
-    url: new URL(absoluteUrl(document.permalink, baseUrl)),
+    url: new URL(permalink),
     source: new Source({ content: document.body, mediaType: SOURCE_MEDIA_TYPE }),
     published: toInstant(document.date) ?? null,
     updated: toInstant(document.updated) ?? null,
@@ -336,8 +341,7 @@ export function postObject(
     return new Note({
       ...common,
       contents: inLanguage(
-        citing(document, context.data.cited) +
-          headed(noteHeading(document), reviewed + document.html),
+        citing(document, context.data.cited) + headed(noteHeading(document), reviewed + html),
         language,
       ),
     });
@@ -350,7 +354,7 @@ export function postObject(
       ...common,
       name: document.title === '' ? null : document.title,
       summaries: summary === '' ? [] : inLanguage(escapeText(summary), language),
-      contents: inLanguage(document.html, language),
+      contents: inLanguage(html, language),
       startTime: toInstant(event.start) ?? null,
       endTime: toInstant(event.end) ?? null,
       location: eventPlace(event) ?? common.location,
@@ -361,7 +365,7 @@ export function postObject(
     ...common,
     name: document.title === '' ? null : document.title,
     summaries: summary === '' ? [] : inLanguage(escapeText(summary), language),
-    contents: inLanguage(citing(document, context.data.cited) + reviewed + document.html, language),
+    contents: inLanguage(citing(document, context.data.cited) + reviewed + html, language),
   });
 }
 

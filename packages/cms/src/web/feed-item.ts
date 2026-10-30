@@ -12,7 +12,7 @@ import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorName, siteAuthorName } from '../site/authors.ts';
 import type { SiteData } from '../theme/site-data.ts';
-import { absoluteHtmlUrls } from './absolute-urls.ts';
+import { absoluteHtmlUrls } from '../util/absolute-urls.ts';
 import { feedGuid, repliesKey } from '../content/guids.ts';
 import { feedLanguage, feedPathUnder, repliesFeedPath } from './feed-source.ts';
 import { escapeXml } from './feed-xml.ts';
