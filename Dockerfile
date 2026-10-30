@@ -3,10 +3,6 @@
 # content/ and data/ are mounted, themes/ is optional, and with no `theme` in
 # site.json the site wears the packaged default theme.
 #
-# The base tag is PINNED to the Node .node-version names, at the minor and
-# patch the workspace is developed on. `node:26-*` floats, and a rebuild months
-# from now would silently pull a different Node under node:sqlite.
-#
 # Debian slim, not Alpine, because of sharp. sharp is the one native module here
 # and it loads a prebuilt libvips from @img/sharp-linux-<arch> on glibc, or from
 # @img/sharp-linuxmusl-<arch> on musl. Both exist for amd64 and arm64, but the
@@ -25,7 +21,7 @@ WORKDIR /workspace
 # pnpm at the version packageManager in package.json names. Node 26 does not
 # include Corepack, so it comes from npm.
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN npm install --global corepack@latest && corepack enable
+RUN npm install --global corepack@0.36.0 && corepack enable
 
 # The dependency layer. `pnpm fetch` reads only the lockfile, so this layer, and
 # the store it fills, is reused by every build until pnpm-lock.yaml changes, even

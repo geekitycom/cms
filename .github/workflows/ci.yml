@@ -1,7 +1,6 @@
 # `pnpm install` runs the root `prepare` script, which builds every package
 # under `packages/` (core and each `plugin-*`), so every job already has
 # `dist/` before its own command runs, and a build that fails fails every job.
-# So there is no separate build job.
 name: ci
 
 on:
