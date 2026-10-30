@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.48.0](https://github.com/geekitycom/cms/compare/v0.47.0...v0.48.0) (2026-10-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* @geekity/cms, @geekity/md2gemini and the plugin packages now require Node 26 or newer.
+
+### Features
+
+* **cms:** add the admin Wiki screens and MCP wiki tools ([027538e](https://github.com/geekitycom/cms/commit/027538ef880be3ecd79c9e25a47c8261cafab29e))
+* **cms:** add the wiki base permalink setting ([d468060](https://github.com/geekitycom/cms/commit/d468060fc86a88db51f9e1e0423472467cc3cfee))
+* **cms:** highlight wiki links in the editor and flag missing targets ([7b10c0b](https://github.com/geekitycom/cms/commit/7b10c0b3061b1a71a14b9d3d945d3e26944702c5))
+* **cms:** let pluginSettle set how long the plugins folder must stand still ([e2b789d](https://github.com/geekitycom/cms/commit/e2b789deb869a5e9a2b835ccca1e61e1f6cc7cbe))
+* **cms:** offer signed-in writers a create button on a missing wiki page ([2ba253d](https://github.com/geekitycom/cms/commit/2ba253d43ba0917f499aec4ec98bbbfa50aaff96))
+* **cms:** render [[wiki links]] in posts, pages and wiki pages ([18f4895](https://github.com/geekitycom/cms/commit/18f489513e9e704905e4189c0628ad23eb83d81e))
+* **cms:** report the port Gemini is listening on now ([183320e](https://github.com/geekitycom/cms/commit/183320ee3a5b853c3a0dbd7931579bb91716c873))
+* **cms:** serve the wiki index at the wiki base ([e1aa0aa](https://github.com/geekitycom/cms/commit/e1aa0aa0d2dff1fd264555ff2d0255819c622684))
+* **cms:** serve wiki pages under the wiki base ([0516637](https://github.com/geekitycom/cms/commit/0516637574b230245dafb7f8ab5dddefc8df0694))
+
+
+### Bug Fixes
+
+* **cms:** call a wiki page a wiki page in the editor's restore offer ([a656a94](https://github.com/geekitycom/cms/commit/a656a940de98e3deeec9d983490edfd67fb275a3))
+* **cms:** depend on whatever md2gemini the workspace holds ([0718ffc](https://github.com/geekitycom/cms/commit/0718ffc013e9663644031dafc216c5c4a86fe96b))
+* **cms:** print the serving line once the supervisor takes the worker on ([a050868](https://github.com/geekitycom/cms/commit/a0508687efd93f49b7270dc2a777e0aa7889cecf))
+
+
+### Performance Improvements
+
+* **cms:** apply every pending migration in one transaction ([87b16b0](https://github.com/geekitycom/cms/commit/87b16b0f6bd18a566c086f5b52cd283e269f3dc0))
+* **cms:** hash the unknown-user dummy password on first use, not at import ([cfeafa4](https://github.com/geekitycom/cms/commit/cfeafa4b2495ec35dfcf1512bec46b7bd0b151c5))
+* **cms:** sign the test admin in with a minimum-cost argon2 hash ([266f67a](https://github.com/geekitycom/cms/commit/266f67ae64ae0b5a0d38a4122469b615df074100))
+
+
+### Build System
+
+* require Node 26, the active LTS, and drop Node 24 ([7a7f2d8](https://github.com/geekitycom/cms/commit/7a7f2d8b8d88b2071033418218c4982224d6cc58))
+
 ## [0.47.0](https://github.com/geekitycom/cms/compare/v0.46.0...v0.47.0) (2026-10-29)
 
 

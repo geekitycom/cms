@@ -1,6 +1,6 @@
 {
   "name": "@geekity/md2gemini",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "module",
   "description": "Converts Markdown to gemtext, the text format of the Gemini protocol.",
   "license": "MIT",

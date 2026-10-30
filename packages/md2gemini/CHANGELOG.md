@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/geekitycom/cms/compare/md2gemini-v0.1.2...md2gemini-v0.2.0) (2026-10-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* @geekity/cms, @geekity/md2gemini and the plugin packages now require Node 26 or newer.
+
+### Build System
+
+* require Node 26, the active LTS, and drop Node 24 ([7a7f2d8](https://github.com/geekitycom/cms/commit/7a7f2d8b8d88b2071033418218c4982224d6cc58))
+
 ## [0.1.2](https://github.com/geekitycom/cms/compare/md2gemini-v0.1.1...md2gemini-v0.1.2) (2026-10-24)
 
 
