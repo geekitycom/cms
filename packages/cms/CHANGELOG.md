@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.1](https://github.com/geekitycom/cms/compare/v0.48.0...v0.48.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* **cms:** federate post content with absolute link and image URLs ([d822452](https://github.com/geekitycom/cms/commit/d822452dbb201ec31e1ad6e4647bc7c2d6ceff0e))
+
 ## [0.48.0](https://github.com/geekitycom/cms/compare/v0.47.0...v0.48.0) (2026-10-30)
 
 
