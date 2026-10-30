@@ -71,7 +71,7 @@
     "@fedify/hono": "^2.4.5",
     "@fedify/sqlite": "^2.4.5",
     "@fedify/vocab": "^2.4.5",
-    "@geekity/md2gemini": "workspace:^0.1.2",
+    "@geekity/md2gemini": "workspace:^",
     "@hono/node-server": "^2.1.5",
     "@js-temporal/polyfill": "^0.5.1",
     "gray-matter": "^4.0.3",
