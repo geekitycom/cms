@@ -190,6 +190,28 @@ describe('the post object', () => {
     });
   });
 
+  it('gives every link in the content an absolute URL, since peers drop relative ones', async () => {
+    const instance = await site({
+      'posts/2026-09-02-links.md': post('', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/links/',
+        body: 'Who is [[Roger Rabbit]]? See [about](/about/) and [the archive](../).',
+      }),
+    });
+
+    const note = await articleAt(instance, '/2026/09/links/');
+
+    const hrefs = [...String(note['content']).matchAll(/href="([^"]*)"/g)].map(([, href]) => href);
+    assert.deepEqual(hrefs, [
+      `${BASE_URL}/wiki/roger-rabbit/`,
+      `${BASE_URL}/about/`,
+      `${BASE_URL}/2026/09/`,
+    ]);
+    assert.deepEqual(Object.values(note['contentMap'] as Record<string, string>), [
+      note['content'],
+    ]);
+  });
+
   it('carries the permalink, the dates, the actor and the addressing doc-4 asks for', async () => {
     const instance = await sharedSite(HELLO);
 

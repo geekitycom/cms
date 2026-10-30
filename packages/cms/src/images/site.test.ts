@@ -140,7 +140,7 @@ describe('image optimization end to end', () => {
       })
     ).json();
     const content = (article as { content: string }).content;
-    assert.match(content, /<img src="\/uploads\/2/);
+    assert.match(content, /<img src="http:\/\/localhost:3000\/uploads\/2/);
     assert.doesNotMatch(content, /<picture>|srcset/);
   });
 
