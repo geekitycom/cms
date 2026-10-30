@@ -3,8 +3,8 @@
 # content/ and data/ are mounted, themes/ is optional, and with no `theme` in
 # site.json the site wears the packaged default theme.
 #
-# The base tag is PINNED to the Node .node-version names (24), at the minor and
-# patch the workspace is developed on. `node:24-*` floats, and a rebuild months
+# The base tag is PINNED to the Node .node-version names, at the minor and
+# patch the workspace is developed on. `node:26-*` floats, and a rebuild months
 # from now would silently pull a different Node under node:sqlite.
 #
 # Debian slim, not Alpine, because of sharp. sharp is the one native module here
@@ -15,16 +15,17 @@
 # release: an image that would need python, make and g++ to install on one
 # architecture is exactly what this base rules out. The size cost over Alpine
 # is a few tens of megabytes.
-ARG NODE_IMAGE=node:24.22.1-trixie-slim
+ARG NODE_IMAGE=node:26.13.0-trixie-slim
 
 
 FROM ${NODE_IMAGE} AS build
 
 WORKDIR /workspace
 
-# pnpm at the version packageManager in package.json names.
+# pnpm at the version packageManager in package.json names. Node 26 does not
+# include Corepack, so it comes from npm.
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable
+RUN npm install --global corepack@latest && corepack enable
 
 # The dependency layer. `pnpm fetch` reads only the lockfile, so this layer, and
 # the store it fills, is reused by every build until pnpm-lock.yaml changes, even

@@ -1,8 +1,7 @@
 # `pnpm install` runs the root `prepare` script, which builds every package
 # under `packages/` (core and each `plugin-*`), so every job already has
 # `dist/` before its own command runs, and a build that fails fails every job.
-# There is no separate build job: the free plan runs 20 jobs at once, and the
-# test matrix needs the slot.
+# So there is no separate build job.
 name: ci
 
 on:
@@ -77,22 +76,17 @@ jobs:
       - run: pnpm typecheck
 
   test:
-    name: test (node ${{ matrix.node.name }}, ${{ matrix.part }})
+    name: test (${{ matrix.part }})
     needs: already-tested
     if: ${{ !cancelled() && needs.already-tested.outputs.skip != 'true' }}
     runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
       matrix:
-        node:
-          - { name: '24', version: '' }
-          - { name: '26', version: '26' }
         part: [cms 1/6, cms 2/6, cms 3/6, cms 4/6, cms 5/6, cms 6/6, packages]
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
-        with:
-          node-version: ${{ matrix.node.version }}
       - if: ${{ startsWith(matrix.part, 'cms ') }}
         env:
           PART: ${{ matrix.part }}

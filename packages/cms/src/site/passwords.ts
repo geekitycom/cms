@@ -38,7 +38,7 @@ export const ARGON2_PARAMETERS = {
  * {@link verifyPasswordHash} needs nothing but the stored string, and a later
  * change to {@link ARGON2_PARAMETERS} leaves existing passwords verifiable.
  *
- * Node 24 hashes natively, so there is no argon2 dependency to build.
+ * Node hashes argon2 natively, so there is no argon2 dependency to build.
  */
 export function hashPassword(password: string): string {
   const salt = randomBytes(ARGON2_PARAMETERS.saltLength);

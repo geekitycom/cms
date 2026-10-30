@@ -11,7 +11,7 @@ site is its own repository that depends on the package.
 
 ## Start a site
 
-You need Node 24 or newer.
+You need Node 26 or newer.
 
 ```sh
 pnpm dlx @geekity/cms init my-site
@@ -28,13 +28,13 @@ what `geekity init` writes. To run a site from the published Docker image, see
 ## Work on the CMS
 
 ```sh
+npm install --global corepack@latest
 corepack enable
 pnpm install
 pnpm dev
 ```
 
-On Node 25 or later, run `npm install --global corepack@latest` first. Those
-versions do not include Corepack.
+Node 26 does not include Corepack, so the first command installs it.
 
 `pnpm dev` serves the demo site in `apps/demo`.
 [Developing Geekity CMS](docs/development.md) covers the workspace, the

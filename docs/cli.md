@@ -452,7 +452,7 @@ the account.
 
 ## How a TypeScript config is loaded
 
-`geekity serve` and `geekity sync` import `geekity.config.ts` directly. Node 24
+`geekity serve` and `geekity sync` import `geekity.config.ts` directly. Node
 strips types without a flag, so nothing else is needed. Type stripping cannot
 erase some syntax, such as `enum`. For a config that uses it, the CLI registers
 the **tsx installed in your own site** instead. `geekity init` puts tsx in
