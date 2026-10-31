@@ -50,6 +50,12 @@ the WordPress compatibility inbox:
 Refused an inbox POST to /inbox/: key not fetchable (HTTP 410); keyId=https://remote.example/users/ada#main-key actor=https://remote.example/users/ada type=Delete id=https://remote.example/users/ada#delete
 ```
 
+To verify a signature, the site fetches the sender's key. The fetch is signed:
+by the inbox's owner at a personal inbox, and by the site's first account at
+the shared inbox. A server in authorized fetch mode answers an unsigned fetch
+with a 401, and Fedify remembers a key it could not fetch for 10 minutes, so
+one unsigned fetch would refuse that sender at every inbox.
+
 The reason is one of these:
 
 - `key not fetchable`, with the HTTP status or the error.
@@ -154,6 +160,18 @@ that asks for `application/activity+json` gets the post's object. A shared
 link, a feed item, an object id, and a reply's `inReplyTo` all name the same
 thing. The site mints another id only for a post that comes back after a
 `Delete`. See [A post that comes back after a Delete](#a-post-that-comes-back-after-a-delete).
+
+A reply's `inReplyTo` names what it answers only when the fediverse can find
+it. A reply to one of the site's posts names that post's object id. When a
+reply to another site is delivered, the CMS asks that page for its
+ActivityPub object. If it has one, `inReplyTo` names the object's id. If it
+has none, the reply is sent with no `inReplyTo`. Mastodon leaves a status
+whose `inReplyTo` it cannot fetch out of every home feed and out of the
+profile's posts, so a reply to an ordinary web page has to go out as a post.
+The answer is kept in `content/_data/federation/replyTargets.json`, by the URL
+the reply cites, so the object a peer fetches and the outbox say what the
+delivery said. A reply that no delivery has looked up since the file was added
+is served with its target's URL as `inReplyTo`.
 
 The object is a `Note` or an `Article`, depending on the post's discovered
 type. A post with no title, or whose text opens with its title, is a `Note`.
@@ -330,7 +348,10 @@ inbox used, the status, the error, and the time. That cache may be empty.
 
 A status is one of:
 
-- `sent`: the inbox accepted it.
+- `sent`: the inbox accepted it. An inbox that answers `400` with a
+  [FEP-c180](https://w3id.org/fep/c180) problem of type
+  `https://w3id.org/fep/c180#duplicate-delivery`, as tags.pub does for an
+  activity it already holds, has it too, so that is `sent` and is not retried.
 - `queued`: it is in Fedify's queue and has not settled.
 - `retrying`: its last attempt failed, and the queue will try again. The error
   says why the attempt failed, including the status code the inbox answered
