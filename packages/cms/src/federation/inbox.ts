@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Context, DocumentLoader, InboxContext, SenderKeyPair } from '@fedify/fedify';
+import type {
+  Context,
+  DocumentLoader,
+  InboxContext,
+  SenderKeyPair,
+  UnverifiedActivityReason,
+} from '@fedify/fedify';
 import {
   Accept,
   Activity,
@@ -173,6 +179,33 @@ export async function handleDelete(context: SiteInboxContext, activity: Delete):
 }
 
 /**
+ * Whether an unverifiable delivery is the `Delete` of an account that is gone,
+ * acted on here: its followers entry is removed.
+ *
+ * The key went with the account, so no signature on it can be checked. The
+ * proof is the 410 Gone its own server answered for the key, which has to be
+ * the actor's own document; no third party can make a live account's server
+ * say that.
+ */
+export async function acceptGoneActorDelete(
+  context: Context<FederationContextData>,
+  activity: Activity,
+  reason: UnverifiedActivityReason,
+): Promise<boolean> {
+  if (!(activity instanceof Delete)) return false;
+  if (reason.type !== 'keyFetchError' || !('status' in reason.result)) return false;
+  if (reason.result.status !== 410) return false;
+  const actor = activity.actorId;
+  if (actor === null || activity.objectId?.href !== actor.href) return false;
+  const keyDocument = new URL(reason.keyId);
+  keyDocument.hash = '';
+  if (keyDocument.href !== actor.href) return false;
+
+  await forget(context, actor.href);
+  return true;
+}
+
+/**
  * Take one actor off a user's followers, or off every user's.
  *
  * Which users to touch is asked of the index rather than of the file listing,
@@ -181,7 +214,7 @@ export async function handleDelete(context: SiteInboxContext, activity: Delete):
  * corrects the index inside the same lock, so the two cannot disagree.
  */
 async function forget(
-  context: SiteInboxContext,
+  context: Context<FederationContextData>,
   actorHref: string,
   username?: string,
 ): Promise<void> {
@@ -354,7 +387,7 @@ export async function logActivity(
 }
 
 /** The files this inbox writes, and the index over them. */
-function recordsOf(context: SiteInboxContext): FederationRecords {
+function recordsOf(context: Context<FederationContextData>): FederationRecords {
   const { contentDir, dataDir } = context.data.config;
   return { admin: context.data.admin, contentDir, dataDir };
 }

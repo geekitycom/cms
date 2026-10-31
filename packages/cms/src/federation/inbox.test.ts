@@ -78,6 +78,7 @@ let strangerKeys: CryptoKeyPair;
 let remoteActorDocument: unknown;
 let restoreFetch: () => void;
 let authorizedFetch = false;
+let actorGone = false;
 
 before(async () => {
   remoteKeys = await testKeyPair(REMOTE_PAIR);
@@ -135,6 +136,10 @@ function routeRemoteHost(): () => void {
         body: (await request.json()) as Record<string, unknown>,
       });
       return new Response('', { status: 202 });
+    }
+    if (url.pathname === '/keys/withdrawn') return new Response('Gone.', { status: 410 });
+    if (url.pathname === new URL(REMOTE_ACTOR).pathname && actorGone) {
+      return new Response('Gone.', { status: 410 });
     }
     if (url.pathname === new URL(REMOTE_ACTOR).pathname) {
       const signed = request.headers.has('signature') || request.headers.has('signature-input');
@@ -475,6 +480,62 @@ describe('a Delete of an actor', () => {
 
     assert.equal(response.status, 202, await response.text());
     assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
+  });
+
+  describe('whose key went with it', () => {
+    // A key id the site has not cached, so verifying the Delete fetches it.
+    const UNCACHED_KEY = `${REMOTE_ACTOR}#rsa-1`;
+
+    afterEach(() => {
+      actorGone = false;
+    });
+
+    function deleteOf(object: string): Delete {
+      return new Delete({
+        id: new URL(`${REMOTE_ACTOR}#delete`),
+        actor: new URL(REMOTE_ACTOR),
+        object: new URL(object),
+      });
+    }
+
+    it('removes the follower, quietly, when the actor’s server says it is gone', async (t) => {
+      const warn = t.mock.method(console, 'warn', () => undefined);
+      const instance = await site();
+      await deliver(instance, follow());
+      actorGone = true;
+
+      const response = await deliver(instance, deleteOf(REMOTE_ACTOR), { keyId: UNCACHED_KEY });
+
+      assert.equal(response.status, 202, await response.text());
+      assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
+      assert.deepEqual(warn.mock.calls, []);
+    });
+
+    it('is refused when it deletes something other than the actor', async (t) => {
+      t.mock.method(console, 'warn', () => undefined);
+      const instance = await site();
+      await deliver(instance, follow());
+      actorGone = true;
+
+      const response = await deliver(instance, deleteOf(`${REMOTE_ORIGIN}/notes/1`), {
+        keyId: UNCACHED_KEY,
+      });
+
+      assert.equal(response.status, 401);
+    });
+
+    it('is refused when the gone key is not the actor’s own', async (t) => {
+      t.mock.method(console, 'warn', () => undefined);
+      const instance = await site();
+      await deliver(instance, follow());
+
+      const response = await deliver(instance, deleteOf(REMOTE_ACTOR), {
+        keyId: `${REMOTE_ORIGIN}/keys/withdrawn`,
+      });
+
+      assert.equal(response.status, 401);
+      assert.equal(instance.admin.countFollowers(LOCAL_USER), 1);
+    });
   });
 
   it('leaves the follower alone when something other than the actor is deleted', async () => {

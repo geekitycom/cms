@@ -30,7 +30,7 @@ import { senderKeyPairs, userActor, userByUsername } from './actor.ts';
 import { articleObjectId, postByObjectId, postCreateActivity } from './article.ts';
 import { isFederatedDocument } from '../content/served.ts';
 import { followersPage, lastFollowersCursor } from './followers.ts';
-import { INBOX_LISTENERS } from './inbox.ts';
+import { acceptGoneActorDelete, INBOX_LISTENERS } from './inbox.ts';
 import { loadActorKeyPairs } from './keys.ts';
 import type { InboxRefusals } from './refusals.ts';
 import type { ActorProfileService } from './profiles.ts';
@@ -275,6 +275,9 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
       return key ?? null;
     })
     .onUnverifiedActivity(async (context, activity, reason) => {
+      if (await acceptGoneActorDelete(context, activity, reason)) {
+        return new Response(null, { status: 202 });
+      }
       const json = (await activity.toJsonLd()) as JsonLdDocument;
       options.refusals.refused(context.request, json, reason);
     });
