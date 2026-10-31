@@ -437,7 +437,11 @@ export async function findImageVariant(
   if (widthsOf === undefined) return undefined;
   const kind = widths(config);
   const known = settledSet(kind, widthsOf.upload, widthsOf.version);
-  if (known !== undefined && !lists(known.set, name)) return undefined;
+  const offered =
+    known === undefined
+      ? (await planWidths(config, widthsOf.upload))?.targets.some((target) => target.file === name)
+      : lists(known.set, name);
+  if (offered !== true) return undefined;
 
   const record = await deriveSet(kind, widthsOf.upload, widthsOf.version);
   return lists(record, name) ? findAsset(relative, [root]) : undefined;

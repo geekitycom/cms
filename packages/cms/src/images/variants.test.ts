@@ -373,3 +373,20 @@ describe('a source whose pixels cannot be decoded', () => {
     assert.ok(await generateImageVariants(config, source), 'the replaced file was not derived');
   });
 });
+
+describe('a name the site does not offer', () => {
+  it('encodes nothing even before any record exists', async () => {
+    const config = await site({ imageWidths: [320, 640] });
+    const source = await upload(config, '2026/09/photo.png', rectangle(1000, 500).png());
+
+    for (const name of ['777.webp', '320.avif', '1000.gif', 'x.webp']) {
+      assert.equal(await findImageVariant(config, `${source}/${name}`), undefined, name);
+    }
+    assert.equal(
+      existsSync(path.join(config.dataDir, 'images', '2026', '09', 'photo.png')),
+      false,
+      'the whole set was encoded',
+    );
+    assert.ok(await findImageVariant(config, `${source}/1000.webp`), 'the full width is offered');
+  });
+});
