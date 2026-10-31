@@ -283,3 +283,15 @@ describe('variantUrl', () => {
     });
   }
 });
+
+describe('the source a record names', () => {
+  it('is the canonical path however the caller spelled it', async () => {
+    const config = await site({ imageWidths: [320] });
+    await upload(config, '2026/09/photo.png', rectangle(1000, 500).png());
+
+    const record = await generateImageVariants(config, 'x/../2026/09/photo.png');
+
+    assert.equal(record?.source, '2026/09/photo.png');
+    assert.equal(describeImage(config, './2026/09//photo.png')?.source, '2026/09/photo.png');
+  });
+});

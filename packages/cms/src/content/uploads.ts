@@ -21,8 +21,8 @@ export function isHalfWrittenStrip(relative: string): boolean {
 }
 
 export function findUpload(relative: string, contentDir: string): StaticAsset | undefined {
-  if (isHalfWrittenStrip(relative)) return undefined;
-  return findAsset(relative, [path.join(contentDir, UPLOAD_DIRECTORY)]);
+  const asset = findAsset(relative, [path.join(contentDir, UPLOAD_DIRECTORY)]);
+  return asset === undefined || isHalfWrittenStrip(asset.file) ? undefined : asset;
 }
 
 /**

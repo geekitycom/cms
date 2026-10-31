@@ -27,3 +27,23 @@ export function encodePath(pathname: string): string {
     .map((segment) => encodeURIComponent(segment))
     .join('/');
 }
+
+/**
+ * A decoded relative path, or `undefined` when a segment is empty, `.` or `..`
+ * or it holds a NUL, so each file has one spelling and no path resolves
+ * somewhere its text does not say.
+ */
+export function plainRelativePath(decoded: string): string | undefined {
+  if (decoded.includes('\0')) return undefined;
+  const plain = decoded.split('/').every((segment) => !['', '.', '..'].includes(segment));
+  return plain ? decoded : undefined;
+}
+
+/** A relative URL path decoded segment by segment, then held to {@link plainRelativePath}. */
+export function decodedRelativePath(encoded: string): string | undefined {
+  try {
+    return plainRelativePath(encoded.split('/').map(decodeURIComponent).join('/'));
+  } catch {
+    return undefined;
+  }
+}

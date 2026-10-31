@@ -38,6 +38,9 @@ describe('uploadPath', () => {
       '/uploads/_/2026/09/dog.jpg/640.webp',
       'https://elsewhere.example/uploads/dog.jpg',
       '/uploads/../secret',
+      '/uploads/x%2F..%2F..%2Fsecret',
+      '/uploads/%2E%2E/secret',
+      '/uploads/2026//dog.jpg',
       '/uploads/',
       '/uploads/%E0%A4%A',
     ]) {

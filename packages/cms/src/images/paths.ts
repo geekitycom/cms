@@ -21,11 +21,33 @@ export type ImageConfig = Pick<
   'contentDir' | 'dataDir' | 'imageOptimization' | 'imageWidths' | 'imageFormats'
 >;
 
-export function derivedDir(config: ImageConfig, source: string): string | undefined {
+/** One upload as the files derived from it know it. */
+export interface Upload {
+  /** Its path under `content/uploads/`, `/`-separated, spelled the one way the directory spells it. */
+  readonly source: string;
+  /** The upload on disk. */
+  readonly file: string;
+  /** Where the files derived from it live. */
+  readonly directory: string;
+}
+
+/**
+ * The upload a source path names, or `undefined` when it names none.
+ *
+ * The source is rebuilt from the resolved file, so however a caller spelled
+ * it, a record and the URLs built from it carry the canonical path.
+ */
+export function locateUpload(config: ImageConfig, source: string): Upload | undefined {
   const file = sourceFile(config, source);
   if (file === undefined) return undefined;
-  const relative = path.relative(path.resolve(config.contentDir, UPLOAD_DIRECTORY), file);
-  return dataPath(config.dataDir, IMAGES, ...relative.split(path.sep));
+  const segments = path
+    .relative(path.resolve(config.contentDir, UPLOAD_DIRECTORY), file)
+    .split(path.sep);
+  return {
+    source: segments.join('/'),
+    file,
+    directory: dataPath(config.dataDir, IMAGES, ...segments),
+  };
 }
 
 /**

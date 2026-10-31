@@ -10,10 +10,10 @@ import { IMAGES, dataFolder } from '../files/data-files.ts';
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
 import { deriveSiteIcon, isDerivedIcon } from './icons.ts';
-import { derivedDir, sourceFile, sourceVersion, versioned } from './paths.ts';
+import { locateUpload, sourceFile, sourceVersion, versioned } from './paths.ts';
 import { VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
-import { encodePath } from '../util/url.ts';
-import type { ImageConfig } from './paths.ts';
+import { encodePath, plainRelativePath } from '../util/url.ts';
+import type { ImageConfig, Upload } from './paths.ts';
 
 /**
  * Image variants: the derived copies of an upload, and the record of them.
@@ -160,12 +160,13 @@ export function generateImageVariants(
   config: ImageConfig,
   source: string,
 ): Promise<ImageRecord | undefined> {
-  const directory = derivedDir(config, source);
-  if (directory === undefined) return Promise.resolve(undefined);
+  const upload = locateUpload(config, source);
+  if (upload === undefined) return Promise.resolve(undefined);
+  const { directory } = upload;
   const running = generating.get(directory);
   if (running !== undefined) return running;
 
-  const started = derive(config, source, directory).finally(() => generating.delete(directory));
+  const started = derive(config, upload).finally(() => generating.delete(directory));
   generating.set(directory, started);
   return started;
 }
@@ -191,18 +192,12 @@ export async function settleImageVariants(config: Pick<ImageConfig, 'dataDir'>):
   }
 }
 
-async function derive(
-  config: ImageConfig,
-  source: string,
-  directory: string,
-): Promise<ImageRecord | undefined> {
+async function derive(config: ImageConfig, upload: Upload): Promise<ImageRecord | undefined> {
   if (!config.imageOptimization) return undefined;
 
+  const { source, file, directory } = upload;
   const sourceFormat = SOURCE_FORMATS.get(path.extname(source).toLowerCase());
   if (sourceFormat === undefined) return undefined;
-
-  const file = sourceFile(config, source);
-  if (file === undefined) return undefined;
 
   let modified: number;
   try {
@@ -330,18 +325,19 @@ function formatted(pipeline: Sharp, format: string): Sharp {
  * upload is not an image, or nothing has been derived from it yet.
  */
 export function describeImage(config: ImageConfig, source: string): DescribedImage | undefined {
-  const directory = derivedDir(config, source);
-  if (directory === undefined) return undefined;
+  const upload = locateUpload(config, source);
+  if (upload === undefined) return undefined;
+  const { directory } = upload;
 
   let record = records.get(directory);
   if (record === undefined) {
-    record = readRecord(path.join(directory, IMAGE_RECORD_NAME), source);
+    record = readRecord(path.join(directory, IMAGE_RECORD_NAME), upload.source);
     if (record === undefined) return undefined;
     records.set(directory, record);
   }
 
   if (!current(config, record)) return undefined;
-  return { ...record, version: sourceVersion(config, source) };
+  return { ...record, version: sourceVersion(config, upload.source) };
 }
 
 /**
@@ -407,10 +403,10 @@ function readRecord(file: string, source: string): ImageRecord | undefined {
  * finish would leave the site worse than it found it.
  */
 export async function removeImageVariants(config: ImageConfig, source: string): Promise<void> {
-  const directory = derivedDir(config, source);
-  if (directory === undefined) return;
-  records.delete(directory);
-  await rm(directory, { recursive: true, force: true });
+  const upload = locateUpload(config, source);
+  if (upload === undefined) return;
+  records.delete(upload.directory);
+  await rm(upload.directory, { recursive: true, force: true });
 }
 
 /**
@@ -427,6 +423,7 @@ export async function findImageVariant(
   config: ImageConfig,
   relative: string,
 ): Promise<StaticAsset | undefined> {
+  if (plainRelativePath(relative) === undefined) return undefined;
   const root = dataFolder(config.dataDir, IMAGES);
 
   const found = findAsset(relative, [root]);

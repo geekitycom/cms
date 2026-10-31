@@ -7,7 +7,7 @@ import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts
 import { writeFileAtomically } from '../files/atomic.ts';
 import { encodePath } from '../util/url.ts';
 import { ICON_SOURCES, parseIconSetting } from './icon-setting.ts';
-import { derivedDir, sourceFile, sourceVersion, versioned } from './paths.ts';
+import { locateUpload, sourceVersion, versioned } from './paths.ts';
 import type { ImageConfig } from './paths.ts';
 
 /**
@@ -200,16 +200,14 @@ export async function deriveSiteIcon(
   name: string,
 ): Promise<boolean> {
   const shape = DERIVED_ICONS.get(name);
-  const file = sourceFile(config, source);
-  if (shape === undefined || file === undefined) return false;
-  if (!ICON_SOURCES.has(path.extname(source).toLowerCase())) return false;
+  const upload = locateUpload(config, source);
+  if (shape === undefined || upload === undefined) return false;
+  if (!ICON_SOURCES.has(path.extname(upload.source).toLowerCase())) return false;
 
   try {
-    const encoded = await drawIcon(file, shape);
-    const directory = derivedDir(config, source);
-    if (directory === undefined) return false;
-    await mkdir(directory, { recursive: true });
-    await writeFileAtomically(path.join(directory, name), encoded);
+    const encoded = await drawIcon(upload.file, shape);
+    await mkdir(upload.directory, { recursive: true });
+    await writeFileAtomically(path.join(upload.directory, name), encoded);
     return true;
   } catch {
     // An icon sharp cannot read is a site with no icons, not a failed

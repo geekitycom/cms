@@ -22,7 +22,7 @@ import {
   THEME_ASSET_PREFIX,
   UPLOAD_ASSET_MAX_AGE,
 } from '../theme/assets.ts';
-import { requestPath } from './request.ts';
+import { assetPath } from './request.ts';
 import { notFound } from './status-pages.ts';
 
 /**
@@ -36,8 +36,9 @@ import { notFound } from './status-pages.ts';
  * current bytes are never pinned under a name that describes older ones.
  */
 export function themeAsset(c: Context<GeekityEnv>): Response {
-  const relative = requestPath(c).slice(THEME_ASSET_PREFIX.length);
-  const asset = findThemeAsset(relative, c.var.renderer.themeDirs());
+  const relative = assetPath(c, THEME_ASSET_PREFIX);
+  const asset =
+    relative === undefined ? undefined : findThemeAsset(relative, c.var.renderer.themeDirs());
   if (asset === undefined) return notFound(c);
 
   const fingerprinted = c.req.query(ASSET_VERSION_PARAM) === assetVersion(asset);
@@ -63,7 +64,8 @@ export function themeAsset(c: Context<GeekityEnv>): Response {
  * page cached before URLs carried one, still gets the file, for a day.
  */
 export async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
-  const relative = decodeVariantPath(requestPath(c).slice(VARIANT_ASSET_PREFIX.length));
+  const relative = assetPath(c, VARIANT_ASSET_PREFIX);
+  if (relative === undefined) return notFound(c);
   const asset = await findImageVariant(c.var.config, relative);
   if (asset === undefined) return notFound(c);
 
@@ -95,15 +97,6 @@ export async function favicon(c: Context<GeekityEnv>): Promise<Response> {
     : assetResponse(asset, options);
 }
 
-/** A request path as a path on disk: percent-encoding off, segment by segment. */
-function decodeVariantPath(relative: string): string {
-  try {
-    return relative.split('/').map(decodeURIComponent).join('/');
-  } catch {
-    return relative;
-  }
-}
-
 /**
  * A file from `content/uploads/`, at the URL Eleventy's passthrough copy puts
  * it at.
@@ -119,8 +112,8 @@ function decodeVariantPath(relative: string): string {
  * or a declared redirect, which never shadow a file that is there.
  */
 export async function upload(c: Context<GeekityEnv>, next: Next): Promise<Response | undefined> {
-  const relative = requestPath(c).slice(UPLOAD_ASSET_PREFIX.length);
-  if (isHalfWrittenStrip(relative)) return notFound(c);
+  const relative = assetPath(c, UPLOAD_ASSET_PREFIX);
+  if (relative === undefined || isHalfWrittenStrip(relative)) return notFound(c);
   const asset = findUpload(relative, c.var.config.contentDir);
   if (asset === undefined) {
     await next();
