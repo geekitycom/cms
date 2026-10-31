@@ -170,19 +170,18 @@ export async function fetchReplyContext(
     return { ok: true, context: { url: target }, picture: { url: read.image, kind: 'photo' } };
   }
 
-  const page = read.page;
-  const post = await fediversePostOf(page, options.fediverse, limits);
-  const original = known === undefined ? await originalOf(target, page, post, limits) : undefined;
+  const citedPage = read.page;
+  const post = await fediversePostOf(citedPage, options.fediverse, limits);
+  const original =
+    known === undefined ? await originalOf(target, citedPage, post, limits) : undefined;
   const found =
     (original === undefined
       ? undefined
       : await describeOriginal(target, original, options.fediverse, limits)) ??
-    (await describePage(target, page, post, known, limits));
+    (await describePage(target, citedPage, post, known, limits));
   if (found === undefined) return refuse('nothing to show');
 
-  // The feed of the page cited, never the original's: that is the feed whose
-  // item `source:inReplyTo` names.
-  const feed = await answeredFeed(page, target, limits);
+  const feed = await answeredFeed(citedPage, target, limits);
   return feed === undefined ? found : { ...found, context: { ...found.context, feed } };
 }
 

@@ -89,6 +89,17 @@ describe('feedHolding', () => {
       title: 'Dave’s feed',
     });
   });
+
+  it('reads past an unknown entity and stray markup without throwing', () => {
+    const xml = `<rss><channel><title>Dave</title><item><guid>${TARGET}</guid></item><item><guid>&nbsp;</guid`;
+    assert.deepEqual(feedHolding(xml, DAVE_FEED, new Set([TARGET])), {
+      url: DAVE_FEED,
+      title: 'Dave',
+    });
+    for (const junk of ['', 'not xml <<< &bogus; <a', '\u0000<rss>']) {
+      assert.equal(feedHolding(junk, DAVE_FEED, new Set([TARGET])), undefined);
+    }
+  });
 });
 
 const ADDRESSES: Record<string, string[]> = {

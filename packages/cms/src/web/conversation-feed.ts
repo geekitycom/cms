@@ -53,14 +53,14 @@ export function feedComments(
     const thread = entry.post ?? options.post;
     const answered =
       entry.parent !== null
-        ? answer(
+        ? inReplyToOf(
             entry.parent.guid,
             absoluteUrl(entry.parent.url ?? '/', baseUrl),
             thread === undefined ? undefined : commentsFeed(thread, options),
           )
         : thread === undefined
           ? undefined
-          : answer(
+          : inReplyToOf(
               feedGuid(thread, baseUrl),
               absoluteUrl(thread.permalink, baseUrl),
               postFeed(thread, options),
@@ -96,11 +96,7 @@ export function feedComments(
   });
 }
 
-/**
- * What a reply answers, as `source:inReplyTo` names it: by the same guid that
- * item carries, and so a permalink exactly when that guid is its page.
- */
-function answer(
+function inReplyToOf(
   id: string,
   page: string,
   feed: AnsweredFeed | undefined,

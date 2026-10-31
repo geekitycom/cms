@@ -113,11 +113,7 @@ export function feedHolding(
     parser.resume();
   };
 
-  try {
-    parser.write(xml).close();
-  } catch {
-    // What was read before the feed broke off is still worth its items.
-  }
+  parser.write(xml).close();
   return found;
 }
 

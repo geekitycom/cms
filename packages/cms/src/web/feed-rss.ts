@@ -11,7 +11,6 @@ import {
   notifyServerOf,
 } from './feed-source.ts';
 import type { CommentFeedSource, FeedComment, FeedSource } from './feed-source.ts';
-import type { AnsweredFeed } from '../webmention/reply-context.ts';
 import {
   cdata,
   CREATIVE_COMMONS_NAMESPACE,
@@ -185,7 +184,13 @@ export function rssItem(item: FeedItem): string[] {
     // element of its own for it.
     ...(item.inReplyTo === undefined
       ? []
-      : [sourceInReplyTo(item.inReplyTo, { isPermaLink: true, feed: item.inReplyToFeed })]),
+      : [
+          sourceInReplyTo({
+            id: item.inReplyTo,
+            isPermaLink: true,
+            ...(item.inReplyToFeed === undefined ? {} : { feed: item.inReplyToFeed }),
+          }),
+        ]),
     '    </item>',
   ];
 }
@@ -194,17 +199,16 @@ export function rssItem(item: FeedItem): string[] {
  * `source:inReplyTo`, with the feed the answered item is in when that is
  * known. `isPermaLink` follows the guid's model: said only when it is false.
  */
-function sourceInReplyTo(
-  id: string,
-  { isPermaLink, feed }: { isPermaLink: boolean; feed: AnsweredFeed | undefined },
-): string {
-  const attributes: [string, string][] = [
-    ...(isPermaLink ? [] : [['isPermaLink', 'false'] as [string, string]]),
-    ...(feed === undefined ? [] : [['feedUrl', feed.url] as [string, string]]),
-    ...(feed?.title === undefined ? [] : [['feedTitle', feed.title] as [string, string]]),
-  ];
-  const written = attributes.map(([name, value]) => ` ${name}="${escapeXml(value)}"`).join('');
-  return `      <source:inReplyTo${written}>${escapeXml(id)}</source:inReplyTo>`;
+function sourceInReplyTo({ id, isPermaLink, feed }: NonNullable<FeedComment['inReplyTo']>): string {
+  const attributes = Object.entries({
+    isPermaLink: isPermaLink ? undefined : 'false',
+    feedUrl: feed?.url,
+    feedTitle: feed?.title,
+  })
+    .filter((pair): pair is [string, string] => pair[1] !== undefined)
+    .map(([name, value]) => ` ${name}="${escapeXml(value)}"`)
+    .join('');
+  return `      <source:inReplyTo${attributes}>${escapeXml(id)}</source:inReplyTo>`;
 }
 
 /**
@@ -354,14 +358,7 @@ function commentItem(comment: FeedComment): string[] {
       : [
           `      <source url="${escapeXml(comment.authorFeed)}">${escapeXml(comment.author)}</source>`,
         ]),
-    ...(comment.inReplyTo === undefined
-      ? []
-      : [
-          sourceInReplyTo(comment.inReplyTo.id, {
-            isPermaLink: comment.inReplyTo.isPermaLink,
-            feed: comment.inReplyTo.feed,
-          }),
-        ]),
+    ...(comment.inReplyTo === undefined ? [] : [sourceInReplyTo(comment.inReplyTo)]),
     ...sourceComments(comment.replies),
     // A comment never carries a description, so its summary is always an
     // excerpt of what it says.

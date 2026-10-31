@@ -211,12 +211,11 @@ export function createServices({
       at: (target, site) => {
         const found = conversation.heldAt(target, site);
         if (found === undefined) return undefined;
-        // Only the stored contexts name the feed's post: a held one would
-        // come back here, and two wordless replies could ask for each other.
+        const storedOnlyNoHeldRecursion = (url: string) => replyContexts.stored(url);
         const feeds = {
           title: site.title,
           baseUrl: resolved.baseUrl,
-          cited: (url: string) => replyContexts.stored(url),
+          cited: storedOnlyNoHeldRecursion,
         };
         return heldReplyContext(target, found, heldFeed(found, feeds));
       },
