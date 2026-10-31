@@ -8,8 +8,9 @@
 # creates its GitHub release.
 #
 # A created release then starts the publish job, which runs `pnpm release` in
-# the `release` environment. A manual run of this workflow goes straight to the
-# publish job, to retry one. See "Publishing a release" in
+# the `release` environment with --skip-gates: branch protection has already
+# made CI pass on the release pull request. A manual run of this workflow goes
+# straight to the publish job, to retry one. See "Publishing a release" in
 # docs/development.md.
 #
 # `apps/demo` is private and unversioned, so `release-please-config.json` tracks
@@ -85,4 +86,4 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: pnpm release
+      - run: pnpm release -- --skip-gates
