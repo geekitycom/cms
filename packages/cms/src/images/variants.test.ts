@@ -323,3 +323,53 @@ describe('a source over the pixel limit', () => {
     );
   });
 });
+
+describe('a source an encoder cannot take whole', () => {
+  it('gets a record whose widest WebP stays within the format, wide or tall', async () => {
+    const config = await site({ imageWidths: [320] });
+    const wide = await upload(config, '2026/09/wide.png', rectangle(17000, 40).png());
+    const tall = await upload(config, '2026/09/tall.png', rectangle(40, 17000).png());
+
+    for (const source of [wide, tall]) {
+      const record = await generateImageVariants(config, source);
+      assert.ok(record !== undefined, `${source} got no record`);
+      const webp = record.variants.filter((variant) => variant.format === 'webp');
+      assert.ok(webp.length > 0, `${source} got no WebP`);
+      for (const variant of webp) {
+        assert.ok(variant.width <= 16383 && variant.height <= 16383, `${source} ${variant.file}`);
+      }
+      assert.ok(record.variants.some((variant) => variant.format === 'png'));
+    }
+  });
+});
+
+describe('a source whose pixels cannot be decoded', () => {
+  async function truncated(): Promise<Buffer> {
+    const whole = await sharp({
+      create: {
+        width: 600,
+        height: 400,
+        channels: 3,
+        noise: { type: 'gaussian', mean: 128, sigma: 40 },
+      },
+    })
+      .png()
+      .toBuffer();
+    return whole.subarray(0, Math.floor(whole.length / 2));
+  }
+
+  it('is not encoded again until the file changes', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    const config = await site({ imageWidths: [320] });
+    const source = await upload(config, '2026/09/cut.png', await truncated());
+
+    assert.equal(await generateImageVariants(config, source), undefined);
+    assert.equal(warn.mock.callCount(), 1, 'the first attempt was not reported');
+    assert.equal(await generateImageVariants(config, source), undefined);
+    assert.equal(await findImageVariant(config, `${source}/320.webp`), undefined);
+    assert.equal(warn.mock.callCount(), 1, 'the source was encoded again');
+
+    await upload(config, source, rectangle(600, 400).png());
+    assert.ok(await generateImageVariants(config, source), 'the replaced file was not derived');
+  });
+});

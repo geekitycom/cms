@@ -1,25 +1,21 @@
-import { statSync, readFileSync } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
+import { statSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import sharp from 'sharp';
-import type { Metadata, Sharp } from 'sharp';
+import type { Metadata, OutputInfo, Sharp } from 'sharp';
 
 import { writeFileAtomically } from '../files/atomic.ts';
 import { IMAGES, dataFolder } from '../files/data-files.ts';
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
-import { deriveSiteIcon, isDerivedIcon } from './icons.ts';
-import {
-  DECODE_OPTIONS,
-  decodable,
-  locateUpload,
-  sourceFile,
-  sourceVersion,
-  versioned,
-} from './paths.ts';
-import { VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
+import { messageOf } from '../util/errors.ts';
 import { encodePath, plainRelativePath } from '../util/url.ts';
+import { deriveSet, forgetDerivedSets, settleDerivedSets, settledSet } from './derived-sets.ts';
+import type { DerivedKind } from './derived-sets.ts';
+import { deriveSiteIcon, isDerivedIcon } from './icons.ts';
+import { DECODE_OPTIONS, decodable, locateUpload, sourceVersion, versioned } from './paths.ts';
+import { VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
 import type { ImageConfig, Upload } from './paths.ts';
 
 /**
@@ -57,9 +53,10 @@ export interface ImageVariant {
  * What was derived from one upload, and the intrinsic size of the upload
  * itself.
  *
- * This is the sidecar's shape. It exists so that rendering a page never opens
- * an image: the dimensions are recorded when the
- * variants are generated and read back, never probed per request.
+ * The sidecar holds it with the version of the bytes it was derived from. It
+ * exists so that rendering a page never opens an image: the dimensions are
+ * recorded when the variants are generated and read back, never probed per
+ * request.
  */
 export interface ImageRecord {
   /** The upload it was derived from, relative to `content/uploads/`. */
@@ -70,14 +67,7 @@ export interface ImageRecord {
   height: number;
   /** The original's own format, which is the one the `<img>` falls back to. */
   format: string;
-  /**
-   * The original's modification time in milliseconds.
-   *
-   * It is what makes a stale record notice it is stale. The CMS never
-   * overwrites an upload — a second `photo.png` becomes `photo-2.png` — but a
-   * file dropped in by hand can be replaced, and a record that outlived its
-   * original would give the page the wrong dimensions.
-   */
+  /** The original's modification time in milliseconds when it was derived from. */
   sourceModified: number;
   /** Every derived copy, by format in configured order and then by width. */
   variants: ImageVariant[];
@@ -120,9 +110,7 @@ export function imageMediaType(format: string): string | undefined {
 
 /**
  * A record as a page renders it: what was derived, and the hash of the
- * original's bytes that every derived URL carries. The hash is not in the
- * sidecar; it is read off the original, so a sidecar written before URLs
- * carried it needs no rewrite.
+ * original's bytes that every derived URL carries.
  */
 export interface DescribedImage extends ImageRecord {
   /** See {@link sourceVersion}. Without it a derived URL is served for a day, not a year. */
@@ -134,88 +122,93 @@ export function variantUrl(source: string, variant: ImageVariant, version?: stri
   return versioned(`${VARIANT_ASSET_PREFIX}${encodePath(`${source}/${variant.file}`)}`, version);
 }
 
-/**
- * Records already read, by the derived directory they were read from.
- *
- * A page render asks for one of these per image, so the sidecar is parsed once
- * per process rather than once per request. The entry survives the sidecar
- * being deleted on purpose: the derived directory is disposable and a request
- * for a missing variant rebuilds it, so a page whose images have been swept
- * away still renders the markup that asks for them back.
- */
-const records = new Map<string, ImageRecord>();
-
-/** Generations already running, so two requests for one image encode it once. */
-const generating = new Map<string, Promise<ImageRecord | undefined>>();
-
-/**
- * Derive every variant of one upload and record what was derived.
- *
- * Returns `undefined` — having written nothing — when optimization is off,
- * when the file is not a raster image the CMS varianties (a GIF, a PDF, a
- * text file), when it is animated, or when it is not there at all. None of
- * those is an error: an upload that has no variants is the ordinary case for
- * most of what a site holds, and the caller's job is to fall back to the
- * original, which is exactly what it would have served anyway. Whether the
- * file is an image is whatever sharp makes of its header; once that has been
- * read, a failure to make the directory, encode or write is thrown, because
- * it is the server failing and not the upload.
- *
- * Two callers asking for the same image at once share one encode.
- */
-export function generateImageVariants(
-  config: ImageConfig,
-  source: string,
-): Promise<ImageRecord | undefined> {
-  const upload = locateUpload(config, source);
-  if (upload === undefined) return Promise.resolve(undefined);
-  const { directory } = upload;
-  const running = generating.get(directory);
-  if (running !== undefined) return running;
-
-  const started = derive(config, upload).finally(() => generating.delete(directory));
-  generating.set(directory, started);
-  return started;
+/** The widths kind of derived set, recorded in `image.json`. */
+function widths(config: ImageConfig): DerivedKind<ImageRecord> {
+  return {
+    sidecar: IMAGE_RECORD_NAME,
+    parse: parseRecord,
+    derive: (upload) => deriveWidths(config, upload),
+  };
 }
 
 /**
- * Wait for every generation still running under one site's data directory.
+ * The upload a source names and the version of its bytes, when it is one the
+ * widths can be derived from at all: GIF is not, and nor is anything that is
+ * not there.
+ */
+function widthSource(
+  config: ImageConfig,
+  source: string,
+): { upload: Upload; version: string } | undefined {
+  if (!SOURCE_FORMATS.has(path.extname(source).toLowerCase())) return undefined;
+  const upload = locateUpload(config, source);
+  if (upload === undefined) return undefined;
+  const version = sourceVersion(config, upload.source);
+  return version === undefined ? undefined : { upload, version };
+}
+
+/**
+ * Derive every variant of one upload and record what was derived, unless the
+ * bytes it holds now have been derived already.
+ *
+ * Returns `undefined` when optimization is off, when the file is not a raster
+ * image the CMS derives from (a GIF, a PDF, a text file), when it is animated,
+ * larger than {@link MAX_INPUT_PIXELS}, undecodable, or not there at all. None
+ * of those is an error: an upload that has no variants is the ordinary case
+ * for most of what a site holds, and the caller falls back to the original,
+ * which is what it would have served anyway. A source that could not be
+ * derived is remembered as such until its bytes change. A failure to make
+ * the directory or write a file is thrown, because it is the server failing
+ * and not the upload.
+ *
+ * Two callers asking for the same image at once share one encode.
+ */
+export async function generateImageVariants(
+  config: ImageConfig,
+  source: string,
+): Promise<ImageRecord | undefined> {
+  if (!config.imageOptimization) return undefined;
+  const found = widthSource(config, source);
+  if (found === undefined) return undefined;
+  const kind = widths(config);
+  const known = settledSet(kind, found.upload, found.version);
+  return known === undefined ? deriveSet(kind, found.upload, found.version) : known.set;
+}
+
+/**
+ * Wait for every derivation still running under one site's data directory.
  *
  * A render starts derivation in the background and returns, so an encode can
  * outlive the request that asked for it and, without this, the site it was
  * writing into: closing a site waits here so nothing is left writing under
- * `dataDir` once close returns. One that starts while these finish is waited
- * for too. A failure is not this caller's to report; the render that started
- * the generation already logged it.
+ * `dataDir` once close returns.
  */
 export async function settleImageVariants(config: Pick<ImageConfig, 'dataDir'>): Promise<void> {
-  const root = dataFolder(config.dataDir, IMAGES) + path.sep;
-  for (;;) {
-    const running = [...generating]
-      .filter(([directory]) => directory.startsWith(root))
-      .map(([, generation]) => generation);
-    if (running.length === 0) return;
-    await Promise.allSettled(running);
-  }
+  await settleDerivedSets(config.dataDir);
 }
 
-async function derive(config: ImageConfig, upload: Upload): Promise<ImageRecord | undefined> {
-  if (!config.imageOptimization) return undefined;
+/** Every width and format one upload's set holds, as encodable targets. */
+interface WidthPlan {
+  width: number;
+  height: number;
+  format: string;
+  sourceModified: number;
+  targets: { format: string; width: number; file: string }[];
+}
 
-  const { source, file, directory } = upload;
-  const sourceFormat = SOURCE_FORMATS.get(path.extname(source).toLowerCase());
-  if (sourceFormat === undefined) return undefined;
+/**
+ * What would be derived from one upload, read off its header alone, or
+ * `undefined` when nothing would.
+ */
+async function planWidths(config: ImageConfig, upload: Upload): Promise<WidthPlan | undefined> {
+  const format = SOURCE_FORMATS.get(path.extname(upload.source).toLowerCase());
+  if (format === undefined) return undefined;
 
   let modified: number;
-  try {
-    modified = Math.trunc(statSync(file).mtimeMs);
-  } catch {
-    return undefined;
-  }
-
   let metadata: Metadata;
   try {
-    metadata = await sharp(file, DECODE_OPTIONS).metadata();
+    modified = Math.trunc(statSync(upload.file).mtimeMs);
+    metadata = await sharp(upload.file, DECODE_OPTIONS).metadata();
   } catch {
     return undefined;
   }
@@ -234,26 +227,47 @@ async function derive(config: ImageConfig, upload: Upload): Promise<ImageRecord 
   const width = upright ? stored.height : stored.width;
   const height = upright ? stored.width : stored.height;
 
-  const variants: ImageVariant[] = [];
-  await mkdir(directory, { recursive: true });
+  const targets = outputFormats(config, format).flatMap((output) =>
+    outputWidths(config, output, width, height).map((target) => ({
+      format: output,
+      width: target,
+      file: `${String(target)}${FORMAT_EXTENSIONS.get(output) ?? '.bin'}`,
+    })),
+  );
+  return { width, height, format, sourceModified: modified, targets };
+}
 
-  for (const format of outputFormats(config, sourceFormat)) {
-    for (const target of outputWidths(config, width)) {
-      variants.push(await encode({ file, directory, format, width: target }));
+async function deriveWidths(config: ImageConfig, upload: Upload): Promise<ImageRecord | undefined> {
+  const plan = await planWidths(config, upload);
+  if (plan === undefined) return undefined;
+
+  await mkdir(upload.directory, { recursive: true });
+  const variants: ImageVariant[] = [];
+  for (const target of plan.targets) {
+    let encoded: { data: Buffer; info: OutputInfo };
+    try {
+      encoded = await encode(upload.file, target);
+    } catch (error) {
+      console.warn(`Could not derive image variants for ${upload.source}: ${messageOf(error)}`);
+      return undefined;
     }
+    await writeFileAtomically(path.join(upload.directory, target.file), encoded.data);
+    variants.push({
+      width: encoded.info.width,
+      height: encoded.info.height,
+      format: target.format,
+      file: target.file,
+    });
   }
 
-  const record: ImageRecord = {
-    source,
-    width,
-    height,
-    format: sourceFormat,
-    sourceModified: modified,
+  return {
+    source: upload.source,
+    width: plan.width,
+    height: plan.height,
+    format: plan.format,
+    sourceModified: plan.sourceModified,
     variants,
   };
-  await writeFileAtomically(path.join(directory, IMAGE_RECORD_NAME), `${JSON.stringify(record)}\n`);
-  records.set(directory, record);
-  return record;
 }
 
 /**
@@ -268,47 +282,49 @@ function outputFormats(config: ImageConfig, sourceFormat: string): string[] {
   return [...formats, sourceFormat];
 }
 
+/** The largest width or height each encoder can write. PNG has no such limit. */
+const FORMAT_MAX_DIMENSIONS: ReadonlyMap<string, number> = new Map([
+  ['avif', 16384],
+  ['jpeg', 65535],
+  ['webp', 16383],
+]);
+
 /**
- * The widths to write: the configured ones narrower than the original, and the
- * original's own width.
+ * The widths to write in one format: the configured ones narrower than the
+ * original, and the original's own width, or as near it as the format can go.
  *
  * Nothing is ever upscaled — a browser given a blown-up copy pays for pixels
  * that carry no detail — and the full size is always there, so a wide display
- * has something to pick that is not the unoptimised original.
+ * has something to pick that is not the unoptimised original. A panorama
+ * wider or taller than the encoder allows gets its widest copy at the limit.
  */
-function outputWidths(config: ImageConfig, width: number): number[] {
-  const widths = new Set(config.imageWidths.filter((candidate) => candidate < width));
-  widths.add(width);
+function outputWidths(
+  config: ImageConfig,
+  format: string,
+  width: number,
+  height: number,
+): number[] {
+  const limit = FORMAT_MAX_DIMENSIONS.get(format) ?? Infinity;
+  const widest = Math.min(width, limit, Math.floor((width * limit) / height));
+  if (widest < 1) return [];
+  const widths = new Set(config.imageWidths.filter((candidate) => candidate < widest));
+  widths.add(widest);
   return [...widths].sort((a, b) => a - b);
 }
 
-/** Write one variant and answer what it turned out to be. */
-async function encode(input: {
-  file: string;
-  directory: string;
-  format: string;
-  width: number;
-}): Promise<ImageVariant> {
-  const extension = FORMAT_EXTENSIONS.get(input.format) ?? '.bin';
-  const name = `${String(input.width)}${extension}`;
-
+/** Encode one variant. A throw here is sharp failing on the source's pixels. */
+async function encode(
+  file: string,
+  target: { format: string; width: number },
+): Promise<{ data: Buffer; info: OutputInfo }> {
   // `autoOrient` applies the EXIF rotation, and sharp drops metadata unless
   // asked to keep it, so the variant comes out the right way up and carrying
   // no camera, no timestamp and no location.
-  const pipeline = sharp(input.file, DECODE_OPTIONS).resize({
-    width: input.width,
+  const pipeline = sharp(file, DECODE_OPTIONS).resize({
+    width: target.width,
     withoutEnlargement: true,
   });
-
-  const encoded = await formatted(pipeline, input.format).toBuffer({ resolveWithObject: true });
-  await writeFileAtomically(path.join(input.directory, name), encoded.data);
-
-  return {
-    width: encoded.info.width,
-    height: encoded.info.height,
-    format: input.format,
-    file: name,
-  };
+  return formatted(pipeline, target.format).toBuffer({ resolveWithObject: true });
 }
 
 /** The encoder for one format, at settings that trade a little fidelity for a lot of bytes. */
@@ -330,53 +346,20 @@ function formatted(pipeline: Sharp, format: string): Sharp {
  *
  * Synchronous and cached, because it is called once per image while a page
  * renders. `undefined` means the caller should serve the plain original: the
- * upload is not an image, or nothing has been derived from it yet.
+ * upload is not an image, nothing has been derived from the bytes it holds
+ * now, or nothing could be.
  */
 export function describeImage(config: ImageConfig, source: string): DescribedImage | undefined {
-  const upload = locateUpload(config, source);
-  if (upload === undefined) return undefined;
-  const { directory } = upload;
-
-  let record = records.get(directory);
-  if (record === undefined) {
-    record = readRecord(path.join(directory, IMAGE_RECORD_NAME), upload.source);
-    if (record === undefined) return undefined;
-    records.set(directory, record);
-  }
-
-  if (!current(config, record)) return undefined;
-  return { ...record, version: sourceVersion(config, upload.source) };
+  const found = widthSource(config, source);
+  if (found === undefined) return undefined;
+  const record = settledSet(widths(config), found.upload, found.version)?.set;
+  return record === undefined ? undefined : { ...record, version: found.version };
 }
 
-/**
- * Whether a record still describes the file it was derived from.
- *
- * The original having gone, or having been replaced under the same name,
- * makes the record rubbish; anything else — including the whole derived
- * directory having been swept away — leaves it true, which is what lets a page
- * keep rendering the markup that asks for the variants back.
- */
-function current(config: ImageConfig, record: ImageRecord): boolean {
-  const file = sourceFile(config, record.source);
-  if (file === undefined) return false;
-  try {
-    return Math.trunc(statSync(file).mtimeMs) === record.sourceModified;
-  } catch {
-    return false;
-  }
-}
-
-/** Parse one sidecar, refusing anything that is not the shape it should be. */
-function readRecord(file: string, source: string): ImageRecord | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(file, 'utf8'));
-  } catch {
-    return undefined;
-  }
-
-  if (typeof parsed !== 'object' || parsed === null) return undefined;
-  const candidate = parsed as Partial<ImageRecord>;
+/** Parse one sidecar's record, refusing anything that is not the shape it should be. */
+function parseRecord(value: unknown, upload: Upload): ImageRecord | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const candidate = value as Partial<ImageRecord>;
   if (
     typeof candidate.width !== 'number' ||
     typeof candidate.height !== 'number' ||
@@ -388,7 +371,7 @@ function readRecord(file: string, source: string): ImageRecord | undefined {
   }
 
   return {
-    source,
+    source: upload.source,
     width: candidate.width,
     height: candidate.height,
     format: candidate.format,
@@ -404,7 +387,8 @@ function readRecord(file: string, source: string): ImageRecord | undefined {
 }
 
 /**
- * Take one upload's derived files away.
+ * Take one upload's derived files away, once any derivation writing them has
+ * finished.
  *
  * Forgiving by design: an upload with nothing derived from it is the ordinary
  * case, and this runs after the original has already gone, so refusing to
@@ -413,8 +397,7 @@ function readRecord(file: string, source: string): ImageRecord | undefined {
 export async function removeImageVariants(config: ImageConfig, source: string): Promise<void> {
   const upload = locateUpload(config, source);
   if (upload === undefined) return;
-  records.delete(upload.directory);
-  await rm(upload.directory, { recursive: true, force: true });
+  await forgetDerivedSets(upload);
 }
 
 /**
@@ -450,17 +433,18 @@ export async function findImageVariant(
     return (await deriveSiteIcon(config, source, name)) ? findAsset(relative, [root]) : undefined;
   }
 
-  const known = describeImage(config, source);
-  if (known !== undefined && !known.variants.some((variant) => variant.file === name)) {
-    return undefined;
-  }
+  const widthsOf = widthSource(config, source);
+  if (widthsOf === undefined) return undefined;
+  const kind = widths(config);
+  const known = settledSet(kind, widthsOf.upload, widthsOf.version);
+  if (known !== undefined && !lists(known.set, name)) return undefined;
 
-  const record = await generateImageVariants(config, source);
-  if (record === undefined || !record.variants.some((variant) => variant.file === name)) {
-    return undefined;
-  }
+  const record = await deriveSet(kind, widthsOf.upload, widthsOf.version);
+  return lists(record, name) ? findAsset(relative, [root]) : undefined;
+}
 
-  return findAsset(relative, [root]);
+function lists(record: ImageRecord | undefined, name: string): boolean {
+  return record?.variants.some((variant) => variant.file === name) ?? false;
 }
 
 const THUMBNAIL_WIDTH = 400;
@@ -471,6 +455,6 @@ export function thumbnailUrl(config: ImageConfig, source: string, url: string): 
     .filter((variant) => variant.format === image.variants[0]?.format)
     .find((variant) => variant.width >= THUMBNAIL_WIDTH);
   return image !== undefined && thumbnail !== undefined
-    ? variantUrl(source, thumbnail, image.version)
+    ? variantUrl(image.source, thumbnail, image.version)
     : url;
 }
