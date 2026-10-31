@@ -17,11 +17,12 @@ import {
   ASSET_VERSION_PARAM,
   assetNotModified,
   assetRangeResponse,
+  assetReply,
   assetResponse,
   assetVersion,
   findThemeAsset,
   IMMUTABLE_ASSET,
-  matchesEtag,
+  isNotModified,
   THEME_ASSET_PREFIX,
   UPLOAD_ASSET_MAX_AGE,
 } from '../theme/assets.ts';
@@ -45,9 +46,7 @@ export function themeAsset(c: Context<GeekityEnv>): Response {
 
   const fingerprinted = c.req.query(ASSET_VERSION_PARAM) === assetVersion(asset);
   const options = fingerprinted ? IMMUTABLE_ASSET : {};
-  return matchesEtag(c.req.header('if-none-match'), asset.etag)
-    ? assetNotModified(asset, options)
-    : assetResponse(asset, options);
+  return assetReply(asset, c.req.raw.headers, options);
 }
 
 /**
@@ -74,9 +73,7 @@ export async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
   const version = sourceVersion(c.var.config, source);
   const fingerprinted = version !== undefined && c.req.query(ASSET_VERSION_PARAM) === version;
   const options = fingerprinted ? IMMUTABLE_ASSET : { maxAge: UPLOAD_ASSET_MAX_AGE };
-  return matchesEtag(c.req.header('if-none-match'), asset.etag)
-    ? assetNotModified(asset, options)
-    : assetResponse(asset, options);
+  return assetReply(asset, c.req.raw.headers, options);
 }
 
 /**
@@ -93,9 +90,7 @@ export async function favicon(c: Context<GeekityEnv>): Promise<Response> {
   if (asset === undefined) return notFound(c);
 
   const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
-  return matchesEtag(c.req.header('if-none-match'), asset.etag)
-    ? assetNotModified(asset, options)
-    : assetResponse(asset, options);
+  return assetReply(asset, c.req.raw.headers, options);
 }
 
 /** A request path as a path on disk: percent-encoding off, segment by segment. */
@@ -131,9 +126,7 @@ export async function upload(c: Context<GeekityEnv>, next: Next): Promise<Respon
   }
 
   const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
-  if (matchesEtag(c.req.header('if-none-match'), asset.etag)) {
-    return assetNotModified(asset, options);
-  }
+  if (isNotModified(asset, c.req.raw.headers)) return assetNotModified(asset, options);
   const part = assetRangeResponse(asset, c.req.header('range'), c.req.header('if-range'), options);
   const whole = part ?? assetResponse(asset, options);
   whole.headers.set('accept-ranges', 'bytes');

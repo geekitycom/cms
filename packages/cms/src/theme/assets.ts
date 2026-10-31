@@ -95,6 +95,32 @@ export function themeAssetUrl(relative: string, themeDirs: readonly string[]): s
   return `${pathname}?${ASSET_VERSION_PARAM}=${assetVersion(asset)}`;
 }
 
+/**
+ * The answer to a GET or HEAD for a whole asset: a 304 when the request's
+ * validators say the client's copy is current, the file otherwise.
+ */
+export function assetReply(
+  asset: StaticAsset,
+  request: Headers,
+  options: AssetResponseOptions = {},
+): Response {
+  return isNotModified(asset, request)
+    ? assetNotModified(asset, options)
+    : assetResponse(asset, options);
+}
+
+/**
+ * Whether a request's validators say the client's copy of this asset is
+ * current. `If-None-Match` decides alone when it is sent; `If-Modified-Since`
+ * is read only without it, as RFC 9110 §13.2.2 orders them.
+ */
+export function isNotModified(asset: StaticAsset, request: Headers): boolean {
+  const ifNoneMatch = request.get('if-none-match');
+  if (ifNoneMatch !== null) return matchesEtag(ifNoneMatch, asset.etag);
+  const since = Date.parse(request.get('if-modified-since') ?? '');
+  return !Number.isNaN(since) && lastModified(asset) <= since;
+}
+
 /** The response body and headers for an asset. */
 export function assetResponse(asset: StaticAsset, options: AssetResponseOptions = {}): Response {
   return new Response(fileBody(asset, 0, asset.stats.size - 1), {
@@ -112,6 +138,8 @@ export function assetResponse(asset: StaticAsset, options: AssetResponseOptions 
  * several, or one that cannot be read, gets the whole file, which is what
  * HTTP allows a server that ignores `Range` to send. So does a request whose
  * `If-Range` no longer names this file: its earlier part was of other bytes.
+ * An empty file has no last bytes to send, so a suffix range of it gets the
+ * whole, empty file too.
  *
  * Returns `undefined` when the whole file is the answer.
  */
@@ -122,9 +150,9 @@ export function assetRangeResponse(
   options: AssetResponseOptions = {},
 ): Response | undefined {
   if (range === undefined) return undefined;
-  if (ifRange !== undefined && ifRange.trim() !== asset.etag) return undefined;
+  if (ifRange !== undefined && !stillNamed(asset, ifRange.trim())) return undefined;
 
-  const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(range.trim());
   if (match === null) return undefined;
   const [, first = '', last = ''] = match;
   if (first === '' && last === '') return undefined;
@@ -132,6 +160,7 @@ export function assetRangeResponse(
   if (first !== '' && last !== '' && Number(last) < Number(first)) return undefined;
 
   const size = asset.stats.size;
+  if (first === '' && size === 0 && Number(last) > 0) return undefined;
   // `bytes=-500` is the last five hundred bytes; `bytes=500-` is all but the first five hundred.
   const start = first === '' ? Math.max(0, size - Number(last)) : Number(first);
   const end = first === '' || last === '' ? size - 1 : Math.min(Number(last), size - 1);
@@ -140,6 +169,7 @@ export function assetRangeResponse(
   headers.set('accept-ranges', 'bytes');
   if (start >= size) {
     headers.delete('content-type');
+    headers.set('cache-control', 'no-store');
     headers.set('content-length', '0');
     headers.set('content-range', `bytes */${String(size)}`);
     return new Response(null, { status: 416, headers });
@@ -148,6 +178,22 @@ export function assetRangeResponse(
   headers.set('content-length', String(end - start + 1));
   headers.set('content-range', `bytes ${String(start)}-${String(end)}/${String(size)}`);
   return new Response(fileBody(asset, start, end), { status: 206, headers });
+}
+
+/**
+ * Whether an `If-Range` still names this file. A date counts only when it is
+ * a strong validator: the file has gone at least a second unchanged, so no
+ * second write could share its Last-Modified (RFC 9110 §8.8.2.2). A weak
+ * tag never counts.
+ */
+function stillNamed(asset: StaticAsset, ifRange: string): boolean {
+  if (ifRange.startsWith('"') || ifRange.startsWith('W/')) return ifRange === asset.etag;
+  return Date.parse(ifRange) === lastModified(asset) && Date.now() - asset.stats.mtimeMs >= 1000;
+}
+
+/** The asset's modification time at the one-second precision of an HTTP date. */
+function lastModified(asset: StaticAsset): number {
+  return Math.floor(asset.stats.mtimeMs / 1000) * 1000;
 }
 
 /** The 304 an unchanged asset gets, which carries the validators and no body. */
@@ -256,7 +302,7 @@ function assetHeaders(asset: StaticAsset, options: AssetResponseOptions): Header
     'content-type': asset.contentType,
     'content-length': String(asset.stats.size),
     'cache-control': `public, max-age=${String(maxAge)}${immutable}`,
-    'last-modified': new Date(asset.stats.mtimeMs).toUTCString(),
+    'last-modified': new Date(lastModified(asset)).toUTCString(),
     etag: asset.etag,
   });
 }
