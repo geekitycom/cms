@@ -60,6 +60,14 @@ describe('responsiveImages', () => {
     assert.equal(responsiveImages(html, known), html);
   });
 
+  it('rewrites a tag whose quoted attribute holds a >, keeping the attribute whole', () => {
+    const tag = '<img alt="x > y" src="/uploads/2026/09/photo.png">';
+    const html = responsiveImages(`<p>${tag}</p>`, known);
+
+    assert.match(html, /^<p><picture>/);
+    assert.match(html, /<img alt="x > y" src="\/uploads\/2026\/09\/photo.png" srcset=/);
+  });
+
   it('keeps every attribute the author wrote, including a title', () => {
     const html = responsiveImages(
       '<img src="/uploads/2026/09/photo.png" alt="A photo" title="Taken in September" class="wide">',

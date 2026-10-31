@@ -1,8 +1,12 @@
 import { decodeEntities } from '../util/html.ts';
 import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from './uploads.ts';
 
-/** Every `<img>` tag, with its attribute text. Void elements have no closing half. */
-export const IMG_TAG = /<img\s([^>]*?)\/?>/gi;
+/**
+ * Every `<img>` tag, with its attribute text. Void elements have no closing
+ * half. A quoted value is taken whole, since a `>` inside one does not end
+ * the tag.
+ */
+export const IMG_TAG = /<img\s((?:[^>"']|"[^"]*"|'[^']*')*?)\/?>/gi;
 
 /** One attribute of a tag: its name, and its value however it was quoted. */
 const ATTRIBUTE = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;

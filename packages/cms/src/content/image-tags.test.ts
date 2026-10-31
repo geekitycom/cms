@@ -20,6 +20,12 @@ describe('imagesIn', () => {
       { src: '/uploads/a.png', source: 'a.png', alt: undefined },
     ]);
   });
+
+  it('reads past a > inside a quoted attribute', () => {
+    assert.deepEqual(imagesIn(`<img alt="1 > 0" title='a > b' src="/uploads/a.png">`), [
+      { src: '/uploads/a.png', source: 'a.png', alt: '1 > 0' },
+    ]);
+  });
 });
 
 describe('uploadPath', () => {
