@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -58,6 +58,20 @@ describe('findAsset', () => {
     assert.equal(findAsset('', [first]), undefined);
     assert.equal(findAsset('nul\0.txt', [first]), undefined);
     assert.equal(findAsset('missing.txt', [first, second]), undefined);
+  });
+
+  it('follows no link out of its root, but serves a root that is itself a link', async () => {
+    const [first] = await roots();
+    const parent = path.dirname(first);
+    await symlink(path.join(parent, 'secret.txt'), path.join(first, 'leak.txt'));
+    await symlink(parent, path.join(first, 'up'));
+    await symlink(path.join(first, 'both.txt'), path.join(first, 'alias.txt'));
+    await symlink(first, path.join(parent, 'linked'));
+
+    assert.equal(findAsset('leak.txt', [first]), undefined);
+    assert.equal(findAsset('up/secret.txt', [first]), undefined);
+    assert.equal(findAsset('alias.txt', [first])?.stats.size, 5);
+    assert.equal(findAsset('both.txt', [path.join(parent, 'linked')])?.stats.size, 5);
   });
 
   it('serves an uploaded PDF as application/pdf, so a browser opens it', async () => {

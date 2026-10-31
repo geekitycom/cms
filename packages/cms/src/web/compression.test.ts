@@ -10,6 +10,7 @@ import { after, describe, it } from 'node:test';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 
 import { browser, csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { COMPRESSION_MAX_BYTES } from './compression.ts';
 import { sessionCookieName } from './session.ts';
 import type { GeekityConfig } from '../config.ts';
 import type { Cms } from '../index.ts';
@@ -176,15 +177,48 @@ describe('compression', () => {
     }
   });
 
-  it('answers a HEAD with the headers of the compressed GET', async () => {
+  it('answers a HEAD with the encoding and validator of the compressed GET, compressing nothing', async () => {
     const cms = await site();
-    const get200 = await get(cms, '/2026/09/post-01/', { 'accept-encoding': 'br' });
-    const head = await cms.app.request('/2026/09/post-01/', {
-      method: 'HEAD',
-      headers: { 'accept-encoding': 'br' },
-    });
-    assert.equal(head.headers.get('content-encoding'), 'br');
-    assert.equal(head.headers.get('content-length'), String(get200.bytes.byteLength));
+    for (const url of ['/2026/09/post-01/', '/uploads/2026/09/long.txt']) {
+      const get200 = await get(cms, url, { 'accept-encoding': 'br' });
+      const head = await cms.app.request(url, {
+        method: 'HEAD',
+        headers: { 'accept-encoding': 'br' },
+      });
+      assert.equal(head.headers.get('content-encoding'), 'br', url);
+      assert.equal(head.headers.get('etag'), get200.response.headers.get('etag'), url);
+      assert.ok(varies(head).includes('accept-encoding'), url);
+      assert.equal(head.headers.get('content-length'), null, `${url} has no encoded length`);
+    }
+  });
+
+  it('sends a body above the size limit as it is, for GET and HEAD', async () => {
+    const contentDir = await box.dir('geekity-compression-large-');
+    await mkdir(path.join(contentDir, 'uploads'), { recursive: true });
+    const large = PARAGRAPH.repeat(Math.ceil((COMPRESSION_MAX_BYTES + 1) / PARAGRAPH.length));
+    await writeFile(path.join(contentDir, 'uploads', 'large.txt'), large);
+    const cms = await box.site({ contentDir });
+
+    for (const method of ['GET', 'HEAD']) {
+      const response = await cms.app.request('/uploads/large.txt', {
+        method,
+        headers: { 'accept-encoding': 'br, gzip' },
+      });
+      assert.equal(response.headers.get('content-encoding'), null, method);
+      assert.equal(response.headers.get('content-length'), String(large.length), method);
+      assert.ok(varies(response).includes('accept-encoding'), method);
+      if (method === 'GET') assert.equal((await response.arrayBuffer()).byteLength, large.length);
+    }
+  });
+
+  it('offers no byte ranges on a compressed body', async () => {
+    const cms = await site();
+    const plain = await get(cms, '/uploads/2026/09/long.txt');
+    assert.equal(plain.response.headers.get('accept-ranges'), 'bytes');
+
+    const encoded = await get(cms, '/uploads/2026/09/long.txt', { 'accept-encoding': 'br' });
+    assert.equal(encoded.response.headers.get('content-encoding'), 'br');
+    assert.equal(encoded.response.headers.get('accept-ranges'), null);
   });
 
   it('never compresses a page that holds a secret, so BREACH has nothing to measure', async () => {

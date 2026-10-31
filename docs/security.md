@@ -258,6 +258,38 @@ uploads. Four directives go further:
   `srcdoc` iframe, which inherits this policy, and its one ancestor is the
   admin page itself.
 
+## Serving uploads
+
+The upload endpoint accepts only the types in the upload allowlist (see
+[Uploads and images](configuration.md#uploads-and-images)). Files can still reach
+`content/uploads/` another way: copied in by hand, synced from a content
+repository, or left by an older version. Uploads are served from the same
+origin as the admin, so the server does not trust the file's extension alone.
+
+- A file whose extension is in the allowlist is served inline under its media
+  type.
+- An SVG is served as `image/svg+xml`, because a site icon can be an SVG, with
+  `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'; sandbox`.
+  Script in the file does not run, and the file loads nothing, when a visitor
+  opens it directly.
+- Any other file, such as `.js` or `.html`, is served as
+  `application/octet-stream` with `Content-Disposition: attachment`. A browser
+  downloads it and does not render it.
+
+An upload is public as soon as it is stored, whether or not a published post
+uses it. The server does not check drafts or publish state before it serves a
+file under `/uploads/`. Uploads are stored at `/uploads/{yyyy}/{mm}/{slug}{ext}`,
+the same layout an Eleventy build copies through, so a person who can guess
+the date and the file name can fetch an image from a draft before the post is
+published. Do not upload a file to a draft that must stay private until the
+post goes out.
+
+The server does not follow a symbolic link out of the directory it serves
+from. If a link under `content/uploads/`, a theme's `static/` directory or
+another served directory resolves to a file outside that directory, the server
+answers as if the file were not there. The served directory itself can be a
+link.
+
 ## security.txt and change-password
 
 `/.well-known/security.txt` ([RFC 9116](https://www.rfc-editor.org/rfc/rfc9116))

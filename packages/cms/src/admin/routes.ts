@@ -192,7 +192,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // while nobody is logged in. Nothing under it is secret.
   app.get(`${ADMIN_ASSET_PREFIX}*`, (c) => {
     const pathname = new URL(c.req.url).pathname.slice(ADMIN_ASSET_PREFIX.length);
-    const response = adminAssetResponse(decodePath(pathname), c.req.header('if-none-match'));
+    const response = adminAssetResponse(decodePath(pathname), c.req.raw.headers);
     return response ?? c.notFound();
   });
 

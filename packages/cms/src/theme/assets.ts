@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { open } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import path from 'node:path';
-import { Readable } from 'node:stream';
 
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
@@ -94,10 +95,32 @@ export function themeAssetUrl(relative: string, themeDirs: readonly string[]): s
   return `${pathname}?${ASSET_VERSION_PARAM}=${assetVersion(asset)}`;
 }
 
+export function assetReply(
+  asset: StaticAsset,
+  request: Headers,
+  options: AssetResponseOptions = {},
+): Response {
+  return isNotModified(asset, request)
+    ? assetNotModified(asset, options)
+    : assetResponse(asset, options);
+}
+
+/**
+ * `If-None-Match` decides alone when it is sent; `If-Modified-Since` is read
+ * only without it, as RFC 9110 §13.2.2 orders them.
+ */
+export function isNotModified(asset: StaticAsset, request: Headers): boolean {
+  const ifNoneMatch = request.get('if-none-match');
+  if (ifNoneMatch !== null) return matchesEtag(ifNoneMatch, asset.etag);
+  const since = Date.parse(request.get('if-modified-since') ?? '');
+  return !Number.isNaN(since) && lastModifiedSecond(asset) <= since;
+}
+
 /** The response body and headers for an asset. */
 export function assetResponse(asset: StaticAsset, options: AssetResponseOptions = {}): Response {
-  const body = Readable.toWeb(createReadStream(asset.file)) as ReadableStream;
-  return new Response(body, { headers: assetHeaders(asset, options) });
+  return new Response(lazyFileBody(asset, 0, asset.stats.size - 1), {
+    headers: assetHeaders(asset, options),
+  });
 }
 
 /**
@@ -110,6 +133,8 @@ export function assetResponse(asset: StaticAsset, options: AssetResponseOptions 
  * several, or one that cannot be read, gets the whole file, which is what
  * HTTP allows a server that ignores `Range` to send. So does a request whose
  * `If-Range` no longer names this file: its earlier part was of other bytes.
+ * An empty file has no last bytes to send, so a suffix range of it gets the
+ * whole, empty file too.
  *
  * Returns `undefined` when the whole file is the answer.
  */
@@ -120,9 +145,9 @@ export function assetRangeResponse(
   options: AssetResponseOptions = {},
 ): Response | undefined {
   if (range === undefined) return undefined;
-  if (ifRange !== undefined && ifRange.trim() !== asset.etag) return undefined;
+  if (ifRange !== undefined && !stillNamed(asset, ifRange.trim())) return undefined;
 
-  const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(range.trim());
   if (match === null) return undefined;
   const [, first = '', last = ''] = match;
   if (first === '' && last === '') return undefined;
@@ -130,6 +155,7 @@ export function assetRangeResponse(
   if (first !== '' && last !== '' && Number(last) < Number(first)) return undefined;
 
   const size = asset.stats.size;
+  if (first === '' && size === 0 && Number(last) > 0) return undefined;
   // `bytes=-500` is the last five hundred bytes; `bytes=500-` is all but the first five hundred.
   const start = first === '' ? Math.max(0, size - Number(last)) : Number(first);
   const end = first === '' || last === '' ? size - 1 : Math.min(Number(last), size - 1);
@@ -138,6 +164,7 @@ export function assetRangeResponse(
   headers.set('accept-ranges', 'bytes');
   if (start >= size) {
     headers.delete('content-type');
+    headers.set('cache-control', 'no-store');
     headers.set('content-length', '0');
     headers.set('content-range', `bytes */${String(size)}`);
     return new Response(null, { status: 416, headers });
@@ -145,8 +172,24 @@ export function assetRangeResponse(
 
   headers.set('content-length', String(end - start + 1));
   headers.set('content-range', `bytes ${String(start)}-${String(end)}/${String(size)}`);
-  const body = Readable.toWeb(createReadStream(asset.file, { start, end })) as ReadableStream;
-  return new Response(body, { status: 206, headers });
+  return new Response(lazyFileBody(asset, start, end), { status: 206, headers });
+}
+
+/**
+ * Whether an `If-Range` still names this file. A date counts only when it is
+ * a strong validator: the file has gone at least a second unchanged, so no
+ * second write could share its Last-Modified (RFC 9110 §8.8.2.2). A weak
+ * tag never counts.
+ */
+function stillNamed(asset: StaticAsset, ifRange: string): boolean {
+  if (ifRange.startsWith('"') || ifRange.startsWith('W/')) return ifRange === asset.etag;
+  return (
+    Date.parse(ifRange) === lastModifiedSecond(asset) && Date.now() - asset.stats.mtimeMs >= 1000
+  );
+}
+
+function lastModifiedSecond(asset: StaticAsset): number {
+  return Math.floor(asset.stats.mtimeMs / 1000) * 1000;
 }
 
 /** The 304 an unchanged asset gets, which carries the validators and no body. */
@@ -177,6 +220,72 @@ export function matchesEtag(ifNoneMatch: string | undefined, etag: string): bool
     .includes(etag);
 }
 
+const CHUNK_BYTES = 64 * 1024;
+
+const PULL_ONLY_WHEN_READ = { highWaterMark: 0 };
+
+function lazyFileBody(
+  asset: StaticAsset,
+  start: number,
+  endInclusive: number,
+): ReadableStream<Uint8Array> {
+  let handle: FileHandle | undefined;
+  let position = start;
+
+  async function close(): Promise<void> {
+    const current = handle;
+    handle = undefined;
+    await current?.close();
+  }
+
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        try {
+          handle ??= await openUnchangedSinceStat(asset);
+          const length = Math.min(CHUNK_BYTES, endInclusive + 1 - position);
+          if (length > 0) {
+            const { bytesRead, buffer } = await handle.read(
+              new Uint8Array(length),
+              0,
+              length,
+              position,
+            );
+            if (bytesRead === 0) throw new Error(`${asset.file} ended before its stated length`);
+            position += bytesRead;
+            controller.enqueue(buffer.subarray(0, bytesRead));
+          }
+          if (position > endInclusive) {
+            await close();
+            controller.close();
+          }
+        } catch (error) {
+          await close();
+          throw error;
+        }
+      },
+      cancel: close,
+    },
+    PULL_ONLY_WHEN_READ,
+  );
+}
+
+async function openUnchangedSinceStat(asset: StaticAsset): Promise<FileHandle> {
+  const handle = await open(asset.file, 'r');
+  const opened = await handle.stat();
+  const { stats } = asset;
+  if (
+    opened.dev !== stats.dev ||
+    opened.ino !== stats.ino ||
+    opened.size !== stats.size ||
+    opened.mtimeMs !== stats.mtimeMs
+  ) {
+    await handle.close();
+    throw new Error(`${asset.file} changed after its headers were written`);
+  }
+  return handle;
+}
+
 function assetHeaders(asset: StaticAsset, options: AssetResponseOptions): Headers {
   const maxAge = options.maxAge ?? THEME_ASSET_MAX_AGE;
   const immutable = options.immutable === true ? ', immutable' : '';
@@ -184,7 +293,7 @@ function assetHeaders(asset: StaticAsset, options: AssetResponseOptions): Header
     'content-type': asset.contentType,
     'content-length': String(asset.stats.size),
     'cache-control': `public, max-age=${String(maxAge)}${immutable}`,
-    'last-modified': new Date(asset.stats.mtimeMs).toUTCString(),
+    'last-modified': new Date(lastModifiedSecond(asset)).toUTCString(),
     etag: asset.etag,
   });
 }

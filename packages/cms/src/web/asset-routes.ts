@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import type { Context, Next } from 'hono';
 
 import {
@@ -7,6 +9,7 @@ import {
   VARIANT_ASSET_PREFIX,
 } from '../content/uploads.ts';
 import type { GeekityEnv } from './env.ts';
+import { UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant } from '../images/variants.ts';
@@ -14,11 +17,12 @@ import {
   ASSET_VERSION_PARAM,
   assetNotModified,
   assetRangeResponse,
+  assetReply,
   assetResponse,
   assetVersion,
   findThemeAsset,
   IMMUTABLE_ASSET,
-  matchesEtag,
+  isNotModified,
   THEME_ASSET_PREFIX,
   UPLOAD_ASSET_MAX_AGE,
 } from '../theme/assets.ts';
@@ -42,9 +46,7 @@ export function themeAsset(c: Context<GeekityEnv>): Response {
 
   const fingerprinted = c.req.query(ASSET_VERSION_PARAM) === assetVersion(asset);
   const options = fingerprinted ? IMMUTABLE_ASSET : {};
-  return matchesEtag(c.req.header('if-none-match'), asset.etag)
-    ? assetNotModified(asset, options)
-    : assetResponse(asset, options);
+  return assetReply(asset, c.req.raw.headers, options);
 }
 
 /**
@@ -71,9 +73,7 @@ export async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
   const version = sourceVersion(c.var.config, source);
   const fingerprinted = version !== undefined && c.req.query(ASSET_VERSION_PARAM) === version;
   const options = fingerprinted ? IMMUTABLE_ASSET : { maxAge: UPLOAD_ASSET_MAX_AGE };
-  return matchesEtag(c.req.header('if-none-match'), asset.etag)
-    ? assetNotModified(asset, options)
-    : assetResponse(asset, options);
+  return assetReply(asset, c.req.raw.headers, options);
 }
 
 /**
@@ -90,9 +90,7 @@ export async function favicon(c: Context<GeekityEnv>): Promise<Response> {
   if (asset === undefined) return notFound(c);
 
   const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
-  return matchesEtag(c.req.header('if-none-match'), asset.etag)
-    ? assetNotModified(asset, options)
-    : assetResponse(asset, options);
+  return assetReply(asset, c.req.raw.headers, options);
 }
 
 /** A request path as a path on disk: percent-encoding off, segment by segment. */
@@ -128,11 +126,24 @@ export async function upload(c: Context<GeekityEnv>, next: Next): Promise<Respon
   }
 
   const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
-  if (matchesEtag(c.req.header('if-none-match'), asset.etag)) {
-    return assetNotModified(asset, options);
-  }
+  if (isNotModified(asset, c.req.raw.headers)) return assetNotModified(asset, options);
   const part = assetRangeResponse(asset, c.req.header('range'), c.req.header('if-range'), options);
   const whole = part ?? assetResponse(asset, options);
   whole.headers.set('accept-ranges', 'bytes');
+  inertUnlessMedia(whole.headers, asset.file);
   return whole;
+}
+
+const UPLOADED_SVG_POLICY =
+  "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'; sandbox";
+
+function inertUnlessMedia(headers: Headers, file: string): void {
+  const extension = path.extname(file).toLowerCase();
+  if (UPLOAD_MEDIA_TYPES.has(extension)) return;
+  if (extension === '.svg') {
+    headers.set('content-security-policy', UPLOADED_SVG_POLICY);
+    return;
+  }
+  if (headers.has('content-type')) headers.set('content-type', 'application/octet-stream');
+  headers.set('content-disposition', 'attachment');
 }

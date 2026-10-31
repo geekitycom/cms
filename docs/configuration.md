@@ -111,6 +111,9 @@ You cannot add SVG to the list. An SVG is markup that can carry script, and the
 site serves uploads from its own origin. An uploaded SVG would be a stored
 cross-site scripting hole in the site's own pages. HTML is excluded for the
 same reason. Host a transcript in HTML on another site and link to it.
+An SVG or HTML file that reaches `content/uploads/` some other way is served
+so that it cannot run script. See
+[Serving uploads](security.md#serving-uploads).
 
 Audio and video are limited by `uploadMediaMaxBytes`. Every other file is
 limited by `uploadMaxBytes`. The limits are separate because an episode is a

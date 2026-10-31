@@ -1,14 +1,7 @@
 import type { Hono } from 'hono';
 
 import { FONT_PATH_PREFIX } from '../fonts/index.ts';
-import {
-  ASSET_VERSION_PARAM,
-  IMMUTABLE_ASSET,
-  assetNotModified,
-  assetResponse,
-  assetVersion,
-  matchesEtag,
-} from '../theme/assets.ts';
+import { ASSET_VERSION_PARAM, IMMUTABLE_ASSET, assetReply, assetVersion } from '../theme/assets.ts';
 import type { GeekityEnv } from './env.ts';
 import { notFound } from './status-pages.ts';
 
@@ -31,8 +24,6 @@ export function mountFonts(app: Hono<GeekityEnv>): void {
     const fingerprinted =
       name === `${version}.woff2` || c.req.query(ASSET_VERSION_PARAM) === version;
     const options = fingerprinted ? IMMUTABLE_ASSET : {};
-    return matchesEtag(c.req.header('if-none-match'), asset.etag)
-      ? assetNotModified(asset, options)
-      : assetResponse(asset, options);
+    return assetReply(asset, c.req.raw.headers, options);
   });
 }
