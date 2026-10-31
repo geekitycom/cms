@@ -414,13 +414,8 @@ export async function findImageVariant(
   config: ImageConfig,
   relative: string,
 ): Promise<StaticAsset | undefined> {
-  if (plainRelativePath(relative) === undefined) return undefined;
+  if (!config.imageOptimization || plainRelativePath(relative) === undefined) return undefined;
   const root = dataFolder(config.dataDir, IMAGES);
-
-  const found = findAsset(relative, [root]);
-  if (found !== undefined) return found;
-
-  if (!config.imageOptimization) return undefined;
 
   const cut = relative.lastIndexOf('/');
   if (cut <= 0) return undefined;
@@ -430,6 +425,8 @@ export async function findImageVariant(
   // The site's icons live beside the widths and are derived one at a time,
   // because they are asked for one at a time and belong in no `srcset`.
   if (isDerivedIcon(name)) {
+    const icon = findAsset(relative, [root]);
+    if (icon !== undefined) return icon;
     return (await deriveSiteIcon(config, source, name)) ? findAsset(relative, [root]) : undefined;
   }
 
@@ -443,8 +440,11 @@ export async function findImageVariant(
       : lists(known.set, name);
   if (offered !== true) return undefined;
 
+  const directory = [widthsOf.upload.directory];
+  const derived = known === undefined ? undefined : findAsset(name, directory);
+  if (derived !== undefined) return derived;
   const record = await deriveSet(kind, widthsOf.upload, widthsOf.version);
-  return lists(record, name) ? findAsset(relative, [root]) : undefined;
+  return lists(record, name) ? findAsset(name, directory) : undefined;
 }
 
 function lists(record: ImageRecord | undefined, name: string): boolean {

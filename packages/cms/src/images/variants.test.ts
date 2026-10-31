@@ -390,3 +390,23 @@ describe('a name the site does not offer', () => {
     assert.ok(await findImageVariant(config, `${source}/1000.webp`), 'the full width is offered');
   });
 });
+
+describe('what the derived route serves', () => {
+  it('is never the sidecar', async () => {
+    const config = await site({ imageWidths: [320] });
+    const source = await upload(config, '2026/09/photo.png', rectangle(1000, 500).png());
+    await generateImageVariants(config, source);
+    assert.ok(existsSync(path.join(config.dataDir, 'images', source, 'image.json')));
+
+    assert.equal(await findImageVariant(config, `${source}/image.json`), undefined);
+  });
+
+  it('is never a write in flight', async () => {
+    const config = await site({ imageWidths: [320] });
+    const source = await upload(config, '2026/09/photo.png', rectangle(1000, 500).png());
+    await generateImageVariants(config, source);
+    await writeFile(path.join(config.dataDir, 'images', source, '320.webp.1a2b-3.tmp'), 'partial');
+
+    assert.equal(await findImageVariant(config, `${source}/320.webp.1a2b-3.tmp`), undefined);
+  });
+});
