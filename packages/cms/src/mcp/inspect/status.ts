@@ -84,7 +84,11 @@ export const federationStatus = defineTool({
         },
         required: ['waiting', 'retrying'],
       },
-      failedDeliveries: { type: 'integer', description: 'Deliveries that failed since `since`.' },
+      failedDeliveries: {
+        type: 'integer',
+        description:
+          'Deliveries that failed since `since` and are still the newest delivery of their post to that recipient.',
+      },
       failedWebmentions: { type: 'integer', description: 'Webmentions that failed since `since`.' },
       recentFailures: {
         type: 'array',
@@ -158,7 +162,7 @@ export const federationStatus = defineTool({
       waiting: countWaitingMessages(config.dataDir),
       retrying: countRetryingDeliveries(config.dataDir, since),
     };
-    const failedDeliveries = admin.countFailedDeliveriesSince(since);
+    const failedDeliveries = admin.listFailedDeliveriesSince(since).length;
     const failedWebmentions = admin.countFailedWebmentionsSince(since);
     const recentFailures = admin.searchDeliveries(
       { statuses: ['failed', 'retrying'] },

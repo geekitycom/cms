@@ -3,15 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Clock } from '../util/clock.ts';
 import { decodeEntities } from '../util/html.ts';
 
-import {
-  allRows,
-  countByStatus,
-  getRow,
-  NO_LIMIT,
-  nullableText,
-  oneOf,
-  readCount,
-} from './rows.ts';
+import { allRows, countByStatus, getRow, NO_LIMIT, nullableText, oneOf } from './rows.ts';
 import type { ListPageOptions, Page, Row } from './rows.ts';
 
 /** How one delivery of one activity to one follower ended. */
@@ -160,7 +152,12 @@ export interface DeliveryStore {
   lastDeliveryToObject(objectId: string): Delivery | undefined;
   /** Every object id a `Delete` was ever recorded going out for. */
   listDeletedObjectIds(): string[];
-  countFailedDeliveriesSince(since: string): number;
+  /**
+   * The failures since then that are still where a recipient stands with a
+   * post, newest first: a failed delivery drops out once a later one about the
+   * same post reaches the same actor, whatever activity it carried.
+   */
+  listFailedDeliveriesSince(since: string): Delivery[];
   /** Every activity sent about any of these objects, newest first. */
   listSentActivitiesAbout(objectIds: readonly string[]): SentActivity[];
   /** The outcomes that match, newest attempt first, one page of them. */
@@ -218,8 +215,16 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     listDeletedObjectIds: db.prepare(`
       SELECT DISTINCT object_id FROM ap_deliveries WHERE activity_type = 'Delete' ORDER BY object_id
     `),
-    countFailedDeliveriesSince: db.prepare(`
-      SELECT COUNT(*) AS count FROM ap_deliveries WHERE status = 'failed' AND attempted_at >= ?
+    listFailedDeliveriesSince: db.prepare(`
+      SELECT * FROM ap_deliveries AS failure
+      WHERE status = 'failed' AND attempted_at >= ?
+        AND NOT EXISTS (
+          SELECT 1 FROM ap_deliveries AS later
+          WHERE later.actor_id = failure.actor_id
+            AND COALESCE(later.slug, later.object_id) = COALESCE(failure.slug, failure.object_id)
+            AND (later.attempted_at, later.rowid) > (failure.attempted_at, failure.rowid)
+        )
+      ORDER BY attempted_at DESC, rowid DESC
     `),
     listSentActivitiesAbout: db.prepare(`
       SELECT activity_id, activity_type, object_id, slug,
@@ -305,8 +310,8 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
       return allRows(statements.listDeletedObjectIds, (row) => String(row['object_id']));
     },
 
-    countFailedDeliveriesSince(since) {
-      return readCount(statements.countFailedDeliveriesSince, since);
+    listFailedDeliveriesSince(since) {
+      return allRows(statements.listFailedDeliveriesSince, toDelivery, since);
     },
 
     listSentActivitiesAbout(objectIds) {

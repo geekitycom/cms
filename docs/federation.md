@@ -719,6 +719,8 @@ step. It is not part of the cutover. Not every follower's software supports a
 - One panel per user, with their avatar, their `@username@host` handle, the
   summary from their profile, their actor id, and their followers with avatars
   and follow dates.
+- The failed deliveries of the last 7 days that no later delivery has put
+  right. See [Failed deliveries](#failed-deliveries).
 - The recent likes, boosts, and replies from the inbox log. Each links to the
   remote object and to the post it was about.
 - One row per post that has been federated: who announced it, its last
@@ -735,8 +737,9 @@ does what `geekity resend --all` does.
 
 The Resend panel shows the latest resend job: queued, running with the posts
 sent out of the total, finished, failed with the error, or interrupted. A
-finished job lists each post with how many inboxes it reached out of how many,
-how many are queued or failed, and its webmentions when it sent them. It names
+finished job says how many posts went to how many inboxes, and how many of
+those were reached, queued or failed. A disclosure under that line lists each
+post with the same counts, and its webmentions when it sent them. The panel names
 the posts dev mode held and the slugs with nothing to resend. The panel updates
 every few seconds without a page load until the job ends. Without JavaScript,
 select **Check again** to see how far it got. While a resend is queued or
@@ -751,6 +754,23 @@ The files decide which posts are listed. A post is listed when it carries an
 that some follower holds a copy of. The outcome cache supplies how each post
 landed. After a site deletes `data/geekity.db`, the screen lists every
 federated post with no outcome recorded, and Resend works on any of them.
+
+### Failed deliveries
+
+The Failed deliveries panel lists each delivery from the last 7 days that
+failed and is still the newest delivery of its post to that recipient. Each row
+shows the post, the activity, when it was sent, the inbox and the error. A
+failure leaves the list when a later delivery of the same post reaches the same
+recipient, whatever activity it carries, or when it is 7 days old. The
+dashboard's Needs attention card counts the same failures and links to this
+panel.
+
+**Retry** on a row queues the `retry-deliveries` job for that post and inbox.
+It is the job the MCP `retry_deliveries` tool queues. The job sends the post,
+as its file reads then, to the recipients at that inbox whose newest delivery
+failed. A recipient that never received the `Create` gets the `Create`; the
+others get an `Update`. The panel shows the latest retry job as the Resend
+panel shows the latest resend.
 
 A Relays panel sits between the followers and the inbox log. It has one row per
 subscription, with:

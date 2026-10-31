@@ -1,6 +1,6 @@
 {# /admin/federation: who this site's people are to the fediverse, who follows
-   each of them, what arrived in the inbox, how what went out landed, and the
-   latest resend job (TASK-393). #}
+   each of them, what failed to go out and the latest retry of it, what arrived
+   in the inbox, how what went out landed, and the latest resend job. #}
 {% extends "layouts/shell.njk" %}
 {% from "components/badge.njk" import badge, status %}
 {% from "components/button.njk" import button %}
@@ -80,6 +80,82 @@
       {% endcall %}
     {% endfor %}
   </div>
+
+  <section id="failures" class="mb-10" aria-labelledby="failures-heading" data-job-region>
+    <h2 id="failures-heading" class="mb-3 text-lg font-semibold">Failed deliveries</h2>
+    {% if failures.length %}
+      {% call table('Failed deliveries') %}
+        <thead>
+          <tr>
+            <th scope="col">Post</th>
+            <th scope="col">Inbox</th>
+            <th scope="col">Error</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for failure in failures %}
+            <tr>
+              <td>
+                {% if failure.post %}
+                  <a class="link link-hover font-medium" href="{{ failure.post.editUrl }}">{{ failure.post.title }}</a>
+                {% elif failure.slug %}
+                  <code class="break-all">{{ failure.slug }}</code>
+                {% else %}
+                  The profile
+                {% endif %}
+                <p class="text-sm">{{ failure.activityType }} <span class="whitespace-nowrap">{{ failure.attemptedAt | date('html') }}</span></p>
+              </td>
+              <td class="break-all">{{ failure.inboxId }}</td>
+              <td class="break-all text-sm">{{ failure.error or 'No reason given.' }}</td>
+              <td>
+                {% if failure.slug and not (retry and retry.active) %}
+                  <form method="post" action="{{ retryUrl }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                    <input type="hidden" name="{{ fields.slug }}" value="{{ failure.slug }}" />
+                    <input type="hidden" name="{{ fields.inbox }}" value="{{ failure.inboxId }}" />
+                    {{ button('Retry', type='submit', style='outline', size='xs') }}
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      {% endcall %}
+      <p class="mt-4 max-w-prose text-sm">
+        Deliveries from the last seven days that failed and have not reached that
+        inbox since. Retry sends the post again, as it now reads, to that inbox
+        alone. A failure leaves this list once a later delivery of the post gets
+        through, or after seven days.
+      </p>
+    {% else %}
+      <p>No delivery has failed in the last seven days.</p>
+    {% endif %}
+    {% if retry %}
+      <div class="mt-4">
+        {% call jobStatus(retry, federationUrl + '#failures', verb='Retried', unit='posts') %}
+          {% if retryResult %}
+            {% if retryResult.posts.length %}
+              <ul class="list-disc pl-6">
+                {% for post in retryResult.posts %}
+                  <li>
+                    <code class="break-all">{{ post.slug }}</code>:
+                    {% if post.activity %}
+                      {{ post.activity.activityType }} reached {{ post.activity.reached }} of {{ post.activity.inboxes }} {% if post.activity.inboxes == 1 %}inbox{% else %}inboxes{% endif %}{% if post.activity.queued %}, {{ post.activity.queued }} queued{% endif %}{% if post.activity.failed %}, {{ status('failed', post.activity.failed + ' failed') }}{% endif %}.
+                    {% else %}
+                      not announced to the fediverse.
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p>The last retry found nothing left to send.</p>
+            {% endif %}
+          {% endif %}
+        {% endcall %}
+      </div>
+    {% endif %}
+  </section>
 
   <section class="mb-10">
     <h2 class="mb-3 text-lg font-semibold">Relays</h2>
@@ -187,9 +263,15 @@
       {% if resend %}
         {% call jobStatus(resend, federationUrl + '#resend', verb='Sent', unit='posts') %}
           {% if resendResult %}
-            <p>Resent {{ resendResult.sent.length }} {% if resendResult.sent.length == 1 %}post{% else %}posts{% endif %}.</p>
+            {% set totals = resendResult.totals %}
+            <p>
+              Resent {{ resendResult.sent.length }} {% if resendResult.sent.length == 1 %}post{% else %}posts{% endif %}{% if totals.inboxes %} to {{ totals.inboxes }} {% if totals.inboxes == 1 %}inbox{% else %}inboxes{% endif %}: {{ totals.reached }} reached{% if totals.queued %}, {{ totals.queued }} queued{% endif %}{% if totals.failed %}, {{ status('failed', totals.failed + ' failed') }}{% endif %}{% endif %}.
+              {% if totals.queued %}Queued deliveries go out in the background; the Delivery table below shows how they landed.{% endif %}
+            </p>
             {% if resendResult.sent.length %}
-              <ul class="list-disc pl-6">
+              <details>
+              <summary class="cursor-pointer">Each post</summary>
+              <ul class="mt-2 list-disc pl-6">
                 {% for post in resendResult.sent %}
                   <li>
                   <code class="break-all">{{ post.slug }}</code>:
@@ -208,6 +290,7 @@
                   </li>
                 {% endfor %}
               </ul>
+              </details>
             {% endif %}
             {% if resendResult.nothing.length %}
               <p>Nothing to resend: {% for slug in resendResult.nothing %}<code class="break-all">{{ slug }}</code>{% if not loop.last %}, {% endif %}{% endfor %}. No announced post has that slug.</p>

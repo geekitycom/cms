@@ -10,6 +10,7 @@ import type { Browser } from './__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { appendInboxActivity } from '../federation/records.ts';
 import { RESEND_JOB } from '../federation/resend-job.ts';
+import { RETRY_DELIVERIES_JOB } from '../federation/retry-job.ts';
 import { createFileRecords } from '../jobs/file-records.ts';
 import type { JobState } from '../jobs/types.ts';
 import { flashes } from './__testing__/flash.ts';
@@ -540,6 +541,70 @@ describe('per-post delivery status', () => {
   });
 });
 
+describe('failed deliveries', () => {
+  async function failedPost(): Promise<{ cms: Cms; agent: Browser }> {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
+    await publishPost(agent, cms);
+    const [sent] = cms.admin.searchDeliveries({}).items;
+    assert.ok(sent !== undefined);
+    cms.admin.recordDelivery({ ...sent, status: 'failed', error: '502 Bad Gateway' });
+    return { cms, agent };
+  }
+
+  it('lists each failure with its post, recipient, activity and error', async () => {
+    const { agent } = await failedPost();
+
+    const section = failuresSection(await federationScreen(agent));
+
+    assert.match(section, /Hello, world/);
+    assert.match(section, new RegExp(REMOTE_INBOX));
+    assert.match(section, /Create/);
+    assert.match(section, /502 Bad Gateway/);
+    assert.match(section, /<button type="submit"[^>]*>Retry<\/button>/);
+  });
+
+  it('queues a retry of that post to that inbox, and the failure goes once it lands', async () => {
+    const { cms, agent } = await failedPost();
+    const { token } = await federationForm(agent);
+
+    const response = await agent.post('/admin/federation/retry', {
+      csrf_token: token,
+      slug: 'hello-world',
+      inbox: REMOTE_INBOX,
+    });
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/federation#failures');
+    const queued = await cms.jobs.latest(RETRY_DELIVERIES_JOB.name);
+    assert.equal(queued?.state, 'queued');
+    assert.deepEqual(queued.payload, { slug: 'hello-world', inbox: REMOTE_INBOX });
+
+    await cms.jobs.run(queued.id);
+    await cms.delivery.settled();
+    assert.equal(deliveries.length, 2, 'the post went out again');
+    assert.equal(deliveries[1]?.url, REMOTE_INBOX);
+
+    const section = failuresSection(await federationScreen(agent));
+    assert.doesNotMatch(section, /502 Bad Gateway/);
+    assert.match(section, /Finished/, 'the retry run is shown');
+  });
+
+  it('says so when nothing has failed', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+
+    assert.match(failuresSection(await federationScreen(agent)), /No delivery has failed/);
+  });
+});
+
+function failuresSection(html: string): string {
+  const match = /<section[^>]*id="failures"[\s\S]*?<\/section>/.exec(html);
+  assert.ok(match, 'the federation screen has a failures section');
+  return match[0].replace(/\s+/g, ' ');
+}
+
 function resendSection(html: string): string {
   const match = /<section[^>]*id="resend"[\s\S]*?<\/section>/.exec(html);
   assert.ok(match, 'the federation screen has a resend section');
@@ -633,7 +698,7 @@ describe('resending a post', () => {
     assert.equal(deliveries.length, 2);
     assert.match(
       resendSection(await federationScreen(agent)),
-      /Resent 1 post\..*hello-world<\/code>: Update reached 1 of 1 inbox/,
+      /Resent 1 post to 1 inbox: 1 reached\..*<details[^>]*>.*hello-world<\/code>: Update reached 1 of 1 inbox/,
     );
   });
 
@@ -697,7 +762,7 @@ describe('resending a post', () => {
     const section = resendSection(await federationScreen(await signedIn(cms)));
 
     assert.match(section, />Finished</);
-    assert.match(section, /Resent 2 posts\./);
+    assert.match(section, /Resent 2 posts to 3 inboxes: 2 reached, <span[^>]*>1 failed<\/span>\./);
     assert.match(
       section,
       /hello-world<\/code>: Update reached 2 of 3 inboxes, <span[^>]*>1 failed<\/span>\./,
