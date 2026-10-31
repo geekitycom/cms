@@ -276,6 +276,14 @@ origin as the admin, so the server does not trust the file's extension alone.
   `application/octet-stream` with `Content-Disposition: attachment`. A browser
   downloads it and does not render it.
 
+An upload is public as soon as it is stored, whether or not a published post
+uses it. The server does not check drafts or publish state before it serves a
+file under `/uploads/`. Uploads are stored at `/uploads/{yyyy}/{mm}/{slug}{ext}`,
+the same layout an Eleventy build copies through, so a person who can guess
+the date and the file name can fetch an image from a draft before the post is
+published. Do not upload a file to a draft that must stay private until the
+post goes out.
+
 The server does not follow a symbolic link out of the directory it serves
 from. If a link under `content/uploads/`, a theme's `static/` directory or
 another served directory resolves to a file outside that directory, the server
