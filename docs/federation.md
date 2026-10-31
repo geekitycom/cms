@@ -50,6 +50,12 @@ the WordPress compatibility inbox:
 Refused an inbox POST to /inbox/: key not fetchable (HTTP 410); keyId=https://remote.example/users/ada#main-key actor=https://remote.example/users/ada type=Delete id=https://remote.example/users/ada#delete
 ```
 
+One unverifiable delivery is accepted: an account's `Delete` of itself, when
+its server answered `410 Gone` for the key, and the key is in the account's own
+actor document. The key went with the account, so its signature cannot be
+checked, but nobody else can make that server say the account is gone. The
+site removes the account from the followers, answers 202, and logs nothing.
+
 To verify a signature, the site fetches the sender's key. The fetch is signed:
 by the inbox's owner at a personal inbox, and by the site's first account at
 the shared inbox. A server in authorized fetch mode answers an unsigned fetch
