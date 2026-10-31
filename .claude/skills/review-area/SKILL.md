@@ -52,7 +52,7 @@ One task per root cause:
 - Title: an imperative fix, for example `Reject webmention sources that redirect to private addresses`.
 - Labels: `review-finding`, plus `security`, `bug`, or `data-loss`.
 - Priority: high for critical or high severity, medium for medium, low for low.
-- Milestone: the area task's milestone.
+- Milestone: `<area id> issues`, one per reviewed area (for example `public-assets issues`). Add it with `backlog milestone add` if it does not exist. Findings never go in the area task's milestone.
 - Description: location, path, problem, triggers, impact, fix, the lens ids, `Found by /review-area <area id> (TASK-n)`, and the proof verdict. Paste a confirmed proof test's source if it is under 40 lines. Otherwise name what it asserts.
 - For a `security` task, add: `The fix's commit message and PR description are public. Describe the change in neutral terms until it is deployed.`
 - Acceptance criteria: one per behavior the regression test asserts, plus "the regression test is in the suite and passes".

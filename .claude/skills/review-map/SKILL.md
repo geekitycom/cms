@@ -15,13 +15,14 @@ Run `backlog instructions overview` and `backlog instructions task-creation` fir
 
 ## What gets written
 
-| Thing         | Where                                                                   |
-| ------------- | ----------------------------------------------------------------------- |
-| The map       | Backlog doc titled `Review map`. One doc, updated in place every cycle. |
-| One cycle     | Milestone `Code review YYYY-MM` (the month the cycle starts).           |
-| One area      | Task labelled `review-area`, in the cycle milestone.                    |
-| Rank          | The area task's ordinal: 10, 20, 30… in rank order. Priority as well.   |
-| Scratch notes | `$MAIN/_local/review/map/`, where `$MAIN` is the main checkout.         |
+| Thing         | Where                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------- |
+| The map       | Backlog doc titled `Review map`. One doc, updated in place every cycle.                     |
+| One cycle     | Milestone `Code review YYYY-MM` (the month the cycle starts).                               |
+| One area      | Task labelled `review-area`, in the cycle milestone.                                        |
+| Findings      | Tasks labelled `review-finding`, in milestone `<area id> issues` (filed by `/review-area`). |
+| Rank          | The area task's ordinal: 10, 20, 30… in rank order. Priority as well.                       |
+| Scratch notes | `$MAIN/_local/review/map/`, where `$MAIN` is the main checkout.                             |
 
 `$MAIN` is `$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")`. A worktree's own `_local/` is deleted with the worktree, so never write there.
 
