@@ -7,14 +7,7 @@ import { Worker } from 'node:worker_threads';
 import { publicDispatcher } from '../util/public-address.ts';
 import { requestPublic } from './fetch-public.ts';
 
-/**
- * The offline harness wraps `fetch` and refuses every non-loopback name
- * before a dispatcher is consulted, so the connection path runs in a worker
- * started without it. There the system resolver, which a socket would use
- * when nothing pins the address, is stubbed to answer loopback for the name,
- * while the checked lookup answers a TEST-NET address.
- */
-const WORKER = `
+const OUTSIDE_OFFLINE_HARNESS = `
 const dns = require('node:dns');
 const { syncBuiltinESMExports } = require('node:module');
 const { parentPort, workerData } = require('node:worker_threads');
@@ -63,7 +56,7 @@ after(async () => {
 
 describe('a name whose resolution changes between the check and the connection', () => {
   it('never reaches the address the later resolution names', async () => {
-    const worker = new Worker(WORKER, {
+    const worker = new Worker(OUTSIDE_OFFLINE_HARNESS, {
       eval: true,
       execArgv: [],
       env: {},

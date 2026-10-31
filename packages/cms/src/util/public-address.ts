@@ -148,21 +148,14 @@ export function pinnedLookup(lookup: HostLookup): LookupFunction {
   return (hostname, options, callback) => {
     lookup(hostname).then(
       (addresses) => {
-        if (addresses.length === 0 || addresses.some(isPrivateAddress)) {
+        const [first, ...rest] = addresses.map((address) => ({ address, family: isIP(address) }));
+        if (first === undefined || addresses.some(isPrivateAddress)) {
           callback(notPublic(hostname), '', undefined);
-          return;
+        } else if (options.all === true) {
+          callback(null, [first, ...rest], undefined);
+        } else {
+          callback(null, first.address, first.family);
         }
-        const found = addresses.map((address) => ({ address, family: isIP(address) }));
-        if (options.all === true) {
-          callback(null, found, undefined);
-          return;
-        }
-        const [first] = found;
-        if (first === undefined) {
-          callback(notPublic(hostname), '', undefined);
-          return;
-        }
-        callback(null, first.address, first.family);
       },
       (thrown: unknown) => {
         callback(thrown instanceof Error ? thrown : new Error(String(thrown)), '', undefined);

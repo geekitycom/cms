@@ -360,15 +360,18 @@ describe('the avatar proxy (AC #4)', () => {
     const href = avatarHref(NICO_ICON);
 
     const before = await cms.app.request(href);
-    assert.equal(before.status, 404, 'an icon nobody recorded is refused');
+    assert.equal(before.headers.get('content-type'), 'image/svg+xml');
+    assert.ok(!requested.includes(NICO_ICON), 'an icon nobody recorded is not fetched');
 
     await cms.actorProfiles.sweep();
     const served = await cms.app.request(href);
     assert.equal(served.status, 200);
     assert.equal(served.headers.get('content-type'), 'image/webp');
 
-    const stranger = await cms.app.request(avatarHref('https://files.mastodon.social/other.png'));
-    assert.equal(stranger.status, 404, 'the proxy is still no open proxy');
+    const other = 'https://files.mastodon.social/other.png';
+    const stranger = await cms.app.request(avatarHref(other));
+    assert.equal(stranger.headers.get('content-type'), 'image/svg+xml');
+    assert.ok(!requested.includes(other), 'the proxy is still no open proxy');
   });
 });
 

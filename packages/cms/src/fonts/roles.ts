@@ -6,10 +6,7 @@ import type { Clock } from '../util/clock.ts';
 import type { FontStyle } from './family.ts';
 import type { FontStore } from './store.ts';
 
-/** How long after a failed fetch the next is queued; doubled per failure in a row. */
-export const FONT_RETRY_MS = 60_000;
-
-/** The longest wait between two fetches of a family that keeps failing. */
+export const FONT_RETRY_BASE_MS = 60_000;
 export const FONT_RETRY_MAX_MS = 60 * 60 * 1000;
 
 export const FONT_ROLES = [
@@ -71,25 +68,18 @@ export interface PageFontsOptions {
   readonly store: FontStore;
   /** Queue a fetch of the family in these styles. Resolves with the job's id. */
   readonly refetch: (family: string, styles: readonly FontStyle[]) => Promise<string>;
-  /** What became of a job the refetch queued. */
   readonly jobStatus: (id: string) => Promise<JobStatus | undefined>;
   readonly now: Clock;
 }
 
-/**
- * What a render knows about the fetch of a family whose files are missing:
- * a job it queued and has not seen end, or a failed one it waits out.
- */
 type Fetching =
   | {
       readonly state: 'queued';
       readonly job: Promise<string>;
-      /** Failed fetches in a row before this one. */
-      readonly failures: number;
-      /** Whether a render is already asking what became of the job. */
-      checking: boolean;
+      readonly failuresInARow: number;
+      statusLookupInFlight: boolean;
     }
-  | { readonly state: 'waiting'; readonly retryAt: number; readonly failures: number };
+  | { readonly state: 'waiting'; readonly retryAt: number; readonly failuresInARow: number };
 
 /**
  * The fonts a page is set in: each role the theme declares whose family the
@@ -109,10 +99,10 @@ export function createPageFonts(
     key: string,
     family: string,
     styles: readonly FontStyle[],
-    failures: number,
+    failuresInARow: number,
   ): void {
     const job = refetch(family, styles);
-    const entry: Fetching = { state: 'queued', job, failures, checking: false };
+    const entry: Fetching = { state: 'queued', job, failuresInARow, statusLookupInFlight: false };
     fetching.set(key, entry);
     job.catch((thrown: unknown) => {
       if (fetching.get(key) === entry) fetching.delete(key);
@@ -128,15 +118,20 @@ export function createPageFonts(
   ): Promise<void> {
     const status = await jobStatus(await entry.job);
     if (fetching.get(key) !== entry) return;
-    entry.checking = false;
-    if (status?.state === 'queued' || status?.state === 'running') return;
-    if (status?.state === 'interrupted') return;
+    entry.statusLookupInFlight = false;
+    if (
+      status?.state === 'queued' ||
+      status?.state === 'running' ||
+      status?.state === 'interrupted'
+    ) {
+      return;
+    }
     if (status?.state === 'failed') {
-      const failures = entry.failures + 1;
-      const wait = Math.min(FONT_RETRY_MS * 2 ** (failures - 1), FONT_RETRY_MAX_MS);
+      const failuresInARow = entry.failuresInARow + 1;
+      const wait = Math.min(FONT_RETRY_BASE_MS * 2 ** (failuresInARow - 1), FONT_RETRY_MAX_MS);
       const retryAt = Date.parse(status.finishedAt) + wait;
-      if (now().getTime() >= retryAt) queue(key, family, styles, failures);
-      else fetching.set(key, { state: 'waiting', retryAt, failures });
+      if (now().getTime() >= retryAt) queue(key, family, styles, failuresInARow);
+      else fetching.set(key, { state: 'waiting', retryAt, failuresInARow });
       return;
     }
     queue(key, family, styles, 0);
@@ -147,9 +142,9 @@ export function createPageFonts(
     if (entry === undefined) {
       queue(key, family, styles, 0);
     } else if (entry.state === 'waiting') {
-      if (now().getTime() >= entry.retryAt) queue(key, family, styles, entry.failures);
-    } else if (!entry.checking) {
-      entry.checking = true;
+      if (now().getTime() >= entry.retryAt) queue(key, family, styles, entry.failuresInARow);
+    } else if (!entry.statusLookupInFlight) {
+      entry.statusLookupInFlight = true;
       settle(key, entry, family, styles).catch((thrown: unknown) => {
         console.warn(`The fetch of the font ${family} could not be looked up: ${String(thrown)}`);
       });

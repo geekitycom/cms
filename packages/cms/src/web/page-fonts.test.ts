@@ -7,7 +7,7 @@ import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { BODY, BOLD, FAMILY, googleLookup, stubGoogle } from '../fonts/__testing__/google.ts';
 import type { StubbedGoogle } from '../fonts/__testing__/google.ts';
 import { css2Url } from '../fonts/family.ts';
-import { FONT_FETCH_JOB, FONT_RETRY_MS } from '../fonts/index.ts';
+import { FONT_FETCH_JOB, FONT_RETRY_BASE_MS } from '../fonts/index.ts';
 import type { Cms } from '../index.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { createInProcessTransport } from '../jobs/in-process.ts';
@@ -206,7 +206,7 @@ describe('a fetch-font job that fails', () => {
     await head(cms);
     await assert.rejects(tooSoon, /never came/, 'nothing is queued inside the back-off');
 
-    clock += FONT_RETRY_MS + 1;
+    clock += FONT_RETRY_BASE_MS + 1;
     const queuedAgain = nextJobSent();
     await head(cms);
     await queuedAgain;

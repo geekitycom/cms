@@ -70,14 +70,14 @@ export const AVATAR_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 /** How long a URL that could not be fetched is left alone. */
 export const AVATAR_RETRY_MS = 60 * 60 * 1000;
 
-/** How often the sweep runs. A tick while a sweep is still running is skipped. */
+/** How often the sweep runs. */
 export const AVATAR_SWEEP_MS = 6 * 60 * 60 * 1000;
 
 /** How many pictures are fetched and decoded at once, requests and sweep together. */
 export const AVATAR_FETCH_LIMIT = 4;
 
-/** How many of those the sweep takes, so a page's first view still gets a slot. */
-const SWEEP_PARALLEL = 2;
+const FIRST_VIEW_SLOTS = 2;
+const SWEEP_PARALLEL = AVATAR_FETCH_LIMIT - FIRST_VIEW_SLOTS;
 
 /** How long a browser keeps a picture, in seconds. */
 export const AVATAR_MAX_AGE_SECONDS = 86_400;
@@ -152,8 +152,8 @@ export interface AvatarService {
   answer(source: string): Promise<AvatarAnswer>;
   /**
    * Fetch every recorded avatar that is missing or older than
-   * {@link AVATAR_MAX_AGE_MS}, a few at a time, and delete every cached file
-   * no recorded URL names. Queued behind any sweep already running.
+   * {@link AVATAR_MAX_AGE_MS}, and delete every cached file no recorded URL
+   * names. Queued behind any sweep already running.
    */
   sweep(): Promise<void>;
   /** Sweep now and then every {@link AVATAR_SWEEP_MS}. Safe twice. */
@@ -191,7 +191,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
     }
   }
 
-  /** Fetch one picture into the cache, once at a time per URL. A write that fails is a picture not had. */
+  /** Fetch one picture into the cache, once at a time per URL. */
   function refresh(source: string): Promise<boolean> {
     const running = inFlight.get(source);
     if (running !== undefined) return running;
@@ -254,14 +254,11 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
     } catch {
       return;
     }
-    // Listed after the directory was read: a picture a request wrote while
-    // the sweep ran is there for a source recorded before it was written, so
-    // that source is in this list.
-    const keep = new Set(
+    const recordedAfterReading = new Set(
       admin.listAvatarSources().flatMap((source) => [imageName(source), failedName(source)]),
     );
     for (const name of names) {
-      if (keep.has(name) || name.endsWith('.tmp')) continue;
+      if (recordedAfterReading.has(name) || name.endsWith('.tmp')) continue;
       await rm(avatarFile(name), { force: true });
     }
   }

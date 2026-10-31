@@ -68,8 +68,7 @@ const requested: string[] = [];
 let web: Record<string, () => Response> = {};
 let hanging = new Set<string>();
 let heardHanging: (() => void) | undefined;
-/** How a hanging request is let go, by URL. */
-const held = new Map<string, (response: Response) => void>();
+const hangingReleases = new Map<string, (response: Response) => void>();
 
 const original = globalThis.fetch;
 before(() => {
@@ -80,7 +79,7 @@ before(() => {
       if (request.signal.aborted) return Promise.reject(new Error('aborted'));
       heardHanging?.();
       return new Promise<Response>((resolve, reject) => {
-        held.set(request.url, resolve);
+        hangingReleases.set(request.url, resolve);
         request.signal.addEventListener('abort', () => reject(new Error('aborted')), {
           once: true,
         });
@@ -99,7 +98,7 @@ afterEach(() => {
   requested.length = 0;
   web = {};
   hanging = new Set();
-  held.clear();
+  hangingReleases.clear();
 });
 
 /** A picture of one colour, `width` by `height`, in `format`. */
@@ -528,7 +527,8 @@ describe('a sweep that is still running', () => {
     const file = path.join(dataFolder(dataDir, AVATARS), cachedFileFor(fresh));
     assert.ok(existsSync(file));
 
-    for (const release of held.values()) release(new Response('missing', { status: 404 }));
+    for (const release of hangingReleases.values())
+      release(new Response('missing', { status: 404 }));
     await sweeping;
     await cms.avatars.settled();
 
@@ -550,7 +550,6 @@ describe('a picture that cannot be written', () => {
   });
 });
 
-/** A service over `sources`, none cached, with a timer the test fires by hand. */
 function serviceOver(
   sources: readonly string[],
   dataDir: string,
@@ -592,8 +591,8 @@ function whenHanging(): Promise<void> {
 }
 
 function releaseAll(): void {
-  for (const release of held.values()) release(new Response('missing', { status: 404 }));
-  held.clear();
+  for (const release of hangingReleases.values()) release(new Response('missing', { status: 404 }));
+  hangingReleases.clear();
 }
 
 describe('fetching at once', () => {
