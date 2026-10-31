@@ -175,21 +175,32 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
   const imageName = (source: string): string => `${hashOf(source)}.webp`;
   const failedName = (source: string): string => `${hashOf(source)}.failed`;
 
-  /** How long ago a cache file was written, or `undefined` when there is none. */
-  async function ageOf(name: string): Promise<number | undefined> {
+  /** When a cache file was written, or `undefined` when there is none. */
+  async function writtenAt(name: string): Promise<number | undefined> {
     try {
-      return config.now().getTime() - (await stat(avatarFile(name))).mtimeMs;
+      return (await stat(avatarFile(name))).mtimeMs;
     } catch {
       return undefined;
     }
   }
 
-  /** Fetch one picture into the cache, once at a time per URL. */
+  /** How long ago a cache file was written, or `undefined` when there is none. */
+  async function ageOf(name: string): Promise<number | undefined> {
+    const at = await writtenAt(name);
+    return at === undefined ? undefined : config.now().getTime() - at;
+  }
+
+  /** Fetch one picture into the cache, once at a time per URL. A write that fails is a picture not had. */
   function refresh(source: string): Promise<boolean> {
     const running = inFlight.get(source);
     if (running !== undefined) return running;
 
-    const started = fetchInto(source, untilStopped.signal).finally(() => inFlight.delete(source));
+    const started = fetchInto(source, untilStopped.signal)
+      .catch((thrown: unknown) => {
+        logger.warn(`Could not keep the avatar at ${source}: ${messageOf(thrown)}`);
+        return false;
+      })
+      .finally(() => inFlight.delete(source));
     inFlight.set(source, started);
     return started;
   }
@@ -213,6 +224,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
 
   async function sweepOnce(): Promise<void> {
     const { signal } = untilStopped;
+    const startedAt = config.now().getTime();
     const sources = admin.listAvatarSources();
     const keep = new Set<string>();
 
@@ -236,7 +248,12 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
       return;
     }
     for (const name of names) {
-      if (!keep.has(name)) await rm(avatarFile(name), { force: true });
+      if (keep.has(name) || name.endsWith('.tmp')) continue;
+      // A picture written since the sources were listed is one a request
+      // fetched for a source recorded after that, not one nobody shows.
+      const at = await writtenAt(name);
+      if (at !== undefined && at >= startedAt) continue;
+      await rm(avatarFile(name), { force: true });
     }
   }
 

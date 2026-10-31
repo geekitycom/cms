@@ -8,6 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
@@ -65,6 +66,8 @@ const requested: string[] = [];
 let web: Record<string, () => Response> = {};
 let hanging = new Set<string>();
 let heardHanging: (() => void) | undefined;
+/** How a hanging request is let go, by URL. */
+const held = new Map<string, (response: Response) => void>();
 
 const original = globalThis.fetch;
 before(() => {
@@ -73,7 +76,8 @@ before(() => {
     requested.push(request.url);
     if (hanging.has(request.url)) {
       heardHanging?.();
-      return new Promise<Response>((_, reject) => {
+      return new Promise<Response>((resolve, reject) => {
+        held.set(request.url, resolve);
         request.signal.addEventListener('abort', () => reject(new Error('aborted')), {
           once: true,
         });
@@ -92,6 +96,7 @@ afterEach(() => {
   requested.length = 0;
   web = {};
   hanging = new Set();
+  held.clear();
 });
 
 /** A picture of one colour, `width` by `height`, in `format`. */
@@ -489,6 +494,58 @@ describe('the cache (AC #4)', () => {
 function cachedFileFor(source: string): string {
   return `${createHash('sha256').update(source).digest('hex')}.webp`;
 }
+
+describe('a sweep that is still running', () => {
+  it('keeps a picture a request fetched for a source recorded after it started', async () => {
+    const { cms, dataDir } = await site();
+    const fresh = 'https://remote.example/avatars/fresh.png';
+    web[fresh] = image(await picture(64, 64, 'png'), 'image/png');
+    hanging = new Set([ADA_ICON, GRACE_PHOTO, IDLE_ICON]);
+    const stalled = nextEvent('the sweep asking for a picture', (done) => {
+      heardHanging = done;
+      return () => {
+        heardHanging = undefined;
+      };
+    });
+    const sweeping = cms.avatars.sweep();
+    await stalled;
+
+    cms.admin.putFollower({
+      username: 'ada',
+      actorId: 'https://remote.example/users/fresh',
+      inboxId: 'https://remote.example/users/fresh/inbox',
+      sharedInboxId: null,
+      handle: null,
+      name: 'fresh',
+      iconUrl: fresh,
+      url: 'https://remote.example/users/fresh',
+    });
+    const response = await cms.app.request(avatarHref(fresh));
+    assert.equal(response.headers.get('content-type'), 'image/webp');
+    const file = path.join(dataFolder(dataDir, AVATARS), cachedFileFor(fresh));
+    assert.ok(existsSync(file));
+
+    for (const release of held.values()) release(new Response('missing', { status: 404 }));
+    await sweeping;
+    await cms.avatars.settled();
+
+    assert.ok(existsSync(file), 'the sweep deleted the picture written while it ran');
+  });
+});
+
+describe('a picture that cannot be written', () => {
+  it('is answered with the placeholder', async () => {
+    const { cms, dataDir } = await site();
+    web[ADA_ICON] = image(await picture(64, 64, 'png'), 'image/png');
+    await rm(dataFolder(dataDir, AVATARS), { recursive: true, force: true });
+    await writeFile(dataFolder(dataDir, AVATARS), 'in the way');
+
+    const response = await cms.app.request(avatarHref(ADA_ICON));
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'image/svg+xml');
+  });
+});
 
 describe('stopping the sweep', () => {
   it('ends the sweep in flight without marking the picture it cut off as failed', async () => {
