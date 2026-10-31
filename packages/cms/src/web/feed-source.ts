@@ -9,7 +9,7 @@ import type { Document } from '../content/document.ts';
 import type { AltTextLibrary } from '../content/alt-text.ts';
 import type { User } from '../site/users.ts';
 import type { SiteData } from '../theme/site-data.ts';
-import type { ReplyContext } from '../webmention/reply-context.ts';
+import type { AnsweredFeed, ReplyContext } from '../webmention/reply-context.ts';
 
 /**
  * What a feed is, before anything has been written: which formats the site
@@ -376,8 +376,11 @@ export interface FeedComment {
    * note's id in the fediverse or a webmention's stored id.
    */
   id: string;
-  /** The guid of what it answers in these feeds: the post's, or a reply's. */
-  inReplyTo?: string | undefined;
+  /**
+   * What it answers: the post's or a reply's guid in these feeds, whether that
+   * guid is its page, and the feed it is in.
+   */
+  inReplyTo?: { id: string; isPermaLink: boolean; feed?: AnsweredFeed } | undefined;
   /** Its direct replies, counted, and the feed holding only them. */
   replies?: { count: number; feed: string } | undefined;
   /** The feed its author publishes, when the site knows one. */

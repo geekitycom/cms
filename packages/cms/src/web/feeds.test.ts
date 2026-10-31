@@ -1064,6 +1064,36 @@ describe('a reply in the feeds', () => {
     assert.equal(body.split(element).length - 1, 1, 'and source:inReplyTo names it once');
     assert.equal(body.replaceAll(line, '').replaceAll(element, '').includes(TARGET), false);
   });
+
+  it('names the feed the target is in, from its stored context (RSS.chat)', async () => {
+    const feed = 'https://remote.example/users/dave/rss.xml';
+    const { cms } = await sharedSite({
+      ...files,
+      '_data/replyContexts.json': JSON.stringify({
+        [TARGET]: { name: 'Hello', feed: { url: feed, title: 'Dave & Co' } },
+      }),
+    });
+    const { body } = await rss(cms, '/feed/');
+
+    assert.ok(
+      body.includes(
+        `<source:inReplyTo feedUrl="${feed}" feedTitle="Dave &amp; Co">${TARGET}</source:inReplyTo>`,
+      ),
+    );
+  });
+
+  it('names the feed without a title when the stored one has none', async () => {
+    const feed = 'https://remote.example/users/dave/rss.xml';
+    const { cms } = await sharedSite({
+      ...files,
+      '_data/replyContexts.json': JSON.stringify({
+        [TARGET]: { name: 'Hello', feed: { url: feed } },
+      }),
+    });
+    const { body } = await rss(cms, '/feed/');
+
+    assert.ok(body.includes(`<source:inReplyTo feedUrl="${feed}">${TARGET}</source:inReplyTo>`));
+  });
 });
 
 describe('an RSVP in the feeds (TASK-198)', () => {

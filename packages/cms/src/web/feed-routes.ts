@@ -92,6 +92,7 @@ export function comments(c: Context<GeekityEnv>, document: Document | undefined)
       ? conversation.latest(limit, c.var.siteAtRequestStart)
       : spokenIn(conversation.thread(document, c.var.siteAtRequestStart)),
     {
+      title: site.title,
       baseUrl: config.baseUrl,
       limit,
       cited: (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart),
@@ -131,6 +132,7 @@ export function repliesFeed(c: Context<GeekityEnv>, segment: string): Response {
   const source: CommentFeedSource = {
     site,
     comments: feedComments(found.replies, {
+      title: site.title,
       baseUrl: config.baseUrl,
       limit: feedSize(site),
       cited,

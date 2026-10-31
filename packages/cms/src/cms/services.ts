@@ -92,6 +92,7 @@ import {
 } from '../webmention/index.ts';
 import type { ReplyContextService, WebmentionService } from '../webmention/index.ts';
 import { heldReplyContext } from '../webmention/reply-context.ts';
+import { heldFeed } from '../web/conversation-feed.ts';
 import type { Booted } from './boot.ts';
 import type { PluginRegistry } from '../plugins/registry.ts';
 import type { Ending, Service } from './lifecycle.ts';
@@ -209,7 +210,15 @@ export function createServices({
       settings,
       at: (target, site) => {
         const found = conversation.heldAt(target, site);
-        return found === undefined ? undefined : heldReplyContext(target, found);
+        if (found === undefined) return undefined;
+        // Only the stored contexts name the feed's post: a held one would
+        // come back here, and two wordless replies could ask for each other.
+        const feeds = {
+          title: site.title,
+          baseUrl: resolved.baseUrl,
+          cited: (url: string) => replyContexts.stored(url),
+        };
+        return heldReplyContext(target, found, heldFeed(found, feeds));
       },
     },
     onStored: (target, previous) => {

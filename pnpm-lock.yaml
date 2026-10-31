@@ -271,6 +271,9 @@ importers:
       nunjucks:
         specifier: ^3.2.4
         version: 3.2.4(chokidar@3.6.0)
+      sax:
+        specifier: ^1.6.1
+        version: 1.6.1
       semver:
         specifier: ^7.8.5
         version: 7.8.5
@@ -320,6 +323,9 @@ importers:
       '@types/nunjucks':
         specifier: ^3.2.6
         version: 3.2.6
+      '@types/sax':
+        specifier: ^1.2.7
+        version: 1.2.7
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0

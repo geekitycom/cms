@@ -9,6 +9,8 @@ import { citedEntry } from './microformats.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { fediversePostOf, fediverseSource } from './reply-context/fediverse.ts';
 import type { FediverseLookup, FediversePost } from './reply-context/fediverse.ts';
+import { answeredFeed } from './reply-context/feed.ts';
+import type { AnsweredFeed } from './reply-context/feed.ts';
 import { jsonLdEventSource, jsonLdSource } from './reply-context/json-ld.ts';
 import {
   fetchOembed,
@@ -31,6 +33,7 @@ import { merge, withoutDirectionControls } from './reply-context/source.ts';
 import type { Limits, Source } from './reply-context/source.ts';
 
 export type { FediverseLookup, FediversePost } from './reply-context/fediverse.ts';
+export type { AnsweredFeed } from './reply-context/feed.ts';
 
 /**
  * Reply context: what a reply shows of the post it answers.
@@ -93,6 +96,8 @@ export interface ReplyContext {
   readonly location?: string;
   /** Its picture, copied into the site's uploads. */
   readonly picture?: CitedPicture;
+  /** The RSS feed it is published in, when its page names one that holds it. */
+  readonly feed?: AnsweredFeed;
 }
 
 export interface CitedAuthor {
@@ -165,22 +170,33 @@ export async function fetchReplyContext(
     return { ok: true, context: { url: target }, picture: { url: read.image, kind: 'photo' } };
   }
 
-  const post = await fediversePostOf(read.page, options.fediverse, limits);
-  const original =
-    known === undefined ? await originalOf(target, read.page, post, limits) : undefined;
-  if (original !== undefined) {
-    const found = await describePage(
-      target,
-      original,
-      await fediversePostOf(original, options.fediverse, limits),
-      undefined,
-      limits,
-    );
-    if (found !== undefined) {
-      return { ...found, context: { ...found.context, original: original.url } };
-    }
-  }
-  return (await describePage(target, read.page, post, known, limits)) ?? refuse('nothing to show');
+  const page = read.page;
+  const post = await fediversePostOf(page, options.fediverse, limits);
+  const original = known === undefined ? await originalOf(target, page, post, limits) : undefined;
+  const found =
+    (original === undefined
+      ? undefined
+      : await describeOriginal(target, original, options.fediverse, limits)) ??
+    (await describePage(target, page, post, known, limits));
+  if (found === undefined) return refuse('nothing to show');
+
+  // The feed of the page cited, never the original's: that is the feed whose
+  // item `source:inReplyTo` names.
+  const feed = await answeredFeed(page, target, limits);
+  return feed === undefined ? found : { ...found, context: { ...found.context, feed } };
+}
+
+async function describeOriginal(
+  target: string,
+  original: HtmlPage,
+  fediverse: FediverseLookup | undefined,
+  limits: Limits,
+): Promise<Extract<ReplyContextFetch, { ok: true }> | undefined> {
+  const post = await fediversePostOf(original, fediverse, limits);
+  const found = await describePage(target, original, post, undefined, limits);
+  return found === undefined
+    ? undefined
+    : { ...found, context: { ...found.context, original: original.url } };
 }
 
 async function describePage(
@@ -338,7 +354,7 @@ export function readReplyContext(
  * fetched, so a reply to a comment shows the comment rather than the whole
  * post it is on, and a reply to the site's own post never fetches its page.
  */
-export function heldReplyContext(target: string, held: HeldAt): ReplyContext {
+export function heldReplyContext(target: string, held: HeldAt, feed?: AnsweredFeed): ReplyContext {
   const said =
     held.kind === 'reply'
       ? held.reply
@@ -357,6 +373,7 @@ export function heldReplyContext(target: string, held: HeldAt): ReplyContext {
     ...(text === '' ? {} : { text }),
     author: { name: said.author.name, ...(url === undefined ? {} : { url: url.href }) },
     published: said.published.toISOString(),
+    ...(feed === undefined ? {} : { feed }),
   };
 }
 

@@ -454,13 +454,16 @@ describe('a reply post in the comments feeds (AC #11)', () => {
 });
 
 describe('a reply post in the RSS feeds (AC #12)', () => {
-  it('carries source:inReplyTo naming what it answers', async () => {
+  it('carries source:inReplyTo naming what it answers and the feed it is in', async () => {
     const cms = await site();
     await reply(cms, NATIVE, { [COMMENT_FIELDS.listed]: '1' });
 
     const rss = await page(cms, '/feed/');
     assert.ok(
-      rss.includes(`<source:inReplyTo>${BASE_URL}/comment/${NATIVE}/</source:inReplyTo>`),
+      rss.includes(
+        `<source:inReplyTo feedUrl="${BASE_URL}${POST_URL}feed/" feedTitle="Comments on: Hello world">` +
+          `${BASE_URL}/comment/${NATIVE}/</source:inReplyTo>`,
+      ),
       rss,
     );
   });

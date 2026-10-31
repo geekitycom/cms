@@ -21,7 +21,7 @@ import type { ContentLicense } from '../content/license.ts';
 import { canonicalLocale, documentLanguage } from '../content/locale.ts';
 import { lastModifiedOf } from './negotiate.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
-import type { ReplyContext } from '../webmention/reply-context.ts';
+import type { AnsweredFeed, ReplyContext } from '../webmention/reply-context.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
 
 /**
@@ -129,6 +129,8 @@ export interface FeedItem {
    * the source namespace's `source:inReplyTo`.
    */
   inReplyTo?: string | undefined;
+  /** The feed what it answers is in, when the reply context found one. */
+  inReplyToFeed?: AnsweredFeed | undefined;
   /**
    * The language the post is written in, when its front matter names one that
    * is not the feed's own. A post in the feed's language says
@@ -261,7 +263,11 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   if (image !== undefined) item.image = absoluteUrl(image, baseUrl);
 
   const inReplyTo = replyTarget(document);
-  if (inReplyTo !== undefined) item.inReplyTo = inReplyTo;
+  if (inReplyTo !== undefined) {
+    item.inReplyTo = inReplyTo;
+    const feed = context.replyContext?.(inReplyTo)?.feed;
+    if (feed !== undefined) item.inReplyToFeed = feed;
+  }
 
   const language = documentLanguage(document);
   if (language !== undefined && language !== canonicalLocale(feedLanguage(context.site))) {

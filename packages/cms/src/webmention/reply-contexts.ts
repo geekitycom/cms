@@ -348,6 +348,8 @@ function parseContexts(text: string): Record<string, ReplyContext> {
     const handle = stringOf(author?.['handle']);
     const photo = parseCitedImage(author?.['photo']);
     const picture = parseCitedPicture(value['picture']);
+    const feed = isRecord(value['feed']) ? value['feed'] : undefined;
+    const feedUrl = webUrlOf(feed?.['url']);
     contexts[target] = {
       url: target,
       ...optional('original', webUrlOf(value['original'])),
@@ -368,6 +370,9 @@ function parseContexts(text: string): Record<string, ReplyContext> {
       ...optional('start', stringOf(value['start'])),
       ...optional('location', stringOf(value['location'])),
       ...(picture === undefined ? {} : { picture }),
+      ...(feedUrl === undefined
+        ? {}
+        : { feed: { url: feedUrl, ...optional('title', stringOf(feed?.['title'])) } }),
     };
   }
   return contexts;

@@ -45,6 +45,12 @@ const NOTE_UNDER_NOTE = 'https://remote.example/notes/2';
 const GUS = 'https://gus.example/reply';
 const KIT = 'https://kit.example/reply';
 const MAX = 'https://max.example/linked';
+const MIGRATED = '/2026/09/migrated/';
+const MIGRATED_GUID = `${BASE_URL}/?p=813`;
+const ON_MIGRATED = id('f1');
+const UNPAGED_NOTE = 'https://remote.example/objects/9';
+const UNPAGED_NOTE_PAGE = 'https://remote.example/@carol/9';
+const UNDER_UNPAGED_NOTE = 'https://remote.example/objects/10';
 
 function commentPage(which: string): string {
   return `${BASE_URL}/comment/${which}/`;
@@ -94,6 +100,17 @@ const FILES: Record<string, string> = {
     `permalink: ${ANSWER}`,
     `in-reply-to: ${commentPage(TOP)}`,
   ]),
+  'posts/2026-09-01-migrated.md': document([
+    'title: Migrated',
+    "date: '2026-09-01T09:00:00Z'",
+    'author: ada',
+    `permalink: ${MIGRATED}`,
+    `guid: ${MIGRATED_GUID}`,
+  ]),
+  '_data/comments/migrated.json': JSON.stringify({
+    post: MIGRATED,
+    comments: [said(ON_MIGRATED, 'Rae', 1)],
+  }),
   'pages/about.md': document(['title: About', `permalink: ${PAGE}`, 'comments: true']),
   'pages/colophon.md': document(['title: Colophon', `permalink: ${CLOSED_PAGE}`]),
   '_data/comments/hello.json': JSON.stringify({
@@ -132,7 +149,7 @@ const FILES: Record<string, string> = {
 
 let cms: Cms;
 
-function logNote(note: { id: string; inReplyTo: string; minute: number }): void {
+function logNote(note: { id: string; inReplyTo: string; minute: number; url?: string }): void {
   const actor = 'https://remote.example/users/carol';
   cms.admin.logInboxActivity({
     activityId: `${note.id}/activity`,
@@ -151,7 +168,7 @@ function logNote(note: { id: string; inReplyTo: string; minute: number }): void 
         content: '<p>Carol has thoughts.</p>',
         inReplyTo: note.inReplyTo,
         published: `2026-09-03T10:${String(note.minute).padStart(2, '0')}:00Z`,
-        url: note.id,
+        url: note.url ?? note.id,
       },
     }),
   });
@@ -174,6 +191,13 @@ before(async () => {
   });
   logNote({ id: NOTE, inReplyTo: POST_GUID, minute: 7 });
   logNote({ id: NOTE_UNDER_NOTE, inReplyTo: NOTE, minute: 8 });
+  logNote({
+    id: UNPAGED_NOTE,
+    inReplyTo: `${BASE_URL}${MIGRATED}`,
+    minute: 11,
+    url: UNPAGED_NOTE_PAGE,
+  });
+  logNote({ id: UNDER_UNPAGED_NOTE, inReplyTo: UNPAGED_NOTE, minute: 12 });
 });
 
 async function items(pathname: string): Promise<XmlElement[]> {
@@ -327,6 +351,65 @@ describe('source:comments', () => {
     assert.ok(answer !== undefined);
     assert.equal(optional(answer, 'source:comments'), undefined);
     assert.equal(child(answer, 'wfw:commentRss').text, `${ANSWER_GUID}feed/`);
+  });
+});
+
+describe('source:inReplyTo names the feed what it answers is in (RSS.chat)', () => {
+  function answered(item: XmlElement | undefined): Record<string, string> {
+    assert.ok(item !== undefined);
+    return child(item, 'source:inReplyTo').attributes;
+  }
+
+  it('names the site feed for a reply to a post, and the thread’s feed for a reply to a reply', async () => {
+    for (const feed of [`${POST}feed/`, '/comments/feed/']) {
+      const found = byGuid(await items(feed));
+      assert.deepEqual(answered(found.get(commentPage(TOP))), {
+        feedUrl: `${BASE_URL}/feed/`,
+        feedTitle: 'A Site',
+      });
+      assert.deepEqual(answered(found.get(commentPage(MIDDLE))), {
+        feedUrl: `${POST_GUID}feed/`,
+        feedTitle: 'Comments on: Hello',
+      });
+      assert.deepEqual(answered(found.get(KIT)), {
+        feedUrl: `${POST_GUID}feed/`,
+        feedTitle: 'Comments on: Hello',
+      });
+    }
+  });
+
+  it('names no feed for a reply to a page, which is in none', async () => {
+    const [onPage] = await items(`${PAGE}feed/`);
+    assert.deepEqual(answered(onPage), {});
+  });
+
+  it('says isPermaLink="false" when the guid it names is not that item’s page', async () => {
+    const found = byGuid(await items(`${MIGRATED}feed/`));
+    assert.equal(
+      child(found.get(commentPage(ON_MIGRATED)) as XmlElement, 'source:inReplyTo').text,
+      MIGRATED_GUID,
+    );
+    assert.equal(answered(found.get(commentPage(ON_MIGRATED)))['isPermaLink'], 'false');
+    assert.equal(answered(found.get(UNPAGED_NOTE))['isPermaLink'], 'false');
+    assert.equal(
+      child(found.get(UNPAGED_NOTE) as XmlElement, 'guid').attributes['isPermaLink'],
+      'false',
+    );
+    assert.equal(
+      child(found.get(UNDER_UNPAGED_NOTE) as XmlElement, 'source:inReplyTo').text,
+      UNPAGED_NOTE,
+    );
+    assert.equal(answered(found.get(UNDER_UNPAGED_NOTE))['isPermaLink'], 'false');
+  });
+
+  it('names the thread’s feed on a reply post that answers a comment here', async () => {
+    const answer = byGuid(await items('/feed/')).get(ANSWER_GUID);
+    assert.ok(answer !== undefined);
+    assert.equal(child(answer, 'source:inReplyTo').text, commentPage(TOP));
+    assert.deepEqual(answered(answer), {
+      feedUrl: `${POST_GUID}feed/`,
+      feedTitle: 'Comments on: Hello',
+    });
   });
 });
 

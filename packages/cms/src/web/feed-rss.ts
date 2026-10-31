@@ -11,6 +11,7 @@ import {
   notifyServerOf,
 } from './feed-source.ts';
 import type { CommentFeedSource, FeedComment, FeedSource } from './feed-source.ts';
+import type { AnsweredFeed } from '../webmention/reply-context.ts';
 import {
   cdata,
   CREATIVE_COMMONS_NAMESPACE,
@@ -182,9 +183,28 @@ export function rssItem(item: FeedItem): string[] {
     `      <source:markdown>${cdata(item.markdown)}</source:markdown>`,
     // What a reply answers, in the same namespace: RSS 2.0 has no
     // element of its own for it.
-    ...optionalElement('source:inReplyTo', item.inReplyTo, 3),
+    ...(item.inReplyTo === undefined
+      ? []
+      : [sourceInReplyTo(item.inReplyTo, { isPermaLink: true, feed: item.inReplyToFeed })]),
     '    </item>',
   ];
+}
+
+/**
+ * `source:inReplyTo`, with the feed the answered item is in when that is
+ * known. `isPermaLink` follows the guid's model: said only when it is false.
+ */
+function sourceInReplyTo(
+  id: string,
+  { isPermaLink, feed }: { isPermaLink: boolean; feed: AnsweredFeed | undefined },
+): string {
+  const attributes: [string, string][] = [
+    ...(isPermaLink ? [] : [['isPermaLink', 'false'] as [string, string]]),
+    ...(feed === undefined ? [] : [['feedUrl', feed.url] as [string, string]]),
+    ...(feed?.title === undefined ? [] : [['feedTitle', feed.title] as [string, string]]),
+  ];
+  const written = attributes.map(([name, value]) => ` ${name}="${escapeXml(value)}"`).join('');
+  return `      <source:inReplyTo${written}>${escapeXml(id)}</source:inReplyTo>`;
 }
 
 /**
@@ -334,7 +354,14 @@ function commentItem(comment: FeedComment): string[] {
       : [
           `      <source url="${escapeXml(comment.authorFeed)}">${escapeXml(comment.author)}</source>`,
         ]),
-    ...optionalElement('source:inReplyTo', comment.inReplyTo, 3),
+    ...(comment.inReplyTo === undefined
+      ? []
+      : [
+          sourceInReplyTo(comment.inReplyTo.id, {
+            isPermaLink: comment.inReplyTo.isPermaLink,
+            feed: comment.inReplyTo.feed,
+          }),
+        ]),
     ...sourceComments(comment.replies),
     // A comment never carries a description, so its summary is always an
     // excerpt of what it says.

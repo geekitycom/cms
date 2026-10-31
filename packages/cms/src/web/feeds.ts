@@ -215,7 +215,7 @@ function commentsFingerprint(source: CommentFeedSource): string {
         comment.published.toISOString(),
         comment.html,
         comment.post?.title ?? '',
-        comment.inReplyTo ?? '',
+        JSON.stringify(comment.inReplyTo ?? null),
         comment.replies === undefined
           ? ''
           : `${String(comment.replies.count)} ${comment.replies.feed}`,

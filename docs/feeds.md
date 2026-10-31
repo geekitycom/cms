@@ -173,6 +173,26 @@ An item carries:
 
 The `guid`, the terms, and the summary are the ones described above.
 
+`source:inReplyTo` also carries `feedUrl` and `feedTitle`, which name the feed
+that holds the item it answers. RSS.chat clients follow `feedUrl` to the other
+side of a conversation. The site finds that feed as follows:
+
+- A post or page on this site: a listed post is in the site feed `/feed/`,
+  titled with the site's title. A page is in no feed.
+- A comment or reply on this site: the comments feed of the post it is on,
+  `{permalink}feed/`, titled `Comments on: {post}`.
+- A page on another site: the site reads the page when it fetches the reply
+  context. If the page links an RSS feed with `rel="alternate"`, the site
+  fetches that feed and looks for an item whose `guid` or `link` is the page.
+  The item's RSS 2.0 `<source url>` and its text name the feed, when the item
+  has one. Otherwise the feed's URL and its channel `title` do. rss.chat
+  publishes a site-wide feed whose items point to each author's own feed this
+  way.
+
+Each attribute is left out when the site does not know it: the page links no
+RSS feed, the feed holds no such item, or the feed has no title. Mastodon
+status pages link no RSS feed, so a reply to a toot carries neither.
+
 `source:markdown` is from Dave Winer's [source namespace][source-ns]. A feed
 reader that understands Markdown should render from it, not from
 `content:encoded`. It is the same text the ActivityStreams `Article` carries as
@@ -278,7 +298,10 @@ Each item also carries, from the [source namespace][source-ns]:
   `guid` of the reply it answers. A reply can sit under a comment that visitors
   cannot see, because it is waiting for a moderator, is spam, or is deleted.
   That reply names the nearest visible reply above it, or the post, and counts
-  as that one's reply.
+  as that one's reply. It has `isPermaLink="false"` when that `guid` is not
+  the item's page, as `guid` itself does. It also has `feedUrl` and
+  `feedTitle`: the site feed for an answer to a listed post, nothing for an
+  answer to a page, and the post's comments feed for an answer to a reply.
 - `source:comments`, only on an item with replies. `count` is how many replies
   answer it directly, and `feedUrl` is its `/replies/` feed.
 - `<source url="…">Name</source>`, the core RSS element, when the site knows a
