@@ -76,7 +76,7 @@ describe('the preview endpoint', () => {
     assert.match(html, /<p class="page-meta">/, 'the page layout, not the post one');
   });
 
-  it('previews a body with no title without falling over', async () => {
+  it('previews a body with no title the way the published note shows it, with no heading', async () => {
     const { agent, token } = await admin();
 
     const response = await agent.post('/admin/preview', {
@@ -87,7 +87,11 @@ describe('the preview endpoint', () => {
     });
 
     assert.equal(response.status, 200);
-    assert.match(await response.text(), /Just a body\./);
+    const html = await response.text();
+    assert.match(html, /Just a body\./);
+    assert.doesNotMatch(html, /<h1 class="p-name">/);
+    assert.doesNotMatch(html, /Untitled/);
+    assert.match(html, /<span class="kicker-kind">Note<\/span>/);
   });
 
   it('escapes a title rather than letting it into the markup', async () => {

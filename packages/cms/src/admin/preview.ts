@@ -92,7 +92,7 @@ function previewDocument(
       submitted: form.permalink,
       wikiBase: permalinkBasesFromSettings(c.var.siteAtRequestStart).wiki,
     }),
-    title: form.title === '' ? 'Untitled' : form.title,
+    title: form.title,
     ...(date === undefined ? {} : { date }),
     tags: splitTags(form.tags),
     categories: splitTags(form.categories),
