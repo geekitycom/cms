@@ -283,7 +283,7 @@ The widths are [`imageWidths`](configuration.md#uploads-and-images), which
 defaults to 11ty/image's own set. The CMS never upscales. It always adds the
 original's own width, so a wide display can pick a full-size copy that is not
 the unprocessed upload. A format that cannot hold the full size gets its
-widest copy at its limit: WebP at 16383 pixels, AVIF at 16384 and JPEG at 65535
+widest copy at its limit: WebP at 16383 pixels, AVIF at 16384 and JPEG at 65500
 in either dimension.
 
 The formats are [`imageFormats`](configuration.md#uploads-and-images) plus the

@@ -297,7 +297,7 @@ function outputFormats(config: ImageConfig, sourceFormat: string): string[] {
 /** The largest width or height each encoder can write. PNG has no such limit. */
 const FORMAT_MAX_DIMENSIONS: ReadonlyMap<string, number> = new Map([
   ['avif', 16384],
-  ['jpeg', 65535],
+  ['jpeg', 65500],
   ['webp', 16383],
 ]);
 
@@ -439,15 +439,12 @@ export async function findImageVariant(
   if (upload === undefined) return undefined;
   const name = relative.slice(cut + 1);
 
-  // Nothing derived from an upload may outlive it, however it went.
   const version = sourceVersion(config, upload.source);
   if (version === undefined) {
     await forgetDerivedSets(upload);
     return undefined;
   }
 
-  // The icons live beside the widths but are drawn only from the site icon,
-  // so no other upload can be made into seven more files.
   const icon = iconSource === undefined ? undefined : locateUpload(config, iconSource);
   const asset = !isDerivedIcon(name)
     ? await findDerivedFile(widths(config), upload, version, name)

@@ -51,8 +51,6 @@ async function site(
   }
 
   const cms = await box.open({ contentDir, dataDir, ...config });
-  // A site's icons are linked once they have been drawn, which the first
-  // render after the setting changes starts in the background.
   await deriveSiteIcons(cms.config, iconSetting(settings));
   return cms;
 }

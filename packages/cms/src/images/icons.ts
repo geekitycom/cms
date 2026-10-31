@@ -167,11 +167,9 @@ function drawnIcons(
   config: ImageConfig,
   setting: string | undefined,
 ): { source: string; version: string } | undefined {
-  const named = siteIconSource(config, setting);
-  const upload = named === undefined ? undefined : locateUpload(config, named);
-  if (upload === undefined) return undefined;
-  const version = sourceVersion(config, upload.source);
-  if (version === undefined) return undefined;
+  const named = namedIcon(config, setting);
+  if (named === undefined) return undefined;
+  const { upload, version } = named;
 
   const known = settledSet(SITE_ICONS, upload, version);
   if (known === undefined) {
@@ -192,12 +190,22 @@ export async function deriveSiteIcons(
   config: ImageConfig,
   setting: string | undefined,
 ): Promise<void> {
-  const named = siteIconSource(config, setting);
-  const upload = named === undefined ? undefined : locateUpload(config, named);
-  if (upload === undefined) return;
-  const version = sourceVersion(config, upload.source);
-  if (version === undefined || settledSet(SITE_ICONS, upload, version) !== undefined) return;
-  await deriveSet(SITE_ICONS, upload, version);
+  const named = namedIcon(config, setting);
+  if (named === undefined || settledSet(SITE_ICONS, named.upload, named.version) !== undefined) {
+    return;
+  }
+  await deriveSet(SITE_ICONS, named.upload, named.version);
+}
+
+/** The upload the icon setting names and the version of its bytes, when it is there. */
+function namedIcon(
+  config: ImageConfig,
+  setting: string | undefined,
+): { upload: Upload; version: string } | undefined {
+  const source = siteIconSource(config, setting);
+  const upload = source === undefined ? undefined : locateUpload(config, source);
+  const version = upload === undefined ? undefined : sourceVersion(config, upload.source);
+  return version === undefined || upload === undefined ? undefined : { upload, version };
 }
 
 /** The icons the head of a site whose icon setting is this links, or none at all. */
@@ -277,8 +285,9 @@ async function deriveIcons(upload: Upload): Promise<readonly string[] | undefine
     if (width === undefined || height === undefined || !decodable({ width, height })) {
       return undefined;
     }
-    for (const [name, shape] of DERIVED_ICONS)
+    for (const [name, shape] of DERIVED_ICONS) {
       drawn.push([name, await drawIcon(upload.file, shape)]);
+    }
   } catch (error) {
     console.warn(`Could not derive the site's icons from ${upload.source}: ${messageOf(error)}`);
     return undefined;
