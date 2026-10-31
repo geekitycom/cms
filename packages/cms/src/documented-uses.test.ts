@@ -113,6 +113,7 @@ describe('the feed builders, as docs/feeds.md uses them', () => {
     });
     const settings = await cms.settings.values(SITE);
     const options = {
+      title: site.title,
       baseUrl: cms.config.baseUrl,
       limit: 20,
       cited: (url: string) => cms.replyContexts.read(url, settings),

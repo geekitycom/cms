@@ -182,9 +182,33 @@ export function rssItem(item: FeedItem): string[] {
     `      <source:markdown>${cdata(item.markdown)}</source:markdown>`,
     // What a reply answers, in the same namespace: RSS 2.0 has no
     // element of its own for it.
-    ...optionalElement('source:inReplyTo', item.inReplyTo, 3),
+    ...(item.inReplyTo === undefined
+      ? []
+      : [
+          sourceInReplyTo({
+            id: item.inReplyTo,
+            isPermaLink: true,
+            ...(item.inReplyToFeed === undefined ? {} : { feed: item.inReplyToFeed }),
+          }),
+        ]),
     '    </item>',
   ];
+}
+
+/**
+ * `source:inReplyTo`, with the feed the answered item is in when that is
+ * known. `isPermaLink` follows the guid's model: said only when it is false.
+ */
+function sourceInReplyTo({ id, isPermaLink, feed }: NonNullable<FeedComment['inReplyTo']>): string {
+  const attributes = Object.entries({
+    isPermaLink: isPermaLink ? undefined : 'false',
+    feedUrl: feed?.url,
+    feedTitle: feed?.title,
+  })
+    .filter((pair): pair is [string, string] => pair[1] !== undefined)
+    .map(([name, value]) => ` ${name}="${escapeXml(value)}"`)
+    .join('');
+  return `      <source:inReplyTo${attributes}>${escapeXml(id)}</source:inReplyTo>`;
 }
 
 /**
@@ -334,7 +358,7 @@ function commentItem(comment: FeedComment): string[] {
       : [
           `      <source url="${escapeXml(comment.authorFeed)}">${escapeXml(comment.author)}</source>`,
         ]),
-    ...optionalElement('source:inReplyTo', comment.inReplyTo, 3),
+    ...(comment.inReplyTo === undefined ? [] : [sourceInReplyTo(comment.inReplyTo)]),
     ...sourceComments(comment.replies),
     // A comment never carries a description, so its summary is always an
     // excerpt of what it says.
