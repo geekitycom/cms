@@ -22,7 +22,7 @@ import {
   feedPathUnder,
 } from './feed-source.ts';
 import type { FeedFormat } from './feed-source.ts';
-import { absoluteUrl } from '../util/url.ts';
+import { absoluteUrl, encodePath } from '../util/url.ts';
 import { authorContext, siteAuthorContext } from '../site/authors.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
 import { siteTimezone } from '../theme/site-data.ts';
@@ -53,7 +53,7 @@ import {
 } from './theme-templates.ts';
 import type { StatusPageName } from './theme-templates.ts';
 import { classifyPath } from './paths.ts';
-import { documentLabel, encodePath } from './request.ts';
+import { documentLabel } from './request.ts';
 import { SEARCH_PATH, snippetMarkdown } from './search.ts';
 import { servedPath, siteView } from './site-view.ts';
 import type { WikiGroup } from './wiki-index.ts';

@@ -5,6 +5,7 @@ import sharp from 'sharp';
 
 import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
 import { writeFileAtomically } from '../files/atomic.ts';
+import { encodePath } from '../util/url.ts';
 import { ICON_SOURCES, parseIconSetting } from './icon-setting.ts';
 import { derivedDir, sourceFile, sourceVersion, versioned } from './paths.ts';
 import type { ImageConfig } from './paths.ts';
@@ -320,17 +321,10 @@ function iconSource(setting: string | undefined): string | undefined {
 
 /** Where one derived icon of one upload is served. */
 function iconHref(source: string, file: string): string {
-  return `${VARIANT_ASSET_PREFIX}${encodedPath(source)}/${file}`;
+  return `${VARIANT_ASSET_PREFIX}${encodePath(`${source}/${file}`)}`;
 }
 
 /** Where the upload itself is served. */
 function uploadHref(source: string): string {
-  return `${UPLOAD_ASSET_PREFIX}${encodedPath(source)}`;
-}
-
-function encodedPath(source: string): string {
-  return source
-    .split('/')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
+  return `${UPLOAD_ASSET_PREFIX}${encodePath(source)}`;
 }

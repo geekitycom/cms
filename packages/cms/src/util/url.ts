@@ -19,3 +19,11 @@ export function absoluteUrl(pathname: string, baseUrl: string): string {
   const resolved = pathname.startsWith('/') ? `${basePath}${pathname}` : pathname;
   return URL.parse(resolved, base)?.toString() ?? pathname;
 }
+
+/** A decoded path with each segment percent-encoded, so `#`, `?`, `%` and spaces name the file rather than end the path. */
+export function encodePath(pathname: string): string {
+  return pathname
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+}

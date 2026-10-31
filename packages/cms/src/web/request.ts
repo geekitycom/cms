@@ -26,14 +26,6 @@ export function requestSearch(c: Context<GeekityEnv>): string {
   return new URL(c.req.url).search;
 }
 
-/** A decoded path back into one safe to put in a `Location` header. */
-export function encodePath(pathname: string): string {
-  return pathname
-    .split('/')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
-}
-
 /** The conditional request headers, as the negotiator wants them. */
 export function conditionalHeaders(c: Context<GeekityEnv>): ConditionalHeaders {
   return {

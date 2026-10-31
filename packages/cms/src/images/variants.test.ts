@@ -12,6 +12,7 @@ import {
   findImageVariant,
   generateImageVariants,
   removeImageVariants,
+  variantUrl,
 } from './variants.ts';
 import type { ImageConfig } from './variants.ts';
 
@@ -266,4 +267,19 @@ describe('findImageVariant', () => {
 
     assert.equal(await findImageVariant(config, `${source}/320.webp`), undefined);
   });
+});
+
+describe('variantUrl', () => {
+  const variant = { width: 400, height: 300, format: 'webp', file: '400.webp' };
+
+  for (const [source, expected] of [
+    ['2026/01/a#b.png', '/uploads/_/2026/01/a%23b.png/400.webp?v=v'],
+    ['2026/01/a?b.png', '/uploads/_/2026/01/a%3Fb.png/400.webp?v=v'],
+    ['2026/01/100%.png', '/uploads/_/2026/01/100%25.png/400.webp?v=v'],
+    ['2026/01/a b.png', '/uploads/_/2026/01/a%20b.png/400.webp?v=v'],
+  ] as const) {
+    it(`encodes each path segment of ${JSON.stringify(source)}`, () => {
+      assert.equal(variantUrl(source, variant, 'v'), expected);
+    });
+  }
 });

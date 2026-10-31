@@ -12,6 +12,7 @@ import type { StaticAsset } from '../files/static-files.ts';
 import { deriveSiteIcon, isDerivedIcon } from './icons.ts';
 import { derivedDir, sourceFile, sourceVersion, versioned } from './paths.ts';
 import { VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
+import { encodePath } from '../util/url.ts';
 import type { ImageConfig } from './paths.ts';
 
 /**
@@ -123,7 +124,7 @@ export interface DescribedImage extends ImageRecord {
 
 /** The public URL of one derived file, naming the original's bytes when `version` is given. */
 export function variantUrl(source: string, variant: ImageVariant, version?: string): string {
-  return versioned(`${VARIANT_ASSET_PREFIX}${source}/${variant.file}`, version);
+  return versioned(`${VARIANT_ASSET_PREFIX}${encodePath(`${source}/${variant.file}`)}`, version);
 }
 
 /**
