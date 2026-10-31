@@ -10,7 +10,14 @@ import { IMAGES, dataFolder } from '../files/data-files.ts';
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
 import { deriveSiteIcon, isDerivedIcon } from './icons.ts';
-import { locateUpload, sourceFile, sourceVersion, versioned } from './paths.ts';
+import {
+  DECODE_OPTIONS,
+  decodable,
+  locateUpload,
+  sourceFile,
+  sourceVersion,
+  versioned,
+} from './paths.ts';
 import { VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
 import { encodePath, plainRelativePath } from '../util/url.ts';
 import type { ImageConfig, Upload } from './paths.ts';
@@ -208,12 +215,13 @@ async function derive(config: ImageConfig, upload: Upload): Promise<ImageRecord 
 
   let metadata: Metadata;
   try {
-    metadata = await sharp(file).metadata();
+    metadata = await sharp(file, DECODE_OPTIONS).metadata();
   } catch {
     return undefined;
   }
   const stored = { width: metadata.width, height: metadata.height };
   if (stored.width === undefined || stored.height === undefined) return undefined;
+  if (!decodable({ width: stored.width, height: stored.height })) return undefined;
   // An animated WebP or AVIF is the GIF case wearing another extension: sharp
   // would flatten it to its first frame, which is not what anybody uploaded.
   if ((metadata.pages ?? 1) > 1) return undefined;
@@ -287,7 +295,7 @@ async function encode(input: {
   // `autoOrient` applies the EXIF rotation, and sharp drops metadata unless
   // asked to keep it, so the variant comes out the right way up and carrying
   // no camera, no timestamp and no location.
-  const pipeline = sharp(input.file, { autoOrient: true }).resize({
+  const pipeline = sharp(input.file, DECODE_OPTIONS).resize({
     width: input.width,
     withoutEnlargement: true,
   });

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -293,5 +294,32 @@ describe('the source a record names', () => {
 
     assert.equal(record?.source, '2026/09/photo.png');
     assert.equal(describeImage(config, './2026/09//photo.png')?.source, '2026/09/photo.png');
+  });
+});
+
+describe('a source over the pixel limit', () => {
+  const huge = (): Sharp => rectangle(8000, 8000).png({ compressionLevel: 9 });
+
+  it('yields no variants and writes nothing', async () => {
+    const config = await site();
+    const source = await upload(config, '2026/09/huge.png', huge());
+
+    assert.equal(await generateImageVariants(config, source), undefined);
+    assert.equal(await findImageVariant(config, `${source}/320.webp`), undefined);
+    assert.equal(
+      existsSync(path.join(config.dataDir, 'images', '2026', '09', 'huge.png', '320.webp')),
+      false,
+    );
+  });
+
+  it('yields no icons', async () => {
+    const config = await site();
+    const source = await upload(config, '2026/09/huge.png', huge());
+
+    assert.equal(await findImageVariant(config, `${source}/icon-32.png`), undefined);
+    assert.equal(
+      existsSync(path.join(config.dataDir, 'images', '2026', '09', 'huge.png', 'icon-32.png')),
+      false,
+    );
   });
 });

@@ -7,7 +7,13 @@ import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts
 import { writeFileAtomically } from '../files/atomic.ts';
 import { encodePath } from '../util/url.ts';
 import { ICON_SOURCES, parseIconSetting } from './icon-setting.ts';
-import { locateUpload, sourceVersion, versioned } from './paths.ts';
+import {
+  DECODE_OPTIONS,
+  locateUpload,
+  MAX_INPUT_PIXELS,
+  sourceVersion,
+  versioned,
+} from './paths.ts';
 import type { ImageConfig } from './paths.ts';
 
 /**
@@ -239,7 +245,7 @@ async function drawIcon(file: string, shape: IconShape): Promise<Buffer> {
  * location.
  */
 async function square(file: string, size: number): Promise<Buffer> {
-  return sharp(file, { autoOrient: true })
+  return sharp(file, DECODE_OPTIONS)
     .resize({ width: size, height: size, fit: 'cover', position: 'centre' })
     .png({ compressionLevel: 9 })
     .toBuffer();
@@ -254,13 +260,13 @@ async function square(file: string, size: number): Promise<Buffer> {
 async function maskable(file: string, size: number): Promise<Buffer> {
   const inner = Math.round(size * MASKABLE_SAFE_ZONE);
   const edge = Math.floor((size - inner) / 2);
-  const { dominant } = await sharp(file, { autoOrient: true }).stats();
+  const { dominant } = await sharp(file, DECODE_OPTIONS).stats();
   const background = { ...dominant, alpha: 1 };
 
-  const picture = await sharp(file, { autoOrient: true })
+  const picture = await sharp(file, DECODE_OPTIONS)
     .resize({ width: inner, height: inner, fit: 'cover', position: 'centre' })
     .toBuffer();
-  return sharp(picture)
+  return sharp(picture, { limitInputPixels: MAX_INPUT_PIXELS })
     .flatten({ background })
     .extend({
       top: edge,

@@ -21,6 +21,21 @@ export type ImageConfig = Pick<
   'contentDir' | 'dataDir' | 'imageOptimization' | 'imageWidths' | 'imageFormats'
 >;
 
+/**
+ * The most pixels a derived image is decoded from: a 60 megapixel camera's
+ * full frame, and well under sharp's own default. A flat PNG of a few hundred
+ * kilobytes can declare far more, and decoding it costs memory in proportion.
+ */
+export const MAX_INPUT_PIXELS = 60_000_000;
+
+/** sharp's input options for a picture the site derives from. */
+export const DECODE_OPTIONS = { autoOrient: true, limitInputPixels: MAX_INPUT_PIXELS } as const;
+
+/** Whether a header's dimensions are within {@link MAX_INPUT_PIXELS}. */
+export function decodable(size: { width: number; height: number }): boolean {
+  return size.width * size.height <= MAX_INPUT_PIXELS;
+}
+
 /** One upload as the files derived from it know it. */
 export interface Upload {
   /** Its path under `content/uploads/`, `/`-separated, spelled the one way the directory spells it. */
