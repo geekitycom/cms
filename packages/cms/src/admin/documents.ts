@@ -97,8 +97,7 @@ import { formatInTimezone } from './formatting.ts';
 import { allowGeolocation } from './headers.ts';
 import { AUTOSAVE_DISCARD_JSON_PATH, AUTOSAVE_DISCARD_PATH, AUTOSAVE_PATH } from './autosave.ts';
 import { laterOrOnlyKnown } from './autosave-client.ts';
-import { PREVIEW_PATH } from './preview.ts';
-import { ADMIN_PREFIX, WIKI_ADMIN_PATH } from '../site/admin-paths.ts';
+import { ADMIN_PREFIX, PREVIEW_PATH, WIKI_ADMIN_PATH } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**
@@ -388,7 +387,7 @@ async function renderRestoredCopy(
     render,
     document,
     form,
-    media: copyMedia(form, document, c.var.config.contentDir),
+    media: lenientMedia(form, document, c.var.config.contentDir),
     conflict,
     restoring: {
       rebaseUrl: withQuery(documentEditorPath(kind, document), { [RESTORE]: REBASE }),
@@ -711,8 +710,12 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
   });
 }
 
-function copyMedia(form: EditorForm, document: Document, contentDir: string): ResolvedMedia {
-  const previous = enclosureOf(document.extra);
+export function lenientMedia(
+  form: EditorForm,
+  document: Document | undefined,
+  contentDir: string,
+): ResolvedMedia {
+  const previous = document === undefined ? undefined : enclosureOf(document.extra);
   const recording = resolveEnclosure(form.enclosure, previous, contentDir);
   const photos = resolvePhotos(form.photos, contentDir);
   const review = resolveReview(form.review, contentDir);

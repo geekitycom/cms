@@ -1,31 +1,24 @@
 import type { Context, Hono } from 'hono';
 
-import { CITATION_PROPERTIES } from '../content/citation.ts';
 import { DOCUMENT_DIRECTORIES } from '../content/content-tree.ts';
 import { isDocumentType } from '../content/document.ts';
 import type { Document, DocumentType } from '../content/document.ts';
-import { splitTags } from '../content/document-form.ts';
-import { eventFrontMatter, resolveEvent, submittedEventForm } from '../content/event-form.ts';
+import { DOCUMENT_KINDS } from '../content/document-kind.ts';
+import { extraFromForm, formInReplyTo, splitTags } from '../content/document-form.ts';
 import { handleDirectory } from '../content/handles.ts';
 import { renderMarkdown } from '../content/markdown.ts';
-import { reviewFrontMatter } from '../content/review.ts';
-import { resolveReview, submittedReviewForm } from '../content/review-form.ts';
-import { RSVP_FRONT_MATTER_KEY, rsvpValue } from '../content/rsvp.ts';
 import { defaultPermalink, slugify } from '../content/slug.ts';
 import { calendarDayIn, toUtcInstant } from '../content/time.ts';
-import { normalizeBody } from '../content/writer.ts';
 import { currentUsername } from '../web/document-site.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { listUsers } from '../site/users.ts';
-import { stringOrEmpty } from '../util/forms.ts';
 import { authorContext } from '../site/authors.ts';
 import { documentContext } from '../web/context.ts';
 import { DOCUMENT_TEMPLATES } from '../web/theme-templates.ts';
-import { ADMIN_PREFIX } from '../site/admin-paths.ts';
+import { PREVIEW_PATH } from '../site/admin-paths.ts';
 import { permalinkBasesFromSettings } from '../site/settings.ts';
-
-/** Where the editor posts a body it wants to see rendered. */
-export const PREVIEW_PATH = `${ADMIN_PREFIX}/preview`;
+import { syndicationTargetsReader } from '../webmention/syndication.ts';
+import { lenientMedia, submittedForm } from './documents.ts';
 
 /**
  * Render an unsaved body the way the public site would render it.
@@ -74,18 +67,17 @@ function previewDocument(
   input: { type: DocumentType; body: Record<string, unknown> },
 ): Document {
   const { type, body } = input;
+  const kind = DOCUMENT_KINDS[type];
+  const contentDir = c.var.config.contentDir;
+  const form = submittedForm(kind, body, contentDir);
 
   const timezone = c.var.siteAtRequestStart.timezone;
-  const title = stringOrEmpty(body['title']).trim();
   // The editor's field is wall-clock time in the site's zone, so
   // the preview reads it the way the save will and shows the date the saved
   // post would show rather than one the server's own zone invented.
-  const date =
-    type === 'post'
-      ? orNow(stringOrEmpty(body['date']).trim(), timezone, c.var.store.now())
-      : undefined;
-  const slug = slugify(stringOrEmpty(body['slug']).trim()) || slugify(title) || 'preview';
-  const markdown = normalizeBody(stringOrEmpty(body['body']));
+  const date = type === 'post' ? orNow(form.date, timezone, c.var.store.now()) : undefined;
+  const slug = slugify(form.slug) || slugify(form.title) || 'preview';
+  const inReplyTo = formInReplyTo(kind, form, undefined);
 
   return {
     type,
@@ -97,63 +89,36 @@ function previewDocument(
       type,
       slug,
       date: date === undefined ? undefined : (calendarDayIn(date, timezone) ?? date),
-      submitted: stringOrEmpty(body['permalink']).trim(),
+      submitted: form.permalink,
       wikiBase: permalinkBasesFromSettings(c.var.siteAtRequestStart).wiki,
     }),
-    title: title === '' ? 'Untitled' : title,
+    title: form.title === '' ? 'Untitled' : form.title,
     ...(date === undefined ? {} : { date }),
-    tags: splitTags(stringOrEmpty(body['tags'])),
-    categories: splitTags(stringOrEmpty(body['categories'])),
-    draft: body['draft'] !== undefined,
-    ...(stringOrEmpty(body['description']) === ''
-      ? {}
-      : { description: stringOrEmpty(body['description']).trim() }),
+    tags: splitTags(form.tags),
+    categories: splitTags(form.categories),
+    draft: form.draft,
+    ...(form.description === '' ? {} : { description: form.description }),
     ...(currentUsername(c) === undefined ? {} : { author: currentUsername(c) }),
-    ...(stringOrEmpty(body['in-reply-to']).trim() === ''
-      ? {}
-      : { inReplyTo: stringOrEmpty(body['in-reply-to']).trim() }),
-    extra: {
-      ...Object.fromEntries(
-        CITATION_PROPERTIES.flatMap((property) => {
-          const cited = stringOrEmpty(body[property]).trim();
-          return cited === '' ? [] : [[property, cited]];
-        }),
-      ),
-      ...previewRsvp(body),
-      ...previewEvent(body, timezone),
-      ...previewReview(body, c.var.config.contentDir),
-    },
-    body: markdown,
+    ...(inReplyTo === undefined ? {} : { inReplyTo }),
+    extra: extraFromForm(
+      kind,
+      undefined,
+      form,
+      c.var.store.now(),
+      lenientMedia(form, undefined, contentDir),
+      syndicationTargetsReader(contentDir)(),
+      timezone,
+    ),
+    body: form.body,
     html: renderMarkdown(
-      markdown,
-      handleDirectory(c.var.config.contentDir),
+      form.body,
+      handleDirectory(contentDir),
       permalinkBasesFromSettings(c.var.siteAtRequestStart).wiki,
     ),
     // A preview is not a version of anything, so it has no hash to be
     // mistaken for one.
     hash: '',
   };
-}
-
-function previewEvent(body: Record<string, unknown>, timezone: string): Record<string, unknown> {
-  const resolved = resolveEvent(submittedEventForm(body), timezone);
-  if (!('event' in resolved)) return {};
-  return Object.fromEntries(
-    Object.entries(eventFrontMatter(resolved.event)).filter(([, value]) => value !== undefined),
-  );
-}
-
-function previewReview(body: Record<string, unknown>, contentDir: string): Record<string, unknown> {
-  const resolved = resolveReview(submittedReviewForm(body), contentDir);
-  if (!('review' in resolved)) return {};
-  return Object.fromEntries(
-    Object.entries(reviewFrontMatter(resolved.review)).filter(([, value]) => value !== undefined),
-  );
-}
-
-function previewRsvp(body: Record<string, unknown>): Record<string, unknown> {
-  const rsvp = rsvpValue(body[RSVP_FRONT_MATTER_KEY]);
-  return rsvp === undefined ? {} : { [RSVP_FRONT_MATTER_KEY]: rsvp };
 }
 
 /** The permalink to show: the one the form carried, or the one the slug implies. */

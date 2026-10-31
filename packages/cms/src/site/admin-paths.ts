@@ -32,3 +32,5 @@ export const WIKI_ADMIN_PATH = `${ADMIN_PREFIX}/wiki`;
 export function newWikiPagePath(slug: string, title: string): string {
   return `${WIKI_ADMIN_PATH}/new?${new URLSearchParams({ slug, title }).toString()}`;
 }
+
+export const PREVIEW_PATH = `${ADMIN_PREFIX}/preview`;

@@ -168,10 +168,10 @@ export {
   loginKeys,
 } from '../web/throttle.ts';
 export type { LoginThrottle, LoginThrottleOptions } from '../web/throttle.ts';
-export { mountPreview, PREVIEW_PATH } from './preview.ts';
+export { mountPreview } from './preview.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from '../site/passwords.ts';
 export { guard, LOGOUT_PATH, mountAdmin, postEditorPath, SETUP_PATH } from './routes.ts';
-export { LOGIN_PATH } from '../site/admin-paths.ts';
+export { LOGIN_PATH, PREVIEW_PATH } from '../site/admin-paths.ts';
 export { ADMIN_SECTIONS, adminMenu, UnknownAdminScreenError } from './menu.ts';
 export type {
   AdminMenuChild,
