@@ -564,7 +564,9 @@ A page never fails because of these values:
   ignored.
 - When the family's files are missing from `data/fonts/`, pages use the
   theme's stack and the server queues one `fetch-font` job to download them
-  again. The setting stays.
+  again. If that job fails, a later page render queues another once a minute
+  has passed, then two, then four, up to an hour between tries. The setting
+  stays.
 
 The variables `GEEKITY_SITE__HEADING_FONT` and `GEEKITY_SITE__BODY_FONT`
 override the settings in the admin and on the command line. As with the

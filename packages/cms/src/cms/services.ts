@@ -265,6 +265,8 @@ export function createServices({
     fonts: createPageFonts({
       store: fonts,
       refetch: (family, styles) => queueFontFetch(jobs, family, styles),
+      jobStatus: (id) => jobs.status(id),
+      now: resolved.now,
     }),
     // The stored context of a reply's target: a file read, never a fetch, so
     // a page is drawn without waiting on anybody's server.

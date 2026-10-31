@@ -6,7 +6,8 @@ import { after, afterEach, before, describe, it } from 'node:test';
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { BODY, BOLD, FAMILY, googleLookup, stubGoogle } from '../fonts/__testing__/google.ts';
 import type { StubbedGoogle } from '../fonts/__testing__/google.ts';
-import { FONT_FETCH_JOB } from '../fonts/index.ts';
+import { css2Url } from '../fonts/family.ts';
+import { FONT_FETCH_JOB, FONT_RETRY_MS } from '../fonts/index.ts';
 import type { Cms } from '../index.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { createInProcessTransport } from '../jobs/in-process.ts';
@@ -38,7 +39,7 @@ const POST = [
   '',
 ].join('\n');
 
-async function site(settings: Record<string, unknown>): Promise<Cms> {
+async function site(settings: Record<string, unknown>, now?: () => Date): Promise<Cms> {
   const contentDir = await box.dir('geekity-page-fonts-content-');
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
   await mkdir(path.join(contentDir, 'posts'), { recursive: true });
@@ -52,6 +53,7 @@ async function site(settings: Record<string, unknown>): Promise<Cms> {
     dataDir: await box.dir('geekity-page-fonts-data-'),
     hostLookup: googleLookup,
     jobs: { transport: watchedTransport() },
+    ...(now === undefined ? {} : { now }),
   });
 }
 
@@ -79,11 +81,15 @@ async function fontJobs(cms: Cms): Promise<number> {
 
 const sent = new Set<() => void>();
 
-function nextJobSent(): Promise<void> {
-  return nextEvent('a job sent to the transport', (done) => {
-    sent.add(done);
-    return () => sent.delete(done);
-  });
+function nextJobSent(timeoutMs?: number): Promise<void> {
+  return nextEvent(
+    'a job sent to the transport',
+    (done) => {
+      sent.add(done);
+      return () => sent.delete(done);
+    },
+    timeoutMs,
+  );
 }
 
 function watchedTransport(): MessageTransport {
@@ -178,6 +184,36 @@ describe('a chosen font whose files are missing (AC #5)', () => {
     assert.doesNotMatch(goneAgain, /--font-body/);
     await queuedAgain;
     assert.equal(await fontJobs(cms), 1, 'a second loss queues a second fetch');
+  });
+});
+
+describe('a fetch-font job that fails', () => {
+  it('is queued again by a render after the back-off, and the font comes back without a restart', async () => {
+    let clock = Date.now();
+    const cms = await site({ bodyFont: FAMILY }, () => new Date(clock));
+    google.web[css2Url(FAMILY, BODY)] = () => new Response('unavailable', { status: 503 });
+
+    const queued = nextJobSent();
+    await head(cms);
+    await queued;
+    const [first] = await cms.jobs.list(['queued']);
+    assert.ok(first !== undefined && first.name === FONT_FETCH_JOB.name);
+    assert.equal((await cms.jobs.run(first.id)).state, 'failed');
+
+    google.reset();
+    google.serveFamily(BODY);
+    const tooSoon = nextJobSent(200);
+    await head(cms);
+    await assert.rejects(tooSoon, /never came/, 'nothing is queued inside the back-off');
+
+    clock += FONT_RETRY_MS + 1;
+    const queuedAgain = nextJobSent();
+    await head(cms);
+    await queuedAgain;
+    const [second] = await cms.jobs.list(['queued']);
+    assert.ok(second !== undefined && second.name === FONT_FETCH_JOB.name);
+    assert.equal((await cms.jobs.run(second.id)).state, 'finished');
+    assert.match(await head(cms), /--font-body: "Atkinson Hyperlegible"/);
   });
 });
 
