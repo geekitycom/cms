@@ -1,4 +1,4 @@
-import { statSync } from 'node:fs';
+import { realpathSync, statSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import path from 'node:path';
 
@@ -21,7 +21,9 @@ export interface StaticAsset {
  *
  * Returns `undefined` when the request escapes its root, names a directory, or
  * matches nothing. Traversal is checked after resolution rather than by
- * inspecting the request, so an encoded `..` cannot slip past.
+ * inspecting the request, so an encoded `..` cannot slip past, and again on
+ * the file's real path, so a symbolic link cannot lead out of the root either.
+ * The root itself may be a link.
  */
 export function findAsset(relative: string, roots: string[]): StaticAsset | undefined {
   const normalized = normalizeAssetPath(relative);
@@ -33,15 +35,15 @@ export function findAsset(relative: string, roots: string[]): StaticAsset | unde
 
     // `path.resolve` has already collapsed every `..`; anything that landed
     // outside the root was trying to get out.
-    if (file !== root && !file.startsWith(root + path.sep)) continue;
+    if (!within(root, file)) continue;
 
     let stats: Stats;
     try {
       stats = statSync(file);
+      if (!stats.isFile() || !within(realpathSync(root), realpathSync(file))) continue;
     } catch {
       continue;
     }
-    if (!stats.isFile()) continue;
 
     return {
       file,
@@ -52,6 +54,10 @@ export function findAsset(relative: string, roots: string[]): StaticAsset | unde
   }
 
   return undefined;
+}
+
+function within(root: string, file: string): boolean {
+  return file === root || file.startsWith(root + path.sep);
 }
 
 /**
