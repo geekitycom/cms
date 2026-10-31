@@ -175,7 +175,7 @@ describe('the health widget (TASK-450)', () => {
     const html = await dashboard(agent);
 
     assert.deepEqual(rows(html), [
-      ['Resend failed', '/admin/federation#resend', '2'],
+      ['Resend failed', '/admin/federation/resend', '2'],
       ['Metadata sweep failed', '/admin/tools/maintenance#strip-metadata', '1'],
       ['Site export running for over an hour', '/admin/tools/export', '1'],
       ['Failed federation deliveries', '/admin/federation#failures', '2'],

@@ -82,6 +82,7 @@ export const ADMIN_TEMPLATES = {
   appActivityEntry: 'pages/users/activity-entry.njk',
   writingGoals: 'pages/users/writing-goals.njk',
   federation: 'pages/federation/followers.njk',
+  federationResend: 'pages/federation/resend.njk',
   federationSettings: 'pages/federation/settings.njk',
   indieauthConsent: 'pages/indieauth/consent.njk',
   indieauthRefused: 'pages/indieauth/refused.njk',

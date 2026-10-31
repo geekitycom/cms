@@ -431,7 +431,7 @@ another-post: Update to 3 of 3 inboxes
 ```
 
 `geekity resend <slug>...` does the same for named posts. Both run the same
-`resend` [admin job](configuration.md#admin-jobs) as the federation screen.
+`resend` [admin job](configuration.md#admin-jobs) as Federation > Resend.
 Each resend sends:
 
 - an `Update` for a post that is still published
@@ -727,23 +727,24 @@ step. It is not part of the cutover. Not every follower's software supports a
   activity, when that was sent, and how many recipients it reached, is queued
   for, or failed for.
 
-Each post row has a Resend button, and the Resend panel above the rows has
-**Resend every announced post**. Both queue the `resend`
+Each post row has a Resend button. **Resend every announced post** is on its
+own page, Federation > Resend at `/admin/federation/resend`, because it is an
+occasional repair rather than something to watch. Both queue the `resend`
 [admin job](configuration.md#admin-jobs) and return at once. The job calls
 `cms.delivery.resend` for each post, so it builds each post again from its file
 when it runs and sends it to every current follower and every accepted relay.
-The button on a row also sends that post's webmentions again. The panel button
-does what `geekity resend --all` does.
+The button on a row also sends that post's webmentions again. The button on the
+Resend page does what `geekity resend --all` does.
 
-The Resend panel shows the latest resend job: queued, running with the posts
+The Resend page shows the latest resend job, whichever button queued it: queued, running with the posts
 sent out of the total, finished, failed with the error, or interrupted. A
 finished job says how many posts went to how many inboxes, and how many of
 those were reached, queued or failed. A disclosure under that line lists each
-post with the same counts, and its webmentions when it sent them. The panel names
-the posts dev mode held and the slugs with nothing to resend. The panel updates
+post with the same counts, and its webmentions when it sent them. The page names
+the posts dev mode held and the slugs with nothing to resend. The status updates
 every few seconds without a page load until the job ends. Without JavaScript,
 select **Check again** to see how far it got. While a resend is queued or
-running, the screen queues no second one and says so.
+running, neither button queues a second one, and the page says so.
 
 When the server stops or reloads during a resend, the job stops before the next
 post and the next server runs it again from the first post. A post sent twice
@@ -771,7 +772,7 @@ It is the job the MCP `retry_deliveries` tool queues. The job sends the post,
 as its file reads then, to the recipients at that inbox whose newest delivery
 failed. A recipient that never received the `Create` gets the `Create`; the
 others get an `Update`. The panel shows the latest retry job as the Resend
-panel shows the latest resend.
+page shows the latest resend.
 
 A Relays panel sits between the followers and the inbox log. It has one row per
 subscription, with:

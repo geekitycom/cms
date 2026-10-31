@@ -62,12 +62,12 @@ export const FEDERATION_PATH = `${ADMIN_PREFIX}/federation`;
  */
 export const FEDERATION_SETTINGS_PATH = `${FEDERATION_PATH}/settings`;
 
-/** Where a post's Resend button posts. */
+/** Federation > Resend, which is also where a post's Resend button posts. */
 export const RESEND_PATH = `${FEDERATION_PATH}/resend`;
 
 export const RESEND_ALL_PATH = `${FEDERATION_PATH}/resend-all`;
 
-export const RESEND_PANEL = `${FEDERATION_PATH}#resend`;
+export const RESEND_PANEL = RESEND_PATH;
 
 export const DELIVERY_PANEL = `${FEDERATION_PATH}#delivery`;
 
@@ -131,8 +131,6 @@ export function mountFederationScreen(
   const { render } = options;
 
   app.get(FEDERATION_PATH, async (c) => {
-    const latestResend = await c.var.jobs.latest(RESEND_JOB.name);
-    const report = finishedResult(RESEND_JOB, latestResend);
     const latestRetry = await c.var.jobs.latest(RETRY_DELIVERIES_JOB.name);
     const failuresSince = new Date(c.var.config.now().getTime() - FAILURE_WINDOW_MS).toISOString();
     const admin = c.var.admin;
@@ -151,10 +149,8 @@ export function mountFederationScreen(
       section: 'federation',
       child: 'followers',
       resendUrl: RESEND_PATH,
-      resendAllUrl: RESEND_ALL_PATH,
-      resend: jobStatusView(latestResend),
+      resendPageUrl: RESEND_PATH,
       federationUrl: FEDERATION_PATH,
-      resendResult: report && resendResult(report.posts),
       retryUrl: RETRY_PATH,
       retry: jobStatusView(latestRetry),
       retryResult: finishedResult(RETRY_DELIVERIES_JOB, latestRetry),
@@ -203,6 +199,19 @@ export function mountFederationScreen(
           });
         },
       }),
+    });
+  });
+
+  app.get(RESEND_PATH, async (c) => {
+    const latest = await c.var.jobs.latest(RESEND_JOB.name);
+    const report = finishedResult(RESEND_JOB, latest);
+    return render(c, ADMIN_TEMPLATES.federationResend, {
+      section: 'federation',
+      child: 'resend',
+      resendUrl: RESEND_PATH,
+      resendAllUrl: RESEND_ALL_PATH,
+      resend: jobStatusView(latest),
+      resendResult: report && resendResult(report.posts),
     });
   });
 
