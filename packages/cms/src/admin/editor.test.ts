@@ -619,3 +619,67 @@ describe('the preview of an event (TASK-200 AC #4)', () => {
     assert.match(html, /<span class="p-location">Chicago Public Library<\/span>/);
   });
 });
+
+describe('the preview of a link post', () => {
+  async function preview(fields: Record<string, string>): Promise<string> {
+    const { agent, token } = await admin();
+    return (
+      await agent.post('/admin/preview', {
+        csrf_token: token,
+        type: 'post',
+        kind: 'link',
+        title: 'Missing Printed Magazines',
+        body: 'This article really hit home.\n',
+        ...fields,
+      })
+    ).text();
+  }
+
+  it('renders a reply chosen in the link editor as a reply', async () => {
+    const html = await preview({
+      'link-verb': 'in-reply-to',
+      'link-url': 'https://example.com/magazines/',
+    });
+
+    assert.match(html, /<span class="kicker-kind">Reply<\/span>/);
+    assert.match(html, /class="[^"]*u-in-reply-to h-cite/);
+    assert.match(html, /href="https:\/\/example\.com\/magazines\/"/);
+  });
+
+  for (const [property, kicker] of [
+    ['like-of', 'Like'],
+    ['repost-of', 'Repost'],
+    ['bookmark-of', 'Bookmark'],
+  ] as const) {
+    it(`renders ${property} chosen in the link editor as a citation`, async () => {
+      const html = await preview({
+        'link-verb': property,
+        'link-url': 'https://example.com/magazines/',
+      });
+
+      assert.match(html, new RegExp(`<span class="kicker-kind">${kicker}</span>`));
+      assert.match(html, new RegExp(`class="[^"]*u-${property}`));
+      assert.match(html, /href="https:\/\/example\.com\/magazines\/"/);
+    });
+  }
+});
+
+describe('the preview of a photo post', () => {
+  it('renders the photos the form carries', async () => {
+    const { agent, token } = await admin();
+
+    const html = await (
+      await agent.post('/admin/preview', {
+        csrf_token: token,
+        type: 'post',
+        kind: 'photo',
+        'photo-url-0': 'https://example.com/lake.jpg',
+        'photo-alt-0': 'A lake at dusk',
+        body: 'Out by the water.\n',
+      })
+    ).text();
+
+    assert.match(html, /src="https:\/\/example\.com\/lake\.jpg"/);
+    assert.match(html, /alt="A lake at dusk"/);
+  });
+});
