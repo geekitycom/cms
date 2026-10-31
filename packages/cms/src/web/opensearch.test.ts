@@ -11,6 +11,7 @@ import { after, describe, it } from 'node:test';
 
 import sharp from 'sharp';
 
+import { deriveSiteIcons, iconSetting } from '../images/icons.ts';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { child, childrenNamed, parseXml } from './__testing__/xml.ts';
@@ -50,7 +51,9 @@ async function site(
     await writeFile(file, contents);
   }
 
-  return { cms: await box.open({ contentDir, dataDir, ...config }), contentDir };
+  const cms = await box.open({ contentDir, dataDir, ...config });
+  await deriveSiteIcons(cms.config, iconSetting(settings));
+  return { cms, contentDir };
 }
 
 async function png(size: number): Promise<Buffer> {
@@ -190,7 +193,7 @@ describe('settings and the base path (TASK-204 AC #3)', () => {
   it('carries the base path of a site served from a subdirectory', async () => {
     const { cms } = await site(
       { title: 'Words', avatar: AVATAR },
-      {},
+      { [AVATAR]: await png(64) },
       { baseUrl: 'https://example.com/blog' },
     );
     const root = await description(cms);

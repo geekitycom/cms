@@ -12,6 +12,7 @@ import { stripMetadata } from '../content/metadata/index.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
 import { generateImageVariants, removeImageVariants } from '../images/variants.ts';
 import type { ImageConfig } from '../images/variants.ts';
+import { decodable } from '../images/paths.ts';
 import { messageOf } from '../util/errors.ts';
 import { fetchPublic } from './fetch-public.ts';
 import type { HostLookup } from '../util/public-address.ts';
@@ -90,7 +91,7 @@ export async function copyCitedImage(
   } catch {
     return undefined;
   }
-  if (size === undefined) return undefined;
+  if (size === undefined || !decodable(size)) return undefined;
 
   const name = `${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}${extension}`;
   const directory = path.join(options.config.contentDir, UPLOAD_DIRECTORY, CITED_PICTURE_DIRECTORY);

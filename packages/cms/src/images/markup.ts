@@ -1,9 +1,7 @@
 import { escapeAttribute } from '../util/html.ts';
 import { messageOf } from '../util/errors.ts';
 import { IMG_TAG, parseAttributes, uploadPath } from '../content/image-tags.ts';
-import { describeImage, generateImageVariants, imageMediaType } from './variants.ts';
-import { VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
-import { versioned } from './paths.ts';
+import { describeImage, generateImageVariants, imageMediaType, variantUrl } from './variants.ts';
 import type { DescribedImage, ImageConfig, ImageVariant } from './variants.ts';
 
 /**
@@ -196,17 +194,9 @@ function image(
 function srcset(record: DescribedImage, variants: ImageVariant[]): string {
   return [...variants]
     .sort((a, b) => a.width - b.width)
-    .map((variant) => `${variantHref(record, variant)} ${String(variant.width)}w`)
+    .map(
+      (variant) =>
+        `${variantUrl(record.source, variant, record.version)} ${String(variant.width)}w`,
+    )
     .join(', ');
-}
-
-/**
- * The URL of one derived file, with every path segment encoded as a URL wants
- * and the original's version on the end.
- */
-function variantHref(record: DescribedImage, variant: ImageVariant): string {
-  const segments = [...record.source.split('/'), variant.file].map((segment) =>
-    encodeURIComponent(segment),
-  );
-  return versioned(`${VARIANT_ASSET_PREFIX}${segments.join('/')}`, record.version);
 }

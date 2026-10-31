@@ -5,9 +5,20 @@ import sharp from 'sharp';
 
 import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
 import { writeFileAtomically } from '../files/atomic.ts';
+import { encodePath } from '../util/url.ts';
 import { ICON_SOURCES, parseIconSetting } from './icon-setting.ts';
-import { derivedDir, sourceFile, sourceVersion, versioned } from './paths.ts';
-import type { ImageConfig } from './paths.ts';
+import {
+  DECODE_OPTIONS,
+  decodable,
+  locateUpload,
+  MAX_INPUT_PIXELS,
+  sourceVersion,
+  versioned,
+} from './paths.ts';
+import type { ImageConfig, Upload } from './paths.ts';
+import { deriveSet, settledSet } from './derived-sets.ts';
+import type { DerivedKind } from './derived-sets.ts';
+import { messageOf } from '../util/errors.ts';
 
 /**
  * The site's icons: the favicons, the touch icon, the manifest's icons and
@@ -24,10 +35,9 @@ import type { ImageConfig } from './paths.ts';
  * `icon-32.png` rather than `32.png` so it can never be confused with the
  * width of that number.
  *
- * Nothing is derived until somebody asks: the head and the manifest link URLs,
- * and the first browser to follow one encodes it. That keeps the sizes out of
- * every upload's variant set, where they would turn up in a `srcset` as
- * candidates nobody wants.
+ * They are their own derived set, drawn only from the site icon's upload,
+ * which keeps the sizes out of every upload's variant set, where they would
+ * turn up in a `srcset` as candidates nobody wants.
  */
 
 /** One icon as the head links it. */
@@ -135,8 +145,7 @@ export function iconSetting(site: { icon?: unknown; avatar?: unknown }): string 
  * directory, or `undefined` when there is none to derive from.
  *
  * None when the setting is empty, names no upload of this site, names a file
- * no icon can be made of, or when image optimization is off, because nothing
- * may link a file this server would answer 404 for.
+ * no icon can be made of, or when image optimization is off.
  */
 export function siteIconSource(
   config: ImageConfig,
@@ -145,12 +154,66 @@ export function siteIconSource(
   return config.imageOptimization ? iconSource(setting) : undefined;
 }
 
+/**
+ * The site icon's upload and the version of its bytes, once the icons have
+ * been drawn from those bytes.
+ *
+ * Nothing may link a file this server would answer 404 for, and only drawing
+ * the icons shows whether the upload is there and can be read. So a version
+ * not drawn yet is drawn in the background and links nothing until it is,
+ * the way a page's images stay plain until their variants exist.
+ */
+function drawnIcons(
+  config: ImageConfig,
+  setting: string | undefined,
+): { source: string; version: string } | undefined {
+  const named = namedIcon(config, setting);
+  if (named === undefined) return undefined;
+  const { upload, version } = named;
+
+  const known = settledSet(SITE_ICONS, upload, version);
+  if (known === undefined) {
+    void deriveSet(SITE_ICONS, upload, version).catch((error: unknown) => {
+      console.warn(`Could not derive the site's icons from ${upload.source}: ${messageOf(error)}`);
+    });
+    return undefined;
+  }
+  return known.set === undefined ? undefined : { source: upload.source, version };
+}
+
+/**
+ * Draw the site's icons now if the bytes the setting names have not been
+ * drawn from, so a page that shows them right after the setting changes has
+ * them to show.
+ */
+export async function deriveSiteIcons(
+  config: ImageConfig,
+  setting: string | undefined,
+): Promise<void> {
+  const named = namedIcon(config, setting);
+  if (named === undefined || settledSet(SITE_ICONS, named.upload, named.version) !== undefined) {
+    return;
+  }
+  await deriveSet(SITE_ICONS, named.upload, named.version);
+}
+
+/** The upload the icon setting names and the version of its bytes, when it is there. */
+function namedIcon(
+  config: ImageConfig,
+  setting: string | undefined,
+): { upload: Upload; version: string } | undefined {
+  const source = siteIconSource(config, setting);
+  const upload = source === undefined ? undefined : locateUpload(config, source);
+  const version = upload === undefined ? undefined : sourceVersion(config, upload.source);
+  return version === undefined || upload === undefined ? undefined : { upload, version };
+}
+
 /** The icons the head of a site whose icon setting is this links, or none at all. */
 export function siteIcons(config: ImageConfig, setting: string | undefined): SiteIcon[] {
-  const source = siteIconSource(config, setting);
-  if (source === undefined) return [];
+  const drawn = drawnIcons(config, setting);
+  if (drawn === undefined) return [];
 
-  const version = sourceVersion(config, source);
+  const { source, version } = drawn;
   const svg: SiteIcon[] = isSvg(source)
     ? [{ rel: 'icon', sizes: '', type: 'image/svg+xml', href: uploadHref(source) }]
     : [];
@@ -167,10 +230,10 @@ export function siteIcons(config: ImageConfig, setting: string | undefined): Sit
 
 /** The icons a web app manifest lists for a site whose icon setting is this. */
 export function manifestIcons(config: ImageConfig, setting: string | undefined): ManifestIcon[] {
-  const source = siteIconSource(config, setting);
-  if (source === undefined) return [];
+  const drawn = drawnIcons(config, setting);
+  if (drawn === undefined) return [];
 
-  const version = sourceVersion(config, source);
+  const { source, version } = drawn;
   const svg: ManifestIcon[] = isSvg(source)
     ? [{ src: uploadHref(source), sizes: 'any', type: 'image/svg+xml' }]
     : [];
@@ -185,36 +248,56 @@ export function manifestIcons(config: ImageConfig, setting: string | undefined):
   ];
 }
 
+/** The sidecar that records which bytes the site's icons were drawn from. */
+export const ICON_RECORD_NAME = 'icons.json';
+
 /**
- * Derive one icon file, or answer `false` having written nothing.
+ * The site's icons as a derived set: every one of them, drawn together from
+ * one version of the icon upload, so a replaced icon is redrawn whole.
+ */
+export const SITE_ICONS: DerivedKind<readonly string[]> = {
+  sidecar: ICON_RECORD_NAME,
+  parse: (value) =>
+    Array.isArray(value) &&
+    value.every((name) => typeof name === 'string' && DERIVED_ICONS.has(name))
+      ? (value as string[])
+      : undefined,
+  derive: deriveIcons,
+  offers: (_upload, name) => Promise.resolve(DERIVED_ICONS.has(name)),
+  holds: (names, name) => names.includes(name),
+};
+
+/**
+ * Draw every icon, or answer `undefined` having written nothing when sharp
+ * cannot read the picture.
  *
  * Enlarging is allowed, unlike a width variant: 512 pixels is what a launcher
  * asks for, and a site whose icon is smaller than that is better served a soft
  * icon than none. The crop is the middle of the picture, which is where a face
- * is.
+ * is. The icons are drawn one at a time, so deriving them holds one decode.
  */
-export async function deriveSiteIcon(
-  config: ImageConfig,
-  source: string,
-  name: string,
-): Promise<boolean> {
-  const shape = DERIVED_ICONS.get(name);
-  const file = sourceFile(config, source);
-  if (shape === undefined || file === undefined) return false;
-  if (!ICON_SOURCES.has(path.extname(source).toLowerCase())) return false;
+async function deriveIcons(upload: Upload): Promise<readonly string[] | undefined> {
+  if (!ICON_SOURCES.has(path.extname(upload.source).toLowerCase())) return undefined;
 
+  const drawn: [string, Buffer][] = [];
   try {
-    const encoded = await drawIcon(file, shape);
-    const directory = derivedDir(config, source);
-    if (directory === undefined) return false;
-    await mkdir(directory, { recursive: true });
-    await writeFileAtomically(path.join(directory, name), encoded);
-    return true;
-  } catch {
-    // An icon sharp cannot read is a site with no icons, not a failed
-    // request: the handler answers 404 and the page it came from is fine.
-    return false;
+    const { width, height } = await sharp(upload.file, DECODE_OPTIONS).metadata();
+    if (width === undefined || height === undefined || !decodable({ width, height })) {
+      return undefined;
+    }
+    for (const [name, shape] of DERIVED_ICONS) {
+      drawn.push([name, await drawIcon(upload.file, shape)]);
+    }
+  } catch (error) {
+    console.warn(`Could not derive the site's icons from ${upload.source}: ${messageOf(error)}`);
+    return undefined;
   }
+
+  await mkdir(upload.directory, { recursive: true });
+  for (const [name, png] of drawn) {
+    await writeFileAtomically(path.join(upload.directory, name), png);
+  }
+  return drawn.map(([name]) => name);
 }
 
 async function drawIcon(file: string, shape: IconShape): Promise<Buffer> {
@@ -223,12 +306,11 @@ async function drawIcon(file: string, shape: IconShape): Promise<Buffer> {
       return square(file, shape.size);
     case 'maskable':
       return maskable(file, shape.size);
-    case 'ico':
-      return icoFile(
-        await Promise.all(
-          shape.sizes.map(async (size) => ({ size, png: await square(file, size) })),
-        ),
-      );
+    case 'ico': {
+      const frames: { size: number; png: Buffer }[] = [];
+      for (const size of shape.sizes) frames.push({ size, png: await square(file, size) });
+      return icoFile(frames);
+    }
   }
 }
 
@@ -240,7 +322,7 @@ async function drawIcon(file: string, shape: IconShape): Promise<Buffer> {
  * location.
  */
 async function square(file: string, size: number): Promise<Buffer> {
-  return sharp(file, { autoOrient: true })
+  return sharp(file, DECODE_OPTIONS)
     .resize({ width: size, height: size, fit: 'cover', position: 'centre' })
     .png({ compressionLevel: 9 })
     .toBuffer();
@@ -255,13 +337,13 @@ async function square(file: string, size: number): Promise<Buffer> {
 async function maskable(file: string, size: number): Promise<Buffer> {
   const inner = Math.round(size * MASKABLE_SAFE_ZONE);
   const edge = Math.floor((size - inner) / 2);
-  const { dominant } = await sharp(file, { autoOrient: true }).stats();
+  const { dominant } = await sharp(file, DECODE_OPTIONS).stats();
   const background = { ...dominant, alpha: 1 };
 
-  const picture = await sharp(file, { autoOrient: true })
+  const picture = await sharp(file, DECODE_OPTIONS)
     .resize({ width: inner, height: inner, fit: 'cover', position: 'centre' })
     .toBuffer();
-  return sharp(picture)
+  return sharp(picture, { limitInputPixels: MAX_INPUT_PIXELS })
     .flatten({ background })
     .extend({
       top: edge,
@@ -320,17 +402,10 @@ function iconSource(setting: string | undefined): string | undefined {
 
 /** Where one derived icon of one upload is served. */
 function iconHref(source: string, file: string): string {
-  return `${VARIANT_ASSET_PREFIX}${encodedPath(source)}/${file}`;
+  return `${VARIANT_ASSET_PREFIX}${encodePath(`${source}/${file}`)}`;
 }
 
 /** Where the upload itself is served. */
 function uploadHref(source: string): string {
-  return `${UPLOAD_ASSET_PREFIX}${encodedPath(source)}`;
-}
-
-function encodedPath(source: string): string {
-  return source
-    .split('/')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
+  return `${UPLOAD_ASSET_PREFIX}${encodePath(source)}`;
 }

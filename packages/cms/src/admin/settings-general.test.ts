@@ -454,6 +454,7 @@ describe('the Site icon field (TASK-212)', () => {
     assert.equal((await cms.app.request('/favicon.ico')).status, 404, 'no icon to begin with');
 
     assert.equal((await saveSettings(agent, 'general', { icon: ICON })).status, 303);
+    assert.equal((await agent.get('/admin/settings')).status, 200, 'the save redirects here');
 
     const home = await (await cms.app.request('/')).text();
     assert.match(

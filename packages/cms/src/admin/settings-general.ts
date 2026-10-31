@@ -11,7 +11,7 @@ import type { Hono } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
 import { userForAuthor } from '../content/authors.ts';
-import { iconSetting, siteIcons } from '../images/icons.ts';
+import { deriveSiteIcons, iconSetting, siteIcons } from '../images/icons.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import { listUsers } from '../site/users.ts';
@@ -67,7 +67,7 @@ export const GENERAL_SETTINGS: SettingsPage = {
   panels: async (c, settings) => ({
     ...(await tmdbPanel(c.var.settings)),
     ...baseUrlPanel(c.var.config, settings),
-    ...iconPanel(c.var.config, settings),
+    ...(await iconPanel(c.var.config, settings)),
     licenseChoices: Object.entries(CREATIVE_COMMONS_LICENSES).map(([key, license]) => ({
       key,
       name: `${license.name}, ${license.title}`,
@@ -143,8 +143,12 @@ function iconInEffect(settings: SiteSettings): string | undefined {
   return iconSetting({ icon: settings.icon, avatar: settings.avatar });
 }
 
-function iconPanel(config: ResolvedConfig, settings: SiteSettings): Record<string, unknown> {
+async function iconPanel(
+  config: ResolvedConfig,
+  settings: SiteSettings,
+): Promise<Record<string, unknown>> {
   const inEffect = iconInEffect(settings);
+  await deriveSiteIcons(config, inEffect);
   const preview = siteIcons(config, inEffect).find((icon) => icon.rel === 'apple-touch-icon');
 
   return {

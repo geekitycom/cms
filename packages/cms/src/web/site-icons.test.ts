@@ -5,13 +5,16 @@
  * over HTTP against the packaged theme, the way a browser and a crawler meet it.
  */
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import sharp from 'sharp';
 
+import { deriveSiteIcons, iconSetting } from '../images/icons.ts';
 import { sandbox } from '../admin/__testing__/harness.ts';
+import { sourceVersion } from '../images/paths.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { shared } from './__testing__/shared.ts';
 
@@ -47,7 +50,9 @@ async function site(
     await writeFile(file, contents);
   }
 
-  return box.open({ contentDir, dataDir, ...config });
+  const cms = await box.open({ contentDir, dataDir, ...config });
+  await deriveSiteIcons(cms.config, iconSetting(settings));
+  return cms;
 }
 
 const sharedSite = shared(site);
@@ -348,5 +353,114 @@ describe('the web app manifest (TASK-147 AC #4)', () => {
       manifests.map((link) => link['href']),
       ['/manifest.webmanifest'],
     );
+  });
+});
+
+describe('icon names under an upload that is not the site icon', () => {
+  it('answer 404 and write nothing', async () => {
+    const cms = await site(
+      { avatar: AVATAR },
+      { [AVATAR]: await png(240), '/uploads/2026/09/other.png': await png(300) },
+    );
+
+    for (const name of ['icon-512.png', 'favicon.ico', 'maskable-512.png']) {
+      const response = await get(cms, `/uploads/_/2026/09/other.png/${name}`);
+      await response.arrayBuffer();
+      assert.equal(response.status, 404, name);
+    }
+    assert.equal(
+      existsSync(path.join(cms.config.dataDir, 'images', '2026', '09', 'other.png')),
+      false,
+      'icons were drawn from an upload that is not the site icon',
+    );
+    assert.equal((await get(cms, '/uploads/_/2026/09/avatar.png/icon-512.png')).status, 200);
+  });
+});
+
+describe('derived files after their upload is replaced in place', () => {
+  const RED = { r: 220, g: 20, b: 20 };
+  const BLUE = { r: 20, g: 20, b: 220 };
+
+  async function isRed(response: Response): Promise<boolean> {
+    const { dominant } = await sharp(Buffer.from(await response.arrayBuffer())).stats();
+    return dominant.r > dominant.b;
+  }
+
+  async function iconHref(cms: Cms): Promise<string> {
+    const link = (await headLinks(cms)).find((attributes) =>
+      attributes.href?.includes('icon-32.png'),
+    );
+    assert.ok(link?.href !== undefined, 'the head links no icon-32.png');
+    return link.href.replaceAll('&amp;', '&');
+  }
+
+  it('serve the new picture at the icon URL the head links for the new bytes', async () => {
+    const cms = await site({ avatar: AVATAR }, { [AVATAR]: await png(240, RED) });
+    assert.ok(await isRed(await get(cms, await iconHref(cms))), 'the first icon is red');
+
+    await writeFile(path.join(cms.config.contentDir, AVATAR), await png(300, BLUE));
+    await deriveSiteIcons(cms.config, AVATAR);
+    const href = await iconHref(cms);
+    const second = await get(cms, href);
+
+    assert.equal(second.status, 200);
+    assert.equal(await isRed(second), false, `${href} served the old red icon`);
+    assert.match(second.headers.get('cache-control') ?? '', /immutable/);
+  });
+
+  it('never mark a width derived from the old bytes immutable under the new hash', async () => {
+    const photo = '/uploads/2026/09/photo.png';
+    const cms = await site({}, { [photo]: await png(640, RED) }, { imageWidths: [320] });
+    const first = await get(cms, '/uploads/_/2026/09/photo.png/320.webp');
+    assert.equal(first.status, 200);
+    await first.arrayBuffer();
+
+    await writeFile(path.join(cms.config.contentDir, photo), await png(700, BLUE));
+    const version = sourceVersion(cms.config, '2026/09/photo.png');
+    assert.ok(version !== undefined);
+    const second = await get(cms, `/uploads/_/2026/09/photo.png/320.webp?v=${version}`);
+    const cacheControl = second.headers.get('cache-control') ?? '';
+
+    assert.equal(second.status, 200);
+    assert.ok(
+      !((await isRed(second)) && cacheControl.includes('immutable')),
+      `the old red variant was served under the new hash with "${cacheControl}"`,
+    );
+  });
+});
+
+describe('an icon setting that names an upload no icon can be drawn from', () => {
+  async function manifestIconList(cms: Cms): Promise<unknown[]> {
+    const response = await get(cms, '/manifest.webmanifest');
+    assert.equal(response.status, 200);
+    return ((await response.json()) as { icons?: unknown[] }).icons ?? [];
+  }
+
+  function iconLinks(links: Record<string, string>[]): Record<string, string>[] {
+    return links.filter((link) => link.rel === 'icon' || link.rel === 'apple-touch-icon');
+  }
+
+  it('links no icons and lists none when the upload is missing', async () => {
+    const cms = await site({ icon: '/uploads/2026/01/gone.png' });
+
+    assert.deepEqual(iconLinks(await headLinks(cms)), []);
+    assert.deepEqual(await manifestIconList(cms), []);
+  });
+
+  it('never links an icon URL that answers 404 when the upload cannot be read', async (t) => {
+    t.mock.method(console, 'warn', () => undefined);
+    const cms = await site(
+      { icon: '/uploads/2026/01/broken.png' },
+      { '/uploads/2026/01/broken.png': 'this is not a PNG' },
+    );
+
+    for (let render = 0; render < 2; render++) {
+      for (const link of iconLinks(await headLinks(cms))) {
+        const response = await get(cms, (link.href ?? '').replaceAll('&amp;', '&'));
+        await response.arrayBuffer();
+        assert.equal(response.status, 200, `the head links ${String(link.href)}, a 404`);
+      }
+    }
+    assert.deepEqual(await manifestIconList(cms), []);
   });
 });

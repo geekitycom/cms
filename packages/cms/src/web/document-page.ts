@@ -8,7 +8,7 @@ import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import type { Document } from '../content/document.ts';
 import { isListed } from '../content/served.ts';
 import type { GeekityEnv } from './env.ts';
-import { absoluteUrl } from '../util/url.ts';
+import { absoluteUrl, encodePath } from '../util/url.ts';
 import { pingbackEndpointFor } from '../webmention/pingback.ts';
 import { WEBMENTION_PATH } from '../webmention/endpoint.ts';
 import { documentMarkdown } from './markdown-representation.ts';
@@ -22,7 +22,7 @@ import {
   textFormatOf,
 } from './negotiate.ts';
 import type { Representation } from './negotiate.ts';
-import { conditionalHeaders, drawnForSomebody, encodePath } from './request.ts';
+import { conditionalHeaders, drawnForSomebody } from './request.ts';
 import { servedPath, siteView } from './site-view.ts';
 
 /**

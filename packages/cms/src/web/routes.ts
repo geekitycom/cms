@@ -7,6 +7,7 @@ import { mountContact } from './contact-routes.ts';
 import { COMMENT_PAGE_PREFIX } from '../content/guids.ts';
 import { findPathRedirect, findQueryRedirect, redirectLocation } from '../content/redirects.ts';
 import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
+import { encodePath } from '../util/url.ts';
 import type { GeekityEnv } from './env.ts';
 import { iconSetting } from '../images/icons.ts';
 import { advertiseIdentityEndpoints, MCP_SERVER_CARD_PATH } from './indieauth-discovery.ts';
@@ -46,7 +47,6 @@ import {
 import type { PathMatch } from './paths.ts';
 import {
   conditionalHeaders,
-  encodePath,
   queryFeedFormat,
   requestPath,
   requestSearch,

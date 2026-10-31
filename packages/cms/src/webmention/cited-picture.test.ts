@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, afterEach, describe, it } from 'node:test';
 
+import sharp from 'sharp';
+
 import { gifWithMetadata, jpegWithMetadata, leakedSecrets } from '../__testing__/metadata.ts';
 import {
   copyCitedPicture,
@@ -140,6 +142,25 @@ describe('copyCitedPicture', () => {
 
     assert.equal(
       await copyCitedPicture({ url: GIF_URL, kind: 'photo' }, { lookup, config }),
+      undefined,
+    );
+    await assert.rejects(readdir(path.join(config.contentDir, 'uploads', 'cited')));
+  });
+
+  it('copies nothing whose header declares more pixels than the site decodes', async () => {
+    const config = await site();
+    const huge = await sharp({
+      create: { width: 8000, height: 8000, channels: 3, background: { r: 1, g: 2, b: 3 } },
+    })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    answer = () => image(huge, 'image/png');
+
+    assert.equal(
+      await copyCitedPicture(
+        { url: 'https://i.ytimg.com/huge.png', kind: 'photo' },
+        { lookup, config },
+      ),
       undefined,
     );
     await assert.rejects(readdir(path.join(config.contentDir, 'uploads', 'cited')));

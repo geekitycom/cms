@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
+import { decodedRelativePath } from '../util/url.ts';
 
 /**
  * The extensions an icon may be derived from.
@@ -28,15 +29,10 @@ export function parseIconSetting(
 ): { source: string } | { problem: 'not-an-upload' | 'not-an-image' } {
   if (!setting.startsWith(UPLOAD_ASSET_PREFIX)) return { problem: 'not-an-upload' };
 
-  const relative = setting.slice(UPLOAD_ASSET_PREFIX.length);
-  if (relative === '' || relative.includes('..')) return { problem: 'not-an-upload' };
-  if (!ICON_SOURCES.has(path.extname(relative).toLowerCase())) return { problem: 'not-an-image' };
-
   // The setting holds a URL and the lookup wants a path, so whatever the
   // upload endpoint encoded comes off again here.
-  try {
-    return { source: relative.split('/').map(decodeURIComponent).join('/') };
-  } catch {
-    return { problem: 'not-an-upload' };
-  }
+  const source = decodedRelativePath(setting.slice(UPLOAD_ASSET_PREFIX.length));
+  if (source === undefined) return { problem: 'not-an-upload' };
+  if (!ICON_SOURCES.has(path.extname(source).toLowerCase())) return { problem: 'not-an-image' };
+  return { source };
 }

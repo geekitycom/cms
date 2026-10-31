@@ -1,8 +1,13 @@
 import { decodeEntities } from '../util/html.ts';
+import { decodedRelativePath } from '../util/url.ts';
 import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from './uploads.ts';
 
-/** Every `<img>` tag, with its attribute text. Void elements have no closing half. */
-export const IMG_TAG = /<img\s([^>]*?)\/?>/gi;
+/**
+ * Every `<img>` tag, with its attribute text. Void elements have no closing
+ * half. A quoted value is taken whole, since a `>` inside one does not end
+ * the tag.
+ */
+export const IMG_TAG = /<img\s((?:[^>"']|"[^"]*"|'[^']*')*?)\/?>/gi;
 
 /** One attribute of a tag: its name, and its value however it was quoted. */
 const ATTRIBUTE = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
@@ -41,16 +46,9 @@ export function uploadPath(src: string): string | undefined {
   if (src.startsWith(VARIANT_ASSET_PREFIX)) return undefined;
   if (!src.startsWith(UPLOAD_ASSET_PREFIX)) return undefined;
 
-  const relative = src.slice(UPLOAD_ASSET_PREFIX.length);
-  if (relative === '' || relative.includes('..')) return undefined;
-
   // A URL is what is in the attribute and a path is what is on disk, so the
   // percent-encoding markdown-it applied has to come off before the lookup.
-  try {
-    return relative.split('/').map(decodeURIComponent).join('/');
-  } catch {
-    return undefined;
-  }
+  return decodedRelativePath(src.slice(UPLOAD_ASSET_PREFIX.length));
 }
 
 /** A tag's attributes by lower-cased name, with entities left as written. */

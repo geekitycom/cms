@@ -11,7 +11,6 @@ import {
 import type { GeekityEnv } from './env.ts';
 import { UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
-import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant } from '../images/variants.ts';
 import {
   ASSET_VERSION_PARAM,
@@ -26,7 +25,7 @@ import {
   THEME_ASSET_PREFIX,
   UPLOAD_ASSET_MAX_AGE,
 } from '../theme/assets.ts';
-import { requestPath } from './request.ts';
+import { assetPath } from './request.ts';
 import { notFound } from './status-pages.ts';
 
 /**
@@ -40,8 +39,9 @@ import { notFound } from './status-pages.ts';
  * current bytes are never pinned under a name that describes older ones.
  */
 export function themeAsset(c: Context<GeekityEnv>): Response {
-  const relative = requestPath(c).slice(THEME_ASSET_PREFIX.length);
-  const asset = findThemeAsset(relative, c.var.renderer.themeDirs());
+  const relative = assetPath(c, THEME_ASSET_PREFIX);
+  const asset =
+    relative === undefined ? undefined : findThemeAsset(relative, c.var.renderer.themeDirs());
   if (asset === undefined) return notFound(c);
 
   const fingerprinted = c.req.query(ASSET_VERSION_PARAM) === assetVersion(asset);
@@ -65,13 +65,13 @@ export function themeAsset(c: Context<GeekityEnv>): Response {
  * page cached before URLs carried one, still gets the file, for a day.
  */
 export async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
-  const relative = decodeVariantPath(requestPath(c).slice(VARIANT_ASSET_PREFIX.length));
-  const asset = await findImageVariant(c.var.config, relative);
+  const relative = assetPath(c, VARIANT_ASSET_PREFIX);
+  if (relative === undefined) return notFound(c);
+  const iconSource = siteIconSource(c.var.config, iconSetting(c.var.renderer.site()));
+  const asset = await findImageVariant(c.var.config, relative, iconSource);
   if (asset === undefined) return notFound(c);
 
-  const source = relative.slice(0, relative.lastIndexOf('/'));
-  const version = sourceVersion(c.var.config, source);
-  const fingerprinted = version !== undefined && c.req.query(ASSET_VERSION_PARAM) === version;
+  const fingerprinted = c.req.query(ASSET_VERSION_PARAM) === asset.version;
   const options = fingerprinted ? IMMUTABLE_ASSET : { maxAge: UPLOAD_ASSET_MAX_AGE };
   return assetReply(asset, c.req.raw.headers, options);
 }
@@ -86,20 +86,11 @@ export async function favicon(c: Context<GeekityEnv>): Promise<Response> {
   const source = siteIconSource(c.var.config, iconSetting(c.var.renderer.site()));
   if (source === undefined) return notFound(c);
 
-  const asset = await findImageVariant(c.var.config, `${source}/${FAVICON_FILE}`);
+  const asset = await findImageVariant(c.var.config, `${source}/${FAVICON_FILE}`, source);
   if (asset === undefined) return notFound(c);
 
   const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
   return assetReply(asset, c.req.raw.headers, options);
-}
-
-/** A request path as a path on disk: percent-encoding off, segment by segment. */
-function decodeVariantPath(relative: string): string {
-  try {
-    return relative.split('/').map(decodeURIComponent).join('/');
-  } catch {
-    return relative;
-  }
 }
 
 /**
@@ -117,8 +108,8 @@ function decodeVariantPath(relative: string): string {
  * or a declared redirect, which never shadow a file that is there.
  */
 export async function upload(c: Context<GeekityEnv>, next: Next): Promise<Response | undefined> {
-  const relative = requestPath(c).slice(UPLOAD_ASSET_PREFIX.length);
-  if (isHalfWrittenStrip(relative)) return notFound(c);
+  const relative = assetPath(c, UPLOAD_ASSET_PREFIX);
+  if (relative === undefined || isHalfWrittenStrip(relative)) return notFound(c);
   const asset = findUpload(relative, c.var.config.contentDir);
   if (asset === undefined) {
     await next();

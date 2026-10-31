@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
+import { plainRelativePath } from '../util/url.ts';
 import type { GeekityEnv } from './env.ts';
 import { FEED_FORMATS, FEED_SEGMENTS } from './feeds.ts';
 import type { FeedFormat } from './feeds.ts';
@@ -22,16 +23,17 @@ export function requestPath(c: Context<GeekityEnv>): string {
   }
 }
 
-export function requestSearch(c: Context<GeekityEnv>): string {
-  return new URL(c.req.url).search;
+/**
+ * The decoded path under an asset prefix, or `undefined` when it is not a
+ * plain relative path. Every asset route reads its file name here, so all of
+ * them decode once and refuse the same spellings.
+ */
+export function assetPath(c: Context<GeekityEnv>, prefix: string): string | undefined {
+  return plainRelativePath(requestPath(c).slice(prefix.length));
 }
 
-/** A decoded path back into one safe to put in a `Location` header. */
-export function encodePath(pathname: string): string {
-  return pathname
-    .split('/')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
+export function requestSearch(c: Context<GeekityEnv>): string {
+  return new URL(c.req.url).search;
 }
 
 /** The conditional request headers, as the negotiator wants them. */

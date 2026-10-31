@@ -21,11 +21,48 @@ export type ImageConfig = Pick<
   'contentDir' | 'dataDir' | 'imageOptimization' | 'imageWidths' | 'imageFormats'
 >;
 
-export function derivedDir(config: ImageConfig, source: string): string | undefined {
+/**
+ * The most pixels a derived image is decoded from: a 60 megapixel camera's
+ * full frame, and well under sharp's own default. A flat PNG of a few hundred
+ * kilobytes can declare far more, and decoding it costs memory in proportion.
+ */
+export const MAX_INPUT_PIXELS = 60_000_000;
+
+/** sharp's input options for a picture the site derives from. */
+export const DECODE_OPTIONS = { autoOrient: true, limitInputPixels: MAX_INPUT_PIXELS } as const;
+
+/** Whether a header's dimensions are within {@link MAX_INPUT_PIXELS}. */
+export function decodable(size: { width: number; height: number }): boolean {
+  return size.width * size.height <= MAX_INPUT_PIXELS;
+}
+
+/** One upload as the files derived from it know it. */
+export interface Upload {
+  /** Its path under `content/uploads/`, `/`-separated, spelled the one way the directory spells it. */
+  readonly source: string;
+  /** The upload on disk. */
+  readonly file: string;
+  /** Where the files derived from it live. */
+  readonly directory: string;
+}
+
+/**
+ * The upload a source path names, or `undefined` when it names none.
+ *
+ * The source is rebuilt from the resolved file, so however a caller spelled
+ * it, a record and the URLs built from it carry the canonical path.
+ */
+export function locateUpload(config: ImageConfig, source: string): Upload | undefined {
   const file = sourceFile(config, source);
   if (file === undefined) return undefined;
-  const relative = path.relative(path.resolve(config.contentDir, UPLOAD_DIRECTORY), file);
-  return dataPath(config.dataDir, IMAGES, ...relative.split(path.sep));
+  const segments = path
+    .relative(path.resolve(config.contentDir, UPLOAD_DIRECTORY), file)
+    .split(path.sep);
+  return {
+    source: segments.join('/'),
+    file,
+    directory: dataPath(config.dataDir, IMAGES, ...segments),
+  };
 }
 
 /**

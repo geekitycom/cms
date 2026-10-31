@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -12,6 +13,7 @@ import {
   findImageVariant,
   generateImageVariants,
   removeImageVariants,
+  variantUrl,
 } from './variants.ts';
 import type { ImageConfig } from './variants.ts';
 
@@ -265,5 +267,171 @@ describe('findImageVariant', () => {
     const source = await upload(config, '2026/09/photo.png', rectangle(1000, 500).png());
 
     assert.equal(await findImageVariant(config, `${source}/320.webp`), undefined);
+  });
+});
+
+describe('variantUrl', () => {
+  const variant = { width: 400, height: 300, format: 'webp', file: '400.webp' };
+
+  for (const [source, expected] of [
+    ['2026/01/a#b.png', '/uploads/_/2026/01/a%23b.png/400.webp?v=v'],
+    ['2026/01/a?b.png', '/uploads/_/2026/01/a%3Fb.png/400.webp?v=v'],
+    ['2026/01/100%.png', '/uploads/_/2026/01/100%25.png/400.webp?v=v'],
+    ['2026/01/a b.png', '/uploads/_/2026/01/a%20b.png/400.webp?v=v'],
+  ] as const) {
+    it(`encodes each path segment of ${JSON.stringify(source)}`, () => {
+      assert.equal(variantUrl(source, variant, 'v'), expected);
+    });
+  }
+});
+
+describe('the source a record names', () => {
+  it('is the canonical path however the caller spelled it', async () => {
+    const config = await site({ imageWidths: [320] });
+    await upload(config, '2026/09/photo.png', rectangle(1000, 500).png());
+
+    const record = await generateImageVariants(config, 'x/../2026/09/photo.png');
+
+    assert.equal(record?.source, '2026/09/photo.png');
+    assert.equal(describeImage(config, './2026/09//photo.png')?.source, '2026/09/photo.png');
+  });
+});
+
+describe('a source over the pixel limit', () => {
+  const huge = (): Sharp => rectangle(8000, 8000).png({ compressionLevel: 9 });
+
+  it('yields no variants and writes nothing', async () => {
+    const config = await site();
+    const source = await upload(config, '2026/09/huge.png', huge());
+
+    assert.equal(await generateImageVariants(config, source), undefined);
+    assert.equal(await findImageVariant(config, `${source}/320.webp`), undefined);
+    assert.equal(
+      existsSync(path.join(config.dataDir, 'images', '2026', '09', 'huge.png', '320.webp')),
+      false,
+    );
+  });
+
+  it('yields no icons', async () => {
+    const config = await site();
+    const source = await upload(config, '2026/09/huge.png', huge());
+
+    assert.equal(await findImageVariant(config, `${source}/icon-32.png`, source), undefined);
+    assert.equal(
+      existsSync(path.join(config.dataDir, 'images', '2026', '09', 'huge.png', 'icon-32.png')),
+      false,
+    );
+  });
+});
+
+describe('a source an encoder cannot take whole', () => {
+  it('gets a record whose widest WebP stays within the format, wide or tall', async () => {
+    const config = await site({ imageWidths: [320] });
+    const wide = await upload(config, '2026/09/wide.png', rectangle(17000, 40).png());
+    const tall = await upload(config, '2026/09/tall.png', rectangle(40, 17000).png());
+
+    for (const source of [wide, tall]) {
+      const record = await generateImageVariants(config, source);
+      assert.ok(record !== undefined, `${source} got no record`);
+      const webp = record.variants.filter((variant) => variant.format === 'webp');
+      assert.ok(webp.length > 0, `${source} got no WebP`);
+      for (const variant of webp) {
+        assert.ok(variant.width <= 16383 && variant.height <= 16383, `${source} ${variant.file}`);
+      }
+      assert.ok(record.variants.some((variant) => variant.format === 'png'));
+    }
+  });
+});
+
+describe('a source whose pixels cannot be decoded', () => {
+  async function truncated(): Promise<Buffer> {
+    const whole = await sharp({
+      create: {
+        width: 600,
+        height: 400,
+        channels: 3,
+        background: { r: 0, g: 0, b: 0 },
+        noise: { type: 'gaussian', mean: 128, sigma: 40 },
+      },
+    })
+      .png()
+      .toBuffer();
+    return whole.subarray(0, Math.floor(whole.length / 2));
+  }
+
+  it('is not encoded again until the file changes', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    const config = await site({ imageWidths: [320] });
+    const source = await upload(config, '2026/09/cut.png', await truncated());
+
+    assert.equal(await generateImageVariants(config, source), undefined);
+    assert.equal(warn.mock.callCount(), 1, 'the first attempt was not reported');
+    assert.equal(await generateImageVariants(config, source), undefined);
+    assert.equal(await findImageVariant(config, `${source}/320.webp`), undefined);
+    assert.equal(warn.mock.callCount(), 1, 'the source was encoded again');
+
+    await upload(config, source, rectangle(600, 400).png());
+    assert.ok(await generateImageVariants(config, source), 'the replaced file was not derived');
+  });
+});
+
+describe('a name the site does not offer', () => {
+  it('encodes nothing even before any record exists', async () => {
+    const config = await site({ imageWidths: [320, 640] });
+    const source = await upload(config, '2026/09/photo.png', rectangle(1000, 500).png());
+
+    for (const name of ['777.webp', '320.avif', '1000.gif', 'x.webp']) {
+      assert.equal(await findImageVariant(config, `${source}/${name}`), undefined, name);
+    }
+    assert.equal(
+      existsSync(path.join(config.dataDir, 'images', '2026', '09', 'photo.png')),
+      false,
+      'the whole set was encoded',
+    );
+    assert.ok(await findImageVariant(config, `${source}/1000.webp`), 'the full width is offered');
+  });
+});
+
+describe('what the derived route serves', () => {
+  it('is never the sidecar', async () => {
+    const config = await site({ imageWidths: [320] });
+    const source = await upload(config, '2026/09/photo.png', rectangle(1000, 500).png());
+    await generateImageVariants(config, source);
+    assert.ok(existsSync(path.join(config.dataDir, 'images', source, 'image.json')));
+
+    assert.equal(await findImageVariant(config, `${source}/image.json`), undefined);
+  });
+
+  it('is never a write in flight', async () => {
+    const config = await site({ imageWidths: [320] });
+    const source = await upload(config, '2026/09/photo.png', rectangle(1000, 500).png());
+    await generateImageVariants(config, source);
+    await writeFile(path.join(config.dataDir, 'images', source, '320.webp.1a2b-3.tmp'), 'partial');
+
+    assert.equal(await findImageVariant(config, `${source}/320.webp.1a2b-3.tmp`), undefined);
+  });
+});
+
+describe('derived files whose upload is gone', () => {
+  it('answer nothing and are taken away once the original is removed by hand', async () => {
+    const config = await site({ imageWidths: [320] });
+    const source = await upload(config, '2026/09/photo.png', rectangle(1000, 500).png());
+    assert.ok(await findImageVariant(config, `${source}/320.webp`), 'the variant was served first');
+
+    await rm(path.join(config.contentDir, 'uploads', source));
+
+    assert.equal(await findImageVariant(config, `${source}/320.webp`), undefined);
+    assert.equal(existsSync(path.join(config.dataDir, 'images', source)), false);
+  });
+
+  it('are not written back by an encode that was running when they were removed', async () => {
+    const config = await site({ imageWidths: [320, 640, 960] });
+    const source = await upload(config, '2026/09/photo.png', rectangle(2000, 1500).png());
+
+    const generation = generateImageVariants(config, source);
+    const removal = removeImageVariants(config, source);
+    await Promise.all([generation, removal]);
+
+    assert.equal(existsSync(path.join(config.dataDir, 'images', source)), false);
   });
 });

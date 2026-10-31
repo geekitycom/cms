@@ -1,4 +1,4 @@
-import { iconSetting, siteIconSource } from '../images/icons.ts';
+import { iconSetting, siteIcons } from '../images/icons.ts';
 import type { ImageConfig } from '../images/paths.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { FAVICON_PATH } from './manifest.ts';
@@ -41,7 +41,7 @@ export function openSearchDescription(input: {
   const { config, site } = input;
   const url = (pathname: string): string => absoluteUrl(pathname, config.baseUrl);
   const tagline = site.tagline?.trim() ?? '';
-  const hasIcon = siteIconSource(config, iconSetting(site)) !== undefined;
+  const hasIcon = siteIcons(config, iconSetting(site)).length > 0;
 
   const lines = [
     '<?xml version="1.0" encoding="UTF-8"?>',

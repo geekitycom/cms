@@ -9,7 +9,7 @@ import type { ListingRequest, ListingSubject } from './listing-subject.ts';
 import { representationHref } from './negotiate.ts';
 import type { Representation } from './negotiate.ts';
 import { pageCount } from './pagination.ts';
-import { encodePath } from './request.ts';
+import { encodePath } from '../util/url.ts';
 import { servedPath } from './site-view.ts';
 import type { SiteView } from './site-view.ts';
 import { PAGE_SEGMENT, taxonomyForSegment } from '../content/taxonomy.ts';
