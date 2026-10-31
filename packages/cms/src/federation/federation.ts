@@ -23,10 +23,10 @@ import type {
   IndexClock,
   TaxonomyReader,
 } from '../content/store.ts';
-import { countUsers, listUsers } from '../site/users.ts';
+import { countUsers, listUsers, primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { authorNames } from '../content/authors.ts';
-import { userActor, userByUsername } from './actor.ts';
+import { senderKeyPairs, userActor, userByUsername } from './actor.ts';
 import { articleObjectId, postByObjectId, postCreateActivity } from './article.ts';
 import { isFederatedDocument } from '../content/served.ts';
 import { followersPage, lastFollowersCursor } from './followers.ts';
@@ -264,6 +264,16 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
     // and a shared inbox, or to a plugin's second federation over the same KV
     // store, would otherwise be handled twice.
     .withIdempotency('per-origin')
+    // A personal inbox fetches the sender's key signed as its owner; the
+    // shared one has no owner, so it signs as the site's first account. Fetched
+    // unsigned, a key on a server in authorized fetch mode answers 401, and
+    // Fedify keeps that failure long enough to refuse the same key at the
+    // personal inbox too.
+    .setSharedKeyDispatcher(async (context) => {
+      const signer = primaryUser(context.data.config.dataDir);
+      const [key] = signer === undefined ? [] : await senderKeyPairs(context, signer);
+      return key ?? null;
+    })
     .onUnverifiedActivity(async (context, activity, reason) => {
       const json = (await activity.toJsonLd()) as JsonLdDocument;
       options.refusals.refused(context.request, json, reason);

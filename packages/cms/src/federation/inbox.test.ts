@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 import type { TestContext } from 'node:test';
 
 import { exportJwk, importJwk, signRequest } from '@fedify/fedify';
@@ -77,6 +77,7 @@ let remoteKeys: CryptoKeyPair;
 let strangerKeys: CryptoKeyPair;
 let remoteActorDocument: unknown;
 let restoreFetch: () => void;
+let authorizedFetch = false;
 
 before(async () => {
   remoteKeys = await testKeyPair(REMOTE_PAIR);
@@ -136,6 +137,8 @@ function routeRemoteHost(): () => void {
       return new Response('', { status: 202 });
     }
     if (url.pathname === new URL(REMOTE_ACTOR).pathname) {
+      const signed = request.headers.has('signature') || request.headers.has('signature-input');
+      if (authorizedFetch && !signed) return new Response('Request not signed', { status: 401 });
       return new Response(JSON.stringify(remoteActorDocument), {
         headers: { 'content-type': 'application/activity+json' },
       });
@@ -891,6 +894,25 @@ describe('the federation files', () => {
         .reverse(),
       types,
     );
+  });
+});
+
+describe('a peer in authorized fetch mode', () => {
+  beforeEach(() => {
+    authorizedFetch = true;
+  });
+
+  afterEach(() => {
+    authorizedFetch = false;
+  });
+
+  it('has its delivery to the shared inbox accepted, the key fetched signed', async () => {
+    const instance = await site();
+
+    const response = await deliver(instance, follow(), { inbox: SHARED_INBOX });
+
+    assert.equal(response.status, 202, await response.text());
+    assert.equal(deliveries.filter((delivery) => delivery.body['type'] === 'Accept').length, 1);
   });
 });
 
