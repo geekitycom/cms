@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { open } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import path from 'node:path';
-import { Readable } from 'node:stream';
 
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
@@ -96,8 +97,9 @@ export function themeAssetUrl(relative: string, themeDirs: readonly string[]): s
 
 /** The response body and headers for an asset. */
 export function assetResponse(asset: StaticAsset, options: AssetResponseOptions = {}): Response {
-  const body = Readable.toWeb(createReadStream(asset.file)) as ReadableStream;
-  return new Response(body, { headers: assetHeaders(asset, options) });
+  return new Response(fileBody(asset, 0, asset.stats.size - 1), {
+    headers: assetHeaders(asset, options),
+  });
 }
 
 /**
@@ -145,8 +147,7 @@ export function assetRangeResponse(
 
   headers.set('content-length', String(end - start + 1));
   headers.set('content-range', `bytes ${String(start)}-${String(end)}/${String(size)}`);
-  const body = Readable.toWeb(createReadStream(asset.file, { start, end })) as ReadableStream;
-  return new Response(body, { status: 206, headers });
+  return new Response(fileBody(asset, start, end), { status: 206, headers });
 }
 
 /** The 304 an unchanged asset gets, which carries the validators and no body. */
@@ -175,6 +176,77 @@ export function matchesEtag(ifNoneMatch: string | undefined, etag: string): bool
     .split(',')
     .map((candidate) => candidate.trim().replace(/^W\//, ''))
     .includes(etag);
+}
+
+const CHUNK_BYTES = 64 * 1024;
+
+/**
+ * The bytes `start` to `end` of an asset, inclusive, read from the file only
+ * once something reads the body.
+ *
+ * A body that is never read, as for a HEAD request or a client that goes
+ * away first, never opens the file, and a cancelled one closes it: a
+ * descriptor held by an abandoned stream is not given back until the process
+ * exits. The file is checked against the stat the headers came from as it is
+ * opened, so a file replaced in between fails the response rather than
+ * sending bytes its headers do not describe.
+ */
+function fileBody(asset: StaticAsset, start: number, end: number): ReadableStream<Uint8Array> {
+  let handle: FileHandle | undefined;
+  let position = start;
+
+  async function close(): Promise<void> {
+    const current = handle;
+    handle = undefined;
+    await current?.close();
+  }
+
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        try {
+          handle ??= await openDescribed(asset);
+          const length = Math.min(CHUNK_BYTES, end + 1 - position);
+          if (length > 0) {
+            const { bytesRead, buffer } = await handle.read(
+              new Uint8Array(length),
+              0,
+              length,
+              position,
+            );
+            if (bytesRead === 0) throw new Error(`${asset.file} ended before its stated length`);
+            position += bytesRead;
+            controller.enqueue(buffer.subarray(0, bytesRead));
+          }
+          if (position > end) {
+            await close();
+            controller.close();
+          }
+        } catch (error) {
+          await close();
+          throw error;
+        }
+      },
+      cancel: close,
+    },
+    { highWaterMark: 0 },
+  );
+}
+
+async function openDescribed(asset: StaticAsset): Promise<FileHandle> {
+  const handle = await open(asset.file, 'r');
+  const opened = await handle.stat();
+  const { stats } = asset;
+  if (
+    opened.dev !== stats.dev ||
+    opened.ino !== stats.ino ||
+    opened.size !== stats.size ||
+    opened.mtimeMs !== stats.mtimeMs
+  ) {
+    await handle.close();
+    throw new Error(`${asset.file} changed after its headers were written`);
+  }
+  return handle;
 }
 
 function assetHeaders(asset: StaticAsset, options: AssetResponseOptions): Headers {
