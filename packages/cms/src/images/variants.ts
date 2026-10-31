@@ -121,6 +121,11 @@ export interface DescribedImage extends ImageRecord {
   version?: string | undefined;
 }
 
+/** A derived file, and the version of the upload's bytes it was derived from. */
+export interface DerivedAsset extends StaticAsset {
+  version: string;
+}
+
 /** The public URL of one derived file, naming the original's bytes when `version` is given. */
 export function variantUrl(source: string, variant: ImageVariant, version?: string): string {
   return versioned(`${VARIANT_ASSET_PREFIX}${encodePath(`${source}/${variant.file}`)}`, version);
@@ -415,13 +420,18 @@ export async function removeImageVariants(config: ImageConfig, source: string): 
  * rebuilds the whole set for that source and then serves it, which is what
  * makes the derived directory disposable, as everything derived must be. A
  * request for a width or a format the site does not offer is a 404 and encodes
- * nothing, so nobody can make the server work by asking for sizes.
+ * nothing, so nobody can make the server work by asking for sizes. An icon
+ * name is answered only under `iconSource`, the site icon's upload. A file
+ * whose upload has gone is answered with nothing and removed.
+ *
+ * The file comes back with the version of the bytes it was derived from, and
+ * a set derived from older bytes is derived again first.
  */
 export async function findImageVariant(
   config: ImageConfig,
   relative: string,
   iconSource?: string,
-): Promise<StaticAsset | undefined> {
+): Promise<DerivedAsset | undefined> {
   if (!config.imageOptimization || plainRelativePath(relative) === undefined) return undefined;
   const cut = relative.lastIndexOf('/');
   if (cut <= 0) return undefined;
@@ -438,11 +448,13 @@ export async function findImageVariant(
 
   // The icons live beside the widths but are drawn only from the site icon,
   // so no other upload can be made into seven more files.
-  if (!isDerivedIcon(name)) return findDerivedFile(widths(config), upload, version, name);
   const icon = iconSource === undefined ? undefined : locateUpload(config, iconSource);
-  return icon?.source === upload.source
-    ? findDerivedFile(SITE_ICONS, upload, version, name)
-    : undefined;
+  const asset = !isDerivedIcon(name)
+    ? await findDerivedFile(widths(config), upload, version, name)
+    : icon?.source === upload.source
+      ? await findDerivedFile(SITE_ICONS, upload, version, name)
+      : undefined;
+  return asset === undefined ? undefined : { ...asset, version };
 }
 
 const THUMBNAIL_WIDTH = 400;

@@ -8,7 +8,6 @@ import {
 } from '../content/uploads.ts';
 import type { GeekityEnv } from './env.ts';
 import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
-import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant } from '../images/variants.ts';
 import {
   ASSET_VERSION_PARAM,
@@ -70,9 +69,7 @@ export async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
   const asset = await findImageVariant(c.var.config, relative, iconSource);
   if (asset === undefined) return notFound(c);
 
-  const source = relative.slice(0, relative.lastIndexOf('/'));
-  const version = sourceVersion(c.var.config, source);
-  const fingerprinted = version !== undefined && c.req.query(ASSET_VERSION_PARAM) === version;
+  const fingerprinted = c.req.query(ASSET_VERSION_PARAM) === asset.version;
   const options = fingerprinted ? IMMUTABLE_ASSET : { maxAge: UPLOAD_ASSET_MAX_AGE };
   return matchesEtag(c.req.header('if-none-match'), asset.etag)
     ? assetNotModified(asset, options)

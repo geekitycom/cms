@@ -13,6 +13,7 @@ import { after, describe, it } from 'node:test';
 import sharp from 'sharp';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
+import { sourceVersion } from '../images/paths.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { shared } from './__testing__/shared.ts';
 
@@ -370,5 +371,56 @@ describe('icon names under an upload that is not the site icon', () => {
       'icons were drawn from an upload that is not the site icon',
     );
     assert.equal((await get(cms, '/uploads/_/2026/09/avatar.png/icon-512.png')).status, 200);
+  });
+});
+
+describe('derived files after their upload is replaced in place', () => {
+  const RED = { r: 220, g: 20, b: 20 };
+  const BLUE = { r: 20, g: 20, b: 220 };
+
+  async function isRed(response: Response): Promise<boolean> {
+    const { dominant } = await sharp(Buffer.from(await response.arrayBuffer())).stats();
+    return dominant.r > dominant.b;
+  }
+
+  async function iconHref(cms: Cms): Promise<string> {
+    const link = (await headLinks(cms)).find((attributes) =>
+      attributes.href?.includes('icon-32.png'),
+    );
+    assert.ok(link?.href !== undefined, 'the head links no icon-32.png');
+    return link.href.replaceAll('&amp;', '&');
+  }
+
+  it('serve the new picture at the icon URL the head links for the new bytes', async () => {
+    const cms = await site({ avatar: AVATAR }, { [AVATAR]: await png(240, RED) });
+    assert.ok(await isRed(await get(cms, await iconHref(cms))), 'the first icon is red');
+
+    await writeFile(path.join(cms.config.contentDir, AVATAR), await png(300, BLUE));
+    const href = await iconHref(cms);
+    const second = await get(cms, href);
+
+    assert.equal(second.status, 200);
+    assert.equal(await isRed(second), false, `${href} served the old red icon`);
+    assert.match(second.headers.get('cache-control') ?? '', /immutable/);
+  });
+
+  it('never mark a width derived from the old bytes immutable under the new hash', async () => {
+    const photo = '/uploads/2026/09/photo.png';
+    const cms = await site({}, { [photo]: await png(640, RED) }, { imageWidths: [320] });
+    const first = await get(cms, '/uploads/_/2026/09/photo.png/320.webp');
+    assert.equal(first.status, 200);
+    await first.arrayBuffer();
+
+    await writeFile(path.join(cms.config.contentDir, photo), await png(700, BLUE));
+    const version = sourceVersion(cms.config, '2026/09/photo.png');
+    assert.ok(version !== undefined);
+    const second = await get(cms, `/uploads/_/2026/09/photo.png/320.webp?v=${version}`);
+    const cacheControl = second.headers.get('cache-control') ?? '';
+
+    assert.equal(second.status, 200);
+    assert.ok(
+      !((await isRed(second)) && cacheControl.includes('immutable')),
+      `the old red variant was served under the new hash with "${cacheControl}"`,
+    );
   });
 });
