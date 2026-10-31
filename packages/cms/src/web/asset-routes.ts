@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import type { Context, Next } from 'hono';
 
 import {
@@ -7,6 +9,7 @@ import {
   VARIANT_ASSET_PREFIX,
 } from '../content/uploads.ts';
 import type { GeekityEnv } from './env.ts';
+import { UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant } from '../images/variants.ts';
@@ -134,5 +137,29 @@ export async function upload(c: Context<GeekityEnv>, next: Next): Promise<Respon
   const part = assetRangeResponse(asset, c.req.header('range'), c.req.header('if-range'), options);
   const whole = part ?? assetResponse(asset, options);
   whole.headers.set('accept-ranges', 'bytes');
+  confineToMedia(whole.headers, asset.file);
   return whole;
+}
+
+const UPLOADED_SVG_POLICY =
+  "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'; sandbox";
+
+/**
+ * Keeps an upload the upload endpoint would not have taken from running as
+ * the site. Such a file can still arrive by hand, by a synced content
+ * repository or from an older version, and the uploads share the admin's
+ * origin.
+ *
+ * An SVG stays an image, since a site icon may be one, but under a policy
+ * that runs no script and loads nothing. Anything else is a download.
+ */
+function confineToMedia(headers: Headers, file: string): void {
+  const extension = path.extname(file).toLowerCase();
+  if (UPLOAD_MEDIA_TYPES.has(extension)) return;
+  if (extension === '.svg') {
+    headers.set('content-security-policy', UPLOADED_SVG_POLICY);
+    return;
+  }
+  if (headers.has('content-type')) headers.set('content-type', 'application/octet-stream');
+  headers.set('content-disposition', 'attachment');
 }

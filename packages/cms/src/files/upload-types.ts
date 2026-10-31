@@ -65,11 +65,13 @@ const OGG: readonly UploadSignature[] = [{ offset: 0, bytes: ascii('OggS') }];
 /**
  * Every extension the upload endpoint can accept, and what it takes to be one.
  *
- * SVG is deliberately absent. An SVG is a document that may carry script, and
- * an upload is served from the site's own origin, so accepting one would hand
- * anybody who can reach the editor a stored cross-site scripting hole. A site
- * that wants them anyway can put `.svg` in `uploadTypes` — and then it has
- * chosen that, which is the point.
+ * SVG is deliberately absent, and `uploadTypes` cannot add it: the setting
+ * accepts only extensions in this table. An SVG is a document that may carry
+ * script, and an upload is served from the site's own origin, so accepting
+ * one would hand anybody who can reach the editor a stored cross-site
+ * scripting hole. An SVG that reaches `content/uploads/` another way is
+ * served under a policy that runs no script, and any other file outside this
+ * table is served as a download.
  */
 export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
   string,
