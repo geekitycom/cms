@@ -25,6 +25,7 @@ import {
   AVATAR_SIZE,
   avatarHref,
   avatarSourceOf,
+  createAvatarService,
 } from './avatars.ts';
 
 const box = sandbox();
@@ -284,17 +285,38 @@ describe('the avatar route (AC #2)', () => {
     assert.deepEqual(requested, [GRACE_PHOTO], 'fetched once');
   });
 
-  it('is not an open proxy: a URL the site has not recorded is a 404 and fetches nothing', async () => {
+  it('is not an open proxy: a URL the site has not recorded gets the placeholder and fetches nothing', async () => {
     const { cms } = await site();
     web[STRANGER] = image(await picture(80, 80, 'png'), 'image/png');
     web[PENDING_PHOTO] = image(await picture(80, 80, 'png'), 'image/png');
+    hanging = new Set([IDLE_ICON]);
 
-    for (const source of [STRANGER, PENDING_PHOTO]) {
-      const response = await cms.app.request(avatarHref(source));
-      assert.equal(response.status, 404, `${source} is refused`);
+    const recorded = await cms.app.request(avatarHref(IDLE_ICON));
+    assert.equal(recorded.status, 200);
+    assert.equal(recorded.headers.get('content-type'), 'image/svg+xml');
+    const expected = {
+      status: recorded.status,
+      headers: [...recorded.headers.entries()],
+      body: await recorded.text(),
+    };
+
+    for (const key of [
+      avatarHref(STRANGER),
+      avatarHref(PENDING_PHOTO),
+      '/_geekity/avatars/not-a-key!',
+    ]) {
+      const response = await cms.app.request(key);
+      assert.deepEqual(
+        {
+          status: response.status,
+          headers: [...response.headers.entries()],
+          body: await response.text(),
+        },
+        expected,
+        `${key} is answered like a recorded, unfetched one`,
+      );
     }
-    assert.equal((await cms.app.request('/_geekity/avatars/not-a-key!')).status, 404);
-    assert.deepEqual(requested, [], 'nothing was fetched');
+    assert.deepEqual(requested, [IDLE_ICON], 'nothing else was fetched');
   });
 
   it('serves any follower’s avatar, one with no inbox activity too', async () => {
@@ -340,6 +362,28 @@ describe('the avatar route (AC #2)', () => {
       assert.equal(response.headers.get('content-type'), 'image/svg+xml', source);
       assert.ok(!(await response.text()).includes('script'), 'the stranger’s bytes are not served');
     }
+  });
+
+  it('never hands sharp bytes that do not open like one of the pictures it shows', async () => {
+    const { cms } = await site();
+    const warned: string[] = [];
+    const source = 'https://remote.example/avatars/ada.png';
+    web[source] = () =>
+      new Response('<svg xmlns="http://www.w3.org/2000/svg"/>', {
+        headers: { 'content-type': 'image/png' },
+      });
+    const avatars = createAvatarService({
+      admin: cms.admin,
+      config: cms.config,
+      logger: { warn: (message) => void warned.push(message) },
+    });
+
+    const answer = await avatars.answer(source);
+
+    assert.equal(answer.kind, 'placeholder');
+    assert.equal(warned.length, 1);
+    assert.match(warned[0] ?? '', /not a JPEG, PNG, GIF, WebP or AVIF file/);
+    assert.doesNotMatch(warned[0] ?? '', /not a readable picture/, 'sharp never read the bytes');
   });
 
   it('does not follow a redirect to a private address', async () => {
@@ -431,7 +475,13 @@ describe('the cache (AC #4)', () => {
     const left = await readdir(dataFolder(dataDir, AVATARS));
     assert.ok(!left.includes(adaFile), 'the unfollowed liker’s picture is gone');
     assert.equal(left.filter((name) => name.endsWith('.webp')).length, 1, 'Grace’s stays');
-    assert.equal((await cms.app.request(avatarHref(ADA_ICON))).status, 404);
+    const response = await cms.app.request(avatarHref(ADA_ICON));
+    assert.equal(response.headers.get('content-type'), 'image/svg+xml');
+    assert.equal(
+      requested.filter((url) => url === ADA_ICON).length,
+      1,
+      'the forgotten picture is not fetched again',
+    );
   });
 });
 

@@ -21,11 +21,11 @@ export function mountAvatars(app: Hono<GeekityEnv>): void {
   app.get(`${AVATAR_PATH_PREFIX}:key`, async (c) => {
     const source = avatarSourceOf(c.req.param('key'));
     const answer =
-      source === undefined ? ({ kind: 'unknown' } as const) : await c.var.avatars.answer(source);
+      source === undefined
+        ? ({ kind: 'placeholder' } as const)
+        : await c.var.avatars.answer(source);
 
     switch (answer.kind) {
-      case 'unknown':
-        return c.text('Not Found', 404);
       case 'placeholder':
         return new Response(AVATAR_PLACEHOLDER_SVG, {
           headers: {

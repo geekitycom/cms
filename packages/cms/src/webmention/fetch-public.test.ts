@@ -80,7 +80,7 @@ describe('a name whose resolution changes between the check and the connection',
     });
     await worker.terminate();
 
-    assert.equal(result.error, undefined, result.error);
+    assert.equal(result.error, undefined, result.error ?? 'the worker failed');
     assert.deepEqual(reached, [], 'the loopback server was asked');
     assert.ok(!(result.asked ?? []).includes('rebind.example'), 'the system resolver was asked');
     assert.equal(result.ok, false);

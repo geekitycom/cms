@@ -9,6 +9,8 @@ import { writeFileAtomically } from '../files/atomic.ts';
 import { AVATARS, dataFolder, dataPath } from '../files/data-files.ts';
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
+import { UPLOAD_MEDIA_TYPES, matchesSignature } from '../files/upload-types.ts';
+import type { UploadMediaType } from '../files/upload-types.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { messageOf } from '../util/errors.ts';
@@ -25,10 +27,12 @@ import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
  * the size the theme shows it at and keeps the result.
  *
  * The key is the source URL itself, base64url-encoded, and it is only a
- * spelling: a request is answered only when the index says the URL is an
- * avatar the site has recorded ({@link AdminStore.isAvatarSource}). Anything
- * else is a 404 that fetches nothing, so this is not an open proxy, and there
- * is no table or secret to lose.
+ * spelling: a picture is fetched only when the index says the URL is an
+ * avatar the site has recorded ({@link AdminStore.isAvatarSource}). Any
+ * other key is answered with the placeholder, the same answer a recorded
+ * avatar gets before it is fetched, so this is not an open proxy, nobody can
+ * tell from the answer whether an actor has reached the site, and there is
+ * no table or secret to lose.
  *
  * The files under `<dataDir>/avatars/` are a disposable cache:
  * every one of them is named by the hash of a URL the index holds and can be
@@ -81,8 +85,13 @@ export const AVATAR_PLACEHOLDER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" v
 /** The content types a picture may arrive as. SVG is not one: it is a document. */
 const ACCEPTED_TYPES = /^\s*image\/(jpeg|png|gif|webp|avif)\s*(;|$)/i;
 
-/** What sharp must find the bytes to be, whatever the header said. AVIF reads as `heif`. */
-const ACCEPTED_FORMATS: ReadonlySet<string> = new Set(['jpeg', 'png', 'gif', 'webp', 'heif']);
+/**
+ * What the bytes must open with, whatever the header said, before sharp sees
+ * them: so only the decoders for these formats ever read a stranger's file.
+ */
+const ACCEPTED_SIGNATURES: readonly UploadMediaType[] = ['.jpg', '.png', '.gif', '.webp', '.avif']
+  .map((extension) => UPLOAD_MEDIA_TYPES.get(extension))
+  .filter((media) => media !== undefined);
 
 /** The most pixels a picture may have before sharp will not decode it. */
 const MAX_INPUT_PIXELS = 4096 * 4096;
@@ -104,9 +113,7 @@ export function avatarSourceOf(key: string): string | undefined {
 
 /** What a request for an avatar is answered with. */
 export type AvatarAnswer =
-  | { readonly kind: 'image'; readonly asset: StaticAsset }
-  | { readonly kind: 'placeholder' }
-  | { readonly kind: 'unknown' };
+  { readonly kind: 'image'; readonly asset: StaticAsset } | { readonly kind: 'placeholder' };
 
 /** Where the service reports a picture it could not fetch. */
 export interface AvatarLogger {
@@ -131,9 +138,10 @@ export interface CreateAvatarServiceOptions {
 export interface AvatarService {
   /**
    * The answer to a request for the avatar at `source`: the cached picture,
-   * the placeholder when there is none to be had yet, or `unknown` for a URL
-   * the site has not recorded. Fetches only for a recorded URL with nothing
-   * cached, and waits for that fetch no longer than the first-view bound.
+   * or the placeholder when there is none to be had yet, and always the
+   * placeholder for a URL the site has not recorded. Fetches only for a
+   * recorded URL with nothing cached, and waits for that fetch no longer than
+   * the first-view bound.
    */
   answer(source: string): Promise<AvatarAnswer>;
   /**
@@ -239,7 +247,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
   return {
     async answer(source) {
       if (webUrl(source) === undefined || !admin.isAvatarSource(source)) {
-        return { kind: 'unknown' };
+        return { kind: 'placeholder' };
       }
 
       const held = cached(source);
@@ -305,14 +313,15 @@ async function fetchAvatar(
     contentType: { pattern: ACCEPTED_TYPES, name: 'a JPEG, PNG, GIF, WebP or AVIF picture' },
   });
   if (!fetched.ok) return fetched;
+  if (!ACCEPTED_SIGNATURES.some((media) => matchesSignature(media, fetched.body))) {
+    return { ok: false, reason: 'not a JPEG, PNG, GIF, WebP or AVIF file' };
+  }
 
   try {
-    const decoder = sharp(fetched.body, { autoOrient: true, limitInputPixels: MAX_INPUT_PIXELS });
-    const { format } = await decoder.metadata();
-    if (format === undefined || !ACCEPTED_FORMATS.has(format)) {
-      return { ok: false, reason: `a ${String(format)} file, not a picture this site shows` };
-    }
-    const image = await decoder
+    const image = await sharp(fetched.body, {
+      autoOrient: true,
+      limitInputPixels: MAX_INPUT_PIXELS,
+    })
       .resize({ width: AVATAR_SIZE, height: AVATAR_SIZE, fit: 'cover', position: 'centre' })
       .webp({ quality: 80 })
       .toBuffer();
