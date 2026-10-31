@@ -66,7 +66,8 @@ export function themeAsset(c: Context<GeekityEnv>): Response {
 export async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
   const relative = assetPath(c, VARIANT_ASSET_PREFIX);
   if (relative === undefined) return notFound(c);
-  const asset = await findImageVariant(c.var.config, relative);
+  const iconSource = siteIconSource(c.var.config, iconSetting(c.var.renderer.site()));
+  const asset = await findImageVariant(c.var.config, relative, iconSource);
   if (asset === undefined) return notFound(c);
 
   const source = relative.slice(0, relative.lastIndexOf('/'));
@@ -88,7 +89,7 @@ export async function favicon(c: Context<GeekityEnv>): Promise<Response> {
   const source = siteIconSource(c.var.config, iconSetting(c.var.renderer.site()));
   if (source === undefined) return notFound(c);
 
-  const asset = await findImageVariant(c.var.config, `${source}/${FAVICON_FILE}`);
+  const asset = await findImageVariant(c.var.config, `${source}/${FAVICON_FILE}`, source);
   if (asset === undefined) return notFound(c);
 
   const options = { maxAge: UPLOAD_ASSET_MAX_AGE };

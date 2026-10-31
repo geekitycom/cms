@@ -7,14 +7,10 @@ import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts
 import { writeFileAtomically } from '../files/atomic.ts';
 import { encodePath } from '../util/url.ts';
 import { ICON_SOURCES, parseIconSetting } from './icon-setting.ts';
-import {
-  DECODE_OPTIONS,
-  locateUpload,
-  MAX_INPUT_PIXELS,
-  sourceVersion,
-  versioned,
-} from './paths.ts';
-import type { ImageConfig } from './paths.ts';
+import { DECODE_OPTIONS, decodable, MAX_INPUT_PIXELS, sourceVersion, versioned } from './paths.ts';
+import type { ImageConfig, Upload } from './paths.ts';
+import type { DerivedKind } from './derived-sets.ts';
+import { messageOf } from '../util/errors.ts';
 
 /**
  * The site's icons: the favicons, the touch icon, the manifest's icons and
@@ -192,34 +188,55 @@ export function manifestIcons(config: ImageConfig, setting: string | undefined):
   ];
 }
 
+/** The sidecar that records which bytes the site's icons were drawn from. */
+export const ICON_RECORD_NAME = 'icons.json';
+
 /**
- * Derive one icon file, or answer `false` having written nothing.
+ * The site's icons as a derived set: every one of them, drawn together from
+ * one version of the icon upload, so a replaced icon is redrawn whole.
+ */
+export const SITE_ICONS: DerivedKind<readonly string[]> = {
+  sidecar: ICON_RECORD_NAME,
+  parse: (value) =>
+    Array.isArray(value) &&
+    value.every((name) => typeof name === 'string' && DERIVED_ICONS.has(name))
+      ? (value as string[])
+      : undefined,
+  derive: deriveIcons,
+  offers: (_upload, name) => Promise.resolve(DERIVED_ICONS.has(name)),
+  holds: (names, name) => names.includes(name),
+};
+
+/**
+ * Draw every icon, or answer `undefined` having written nothing when sharp
+ * cannot read the picture.
  *
  * Enlarging is allowed, unlike a width variant: 512 pixels is what a launcher
  * asks for, and a site whose icon is smaller than that is better served a soft
  * icon than none. The crop is the middle of the picture, which is where a face
- * is.
+ * is. The icons are drawn one at a time, so deriving them holds one decode.
  */
-export async function deriveSiteIcon(
-  config: ImageConfig,
-  source: string,
-  name: string,
-): Promise<boolean> {
-  const shape = DERIVED_ICONS.get(name);
-  const upload = locateUpload(config, source);
-  if (shape === undefined || upload === undefined) return false;
-  if (!ICON_SOURCES.has(path.extname(upload.source).toLowerCase())) return false;
+async function deriveIcons(upload: Upload): Promise<readonly string[] | undefined> {
+  if (!ICON_SOURCES.has(path.extname(upload.source).toLowerCase())) return undefined;
 
+  const drawn: [string, Buffer][] = [];
   try {
-    const encoded = await drawIcon(upload.file, shape);
-    await mkdir(upload.directory, { recursive: true });
-    await writeFileAtomically(path.join(upload.directory, name), encoded);
-    return true;
-  } catch {
-    // An icon sharp cannot read is a site with no icons, not a failed
-    // request: the handler answers 404 and the page it came from is fine.
-    return false;
+    const { width, height } = await sharp(upload.file, DECODE_OPTIONS).metadata();
+    if (width === undefined || height === undefined || !decodable({ width, height })) {
+      return undefined;
+    }
+    for (const [name, shape] of DERIVED_ICONS)
+      drawn.push([name, await drawIcon(upload.file, shape)]);
+  } catch (error) {
+    console.warn(`Could not derive the site's icons from ${upload.source}: ${messageOf(error)}`);
+    return undefined;
   }
+
+  await mkdir(upload.directory, { recursive: true });
+  for (const [name, png] of drawn) {
+    await writeFileAtomically(path.join(upload.directory, name), png);
+  }
+  return drawn.map(([name]) => name);
 }
 
 async function drawIcon(file: string, shape: IconShape): Promise<Buffer> {
@@ -228,12 +245,11 @@ async function drawIcon(file: string, shape: IconShape): Promise<Buffer> {
       return square(file, shape.size);
     case 'maskable':
       return maskable(file, shape.size);
-    case 'ico':
-      return icoFile(
-        await Promise.all(
-          shape.sizes.map(async (size) => ({ size, png: await square(file, size) })),
-        ),
-      );
+    case 'ico': {
+      const frames: { size: number; png: Buffer }[] = [];
+      for (const size of shape.sizes) frames.push({ size, png: await square(file, size) });
+      return icoFile(frames);
+    }
   }
 }
 

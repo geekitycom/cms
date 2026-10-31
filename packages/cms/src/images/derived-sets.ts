@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import { writeFileAtomically } from '../files/atomic.ts';
 import { IMAGES, dataFolder } from '../files/data-files.ts';
+import { findAsset } from '../files/static-files.ts';
+import type { StaticAsset } from '../files/static-files.ts';
 import { isRecord } from '../util/guards.ts';
 import type { Upload } from './paths.ts';
 
@@ -30,6 +32,10 @@ export interface DerivedKind<T> {
    * the server failing, not the upload, and is not remembered.
    */
   derive(upload: Upload): Promise<T | undefined>;
+  /** Whether a set derived from this upload would hold a file of this name, read off as little as possible. */
+  offers(upload: Upload, name: string): Promise<boolean>;
+  /** Whether a set holds a file of this name. */
+  holds(set: T, name: string): boolean;
 }
 
 /** What one version of an upload came to: `set` is `undefined` when nothing could be derived. */
@@ -41,8 +47,13 @@ export interface Settled<T> {
 /** Sets already settled, by sidecar path. An entry outlives its sidecar, which may be swept away. */
 const settled = new Map<string, Settled<unknown>>();
 
-/** Derivations running, by sidecar path, so concurrent callers share one and removal can wait for it. */
+/**
+ * Derivations running, by sidecar path, so concurrent callers share one, and
+ * lookups that may yet start one, so settling and removal wait for them too.
+ */
 const running = new Map<string, Promise<unknown>>();
+
+let lookups = 0;
 
 /** The set one version of an upload settled as, or `undefined` when that version has not been derived. */
 export function settledSet<T>(
@@ -81,8 +92,47 @@ export function deriveSet<T>(
 }
 
 /**
- * Wait for every derivation running under one site's data directory, and for
- * any that starts while those finish. A failure is not this caller's to
+ * One file of a set, by name, deriving the set when the file is one it holds
+ * or would hold and is not there. Only a name the set lists is ever served,
+ * so a sidecar or a write in flight beside the files never is.
+ */
+export function findDerivedFile<T>(
+  kind: DerivedKind<T>,
+  upload: Upload,
+  version: string,
+  name: string,
+): Promise<StaticAsset | undefined> {
+  const key = path.join(upload.directory, `lookup-${String(++lookups)}`);
+  const lookup = lookUp(kind, upload, version, name).finally(() => running.delete(key));
+  running.set(key, lookup);
+  return lookup;
+}
+
+async function lookUp<T>(
+  kind: DerivedKind<T>,
+  upload: Upload,
+  version: string,
+  name: string,
+): Promise<StaticAsset | undefined> {
+  const known = settledSet(kind, upload, version);
+  const offered =
+    known === undefined ? await kind.offers(upload, name) : holds(kind, known.set, name);
+  if (!offered) return undefined;
+
+  const directory = [upload.directory];
+  const found = known === undefined ? undefined : findAsset(name, directory);
+  if (found !== undefined) return found;
+  const set = await deriveSet(kind, upload, version);
+  return holds(kind, set, name) ? findAsset(name, directory) : undefined;
+}
+
+function holds<T>(kind: DerivedKind<T>, set: T | undefined, name: string): boolean {
+  return set !== undefined && kind.holds(set, name);
+}
+
+/**
+ * Wait for every derivation and lookup running under one site's data
+ * directory, and for any that starts while those finish. A failure is not this caller's to
  * report: whoever started the derivation was handed it.
  */
 export async function settleDerivedSets(dataDir: string): Promise<void> {

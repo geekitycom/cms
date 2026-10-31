@@ -316,7 +316,7 @@ describe('a source over the pixel limit', () => {
     const config = await site();
     const source = await upload(config, '2026/09/huge.png', huge());
 
-    assert.equal(await findImageVariant(config, `${source}/icon-32.png`), undefined);
+    assert.equal(await findImageVariant(config, `${source}/icon-32.png`, source), undefined);
     assert.equal(
       existsSync(path.join(config.dataDir, 'images', '2026', '09', 'huge.png', 'icon-32.png')),
       false,

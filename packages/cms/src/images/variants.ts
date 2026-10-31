@@ -6,14 +6,18 @@ import sharp from 'sharp';
 import type { Metadata, OutputInfo, Sharp } from 'sharp';
 
 import { writeFileAtomically } from '../files/atomic.ts';
-import { IMAGES, dataFolder } from '../files/data-files.ts';
-import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
 import { messageOf } from '../util/errors.ts';
 import { encodePath, plainRelativePath } from '../util/url.ts';
-import { deriveSet, forgetDerivedSets, settleDerivedSets, settledSet } from './derived-sets.ts';
+import {
+  deriveSet,
+  findDerivedFile,
+  forgetDerivedSets,
+  settleDerivedSets,
+  settledSet,
+} from './derived-sets.ts';
 import type { DerivedKind } from './derived-sets.ts';
-import { deriveSiteIcon, isDerivedIcon } from './icons.ts';
+import { isDerivedIcon, SITE_ICONS } from './icons.ts';
 import { DECODE_OPTIONS, decodable, locateUpload, sourceVersion, versioned } from './paths.ts';
 import { VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
 import type { ImageConfig, Upload } from './paths.ts';
@@ -128,6 +132,9 @@ function widths(config: ImageConfig): DerivedKind<ImageRecord> {
     sidecar: IMAGE_RECORD_NAME,
     parse: parseRecord,
     derive: (upload) => deriveWidths(config, upload),
+    offers: async (upload, name) =>
+      (await planWidths(config, upload))?.targets.some((target) => target.file === name) === true,
+    holds: (record, name) => record.variants.some((variant) => variant.file === name),
   };
 }
 
@@ -413,10 +420,9 @@ export async function removeImageVariants(config: ImageConfig, source: string): 
 export async function findImageVariant(
   config: ImageConfig,
   relative: string,
+  iconSource?: string,
 ): Promise<StaticAsset | undefined> {
   if (!config.imageOptimization || plainRelativePath(relative) === undefined) return undefined;
-  const root = dataFolder(config.dataDir, IMAGES);
-
   const cut = relative.lastIndexOf('/');
   if (cut <= 0) return undefined;
   const upload = locateUpload(config, relative.slice(0, cut));
@@ -430,33 +436,13 @@ export async function findImageVariant(
     return undefined;
   }
 
-  // The site's icons live beside the widths and are derived one at a time,
-  // because they are asked for one at a time and belong in no `srcset`.
-  if (isDerivedIcon(name)) {
-    const icon = findAsset(relative, [root]);
-    if (icon !== undefined) return icon;
-    return (await deriveSiteIcon(config, upload.source, name))
-      ? findAsset(relative, [root])
-      : undefined;
-  }
-
-  const kind = widths(config);
-  const known = settledSet(kind, upload, version);
-  const offered =
-    known === undefined
-      ? (await planWidths(config, upload))?.targets.some((target) => target.file === name)
-      : lists(known.set, name);
-  if (offered !== true) return undefined;
-
-  const directory = [upload.directory];
-  const derived = known === undefined ? undefined : findAsset(name, directory);
-  if (derived !== undefined) return derived;
-  const record = await deriveSet(kind, upload, version);
-  return lists(record, name) ? findAsset(name, directory) : undefined;
-}
-
-function lists(record: ImageRecord | undefined, name: string): boolean {
-  return record?.variants.some((variant) => variant.file === name) ?? false;
+  // The icons live beside the widths but are drawn only from the site icon,
+  // so no other upload can be made into seven more files.
+  if (!isDerivedIcon(name)) return findDerivedFile(widths(config), upload, version, name);
+  const icon = iconSource === undefined ? undefined : locateUpload(config, iconSource);
+  return icon?.source === upload.source
+    ? findDerivedFile(SITE_ICONS, upload, version, name)
+    : undefined;
 }
 
 const THUMBNAIL_WIDTH = 400;

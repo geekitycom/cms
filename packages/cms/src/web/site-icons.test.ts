@@ -5,6 +5,7 @@
  * over HTTP against the packaged theme, the way a browser and a crawler meet it.
  */
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -348,5 +349,26 @@ describe('the web app manifest (TASK-147 AC #4)', () => {
       manifests.map((link) => link['href']),
       ['/manifest.webmanifest'],
     );
+  });
+});
+
+describe('icon names under an upload that is not the site icon', () => {
+  it('answer 404 and write nothing', async () => {
+    const cms = await site(
+      { avatar: AVATAR },
+      { [AVATAR]: await png(240), '/uploads/2026/09/other.png': await png(300) },
+    );
+
+    for (const name of ['icon-512.png', 'favicon.ico', 'maskable-512.png']) {
+      const response = await get(cms, `/uploads/_/2026/09/other.png/${name}`);
+      await response.arrayBuffer();
+      assert.equal(response.status, 404, name);
+    }
+    assert.equal(
+      existsSync(path.join(cms.config.dataDir, 'images', '2026', '09', 'other.png')),
+      false,
+      'icons were drawn from an upload that is not the site icon',
+    );
+    assert.equal((await get(cms, '/uploads/_/2026/09/avatar.png/icon-512.png')).status, 200);
   });
 });
