@@ -591,6 +591,17 @@ describe('release.ts real run', () => {
     assert.equal(builds(calls).length, 1, calls.join('\n'));
   });
 
+  it('runs no gate with --skip-gates, and still checks, publishes and pushes', () => {
+    const repo = repository(BUMPED);
+    const { status, output, calls } = release(repo, ['--skip-gates', 'beta'], { images: [] });
+
+    assert.equal(status, 0, output);
+    assert.deepEqual(gatesRun(calls), []);
+    assert.ok(index(calls, 'npm whoami') >= 0, calls.join('\n'));
+    assert.deepEqual(publishes(calls), ['cms', 'plugin-a', 'plugin-b']);
+    assert.match(builds(calls)[0] ?? '', /--tag ghcr\.io\/geekitycom\/cms:beta/);
+  });
+
   it('passes a custom tag through to the image', () => {
     const repo = repository(BUMPED);
     const { status, output, calls } = release(repo, ['beta'], { images: [] });
@@ -759,6 +770,15 @@ describe('release.ts --dry-run', () => {
     );
   });
 
+  it('says a run with --skip-gates would skip the gates', () => {
+    const repo = repository(BUMPED);
+    const { status, output } = release(repo, ['--dry-run', '--skip-gates'], { images: [] });
+
+    assert.equal(status, 0, output);
+    assert.match(output, /Skip the quality gates \(--skip-gates\)/);
+    assert.doesNotMatch(output, new RegExp(GATES.join(' ')));
+  });
+
   it('shows a refusal and exits non-zero', () => {
     const repo = repository(BUMPED, [`v${BUMPED.cms}`]);
     const { status, output } = release(repo, ['--dry-run'], { images: [] });
@@ -801,7 +821,7 @@ describe('release.ts arguments', () => {
   it('rejects an unknown option and a second custom tag', () => {
     const repo = repository();
 
-    assert.match(release(repo, ['--skip-gates']).output, /unknown option: --skip-gates/);
+    assert.match(release(repo, ['--force']).output, /unknown option: --force/);
     assert.match(release(repo, ['beta', 'gamma']).output, /only one custom tag/);
   });
 });

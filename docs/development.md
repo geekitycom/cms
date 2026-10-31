@@ -457,9 +457,13 @@ gh pr edit <release pull request> --remove-label "autorelease: pending" --add-la
 
 Merging the release pull request publishes it (decision-58). release-please
 tags the release and reports it, and the `publish` job in
-`.github/workflows/release-please.yml` starts. It runs `pnpm release` in the
-`release` environment:
+`.github/workflows/release-please.yml` starts. It runs
+`pnpm release -- --skip-gates` in the `release` environment:
 
+- It runs no quality gates. [Branch protection](#branch-protection) makes
+  every required CI check pass on the release pull request, up to date with
+  `main`, so the merge commit's tree is the tree CI tested. The tag checks and
+  the tarball checks still run.
 - npm authenticates through trusted publishing. The job's OIDC token proves
   which repository, workflow and environment it runs in, so no npm token is
   stored anywhere. npm attaches provenance to every package it publishes.
@@ -564,7 +568,8 @@ A real run then goes through these steps and stops at the first failure:
 2. The quality gates, once: `pnpm lint`, `pnpm format:check`,
    `pnpm typecheck`, `pnpm test` and `pnpm test:11ty`. The typecheck and the
    tests build every package first. A gate that leaves the working tree changed
-   also stops the release.
+   also stops the release. `--skip-gates` leaves this step out; the publish
+   job passes it because CI has already passed on the merge.
 3. `pnpm pack` for each package to publish, and a check of each tarball. Its
    `package.json` must carry the package's name and version. A plugin's
    tarball must hold `dist/bundle/index.js` and a `dist/bundle/plugin.json`

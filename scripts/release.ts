@@ -15,12 +15,14 @@
  *
  * Usage (from the repository root):
  *
- *   node scripts/release.ts [--dry-run] [CUSTOM_TAG]
+ *   node scripts/release.ts [--dry-run] [--skip-gates] [CUSTOM_TAG]
  *   pnpm release [CUSTOM_TAG]
  *   pnpm release:dry-run
  *
  * CUSTOM_TAG is one more tag for the image. --dry-run prints the plan and the
- * steps, and checks no login and runs no gate.
+ * steps, and checks no login and runs no gate. --skip-gates leaves out the
+ * quality gates, for the publish job: branch protection has already made CI
+ * pass on the merge it publishes.
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -297,7 +299,7 @@ function printPlan(plan: ReleasePlan): void {
   for (const [what, why] of rows) console.log(`  ${what.padEnd(width)}  ${why}`);
 }
 
-function printSteps(plan: ReleasePlan, dockerArgs: readonly string[]): void {
+function printSteps(plan: ReleasePlan, dockerArgs: readonly string[], skipGates: boolean): void {
   const tag = dockerArgs.length > 0 ? ` ${dockerArgs.join(' ')}` : '';
   log('Dry run: nothing was checked, built, published or pushed');
   console.log('A real run would, stopping at the first failure:');
@@ -305,7 +307,11 @@ function printSteps(plan: ReleasePlan, dockerArgs: readonly string[]): void {
     `  1. Check HEAD is ${BRANCH}, clean and level with its upstream, and npm whoami unless npm can use trusted publishing`,
   );
   if (plan.image.push) console.log(`     ${DOCKER_SCRIPT} --check-only${tag}`);
-  console.log(`  2. Run the quality gates once: ${GATES.join(' ')}`);
+  console.log(
+    skipGates
+      ? '  2. Skip the quality gates (--skip-gates)'
+      : `  2. Run the quality gates once: ${GATES.join(' ')}`,
+  );
   console.log('  3. Pack each package and check each tarball');
   console.log(
     `  4. npm publish --access public, in order: ${plan.publish.map((p) => p.name).join(', ') || 'nothing'}`,
@@ -403,13 +409,15 @@ function publishAll(tarballs: ReadonlyMap<WorkspacePackage, string>): void {
 
 interface Arguments {
   dryRun: boolean;
+  skipGates: boolean;
   customTag: string | undefined;
 }
 
 function parseArguments(argv: readonly string[]): Arguments {
-  const parsed: Arguments = { dryRun: false, customTag: undefined };
+  const parsed: Arguments = { dryRun: false, skipGates: false, customTag: undefined };
   for (const arg of argv) {
     if (arg === '--dry-run') parsed.dryRun = true;
+    else if (arg === '--skip-gates') parsed.skipGates = true;
     // pnpm passes the -- in `pnpm release -- beta` through.
     else if (arg === '--') continue;
     else if (arg.startsWith('-')) fail(`unknown option: ${arg}`);
@@ -421,7 +429,7 @@ function parseArguments(argv: readonly string[]): Arguments {
 }
 
 function main(argv: readonly string[]): void {
-  const { dryRun, customTag } = parseArguments(argv);
+  const { dryRun, skipGates, customTag } = parseArguments(argv);
   const dockerArgs = customTag === undefined ? [] : [customTag];
   const root = path.resolve(import.meta.dirname, '..');
   if (fs.realpathSync(process.cwd()) !== fs.realpathSync(root)) {
@@ -441,12 +449,13 @@ function main(argv: readonly string[]): void {
     fail(`a custom image tag was given, but there is no image to push for ${plan.image.ref}`);
   }
   if (dryRun) {
-    printSteps(plan, dockerArgs);
+    printSteps(plan, dockerArgs, skipGates);
     return;
   }
 
   preflight(plan, dockerArgs);
-  runGates();
+  if (skipGates) log('Skipping the quality gates (--skip-gates)');
+  else runGates();
   publishAll(packAll(plan.publish));
 
   if (plan.image.push && !step('bash', [DOCKER_SCRIPT, '--skip-gates', ...dockerArgs])) {
