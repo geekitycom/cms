@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { isLocalAddress } from './public-address.ts';
+import { isLocalAddress, isPrivateHost, pinnedLookup, publicHost } from './public-address.ts';
 
 describe('isLocalAddress', () => {
   it('is true for loopback, private and link-local peers, written plainly or IPv4-mapped', () => {
@@ -40,5 +40,74 @@ describe('isLocalAddress', () => {
     ]) {
       assert.equal(isLocalAddress(address), false, address);
     }
+  });
+});
+
+describe('an IPv6 prefix that carries an IPv4 address', () => {
+  const EMBEDDED = [
+    '::7f00:1',
+    '::a00:1',
+    '64:ff9b::7f00:1',
+    '64:ff9b:1::a00:1',
+    '2002:7f00:1::',
+    '2002:a00:1::1',
+    '2001:0:1:2::7f00:1',
+    'fec0::1',
+  ];
+
+  it('is private as written', () => {
+    for (const address of EMBEDDED) {
+      assert.equal(isPrivateHost(`[${address}]`), true, address);
+    }
+  });
+
+  it('is refused when a name resolves to it', async () => {
+    for (const address of EMBEDDED) {
+      const resolved = await publicHost('cdn.example', () => Promise.resolve([address]));
+      assert.equal(resolved, false, address);
+    }
+    assert.equal(await publicHost('cdn.example', () => Promise.resolve(['2001:db8::7'])), true);
+  });
+});
+
+describe('the resolver a public fetch hands its socket', () => {
+  function resolve(
+    addresses: readonly string[] | Error,
+    all: boolean,
+  ): Promise<{ error: Error | null; answer: unknown; family: number | undefined }> {
+    const lookup = pinnedLookup(() =>
+      addresses instanceof Error ? Promise.reject(addresses) : Promise.resolve(addresses),
+    );
+    return new Promise((done) => {
+      lookup('cdn.example', { all }, (error, answer, family) => {
+        done({ error, answer, family });
+      });
+    });
+  }
+
+  it('hands the socket every address the checked lookup answered', async () => {
+    const found = await resolve(['203.0.113.10', '2001:db8::7'], true);
+    assert.equal(found.error, null);
+    assert.deepEqual(found.answer, [
+      { address: '203.0.113.10', family: 4 },
+      { address: '2001:db8::7', family: 6 },
+    ]);
+
+    const one = await resolve(['203.0.113.10'], false);
+    assert.equal(one.error, null);
+    assert.equal(one.answer, '203.0.113.10');
+    assert.equal(one.family, 4);
+  });
+
+  it('refuses the connection when any answer is private, or there is none', async () => {
+    for (const answers of [['127.0.0.1'], ['203.0.113.10', '10.0.0.5'], ['::7f00:1'], []]) {
+      const refused = await resolve(answers, true);
+      assert.match(refused.error?.message ?? '', /not a public address/, answers.join(','));
+    }
+  });
+
+  it('passes a failed lookup on as the socket error', async () => {
+    const failed = await resolve(new Error('getaddrinfo ENOTFOUND cdn.example'), true);
+    assert.match(failed.error?.message ?? '', /ENOTFOUND/);
   });
 });

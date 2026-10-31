@@ -1,8 +1,13 @@
+import type { JobStatus } from '../jobs/types.ts';
 import { cssFontStackWith, isFontFamilyName } from '../theme/font-family.ts';
 import type { CssFontStack } from '../theme/font-family.ts';
 import type { ThemeFont } from '../theme/themes.ts';
+import type { Clock } from '../util/clock.ts';
 import type { FontStyle } from './family.ts';
 import type { FontStore } from './store.ts';
+
+export const FONT_RETRY_BASE_MS = 60_000;
+export const FONT_RETRY_MAX_MS = 60 * 60 * 1000;
 
 export const FONT_ROLES = [
   {
@@ -61,20 +66,90 @@ function chosenFonts(
 
 export interface PageFontsOptions {
   readonly store: FontStore;
-  readonly refetch: (family: string, styles: readonly FontStyle[]) => Promise<unknown>;
+  /** Queue a fetch of the family in these styles. Resolves with the job's id. */
+  readonly refetch: (family: string, styles: readonly FontStyle[]) => Promise<string>;
+  readonly jobStatus: (id: string) => Promise<JobStatus | undefined>;
+  readonly now: Clock;
 }
+
+type Fetching =
+  | {
+      readonly state: 'queued';
+      readonly job: Promise<string>;
+      readonly failuresInARow: number;
+      statusLookupInFlight: boolean;
+    }
+  | { readonly state: 'waiting'; readonly retryAt: number; readonly failuresInARow: number };
 
 /**
  * The fonts a page is set in: each role the theme declares whose family the
  * site chose and whose files are here. A family whose files are gone is left
  * out, so the page falls back to the theme's stack, and a fetch of it is
- * queued once until its files are back.
+ * queued. While the files stay missing, a render asks what became of that
+ * job: one that failed is queued again once a back-off has passed, one that
+ * finished or was forgotten is queued again at once.
  */
 export function createPageFonts(
   options: PageFontsOptions,
 ): (site: Readonly<Record<string, unknown>>, declared: readonly ThemeFont[]) => PageFont[] {
-  const { store, refetch } = options;
-  const queued = new Set<string>();
+  const { store, refetch, jobStatus, now } = options;
+  const fetching = new Map<string, Fetching>();
+
+  function queue(
+    key: string,
+    family: string,
+    styles: readonly FontStyle[],
+    failuresInARow: number,
+  ): void {
+    const job = refetch(family, styles);
+    const entry: Fetching = { state: 'queued', job, failuresInARow, statusLookupInFlight: false };
+    fetching.set(key, entry);
+    job.catch((thrown: unknown) => {
+      if (fetching.get(key) === entry) fetching.delete(key);
+      console.warn(`No fetch of the font ${family} was queued: ${String(thrown)}`);
+    });
+  }
+
+  async function settle(
+    key: string,
+    entry: Fetching & { readonly state: 'queued' },
+    family: string,
+    styles: readonly FontStyle[],
+  ): Promise<void> {
+    const status = await jobStatus(await entry.job);
+    if (fetching.get(key) !== entry) return;
+    entry.statusLookupInFlight = false;
+    if (
+      status?.state === 'queued' ||
+      status?.state === 'running' ||
+      status?.state === 'interrupted'
+    ) {
+      return;
+    }
+    if (status?.state === 'failed') {
+      const failuresInARow = entry.failuresInARow + 1;
+      const wait = Math.min(FONT_RETRY_BASE_MS * 2 ** (failuresInARow - 1), FONT_RETRY_MAX_MS);
+      const retryAt = Date.parse(status.finishedAt) + wait;
+      if (now().getTime() >= retryAt) queue(key, family, styles, failuresInARow);
+      else fetching.set(key, { state: 'waiting', retryAt, failuresInARow });
+      return;
+    }
+    queue(key, family, styles, 0);
+  }
+
+  function wanted(key: string, family: string, styles: readonly FontStyle[]): void {
+    const entry = fetching.get(key);
+    if (entry === undefined) {
+      queue(key, family, styles, 0);
+    } else if (entry.state === 'waiting') {
+      if (now().getTime() >= entry.retryAt) queue(key, family, styles, entry.failuresInARow);
+    } else if (!entry.statusLookupInFlight) {
+      entry.statusLookupInFlight = true;
+      settle(key, entry, family, styles).catch((thrown: unknown) => {
+        console.warn(`The fetch of the font ${family} could not be looked up: ${String(thrown)}`);
+      });
+    }
+  }
 
   return (site, declared) =>
     chosenFonts(site, declared).flatMap(({ font, role, family }) => {
@@ -82,16 +157,10 @@ export function createPageFonts(
       const key = `${family}\n${role.role}`;
       const stylesheet = store.stylesheet(family, role.styles);
       if (stylesheet === undefined) {
-        if (!queued.has(key)) {
-          queued.add(key);
-          refetch(family, role.styles).catch((thrown: unknown) => {
-            queued.delete(key);
-            console.warn(`No fetch of the font ${family} was queued: ${String(thrown)}`);
-          });
-        }
+        wanted(key, family, role.styles);
         return [];
       }
-      queued.delete(key);
+      fetching.delete(key);
       const value = cssFontStackWith(stylesheet.family, font.fallback);
       return value === undefined
         ? []

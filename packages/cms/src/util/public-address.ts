@@ -1,5 +1,8 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { BlockList, isIP } from 'node:net';
+import type { LookupFunction } from 'node:net';
+
+import { Agent } from 'undici';
 
 /**
  * Whether a host is somebody else's, before this site fetches from it.
@@ -13,7 +16,9 @@ import { BlockList, isIP } from 'node:net';
  * and refuses it when any address it resolves to is private.
  *
  * Neither pins the address the connection then goes to, so a name that
- * resolves differently a moment later (DNS rebinding) is not stopped.
+ * resolves differently a moment later (DNS rebinding) would get past them.
+ * {@link publicDispatcher} is what does: the socket connects to the answer
+ * the check saw, and to nothing else.
  */
 
 /** The addresses a host name resolves to. Injected so a test resolves nothing. */
@@ -36,6 +41,11 @@ const LOCAL: readonly Range[] = [
   ['fe80::', 10, 'ipv6'],
 ];
 
+/**
+ * Reserved, plus the IPv6 prefixes that carry an IPv4 address inside them
+ * (IPv4-compatible, NAT64, 6to4, Teredo): a gateway or relay turns those
+ * into a connection to the embedded address, which may be a private one.
+ */
 const RESERVED: readonly Range[] = [
   ['0.0.0.0', 8, 'ipv4'],
   ['100.64.0.0', 10, 'ipv4'],
@@ -43,7 +53,12 @@ const RESERVED: readonly Range[] = [
   ['198.18.0.0', 15, 'ipv4'],
   ['224.0.0.0', 4, 'ipv4'],
   ['240.0.0.0', 4, 'ipv4'],
-  ['::', 128, 'ipv6'],
+  ['::', 96, 'ipv6'],
+  ['64:ff9b::', 96, 'ipv6'],
+  ['64:ff9b:1::', 48, 'ipv6'],
+  ['2001::', 32, 'ipv6'],
+  ['2002::', 16, 'ipv6'],
+  ['fec0::', 10, 'ipv6'],
   ['ff00::', 8, 'ipv6'],
 ];
 
@@ -102,4 +117,53 @@ export async function publicHost(hostname: string, lookup: HostLookup): Promise<
     return false;
   }
   return addresses.length > 0 && !addresses.some(isPrivateAddress);
+}
+
+/**
+ * The type `fetch` takes: Node's copy of undici's, which the npm package's
+ * duplicates with a drift in method signatures, so an Agent is cast to it.
+ */
+type FetchDispatcher = NonNullable<RequestInit['dispatcher']>;
+
+const dispatchers = new WeakMap<HostLookup, FetchDispatcher>();
+
+/**
+ * The dispatcher a public fetch goes through. Its sockets resolve a name
+ * through `lookup`, refuse to connect when any answer is private, and connect
+ * to the answer they checked, so the address checked and the address dialled
+ * are the same resolution. One per lookup, so connections are pooled.
+ */
+export function publicDispatcher(lookup: HostLookup): FetchDispatcher {
+  const held = dispatchers.get(lookup);
+  if (held !== undefined) return held;
+  const made = new Agent({
+    connect: { lookup: pinnedLookup(lookup) },
+  }) as unknown as FetchDispatcher;
+  dispatchers.set(lookup, made);
+  return made;
+}
+
+/** The resolver a socket is handed: `lookup`'s answer when every address is public, else an error. */
+export function pinnedLookup(lookup: HostLookup): LookupFunction {
+  return (hostname, options, callback) => {
+    lookup(hostname).then(
+      (addresses) => {
+        const [first, ...rest] = addresses.map((address) => ({ address, family: isIP(address) }));
+        if (first === undefined || addresses.some(isPrivateAddress)) {
+          callback(notPublic(hostname), '', undefined);
+        } else if (options.all === true) {
+          callback(null, [first, ...rest], undefined);
+        } else {
+          callback(null, first.address, first.family);
+        }
+      },
+      (thrown: unknown) => {
+        callback(thrown instanceof Error ? thrown : new Error(String(thrown)), '', undefined);
+      },
+    );
+  };
+}
+
+function notPublic(hostname: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(`${hostname} is not a public address`), { code: 'ENOTFOUND' });
 }

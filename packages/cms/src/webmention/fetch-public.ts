@@ -1,13 +1,14 @@
 import { messageOf } from '../util/errors.ts';
 import { WEBMENTION_USER_AGENT } from './discovery.ts';
-import { publicHost } from '../util/public-address.ts';
+import { publicDispatcher, publicHost } from '../util/public-address.ts';
 import type { HostLookup } from '../util/public-address.ts';
 
 /**
  * One GET of a stranger's URL, with every guard the site puts on reaching out.
  *
- * Only http and https, only public hosts (every redirect hop is checked, and a
- * name is refused when any address it resolves to is private), one timeout
+ * Only http and https, only public hosts (every redirect hop is checked, a
+ * name is refused when any address it resolves to is private, and the socket
+ * connects to the address that was checked), one timeout
  * over the whole exchange, a content type the caller names, and no body over
  * the byte limit. Nothing throws: whatever goes wrong is a refusal with a
  * reason a log line can carry.
@@ -166,6 +167,7 @@ export async function requestPublic(
         body,
         redirect: 'manual',
         signal: options.signal,
+        dispatcher: publicDispatcher(options.lookup),
       });
 
       const location = response.headers.get('location');

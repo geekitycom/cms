@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createSerialQueue } from './queue.ts';
+import { createConcurrencyLimit, createSerialQueue } from './queue.ts';
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;
@@ -94,5 +94,39 @@ describe('createSerialQueue', () => {
     await queue.settled();
     assert.deepEqual(seen, [2, 1]);
     assert.equal(queue.pending(), 0);
+  });
+});
+
+describe('createConcurrencyLimit', () => {
+  it('runs no more jobs at once than the limit, and the rest in turn', async () => {
+    const limit = createConcurrencyLimit(2);
+    const gates = [deferred(), deferred(), deferred()];
+    const started: number[] = [];
+    const jobs = gates.map((gate, index) =>
+      limit.run(async () => {
+        started.push(index);
+        await gate.promise;
+        return index;
+      }),
+    );
+
+    await Promise.resolve();
+    assert.deepEqual(started, [0, 1]);
+    gates[0]?.resolve();
+    await jobs[0];
+    await Promise.resolve();
+    assert.deepEqual(started, [0, 1, 2]);
+    gates[1]?.resolve();
+    gates[2]?.resolve();
+    assert.deepEqual(await Promise.all(jobs), [0, 1, 2]);
+  });
+
+  it('frees the slot of a job that fails', async () => {
+    const limit = createConcurrencyLimit(1);
+    await assert.rejects(
+      limit.run(() => Promise.reject(new Error('no'))),
+      /no/,
+    );
+    assert.equal(await limit.run(() => Promise.resolve('next')), 'next');
   });
 });

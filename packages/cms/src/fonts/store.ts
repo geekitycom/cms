@@ -100,7 +100,10 @@ export interface FontStore {
 export function createFontStore(options: CreateFontStoreOptions): FontStore {
   const { dataDir, hostLookup } = options;
   const inFlight = new Map<string, Promise<FontFetch>>();
-  const known = new Map<string, { etag: string; stylesheet: FontStylesheet | undefined }>();
+  const known = new Map<
+    string,
+    { etag: string; stylesheet: FontStylesheet | undefined; files: readonly string[] }
+  >();
 
   function stylesheetName(styles: readonly FontStyle[]): string {
     return `${styles.map(styleKey).join('-')}.css`;
@@ -114,24 +117,25 @@ export function createFontStore(options: CreateFontStoreOptions): FontStore {
     const asset = findAsset(name, [folderOf(slug)]);
     if (asset === undefined) return undefined;
     const memo = known.get(asset.file);
-    if (!fresh && memo?.etag === asset.etag) return memo.stylesheet;
+    if (!fresh && memo?.etag === asset.etag) {
+      return memo.files.every((file) => existsSync(file)) ? memo.stylesheet : undefined;
+    }
 
     const css = readFileSync(asset.file, 'utf8');
     const family = /font-family: '([^']*)'/.exec(css)?.[1];
     const prefix = `${FONT_PATH_PREFIX}${slug}/`;
-    const files = [...css.matchAll(/url\(([^)]*)\)/g)].map(([, href = '']) =>
+    const names = [...css.matchAll(/url\(([^)]*)\)/g)].map(([, href = '']) =>
       href.startsWith(prefix) ? href.slice(prefix.length) : '',
     );
+    const files = names.every((file) => FILE_NAME.test(file))
+      ? names.map((file) => dataPath(dataDir, FONTS, slug, file))
+      : [];
     const whole =
-      family !== undefined &&
-      files.length > 0 &&
-      files.every(
-        (file) => FILE_NAME.test(file) && existsSync(dataPath(dataDir, FONTS, slug, file)),
-      );
+      family !== undefined && files.length > 0 && files.every((file) => existsSync(file));
     const stylesheet = whole
       ? { href: `${prefix}${name}?v=${assetVersion(asset)}`, family }
       : undefined;
-    known.set(asset.file, { etag: asset.etag, stylesheet });
+    known.set(asset.file, { etag: asset.etag, stylesheet, files });
     return stylesheet;
   }
 

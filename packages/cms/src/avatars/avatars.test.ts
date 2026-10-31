@@ -8,6 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
@@ -19,12 +20,15 @@ import { nextEvent } from '../__testing__/wait.ts';
 import { AVATARS, dataFolder } from '../files/data-files.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../util/public-address.ts';
+import type { AvatarService } from './avatars.ts';
 import {
+  AVATAR_FETCH_LIMIT,
   AVATAR_MAX_AGE_MS,
   AVATAR_MAX_BYTES,
   AVATAR_SIZE,
   avatarHref,
   avatarSourceOf,
+  createAvatarService,
 } from './avatars.ts';
 
 const box = sandbox();
@@ -64,6 +68,7 @@ const requested: string[] = [];
 let web: Record<string, () => Response> = {};
 let hanging = new Set<string>();
 let heardHanging: (() => void) | undefined;
+const hangingReleases = new Map<string, (response: Response) => void>();
 
 const original = globalThis.fetch;
 before(() => {
@@ -71,8 +76,10 @@ before(() => {
     const request = new Request(input, init);
     requested.push(request.url);
     if (hanging.has(request.url)) {
+      if (request.signal.aborted) return Promise.reject(new Error('aborted'));
       heardHanging?.();
-      return new Promise<Response>((_, reject) => {
+      return new Promise<Response>((resolve, reject) => {
+        hangingReleases.set(request.url, resolve);
         request.signal.addEventListener('abort', () => reject(new Error('aborted')), {
           once: true,
         });
@@ -91,6 +98,7 @@ afterEach(() => {
   requested.length = 0;
   web = {};
   hanging = new Set();
+  hangingReleases.clear();
 });
 
 /** A picture of one colour, `width` by `height`, in `format`. */
@@ -284,17 +292,38 @@ describe('the avatar route (AC #2)', () => {
     assert.deepEqual(requested, [GRACE_PHOTO], 'fetched once');
   });
 
-  it('is not an open proxy: a URL the site has not recorded is a 404 and fetches nothing', async () => {
+  it('is not an open proxy: a URL the site has not recorded gets the placeholder and fetches nothing', async () => {
     const { cms } = await site();
     web[STRANGER] = image(await picture(80, 80, 'png'), 'image/png');
     web[PENDING_PHOTO] = image(await picture(80, 80, 'png'), 'image/png');
+    hanging = new Set([IDLE_ICON]);
 
-    for (const source of [STRANGER, PENDING_PHOTO]) {
-      const response = await cms.app.request(avatarHref(source));
-      assert.equal(response.status, 404, `${source} is refused`);
+    const recorded = await cms.app.request(avatarHref(IDLE_ICON));
+    assert.equal(recorded.status, 200);
+    assert.equal(recorded.headers.get('content-type'), 'image/svg+xml');
+    const expected = {
+      status: recorded.status,
+      headers: [...recorded.headers.entries()],
+      body: await recorded.text(),
+    };
+
+    for (const key of [
+      avatarHref(STRANGER),
+      avatarHref(PENDING_PHOTO),
+      '/_geekity/avatars/not-a-key!',
+    ]) {
+      const response = await cms.app.request(key);
+      assert.deepEqual(
+        {
+          status: response.status,
+          headers: [...response.headers.entries()],
+          body: await response.text(),
+        },
+        expected,
+        `${key} is answered like a recorded, unfetched one`,
+      );
     }
-    assert.equal((await cms.app.request('/_geekity/avatars/not-a-key!')).status, 404);
-    assert.deepEqual(requested, [], 'nothing was fetched');
+    assert.deepEqual(requested, [IDLE_ICON], 'nothing else was fetched');
   });
 
   it('serves any follower’s avatar, one with no inbox activity too', async () => {
@@ -340,6 +369,28 @@ describe('the avatar route (AC #2)', () => {
       assert.equal(response.headers.get('content-type'), 'image/svg+xml', source);
       assert.ok(!(await response.text()).includes('script'), 'the stranger’s bytes are not served');
     }
+  });
+
+  it('never hands sharp bytes that do not open like one of the pictures it shows', async () => {
+    const { cms } = await site();
+    const warned: string[] = [];
+    const source = 'https://remote.example/avatars/ada.png';
+    web[source] = () =>
+      new Response('<svg xmlns="http://www.w3.org/2000/svg"/>', {
+        headers: { 'content-type': 'image/png' },
+      });
+    const avatars = createAvatarService({
+      admin: cms.admin,
+      config: cms.config,
+      logger: { warn: (message) => void warned.push(message) },
+    });
+
+    const answer = await avatars.answer(source);
+
+    assert.equal(answer.kind, 'placeholder');
+    assert.equal(warned.length, 1);
+    assert.match(warned[0] ?? '', /not a JPEG, PNG, GIF, WebP or AVIF file/);
+    assert.doesNotMatch(warned[0] ?? '', /not a readable picture/, 'sharp never read the bytes');
   });
 
   it('does not follow a redirect to a private address', async () => {
@@ -431,7 +482,13 @@ describe('the cache (AC #4)', () => {
     const left = await readdir(dataFolder(dataDir, AVATARS));
     assert.ok(!left.includes(adaFile), 'the unfollowed liker’s picture is gone');
     assert.equal(left.filter((name) => name.endsWith('.webp')).length, 1, 'Grace’s stays');
-    assert.equal((await cms.app.request(avatarHref(ADA_ICON))).status, 404);
+    const response = await cms.app.request(avatarHref(ADA_ICON));
+    assert.equal(response.headers.get('content-type'), 'image/svg+xml');
+    assert.equal(
+      requested.filter((url) => url === ADA_ICON).length,
+      1,
+      'the forgotten picture is not fetched again',
+    );
   });
 });
 
@@ -440,17 +497,152 @@ function cachedFileFor(source: string): string {
   return `${createHash('sha256').update(source).digest('hex')}.webp`;
 }
 
-describe('stopping the sweep', () => {
-  it('ends the sweep in flight without marking the picture it cut off as failed', async () => {
+describe('a sweep that is still running', () => {
+  it('keeps a picture a request fetched for a source recorded after it started', async () => {
     const { cms, dataDir } = await site();
+    const fresh = 'https://remote.example/avatars/fresh.png';
+    web[fresh] = image(await picture(64, 64, 'png'), 'image/png');
     hanging = new Set([ADA_ICON, GRACE_PHOTO, IDLE_ICON]);
-
-    const asking = nextEvent('an avatar fetch', (done) => {
+    const stalled = nextEvent('the sweep asking for a picture', (done) => {
       heardHanging = done;
       return () => {
         heardHanging = undefined;
       };
     });
+    const sweeping = cms.avatars.sweep();
+    await stalled;
+
+    cms.admin.putFollower({
+      username: 'ada',
+      actorId: 'https://remote.example/users/fresh',
+      inboxId: 'https://remote.example/users/fresh/inbox',
+      sharedInboxId: null,
+      handle: null,
+      name: 'fresh',
+      iconUrl: fresh,
+      url: 'https://remote.example/users/fresh',
+    });
+    const response = await cms.app.request(avatarHref(fresh));
+    assert.equal(response.headers.get('content-type'), 'image/webp');
+    const file = path.join(dataFolder(dataDir, AVATARS), cachedFileFor(fresh));
+    assert.ok(existsSync(file));
+
+    for (const release of hangingReleases.values())
+      release(new Response('missing', { status: 404 }));
+    await sweeping;
+    await cms.avatars.settled();
+
+    assert.ok(existsSync(file), 'the sweep deleted the picture written while it ran');
+  });
+});
+
+describe('a picture that cannot be written', () => {
+  it('is answered with the placeholder', async () => {
+    const { cms, dataDir } = await site();
+    web[ADA_ICON] = image(await picture(64, 64, 'png'), 'image/png');
+    await rm(dataFolder(dataDir, AVATARS), { recursive: true, force: true });
+    await writeFile(dataFolder(dataDir, AVATARS), 'in the way');
+
+    const response = await cms.app.request(avatarHref(ADA_ICON));
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'image/svg+xml');
+  });
+});
+
+function serviceOver(
+  sources: readonly string[],
+  dataDir: string,
+  firstViewWaitMs: number,
+): { avatars: AvatarService; tick: () => void; listed: () => number } {
+  let ticks: (() => void) | undefined;
+  let listed = 0;
+  const avatars = createAvatarService({
+    admin: {
+      isAvatarSource: (source) => sources.includes(source),
+      listAvatarSources: () => {
+        listed += 1;
+        return [...sources];
+      },
+    },
+    config: { dataDir, hostLookup: lookup, now: () => new Date() },
+    timers: {
+      set: (callback) => {
+        ticks = callback;
+        return 'handle';
+      },
+      clear: () => {
+        ticks = undefined;
+      },
+    },
+    firstViewWaitMs,
+    logger: { warn: () => undefined },
+  });
+  return { avatars, tick: () => ticks?.(), listed: () => listed };
+}
+
+function whenHanging(): Promise<void> {
+  return nextEvent('an avatar fetch', (done) => {
+    heardHanging = done;
+    return () => {
+      heardHanging = undefined;
+    };
+  });
+}
+
+function releaseAll(): void {
+  for (const release of hangingReleases.values()) release(new Response('missing', { status: 404 }));
+  hangingReleases.clear();
+}
+
+describe('fetching at once', () => {
+  it('starts no more fetches than the limit, however many requests arrive', async () => {
+    const sources = Array.from(
+      { length: AVATAR_FETCH_LIMIT + 3 },
+      (_, index) => `https://remote.example/avatars/${String(index)}.png`,
+    );
+    hanging = new Set(sources);
+    const { avatars } = serviceOver(sources, await box.dir('geekity-avatars-cap-'), 50);
+
+    const answers = await Promise.all(sources.map((source) => avatars.answer(source)));
+
+    assert.deepEqual(
+      answers.map((answer) => answer.kind),
+      sources.map(() => 'placeholder'),
+    );
+    assert.equal(requested.length, AVATAR_FETCH_LIMIT);
+    releaseAll();
+    await avatars.settled();
+  });
+});
+
+describe('a timer tick while a sweep runs', () => {
+  it('is skipped rather than queued behind it', async () => {
+    hanging = new Set([ADA_ICON]);
+    const { avatars, tick, listed } = serviceOver(
+      [ADA_ICON],
+      await box.dir('geekity-avatars-tick-'),
+      50,
+    );
+    const asking = whenHanging();
+    avatars.start();
+    await asking;
+
+    tick();
+    tick();
+    avatars.stop();
+    await avatars.settled();
+
+    assert.equal(listed(), 1, 'one sweep ran');
+  });
+});
+
+describe('stopping the sweep', () => {
+  it('ends the sweep in flight without marking the picture it cut off as failed', async () => {
+    const { cms, dataDir } = await site();
+    hanging = new Set([ADA_ICON, GRACE_PHOTO, IDLE_ICON]);
+
+    const asking = whenHanging();
     cms.avatars.start();
     await asking;
     cms.avatars.stop();
@@ -462,7 +654,7 @@ describe('stopping the sweep', () => {
       },
       1000,
     );
-    assert.equal(requested.length, 1, 'no other picture was asked for');
+    assert.ok(requested.length <= 2, 'no picture beyond the ones in flight was asked for');
     const cached = await readdir(dataFolder(dataDir, AVATARS)).catch(() => []);
     assert.deepEqual(
       cached.filter((name) => name.endsWith('.failed')),

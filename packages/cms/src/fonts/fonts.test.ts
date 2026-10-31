@@ -253,4 +253,17 @@ describe('the files on disk', () => {
   it('have no stylesheet to link while they are missing', () => {
     assert.equal(fonts.stylesheet(FAMILY, BODY), undefined);
   });
+
+  it('lose their stylesheet on the same store once one of them is deleted', async () => {
+    google.serveFamily(BODY);
+    assert.ok((await fonts.ensure(FAMILY, BODY)).ok);
+    assert.notEqual(fonts.stylesheet(FAMILY, BODY), undefined);
+
+    const folder = path.join(dataDir, 'fonts', fontFamilySlug(FAMILY));
+    const gone = (await readdir(folder)).find((name) => name.endsWith('.woff2'));
+    assert.ok(gone !== undefined);
+    await rm(path.join(folder, gone));
+
+    assert.equal(fonts.stylesheet(FAMILY, BODY), undefined);
+  });
 });

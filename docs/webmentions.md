@@ -33,7 +33,9 @@ a job that sends them again from the file as it reads when the job runs.
 reads for an endpoint, the endpoint it posts to, and the source the receiver
 verifies. Before each request, and again before following each redirect, the
 site resolves the host name. It refuses the request when any address is
-loopback, private, link-local or reserved. A refused endpoint is recorded as
+loopback, private, link-local or reserved, and the connection goes to the
+address that passed the check, not to a second resolution of the name. A
+refused endpoint is recorded as
 `failed`. A refused source is treated as unreachable, so nothing already stored
 from it changes.
 
