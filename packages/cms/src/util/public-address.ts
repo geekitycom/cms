@@ -36,6 +36,11 @@ const LOCAL: readonly Range[] = [
   ['fe80::', 10, 'ipv6'],
 ];
 
+/**
+ * Reserved, plus the IPv6 prefixes that carry an IPv4 address inside them
+ * (IPv4-compatible, NAT64, 6to4, Teredo): a gateway or relay turns those
+ * into a connection to the embedded address, which may be a private one.
+ */
 const RESERVED: readonly Range[] = [
   ['0.0.0.0', 8, 'ipv4'],
   ['100.64.0.0', 10, 'ipv4'],
@@ -43,7 +48,12 @@ const RESERVED: readonly Range[] = [
   ['198.18.0.0', 15, 'ipv4'],
   ['224.0.0.0', 4, 'ipv4'],
   ['240.0.0.0', 4, 'ipv4'],
-  ['::', 128, 'ipv6'],
+  ['::', 96, 'ipv6'],
+  ['64:ff9b::', 96, 'ipv6'],
+  ['64:ff9b:1::', 48, 'ipv6'],
+  ['2001::', 32, 'ipv6'],
+  ['2002::', 16, 'ipv6'],
+  ['fec0::', 10, 'ipv6'],
   ['ff00::', 8, 'ipv6'],
 ];
 

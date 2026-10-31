@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { isLocalAddress } from './public-address.ts';
+import { isLocalAddress, isPrivateHost, publicHost } from './public-address.ts';
 
 describe('isLocalAddress', () => {
   it('is true for loopback, private and link-local peers, written plainly or IPv4-mapped', () => {
@@ -40,5 +40,32 @@ describe('isLocalAddress', () => {
     ]) {
       assert.equal(isLocalAddress(address), false, address);
     }
+  });
+});
+
+describe('an IPv6 prefix that carries an IPv4 address', () => {
+  const EMBEDDED = [
+    '::7f00:1',
+    '::a00:1',
+    '64:ff9b::7f00:1',
+    '64:ff9b:1::a00:1',
+    '2002:7f00:1::',
+    '2002:a00:1::1',
+    '2001:0:1:2::7f00:1',
+    'fec0::1',
+  ];
+
+  it('is private as written', () => {
+    for (const address of EMBEDDED) {
+      assert.equal(isPrivateHost(`[${address}]`), true, address);
+    }
+  });
+
+  it('is refused when a name resolves to it', async () => {
+    for (const address of EMBEDDED) {
+      const resolved = await publicHost('cdn.example', () => Promise.resolve([address]));
+      assert.equal(resolved, false, address);
+    }
+    assert.equal(await publicHost('cdn.example', () => Promise.resolve(['2001:db8::7'])), true);
   });
 });
