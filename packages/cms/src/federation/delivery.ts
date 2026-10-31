@@ -56,6 +56,7 @@ import type { ActivityAbout, DeliveryTarget, ObjectShape, Shape } from './delive
 import { mentionedAccounts } from './handles.ts';
 import { updateActivityId } from './paths.ts';
 import { claimObjectId, readObjectIds, recordDeleted } from './object-ids.ts';
+import { isDuplicateDelivery } from './outbox-observer.ts';
 import { acceptedRelays } from './relays.ts';
 
 /** What one activity's delivery came to, recipient by recipient. */
@@ -460,9 +461,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
           { preferSharedInbox: true, orderingKey: about.objectId },
         );
       } catch (thrown) {
-        status = 'failed';
-        error = messageOf(thrown);
-        logger.warn(`Could not deliver ${about.activityId} to ${target.inboxId}: ${error}`);
+        if (!isDuplicateDelivery(thrown)) {
+          status = 'failed';
+          error = messageOf(thrown);
+          logger.warn(`Could not deliver ${about.activityId} to ${target.inboxId}: ${error}`);
+        }
       }
 
       if (synchronous || status === 'failed') record(target, status, error);

@@ -1,7 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+import { SendActivityError } from '@fedify/fedify';
+
 import type { DeliveryOutcome } from '../store/deliveries.ts';
 import { messageOf } from '../util/errors.ts';
+import { isRecord } from '../util/guards.ts';
 import type { SettlingQueue } from './queue.ts';
 
 export interface ObservedOutbox {
@@ -14,6 +17,7 @@ interface Frame {
   readonly inbox: string;
   error: string | undefined;
   retried: boolean;
+  duplicate: boolean;
 }
 
 interface OutboxMessage {
@@ -47,28 +51,29 @@ export function observeOutbox(
     }
   }
 
-  function noteRetry(message: unknown): void {
+  function needed(message: unknown): boolean {
     const frame = frames.getStore();
-    if (frame === undefined || !isOutbox(message)) return;
-    if (message.activityId === frame.activityId && message.inbox === frame.inbox) {
-      frame.retried = true;
-    }
+    if (frame === undefined || !isOutbox(message)) return true;
+    if (message.activityId !== frame.activityId || message.inbox !== frame.inbox) return true;
+    if (frame.duplicate) return false;
+    frame.retried = true;
+    return true;
   }
 
   return {
     queue: {
       ...inner,
-      enqueue(message, options) {
-        noteRetry(message);
-        return inner.enqueue(message, options);
+      async enqueue(message, options) {
+        if (needed(message)) await inner.enqueue(message, options);
       },
       async enqueueMany(messages, options) {
-        for (const message of messages) noteRetry(message);
+        const wanted = messages.filter(needed);
+        if (wanted.length === 0) return;
         if (inner.enqueueMany !== undefined) {
-          await inner.enqueueMany(messages, options);
+          await inner.enqueueMany(wanted, options);
           return;
         }
-        for (const message of messages) await inner.enqueue(message, options);
+        for (const message of wanted) await inner.enqueue(message, options);
       },
       listen(handler, options) {
         return inner.listen(async (message) => {
@@ -81,6 +86,7 @@ export function observeOutbox(
             inbox: message.inbox,
             error: undefined,
             retried: false,
+            duplicate: false,
           };
           try {
             await frames.run(frame, () => handler(message));
@@ -99,7 +105,9 @@ export function observeOutbox(
 
     onOutboxError: (error) => {
       const frame = frames.getStore();
-      if (frame !== undefined) frame.error = messageOf(error);
+      if (frame === undefined) return;
+      if (isDuplicateDelivery(error)) frame.duplicate = true;
+      else frame.error = messageOf(error);
     },
   };
 }
@@ -113,6 +121,22 @@ function outcomeOf(frame: Frame): DeliveryOutcome {
   if (frame.retried)
     return { ...where(frame), status: error === null ? 'queued' : 'retrying', error };
   return { ...where(frame), status: error === null ? 'sent' : 'failed', error };
+}
+
+const DUPLICATE_DELIVERY = 'https://w3id.org/fep/c180#duplicate-delivery';
+
+/**
+ * Whether an inbox refused an activity because it already holds it, as
+ * tags.pub does with a FEP-c180 problem: the delivery has reached it.
+ */
+export function isDuplicateDelivery(error: unknown): boolean {
+  if (!(error instanceof SendActivityError) || error.statusCode !== 400) return false;
+  try {
+    const problem: unknown = JSON.parse(error.responseBody);
+    return isRecord(problem) && problem['type'] === DUPLICATE_DELIVERY;
+  } catch {
+    return false;
+  }
 }
 
 function isOutbox(message: unknown): message is OutboxMessage {

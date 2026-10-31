@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 
-import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/fedify';
+import {
+  createFederation,
+  InProcessMessageQueue,
+  MemoryKvStore,
+  SendActivityError,
+} from '@fedify/fedify';
 import type { FederationOptions } from '@fedify/fedify';
 import { Create, Note } from '@fedify/vocab';
 
@@ -19,6 +24,17 @@ const INBOX = 'https://remote.example/inbox';
 
 function outbox(attempt = 0): Record<string, unknown> {
   return { type: 'outbox', activityId: ACTIVITY, inbox: INBOX, attempt };
+}
+
+const DUPLICATE_BODY = JSON.stringify({
+  type: 'https://w3id.org/fep/c180#duplicate-delivery',
+  title: 'Duplicate delivery',
+  status: 400,
+  detail: 'Activity already delivered',
+});
+
+function duplicate(): SendActivityError {
+  return new SendActivityError(new URL(INBOX), 400, 'Bad Request', DUPLICATE_BODY);
 }
 
 function innerQueue(): {
@@ -112,6 +128,32 @@ describe('observeOutbox', () => {
     assert.equal(outcomes[0]?.status, 'retrying');
   });
 
+  it('settles an attempt the inbox already holds as sent, and drops its retry', async () => {
+    const { outbox: observer, inner, outcomes } = observed();
+    void observer.queue.listen(async (message) => {
+      observer.onOutboxError(duplicate());
+      await observer.queue.enqueue({ ...(message as object), attempt: 1 });
+    });
+    await inner.deliver(outbox());
+    assert.deepEqual(outcomes, [
+      { activityId: ACTIVITY, inbox: INBOX, status: 'sent', error: null },
+    ]);
+    assert.deepEqual(inner.enqueued, []);
+  });
+
+  it('settles a 400 that is no duplicate delivery as it always did', async () => {
+    const { outbox: observer, inner, outcomes } = observed();
+    void observer.queue.listen(async (message) => {
+      observer.onOutboxError(
+        new SendActivityError(new URL(INBOX), 400, 'Bad Request', '{"type":"about:blank"}'),
+      );
+      await observer.queue.enqueue({ ...(message as object), attempt: 1 });
+    });
+    await inner.deliver(outbox());
+    assert.equal(outcomes[0]?.status, 'retrying');
+    assert.equal(inner.enqueued.length, 1);
+  });
+
   it('settles a failed attempt Fedify gave up on as failed, with the error', async () => {
     const { outbox: observer, inner, outcomes } = observed();
     void observer.queue.listen(() => {
@@ -192,6 +234,7 @@ describe('observeOutbox through Fedify', () => {
       if (url.origin !== PEER) return await original(input, init);
       const statuses = answers.get(url.pathname) ?? [];
       const status = statuses.length > 1 ? (statuses.shift() ?? 202) : (statuses[0] ?? 202);
+      if (url.pathname === '/holds-it') return new Response(DUPLICATE_BODY, { status: 400 });
       return new Response(status < 300 ? '' : 'Not now.', { status });
     }) as typeof fetch;
     restoreFetch = () => {
@@ -264,6 +307,16 @@ describe('observeOutbox through Fedify', () => {
     const outcome = await deliverTo('/gives-up', [500], { outboxRetryPolicy: () => null });
     assert.equal(outcome.status, 'failed');
     assert.match(outcome.error ?? '', /\b500\b/);
+  });
+
+  it('reports an inbox that already holds the activity as sent', async () => {
+    const outcome = await deliverTo('/holds-it', [400]);
+    assert.deepEqual(outcome, {
+      activityId: 'https://blog.example/activities/holds-it',
+      inbox: `${PEER}/holds-it`,
+      status: 'sent',
+      error: null,
+    });
   });
 
   it('reports a permanent refusal as failed', async () => {
