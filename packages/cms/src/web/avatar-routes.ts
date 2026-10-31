@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 
 import type { GeekityEnv } from './env.ts';
-import { assetNotModified, assetResponse, matchesEtag } from '../theme/assets.ts';
+import { assetReply } from '../theme/assets.ts';
 import {
   AVATAR_MAX_AGE_SECONDS,
   AVATAR_PATH_PREFIX,
@@ -35,9 +35,7 @@ export function mountAvatars(app: Hono<GeekityEnv>): void {
         });
       case 'image': {
         const options = { maxAge: AVATAR_MAX_AGE_SECONDS };
-        return matchesEtag(c.req.header('if-none-match'), answer.asset.etag)
-          ? assetNotModified(answer.asset, options)
-          : assetResponse(answer.asset, options);
+        return assetReply(answer.asset, c.req.raw.headers, options);
       }
     }
   });

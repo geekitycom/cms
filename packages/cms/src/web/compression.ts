@@ -11,6 +11,8 @@ import { ADMIN_ASSET_PREFIX, ADMIN_PREFIX } from '../site/admin-paths.ts';
  */
 export const COMPRESSION_THRESHOLD = 1024;
 
+export const COMPRESSION_MAX_BYTES = 2 * 1024 * 1024;
+
 /** The encodings the CMS produces, in the order it prefers them. */
 type Encoding = 'br' | 'gzip';
 const ENCODINGS: readonly Encoding[] = ['br', 'gzip'];
@@ -71,26 +73,38 @@ export function compression(): MiddlewareHandler {
     if (holdsSecrets(c.req.path, response) || !worthCompressing(response)) return;
 
     const encoding = chooseEncoding(c.req.header('accept-encoding'));
-    const declared = Number(response.headers.get('content-length') ?? Number.NaN);
-    if (encoding === undefined || declared < COMPRESSION_THRESHOLD) {
+    if (encoding === undefined) {
       c.res = new Response(response.body, response);
       addVary(c.res.headers);
       return;
     }
 
-    const plain = new Uint8Array(await response.arrayBuffer());
-    if (plain.byteLength < COMPRESSION_THRESHOLD) {
-      c.res = new Response(plain, response);
+    let plain: Uint8Array | undefined;
+    let size = Number(response.headers.get('content-length') ?? Number.NaN);
+    if (!Number.isFinite(size)) {
+      plain = new Uint8Array(await response.arrayBuffer());
+      size = plain.byteLength;
+    }
+    if (size < COMPRESSION_THRESHOLD || size > COMPRESSION_MAX_BYTES) {
+      c.res = new Response(plain ?? response.body, response);
       addVary(c.res.headers);
       return;
     }
 
-    const encoded = await encode(plain, encoding);
-    c.res = new Response(encoded, response);
+    // A HEAD gets the headers its GET would, less the encoded length, which
+    // only encoding the body could tell.
+    const encoded =
+      c.req.method === 'HEAD'
+        ? undefined
+        : await encode(plain ?? new Uint8Array(await response.arrayBuffer()), encoding);
+    c.res = new Response(encoded ?? null, response);
     const headers = c.res.headers;
     addVary(headers);
     headers.set('content-encoding', encoding);
-    headers.set('content-length', String(encoded.byteLength));
+    // Ranges are counted in the plain bytes, which this body no longer is.
+    headers.delete('accept-ranges');
+    if (encoded === undefined) headers.delete('content-length');
+    else headers.set('content-length', String(encoded.byteLength));
     const etag = headers.get('etag');
     if (etag !== null && !etag.startsWith('W/')) headers.set('etag', `W/${etag}`);
   };

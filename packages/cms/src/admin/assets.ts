@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
-import { assetNotModified, assetResponse, matchesEtag } from '../theme/assets.ts';
+import { assetReply } from '../theme/assets.ts';
 
 /**
  * Where the admin's own files live: the compiled stylesheet, the admin bar's
@@ -28,15 +28,10 @@ export function findAdminAsset(relative: string): StaticAsset | undefined {
  * Returns `undefined` when there is no such file, so the caller can fall
  * through to whatever it does with an unknown URL.
  */
-export function adminAssetResponse(
-  relative: string,
-  ifNoneMatch: string | undefined,
-): Response | undefined {
+export function adminAssetResponse(relative: string, request: Headers): Response | undefined {
   const asset = findAdminAsset(relative);
   if (asset === undefined) return undefined;
 
   const options = { maxAge: ADMIN_ASSET_MAX_AGE };
-  return matchesEtag(ifNoneMatch, asset.etag)
-    ? assetNotModified(asset, options)
-    : assetResponse(asset, options);
+  return assetReply(asset, request, options);
 }

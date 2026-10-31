@@ -24,6 +24,11 @@ const ALLOWED: readonly Allowance[] = [
     because: ELAPSED_WALL_TIME,
   },
   {
+    file: 'theme/assets.ts',
+    line: 'Date.now() - asset.stats.mtimeMs >= 1000',
+    because: 'compares a file system mtime with the wall clock that stamped it',
+  },
+  {
     file: 'util/clock.ts',
     line: 'export const systemClock: Clock = () => new Date();',
     because: 'the system clock definition',

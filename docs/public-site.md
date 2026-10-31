@@ -930,6 +930,8 @@ The server does not compress these responses:
 - Images, video, WOFF and WOFF2 fonts and other formats that carry their own
   compression. Encoding them again costs CPU and can make them bigger.
 - Bodies under 1024 bytes, where the saving is smaller than the cost.
+- Bodies over 2 MiB, such as a large text upload. Compressing one means
+  holding all of it in memory and encoding it again on every request.
 - A response that already has a `Content-Encoding`, or whose `Cache-Control`
   says `no-transform`.
 - A response that may hold a secret. This covers every response whose
@@ -947,7 +949,10 @@ and so does every `304`. A cache in front of the site keeps one copy per
 encoding and never sends brotli to a client that cannot decode it.
 
 A compressed response's `ETag` is the uncompressed response's `ETag` with `W/`
-in front. The bytes differ, but the representation is the same.
+in front. The bytes differ, but the representation is the same. A compressed
+response carries no `Accept-Ranges`, because byte ranges count the uncompressed
+bytes. A `HEAD` request gets the `Content-Encoding` and `ETag` its `GET` would,
+without a `Content-Length`, and the server compresses nothing to answer it.
 `If-None-Match` compares weakly. A browser that holds the brotli copy and a feed
 reader that holds the gzip copy both revalidate to `304`, and each gets back the
 validator it sent.
