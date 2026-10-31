@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.50.1](https://github.com/geekitycom/cms/compare/v0.50.0...v0.50.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **cms:** answer asset ranges and conditionals as RFC 9110 describes ([8fee789](https://github.com/geekitycom/cms/commit/8fee789f355c824b8cf96c68f8f1eb1f7ef6d4b3))
+* **cms:** answer every unrecorded avatar key with the placeholder ([3aa98c3](https://github.com/geekitycom/cms/commit/3aa98c375772205f90dd13f3b19f7afb823afac6))
+* **cms:** cap avatar fetches and skip sweep ticks while one runs ([0cddde0](https://github.com/geekitycom/cms/commit/0cddde063f809f60479ed77d822ee7e639417570))
+* **cms:** cap the pixels a derived image is decoded from ([63aff93](https://github.com/geekitycom/cms/commit/63aff93db2e78d8fd2be2090960906c676e7b80a))
+* **cms:** clamp variant widths to the encoder and remember sources that cannot be derived ([4bc53b5](https://github.com/geekitycom/cms/commit/4bc53b5f2063a13ff35d0eacb34e1ffa7156ef23))
+* **cms:** compress no body over 2 MiB and none for a HEAD request ([0696bd3](https://github.com/geekitycom/cms/commit/0696bd34aa1641541f7ca2dfd3ecfafbfef178a8))
+* **cms:** connect public fetches to the address the check resolved ([19f2737](https://github.com/geekitycom/cms/commit/19f2737a960758d44bc5324e59d5765fb8a0a431))
+* **cms:** derive icons only from the site icon, as one shared set ([13f7109](https://github.com/geekitycom/cms/commit/13f71098725970b15735263ea35245c69597b3ec))
+* **cms:** hold the widest jpeg variant to the encoder's 65500 pixels ([468c294](https://github.com/geekitycom/cms/commit/468c294a6e8037ee8d5fae5f7b4ddaeaf1dcf778))
+* **cms:** keep avatars written while the sweep runs ([bff7ba4](https://github.com/geekitycom/cms/commit/bff7ba42ed07ce0353e65d6e8e05be5b412d076e))
+* **cms:** link site icons only once they have been drawn ([c77a3c7](https://github.com/geekitycom/cms/commit/c77a3c7458bf136cca90eff6549a33169f7a70e7))
+* **cms:** mark a derived file immutable only for the bytes it came from ([d86ef43](https://github.com/geekitycom/cms/commit/d86ef43ae91410e971704515a810a4606af90041))
+* **cms:** notice a deleted font file behind a memoised stylesheet ([60fe3ad](https://github.com/geekitycom/cms/commit/60fe3ad9875400a9c132a1a4797f3017c8968445))
+* **cms:** open asset files when the response body is first read ([4b7876a](https://github.com/geekitycom/cms/commit/4b7876a155aa06ad1537c139c93eff6b9ac3e290))
+* **cms:** percent-encode each segment of a variant url ([fd8dd16](https://github.com/geekitycom/cms/commit/fd8dd167b5ddfbd61f3025b31d55d01880e36c3c))
+* **cms:** plan the variant set before deriving for an unknown name ([4cf2956](https://github.com/geekitycom/cms/commit/4cf29564d5d9eba968563425b7e2619d7c8294c1))
+* **cms:** queue a font fetch again after a failed job ([c2866a9](https://github.com/geekitycom/cms/commit/c2866a993487406606383f9917767ee0df60d721))
+* **cms:** read a quoted &gt; inside an img tag as part of the attribute ([ce9ccaa](https://github.com/geekitycom/cms/commit/ce9ccaa04b2ac5a17ca5ef25a1b8d38ce373971f))
+* **cms:** read asset request paths once and refuse dot and empty segments ([0fa2ad6](https://github.com/geekitycom/cms/commit/0fa2ad6b5e9e1087bdb72ceaa2b43c43ed63e45e))
+* **cms:** serve a static file only when its real path is inside its root ([bf4949b](https://github.com/geekitycom/cms/commit/bf4949b1a0423698e714ff76906944796b98635b))
+* **cms:** serve only recorded variant and icon names from the derived route ([7f88eb8](https://github.com/geekitycom/cms/commit/7f88eb8586d922ad0b6bf52cdecac28c025826d2))
+* **cms:** serve uploads outside the upload media types as inert files ([33853aa](https://github.com/geekitycom/cms/commit/33853aabf979e2fd2e8ce5c6a152ef4219bf967c))
+* **cms:** stop serving derived files once their upload is gone ([2dacbae](https://github.com/geekitycom/cms/commit/2dacbaec49d70e7b2ed9634f2be04fa0a77c9059))
+* **cms:** treat ipv6 prefixes that embed an ipv4 address as private ([1d9d792](https://github.com/geekitycom/cms/commit/1d9d79205bc141a774402e4fb497c6cdcb493a33))
+
 ## [0.50.0](https://github.com/geekitycom/cms/compare/v0.49.0...v0.50.0) (2026-10-31)
 
 
