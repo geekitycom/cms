@@ -38,3 +38,5 @@ apps/*/data/
 # The demo's local working copy of content/, which `pnpm dev` serves so that
 # what the admin writes never reaches git. See apps/demo/playground.ts.
 apps/demo/playground/
+
+/backlog/

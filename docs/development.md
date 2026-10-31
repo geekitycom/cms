@@ -38,7 +38,8 @@ scripts/               pack-install-smoke.sh and docker-smoke.sh, the bodies of 
                        `pnpm lint` runs over the Markdown
 docs/                  the documentation, one topic per page; docs/README.md is the index
 deploy/compose.yaml    the compose file a Docker deployment starts from
-backlog/               tasks, docs and decisions (Backlog.md)
+backlog/               tasks, docs and decisions (Backlog.md), local and gitignored;
+                       worktrees under .claude/worktrees/ use the main checkout's
 ```
 
 ## Source layers
