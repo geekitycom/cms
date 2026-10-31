@@ -1,11 +1,11 @@
 ---
 id: TASK-541
 title: Count a relay's duplicate-delivery answer as delivered
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-31T15:28:00Z'
-updated_date: '2026-10-31T15:44:00Z'
+updated_date: '2026-10-31T16:13:00Z'
 labels:
   - federation
 dependencies: []
@@ -32,3 +32,9 @@ tags.pub answers a Create it already holds with 400 and a problem-details body o
 <!-- SECTION:NOTES:BEGIN -->
 outbox-observer marks a 400 FEP-c180 duplicate-delivery as sent and drops Fedify's retry enqueue for it; the synchronous fanOut path treats it as sent too. Verified with unit tests and a through-Fedify test.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+A 400 FEP-c180 duplicate-delivery answer settles as sent and is not retried, in the queue worker and the synchronous path. Released in 0.49.0, deployed to andrewshell.org 2026-10-31.
+<!-- SECTION:FINAL_SUMMARY:END -->

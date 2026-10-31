@@ -1,11 +1,11 @@
 ---
 id: TASK-542
 title: Sign the shared inbox's key fetches
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-31T15:39:00Z'
-updated_date: '2026-10-31T15:44:00Z'
+updated_date: '2026-10-31T16:13:00Z'
 labels:
   - federation
 dependencies: []
@@ -31,3 +31,9 @@ A delivery to the shared inbox (/inbox/) is verified with an unsigned fetch of t
 <!-- SECTION:NOTES:BEGIN -->
 setSharedKeyDispatcher signs shared-inbox key fetches as primaryUser. inbox.test.ts 'a peer in authorized fetch mode' reproduced the production refusal line (401) before the fix and passes after.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The shared inbox signs key fetches as the site's first account, so authorized-fetch peers are verified and no cached 401 refuses them at the personal inbox. Released in 0.49.0; after deploy andrewshell.org logged no inbox refusals.
+<!-- SECTION:FINAL_SUMMARY:END -->

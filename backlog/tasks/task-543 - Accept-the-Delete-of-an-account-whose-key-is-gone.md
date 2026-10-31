@@ -1,11 +1,11 @@
 ---
 id: TASK-543
 title: Accept the Delete of an account whose key is gone
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-31T15:50:00Z'
-updated_date: '2026-10-31T15:51:00Z'
+updated_date: '2026-10-31T16:13:00Z'
 labels:
   - federation
 dependencies: []
@@ -33,3 +33,9 @@ When an account is deleted its server broadcasts a Delete of the actor to every 
 <!-- SECTION:NOTES:BEGIN -->
 onUnverifiedActivity calls acceptGoneActorDelete (inbox.ts) and returns 202 when it applies. Verified by inbox.test.ts 'whose key went with it' (red before, green after) and the full cms suite (7940 pass).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+A self-Delete whose key answered 410 from the actor's own document is accepted with 202, the follower removed and nothing logged. Released in 0.49.0, deployed to andrewshell.org 2026-10-31.
+<!-- SECTION:FINAL_SUMMARY:END -->

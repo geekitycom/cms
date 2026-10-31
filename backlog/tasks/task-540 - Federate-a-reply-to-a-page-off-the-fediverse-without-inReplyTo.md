@@ -1,11 +1,11 @@
 ---
 id: TASK-540
 title: Federate a reply to a page off the fediverse without inReplyTo
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-31T15:28:00Z'
-updated_date: '2026-10-31T15:44:00Z'
+updated_date: '2026-10-31T16:13:00Z'
 labels:
   - federation
 dependencies: []
@@ -37,3 +37,9 @@ The cause is the fallback in federation/article.ts replyTargetId: when the targe
 <!-- SECTION:NOTES:BEGIN -->
 Delivery records what repliedTo found in content/_data/federation/replyTargets.json (object id, or null for no fediverse object); postObject reads it, so the served object, outbox and MCP inspect match the Create. Never-resolved targets keep the old raw-URL inReplyTo. Verified: delivery.test.ts reply suite (red without the null branch, green with), article.test.ts reply suite, full cms suite 7937 pass.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Replies to pages with no fediverse object now federate without inReplyTo; delivery records each target's resolution in content/_data/federation/replyTargets.json so served and outbox objects agree. Released in 0.49.0, deployed to andrewshell.org 2026-10-31. Posts federated before the fix stay hidden on Mastodon until moved to draft and republished under a reissued id.
+<!-- SECTION:FINAL_SUMMARY:END -->
