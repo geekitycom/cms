@@ -1332,8 +1332,22 @@ describe('a reply to a fediverse status (TASK-240)', () => {
     assert.deepEqual(list(note['cc']).sort(), [CAROL_ACTOR, PUBLIC].sort());
   });
 
-  it('federates a reply to a page that is no fediverse object as before (AC #3)', async () => {
-    await reply(PLAIN_PAGE);
+  async function served(cms: Site['cms']): Promise<Record<string, unknown>> {
+    const response = await cms.app.request(`${BASE_URL}/2026/03/answer/`, {
+      headers: { accept: 'application/activity+json' },
+    });
+    assert.equal(response.status, 200);
+    return (await response.json()) as Record<string, unknown>;
+  }
+
+  it('serves the reply in reply to the status’s id, as it was delivered', async () => {
+    const { cms } = await reply(STATUS_URL);
+
+    assert.equal((await served(cms))['inReplyTo'], STATUS_ID);
+  });
+
+  it('federates a reply to a page that is no fediverse object with no inReplyTo', async () => {
+    const { cms } = await reply(PLAIN_PAGE);
 
     const creates = delivered('Create');
     assert.deepEqual(
@@ -1342,9 +1356,25 @@ describe('a reply to a fediverse status (TASK-240)', () => {
       'to the followers only',
     );
     const note = objectOf(creates[0] as Delivery);
-    assert.equal(note['inReplyTo'], PLAIN_PAGE);
+    assert.equal('inReplyTo' in note, false);
     assert.equal(note['cc'], FOLLOWERS);
     assert.deepEqual(mentions(note), []);
+    assert.equal('inReplyTo' in (await served(cms)), false, 'nor when a peer fetches it');
+  });
+
+  it('sends no inReplyTo in the Update of a reply to a page that is no fediverse object', async () => {
+    const { cms, agent } = await reply(PLAIN_PAGE);
+    deliveries.length = 0;
+
+    await submitEditor(agent, '/admin/posts/answer', {
+      body: 'I agree, mostly.',
+      'in-reply-to': PLAIN_PAGE,
+    });
+    await cms.delivery.settled();
+
+    const [update] = delivered('Update');
+    assert.ok(update !== undefined, `expected an Update, saw ${JSON.stringify(deliveries)}`);
+    assert.equal('inReplyTo' in objectOf(update), false);
   });
 
   it('federates a reply to one of the site’s own posts as before, without asking itself', async () => {

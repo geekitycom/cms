@@ -1,9 +1,11 @@
 ---
 id: TASK-540
 title: Federate a reply to a page off the fediverse without inReplyTo
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-10-31T15:28:00Z'
+updated_date: '2026-10-31T15:44:00Z'
 labels:
   - federation
 dependencies: []
@@ -22,10 +24,16 @@ The cause is the fallback in federation/article.ts replyTargetId: when the targe
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A reply whose in-reply-to does not resolve to a fediverse object is delivered with no inReplyTo
-- [ ] #2 A reply whose in-reply-to resolves to a fediverse object is delivered with inReplyTo naming that object's id, as now
-- [ ] #3 A reply to a post on this site keeps inReplyTo naming that post's object id
-- [ ] #4 The object a peer fetches, and the outbox, agree with what delivery sent: no inReplyTo once the target was found not to be a fediverse object, the resolved id once it was
-- [ ] #5 A reply never resolved since this change (federated before it) is served as before
-- [ ] #6 docs/federation.md says when a reply carries inReplyTo
+- [x] #1 A reply whose in-reply-to does not resolve to a fediverse object is delivered with no inReplyTo
+- [x] #2 A reply whose in-reply-to resolves to a fediverse object is delivered with inReplyTo naming that object's id, as now
+- [x] #3 A reply to a post on this site keeps inReplyTo naming that post's object id
+- [x] #4 The object a peer fetches, and the outbox, agree with what delivery sent: no inReplyTo once the target was found not to be a fediverse object, the resolved id once it was
+- [x] #5 A reply never resolved since this change (federated before it) is served as before
+- [x] #6 docs/federation.md says when a reply carries inReplyTo
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Delivery records what repliedTo found in content/_data/federation/replyTargets.json (object id, or null for no fediverse object); postObject reads it, so the served object, outbox and MCP inspect match the Create. Never-resolved targets keep the old raw-URL inReplyTo. Verified: delivery.test.ts reply suite (red without the null branch, green with), article.test.ts reply suite, full cms suite 7937 pass.
+<!-- SECTION:NOTES:END -->

@@ -1177,6 +1177,37 @@ describe('a reply', () => {
     assert.equal(article['inReplyTo'], TARGET);
   });
 
+  function answering(targets: string): ReturnType<typeof site> {
+    return site({
+      '_data/federation/replyTargets.json': targets,
+      'posts/2026-09-02-agreed.md': rawPost(
+        ["date: '2026-09-02T09:00:00Z'", 'permalink: /2026/09/agreed/', `in-reply-to: ${TARGET}`],
+        'Completely agree with this.',
+      ),
+    });
+  }
+
+  it('names the object delivery found behind its target', async () => {
+    const status = 'https://them.example/users/them/statuses/1';
+    const instance = await answering(JSON.stringify({ [TARGET]: status }));
+
+    assert.equal((await articleAt(instance, '/2026/09/agreed/'))['inReplyTo'], status);
+  });
+
+  it('names nothing once delivery found no fediverse object behind its target', async () => {
+    const instance = await answering(JSON.stringify({ [TARGET]: null }));
+
+    assert.equal('inReplyTo' in (await articleAt(instance, '/2026/09/agreed/')), false);
+  });
+
+  it('names its target by URL when the record of targets is damaged', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    const instance = await answering('{"');
+
+    assert.equal((await articleAt(instance, '/2026/09/agreed/'))['inReplyTo'], TARGET);
+    assert.ok(warn.mock.calls.some((call) => String(call.arguments[0]).includes('replyTargets')));
+  });
+
   it('sends no inReplyTo for an in-reply-to that is not a URL', async (t) => {
     t.mock.method(console, 'warn', () => undefined);
     const instance = await site({

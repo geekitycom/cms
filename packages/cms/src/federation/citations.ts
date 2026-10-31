@@ -16,6 +16,7 @@ import type { User } from '../site/users.ts';
 import { actorId, senderKeyPairs } from './actor.ts';
 import { articleObjectId, documentAuthor, toInstant } from './article.ts';
 import type { FederationContextData } from './federation.ts';
+import { recordReplyTarget } from './reply-targets.ts';
 
 export type CitingActivity = Like | Announce;
 
@@ -89,7 +90,9 @@ export async function repliedTo(
   const user = documentAuthor(context, document);
   if (target === undefined || user === undefined) return undefined;
   if (new URL(target).origin === new URL(context.data.config.baseUrl).origin) return undefined;
-  return await lookupCited(context, user, target);
+  const cited = await lookupCited(context, user, target);
+  await recordReplyTarget(context.data.config.contentDir, target, cited?.id.href ?? null);
+  return cited;
 }
 
 /**

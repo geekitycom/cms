@@ -67,6 +67,7 @@ import { mentionedAccounts } from './handles.ts';
 import type { MentionedAccount } from './handles.ts';
 import { currentObjectId, isObjectIdOf, naturalObjectId, readObjectIds } from './object-ids.ts';
 import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } from './paths.ts';
+import { resolvedReplyTarget } from './reply-targets.ts';
 
 /**
  * The user a post is announced by: the one its `author` names, and the site's
@@ -727,18 +728,16 @@ export type PinChange = 'pin' | 'unpin';
  * on. The rule itself lives in `content/permalinks.ts`, because the page, the feed
  * item and the object are one identity now rather than three.
  */
-/**
- * What a reply names the post it answers by: a post on this site by its
- * current object id, which is not always the URL the reply cites, and
- * anything else by that URL.
- */
-function replyTargetId(context: Context<FederationContextData>, inReplyTo: string): URL {
+function replyTargetId(context: Context<FederationContextData>, inReplyTo: string): URL | null {
   const { config, store } = context.data;
   const permalink = permalinkOfObjectId(inReplyTo, config.baseUrl);
   const target =
     (permalink === undefined ? undefined : store.getByPermalink(permalink)) ??
     postByObjectId(store, inReplyTo, config);
-  return target?.type === 'post' ? articleObjectId(context, target) : new URL(inReplyTo);
+  if (target?.type === 'post') return articleObjectId(context, target);
+  const resolved = resolvedReplyTarget(config.contentDir, inReplyTo);
+  if (resolved === null) return null;
+  return new URL(resolved ?? inReplyTo);
 }
 
 export function articleObjectId(context: Context<FederationContextData>, document: Document): URL {
