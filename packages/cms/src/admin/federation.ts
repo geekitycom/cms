@@ -73,8 +73,7 @@ export const DELIVERY_PANEL = `${FEDERATION_PATH}#delivery`;
 
 export const FAILURES_PANEL = `${FEDERATION_PATH}#failures`;
 
-/** How far back a failure is still worth showing and retrying. */
-export const FAILURES_SINCE_MS = 7 * 24 * 60 * 60 * 1000;
+export const FAILURE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Where a failed delivery's Retry button posts. */
 export const RETRY_PATH = `${FEDERATION_PATH}/retry`;
@@ -135,7 +134,7 @@ export function mountFederationScreen(
     const latestResend = await c.var.jobs.latest(RESEND_JOB.name);
     const report = finishedResult(RESEND_JOB, latestResend);
     const latestRetry = await c.var.jobs.latest(RETRY_DELIVERIES_JOB.name);
-    const failuresSince = new Date(c.var.config.now().getTime() - FAILURES_SINCE_MS).toISOString();
+    const failuresSince = new Date(c.var.config.now().getTime() - FAILURE_WINDOW_MS).toISOString();
     const admin = c.var.admin;
     const baseUrl = c.var.config.baseUrl;
     const cited: CitedPageReader = (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart);
@@ -159,14 +158,9 @@ export function mountFederationScreen(
       retryUrl: RETRY_PATH,
       retry: jobStatusView(latestRetry),
       retryResult: finishedResult(RETRY_DELIVERIES_JOB, latestRetry),
-      failures: admin.listFailedDeliveriesSince(failuresSince).map((failure) => ({
-        post: post(failure.objectId),
-        slug: failure.slug,
-        activityType: failure.activityType,
-        inboxId: failure.inboxId,
-        error: failure.error,
-        attemptedAt: failure.attemptedAt,
-      })),
+      failures: admin
+        .listStandingFailuresSince(failuresSince)
+        .map((failure) => ({ ...failure, post: post(failure.objectId) })),
       fields: FEDERATION_FIELDS,
       actors: users.map((user) =>
         actorSummary(user, {
@@ -238,10 +232,6 @@ export function mountFederationScreen(
     return c.redirect(FEDERATION_PATH, 303);
   });
 
-  /**
-   * Queue a retry of one post to one inbox: the recipients there whose newest
-   * delivery of it failed are sent it again, as it now reads.
-   */
   app.post(RETRY_PATH, async (c) => {
     const body = await c.req.parseBody();
     const slug = body[FEDERATION_FIELDS.slug];
@@ -303,14 +293,13 @@ export function mountFederationScreen(
 }
 
 /** What the resend panel shows of a finished resend. */
-export interface ResendResult {
+interface ResendResult {
   readonly sent: readonly Extract<ResendPost, { resent: true }>[];
   readonly nothing: readonly string[];
-  /** The activities of every post sent, added up, for the one-line summary. */
   readonly totals: Pick<ResendActivity, 'inboxes' | 'reached' | 'queued' | 'failed'>;
 }
 
-export function resendResult(posts: readonly ResendPost[]): ResendResult {
+function resendResult(posts: readonly ResendPost[]): ResendResult {
   const sent = posts.filter((post) => post.resent);
   const totals = { inboxes: 0, reached: 0, queued: 0, failed: 0 };
   for (const { activity } of sent) {

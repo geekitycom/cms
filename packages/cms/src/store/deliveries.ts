@@ -152,12 +152,7 @@ export interface DeliveryStore {
   lastDeliveryToObject(objectId: string): Delivery | undefined;
   /** Every object id a `Delete` was ever recorded going out for. */
   listDeletedObjectIds(): string[];
-  /**
-   * The failures since then that are still where a recipient stands with a
-   * post, newest first: a failed delivery drops out once a later one about the
-   * same post reaches the same actor, whatever activity it carried.
-   */
-  listFailedDeliveriesSince(since: string): Delivery[];
+  listStandingFailuresSince(since: string): Delivery[];
   /** Every activity sent about any of these objects, newest first. */
   listSentActivitiesAbout(objectIds: readonly string[]): SentActivity[];
   /** The outcomes that match, newest attempt first, one page of them. */
@@ -215,7 +210,7 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     listDeletedObjectIds: db.prepare(`
       SELECT DISTINCT object_id FROM ap_deliveries WHERE activity_type = 'Delete' ORDER BY object_id
     `),
-    listFailedDeliveriesSince: db.prepare(`
+    listStandingFailuresSince: db.prepare(`
       SELECT * FROM ap_deliveries AS failure
       WHERE status = 'failed' AND attempted_at >= ?
         AND NOT EXISTS (
@@ -310,8 +305,8 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
       return allRows(statements.listDeletedObjectIds, (row) => String(row['object_id']));
     },
 
-    listFailedDeliveriesSince(since) {
-      return allRows(statements.listFailedDeliveriesSince, toDelivery, since);
+    listStandingFailuresSince(since) {
+      return allRows(statements.listStandingFailuresSince, toDelivery, since);
     },
 
     listSentActivitiesAbout(objectIds) {

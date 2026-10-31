@@ -6,7 +6,7 @@ import type { JobStatus } from '../jobs/types.ts';
 import type { PluginScreenCell } from '../plugin.ts';
 import { countRetryingDeliveries } from '../store/queue-database.ts';
 import { EXPORT_PATH } from './export.ts';
-import { DELIVERY_PANEL, FAILURES_PANEL, FAILURES_SINCE_MS, RESEND_PANEL } from './federation.ts';
+import { DELIVERY_PANEL, FAILURES_PANEL, FAILURE_WINDOW_MS, RESEND_PANEL } from './federation.ts';
 import { MAINTENANCE_PATH, STRIP_METADATA_PANEL } from './maintenance.ts';
 import type { CoreWidget } from './widgets.ts';
 
@@ -76,7 +76,7 @@ export const HEALTH_WIDGET: CoreWidget = {
   placement: 'alerts',
   async load(vars) {
     const now = vars.config.now().getTime();
-    const since = new Date(now - FAILURES_SINCE_MS).toISOString();
+    const since = new Date(now - FAILURE_WINDOW_MS).toISOString();
     const jobs = await vars.jobs.list(['failed', 'interrupted', 'finished', 'running']);
 
     const problems: Problem[] = [
@@ -85,7 +85,7 @@ export const HEALTH_WIDGET: CoreWidget = {
       {
         text: 'Failed federation deliveries',
         href: FAILURES_PANEL,
-        count: vars.admin.listFailedDeliveriesSince(since).length,
+        count: vars.admin.listStandingFailuresSince(since).length,
       },
       {
         text: 'Federation deliveries being retried',

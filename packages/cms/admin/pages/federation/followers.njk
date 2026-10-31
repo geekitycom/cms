@@ -1,6 +1,3 @@
-{# /admin/federation: who this site's people are to the fediverse, who follows
-   each of them, what failed to go out and the latest retry of it, what arrived
-   in the inbox, how what went out landed, and the latest resend job. #}
 {% extends "layouts/shell.njk" %}
 {% from "components/badge.njk" import badge, status %}
 {% from "components/button.njk" import button %}
@@ -125,8 +122,8 @@
       <p class="mt-4 max-w-prose text-sm">
         Deliveries from the last seven days that failed and have not reached that
         inbox since. Retry sends the post again, as it now reads, to that inbox
-        alone. A failure leaves this list once a later delivery of the post gets
-        through, or after seven days.
+        alone. A failure leaves this list once the post goes to that inbox
+        again, or after seven days. If that fails too, the new failure is listed.
       </p>
     {% else %}
       <p>No delivery has failed in the last seven days.</p>

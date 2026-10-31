@@ -162,7 +162,7 @@ export const federationStatus = defineTool({
       waiting: countWaitingMessages(config.dataDir),
       retrying: countRetryingDeliveries(config.dataDir, since),
     };
-    const failedDeliveries = admin.listFailedDeliveriesSince(since).length;
+    const failedDeliveries = admin.listStandingFailuresSince(since).length;
     const failedWebmentions = admin.countFailedWebmentionsSince(since);
     const recentFailures = admin.searchDeliveries(
       { statuses: ['failed', 'retrying'] },
