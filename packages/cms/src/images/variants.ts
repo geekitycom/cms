@@ -419,31 +419,39 @@ export async function findImageVariant(
 
   const cut = relative.lastIndexOf('/');
   if (cut <= 0) return undefined;
-  const source = relative.slice(0, cut);
+  const upload = locateUpload(config, relative.slice(0, cut));
+  if (upload === undefined) return undefined;
   const name = relative.slice(cut + 1);
+
+  // Nothing derived from an upload may outlive it, however it went.
+  const version = sourceVersion(config, upload.source);
+  if (version === undefined) {
+    await forgetDerivedSets(upload);
+    return undefined;
+  }
 
   // The site's icons live beside the widths and are derived one at a time,
   // because they are asked for one at a time and belong in no `srcset`.
   if (isDerivedIcon(name)) {
     const icon = findAsset(relative, [root]);
     if (icon !== undefined) return icon;
-    return (await deriveSiteIcon(config, source, name)) ? findAsset(relative, [root]) : undefined;
+    return (await deriveSiteIcon(config, upload.source, name))
+      ? findAsset(relative, [root])
+      : undefined;
   }
 
-  const widthsOf = widthSource(config, source);
-  if (widthsOf === undefined) return undefined;
   const kind = widths(config);
-  const known = settledSet(kind, widthsOf.upload, widthsOf.version);
+  const known = settledSet(kind, upload, version);
   const offered =
     known === undefined
-      ? (await planWidths(config, widthsOf.upload))?.targets.some((target) => target.file === name)
+      ? (await planWidths(config, upload))?.targets.some((target) => target.file === name)
       : lists(known.set, name);
   if (offered !== true) return undefined;
 
-  const directory = [widthsOf.upload.directory];
+  const directory = [upload.directory];
   const derived = known === undefined ? undefined : findAsset(name, directory);
   if (derived !== undefined) return derived;
-  const record = await deriveSet(kind, widthsOf.upload, widthsOf.version);
+  const record = await deriveSet(kind, upload, version);
   return lists(record, name) ? findAsset(name, directory) : undefined;
 }
 

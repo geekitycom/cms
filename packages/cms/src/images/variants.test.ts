@@ -350,6 +350,7 @@ describe('a source whose pixels cannot be decoded', () => {
         width: 600,
         height: 400,
         channels: 3,
+        background: { r: 0, g: 0, b: 0 },
         noise: { type: 'gaussian', mean: 128, sigma: 40 },
       },
     })
@@ -408,5 +409,29 @@ describe('what the derived route serves', () => {
     await writeFile(path.join(config.dataDir, 'images', source, '320.webp.1a2b-3.tmp'), 'partial');
 
     assert.equal(await findImageVariant(config, `${source}/320.webp.1a2b-3.tmp`), undefined);
+  });
+});
+
+describe('derived files whose upload is gone', () => {
+  it('answer nothing and are taken away once the original is removed by hand', async () => {
+    const config = await site({ imageWidths: [320] });
+    const source = await upload(config, '2026/09/photo.png', rectangle(1000, 500).png());
+    assert.ok(await findImageVariant(config, `${source}/320.webp`), 'the variant was served first');
+
+    await rm(path.join(config.contentDir, 'uploads', source));
+
+    assert.equal(await findImageVariant(config, `${source}/320.webp`), undefined);
+    assert.equal(existsSync(path.join(config.dataDir, 'images', source)), false);
+  });
+
+  it('are not written back by an encode that was running when they were removed', async () => {
+    const config = await site({ imageWidths: [320, 640, 960] });
+    const source = await upload(config, '2026/09/photo.png', rectangle(2000, 1500).png());
+
+    const generation = generateImageVariants(config, source);
+    const removal = removeImageVariants(config, source);
+    await Promise.all([generation, removal]);
+
+    assert.equal(existsSync(path.join(config.dataDir, 'images', source)), false);
   });
 });

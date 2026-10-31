@@ -222,9 +222,9 @@ export async function deleteUpload(options: DeleteUploadOptions): Promise<boolea
     return false;
   }
 
-  // After the original, so a hook that throws leaves a file with stale
-  // variants rather than variants with no file: the first is repairable by
-  // regenerating, the second is orphaned bytes.
+  // After the original, so the upload is gone even when the hook throws. Any
+  // derived file it leaves behind is refused and removed the first time it
+  // is asked for.
   await options.removeDerived?.(options.path);
   if (readAltTexts(options.contentDir).has(options.path)) {
     await writeAltText(options.contentDir, options.path, undefined);
