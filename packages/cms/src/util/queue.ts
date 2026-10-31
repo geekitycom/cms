@@ -28,4 +28,31 @@ export function createSerialQueue(): SerialQueue {
   };
 }
 
+/** Runs jobs at most `limit` at a time, the rest waiting their turn in order. */
+export interface ConcurrencyLimit {
+  run<T>(job: () => Promise<T>): Promise<T>;
+}
+
+export function createConcurrencyLimit(limit: number): ConcurrencyLimit {
+  let running = 0;
+  const waiting: (() => void)[] = [];
+
+  return {
+    async run(job) {
+      if (running >= limit) {
+        await new Promise<void>((resolve) => {
+          waiting.push(resolve);
+        });
+      }
+      running += 1;
+      try {
+        return await job();
+      } finally {
+        running -= 1;
+        waiting.shift()?.();
+      }
+    },
+  };
+}
+
 function ignore(): void {}

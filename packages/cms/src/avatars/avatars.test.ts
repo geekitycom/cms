@@ -20,7 +20,9 @@ import { nextEvent } from '../__testing__/wait.ts';
 import { AVATARS, dataFolder } from '../files/data-files.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../util/public-address.ts';
+import type { AvatarService } from './avatars.ts';
 import {
+  AVATAR_FETCH_LIMIT,
   AVATAR_MAX_AGE_MS,
   AVATAR_MAX_BYTES,
   AVATAR_SIZE,
@@ -75,6 +77,7 @@ before(() => {
     const request = new Request(input, init);
     requested.push(request.url);
     if (hanging.has(request.url)) {
+      if (request.signal.aborted) return Promise.reject(new Error('aborted'));
       heardHanging?.();
       return new Promise<Response>((resolve, reject) => {
         held.set(request.url, resolve);
@@ -547,17 +550,100 @@ describe('a picture that cannot be written', () => {
   });
 });
 
+/** A service over `sources`, none cached, with a timer the test fires by hand. */
+function serviceOver(
+  sources: readonly string[],
+  dataDir: string,
+  firstViewWaitMs: number,
+): { avatars: AvatarService; tick: () => void; listed: () => number } {
+  let ticks: (() => void) | undefined;
+  let listed = 0;
+  const avatars = createAvatarService({
+    admin: {
+      isAvatarSource: (source) => sources.includes(source),
+      listAvatarSources: () => {
+        listed += 1;
+        return [...sources];
+      },
+    },
+    config: { dataDir, hostLookup: lookup, now: () => new Date() },
+    timers: {
+      set: (callback) => {
+        ticks = callback;
+        return 'handle';
+      },
+      clear: () => {
+        ticks = undefined;
+      },
+    },
+    firstViewWaitMs,
+    logger: { warn: () => undefined },
+  });
+  return { avatars, tick: () => ticks?.(), listed: () => listed };
+}
+
+function whenHanging(): Promise<void> {
+  return nextEvent('an avatar fetch', (done) => {
+    heardHanging = done;
+    return () => {
+      heardHanging = undefined;
+    };
+  });
+}
+
+function releaseAll(): void {
+  for (const release of held.values()) release(new Response('missing', { status: 404 }));
+  held.clear();
+}
+
+describe('fetching at once', () => {
+  it('starts no more fetches than the limit, however many requests arrive', async () => {
+    const sources = Array.from(
+      { length: AVATAR_FETCH_LIMIT + 3 },
+      (_, index) => `https://remote.example/avatars/${String(index)}.png`,
+    );
+    hanging = new Set(sources);
+    const { avatars } = serviceOver(sources, await box.dir('geekity-avatars-cap-'), 50);
+
+    const answers = await Promise.all(sources.map((source) => avatars.answer(source)));
+
+    assert.deepEqual(
+      answers.map((answer) => answer.kind),
+      sources.map(() => 'placeholder'),
+    );
+    assert.equal(requested.length, AVATAR_FETCH_LIMIT);
+    releaseAll();
+    await avatars.settled();
+  });
+});
+
+describe('a timer tick while a sweep runs', () => {
+  it('is skipped rather than queued behind it', async () => {
+    hanging = new Set([ADA_ICON]);
+    const { avatars, tick, listed } = serviceOver(
+      [ADA_ICON],
+      await box.dir('geekity-avatars-tick-'),
+      50,
+    );
+    const asking = whenHanging();
+    avatars.start();
+    await asking;
+
+    tick();
+    tick();
+    avatars.stop();
+    await avatars.settled();
+
+    assert.equal(listed(), 1, 'one sweep ran');
+  });
+});
+
 describe('stopping the sweep', () => {
   it('ends the sweep in flight without marking the picture it cut off as failed', async () => {
     const { cms, dataDir } = await site();
     hanging = new Set([ADA_ICON, GRACE_PHOTO, IDLE_ICON]);
 
-    const asking = nextEvent('an avatar fetch', (done) => {
-      heardHanging = done;
-      return () => {
-        heardHanging = undefined;
-      };
-    });
+    const asking = whenHanging();
     cms.avatars.start();
     await asking;
     cms.avatars.stop();
@@ -569,7 +655,7 @@ describe('stopping the sweep', () => {
       },
       1000,
     );
-    assert.equal(requested.length, 1, 'no other picture was asked for');
+    assert.ok(requested.length <= 2, 'no picture beyond the ones in flight was asked for');
     const cached = await readdir(dataFolder(dataDir, AVATARS)).catch(() => []);
     assert.deepEqual(
       cached.filter((name) => name.endsWith('.failed')),

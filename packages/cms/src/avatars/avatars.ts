@@ -14,7 +14,7 @@ import type { UploadMediaType } from '../files/upload-types.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { messageOf } from '../util/errors.ts';
-import { createSerialQueue } from '../util/queue.ts';
+import { createConcurrencyLimit, createSerialQueue } from '../util/queue.ts';
 import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
 
 /**
@@ -70,8 +70,14 @@ export const AVATAR_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 /** How long a URL that could not be fetched is left alone. */
 export const AVATAR_RETRY_MS = 60 * 60 * 1000;
 
-/** How often the sweep runs. */
+/** How often the sweep runs. A tick while a sweep is still running is skipped. */
 export const AVATAR_SWEEP_MS = 6 * 60 * 60 * 1000;
+
+/** How many pictures are fetched and decoded at once, requests and sweep together. */
+export const AVATAR_FETCH_LIMIT = 4;
+
+/** How many of those the sweep takes, so a page's first view still gets a slot. */
+const SWEEP_PARALLEL = 2;
 
 /** How long a browser keeps a picture, in seconds. */
 export const AVATAR_MAX_AGE_SECONDS = 86_400;
@@ -146,8 +152,8 @@ export interface AvatarService {
   answer(source: string): Promise<AvatarAnswer>;
   /**
    * Fetch every recorded avatar that is missing or older than
-   * {@link AVATAR_MAX_AGE_MS}, and delete every cached file no recorded URL
-   * names. Queued behind any sweep already running.
+   * {@link AVATAR_MAX_AGE_MS}, a few at a time, and delete every cached file
+   * no recorded URL names. Queued behind any sweep already running.
    */
   sweep(): Promise<void>;
   /** Sweep now and then every {@link AVATAR_SWEEP_MS}. Safe twice. */
@@ -168,6 +174,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
   const avatarFile = (name: string): string => dataPath(config.dataDir, AVATARS, name);
 
   const inFlight = new Map<string, Promise<boolean>>();
+  const fetches = createConcurrencyLimit(AVATAR_FETCH_LIMIT);
   const sweeps = createSerialQueue();
   let handle: unknown;
   let untilStopped = new AbortController();
@@ -175,19 +182,13 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
   const imageName = (source: string): string => `${hashOf(source)}.webp`;
   const failedName = (source: string): string => `${hashOf(source)}.failed`;
 
-  /** When a cache file was written, or `undefined` when there is none. */
-  async function writtenAt(name: string): Promise<number | undefined> {
+  /** How long ago a cache file was written, or `undefined` when there is none. */
+  async function ageOf(name: string): Promise<number | undefined> {
     try {
-      return (await stat(avatarFile(name))).mtimeMs;
+      return config.now().getTime() - (await stat(avatarFile(name))).mtimeMs;
     } catch {
       return undefined;
     }
-  }
-
-  /** How long ago a cache file was written, or `undefined` when there is none. */
-  async function ageOf(name: string): Promise<number | undefined> {
-    const at = await writtenAt(name);
-    return at === undefined ? undefined : config.now().getTime() - at;
   }
 
   /** Fetch one picture into the cache, once at a time per URL. A write that fails is a picture not had. */
@@ -195,7 +196,9 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
     const running = inFlight.get(source);
     if (running !== undefined) return running;
 
-    const started = fetchInto(source, untilStopped.signal)
+    const { signal } = untilStopped;
+    const started = fetches
+      .run(() => fetchInto(source, signal))
       .catch((thrown: unknown) => {
         logger.warn(`Could not keep the avatar at ${source}: ${messageOf(thrown)}`);
         return false;
@@ -224,22 +227,26 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
 
   async function sweepOnce(): Promise<void> {
     const { signal } = untilStopped;
-    const startedAt = config.now().getTime();
     const sources = admin.listAvatarSources();
-    const keep = new Set<string>();
 
-    for (const source of sources) {
-      if (signal.aborted) return;
-      keep.add(imageName(source));
-      keep.add(failedName(source));
-      if (webUrl(source) === undefined) continue;
+    let next = 0;
+    async function refreshDue(): Promise<void> {
+      while (!signal.aborted) {
+        const source = sources[next];
+        next += 1;
+        if (source === undefined) return;
+        if (webUrl(source) === undefined) continue;
 
-      const age = await ageOf(imageName(source));
-      if (age !== undefined && age < AVATAR_MAX_AGE_MS) continue;
-      const failedAge = await ageOf(failedName(source));
-      if (age === undefined && failedAge !== undefined && failedAge < AVATAR_RETRY_MS) continue;
-      await refresh(source);
+        const age = await ageOf(imageName(source));
+        if (age !== undefined && age < AVATAR_MAX_AGE_MS) continue;
+        const failedAge = await ageOf(failedName(source));
+        if (age === undefined && failedAge !== undefined && failedAge < AVATAR_RETRY_MS) continue;
+        if (signal.aborted) return;
+        await refresh(source);
+      }
     }
+    await Promise.all(Array.from({ length: SWEEP_PARALLEL }, refreshDue));
+    if (signal.aborted) return;
 
     let names: string[];
     try {
@@ -247,12 +254,14 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
     } catch {
       return;
     }
+    // Listed after the directory was read: a picture a request wrote while
+    // the sweep ran is there for a source recorded before it was written, so
+    // that source is in this list.
+    const keep = new Set(
+      admin.listAvatarSources().flatMap((source) => [imageName(source), failedName(source)]),
+    );
     for (const name of names) {
       if (keep.has(name) || name.endsWith('.tmp')) continue;
-      // A picture written since the sources were listed is one a request
-      // fetched for a source recorded after that, not one nobody shows.
-      const at = await writtenAt(name);
-      if (at !== undefined && at >= startedAt) continue;
       await rm(avatarFile(name), { force: true });
     }
   }
@@ -290,7 +299,9 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
       if (handle !== undefined) return;
       if (untilStopped.signal.aborted) untilStopped = new AbortController();
       void this.sweep();
-      handle = timers.set(() => void this.sweep(), AVATAR_SWEEP_MS);
+      handle = timers.set(() => {
+        if (sweeps.pending() === 0) void this.sweep();
+      }, AVATAR_SWEEP_MS);
     },
 
     stop() {
