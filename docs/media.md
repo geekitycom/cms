@@ -276,13 +276,15 @@ Uploading a PNG, JPEG, WebP or AVIF writes these files into
 `data/images/{yyyy}/{mm}/{name}{ext}/`:
 
 - one file per width per format, such as `320.webp`, `320.png` and `640.webp`
-- an `image.json` that records the original's intrinsic width and height and
-  everything derived from it
+- an `image.json` that records the original's intrinsic width and height,
+  everything derived from it, and a hash of the bytes it was derived from
 
 The widths are [`imageWidths`](configuration.md#uploads-and-images), which
 defaults to 11ty/image's own set. The CMS never upscales. It always adds the
 original's own width, so a wide display can pick a full-size copy that is not
-the unprocessed upload.
+the unprocessed upload. A format that cannot hold the full size gets its
+widest copy at its limit: WebP at 16383 pixels, AVIF at 16384 and JPEG at 65535
+in either dimension.
 
 The formats are [`imageFormats`](configuration.md#uploads-and-images) plus the
 original's own format. The `<img>` falls back to the original's format. The CMS
@@ -290,7 +292,9 @@ applies the EXIF orientation and drops the metadata, including the camera, the
 timestamp and the location.
 
 A GIF gets no variants and is served as stored. Resizing an animation would
-turn it into a still.
+turn it into a still. Neither does an image larger than 60 megapixels, nor
+one whose pixels sharp cannot decode. The CMS records that nothing could be
+derived and does not try again until the file changes.
 
 A post page renders the picture as:
 
@@ -345,7 +349,11 @@ The readers of those formats cannot resolve this site's derived files.
 `data/images/` is derived state. You can delete it at any time, the same as the
 SQLite index (decision-9). A request for a missing file rebuilds the whole set
 for that source and serves it. A request for a width or a format the site does
-not offer returns 404 and encodes nothing. The directory is inside `data/`, so
+not offer returns 404 and encodes nothing. Only the files the set lists are
+served, never `image.json` or a file still being written. When the upload is
+gone, a request for one of its derived files returns 404 and removes them. When
+the upload is replaced in place, the next request derives the set again from
+the new bytes. The directory is inside `data/`, so
 git ignores it, the content sync does not see it, and an Eleventy build does
 not read it.
 
@@ -392,6 +400,7 @@ It returns `undefined` and writes nothing for:
 - a PDF
 - a text file
 - an upload that does not exist
+- an image over 60 megapixels, or one whose pixels cannot be decoded
 - a site with `imageOptimization` off
 
 In each of these cases the site serves the original.
@@ -401,7 +410,7 @@ In each of these cases the site serves the original.
 | `generateImageVariants`            | Derive the whole set and write the sidecar. Two callers at once share one encode.    |
 | `describeImage`                    | The record, synchronously and cached, for a renderer that must not open a file.      |
 | `findImageVariant`                 | One derived file by request path, generating it when it is missing.                  |
-| `removeImageVariants`              | Take a source's derived directory away.                                              |
+| `removeImageVariants`              | Take a source's derived directory away, after any encode writing into it.            |
 | `responsiveImages(html, describe)` | Rewrite `<img src="/uploads/…">` as `<picture>`. Pure: hand it any lookup.           |
 | `siteImageMarkup(config, html)`    | The same, over one site's own records, deriving in the background for a record miss. |
 | `siteIcons(config, setting)`       | The head's icon links for a site's icon setting: `{ rel, sizes, href }`, or none.    |
@@ -416,14 +425,19 @@ The site's icons are derived copies of the same kind. `siteIcons` returns the
 head's links to them. There are three square PNGs: `icon` at 32 and 16 pixels,
 and `apple-touch-icon` at 180. The CMS crops them from the middle of the site's
 icon. The site's icon is the `icon` that Settings > General writes, or else a
-hand-set `avatar`. The CMS encodes each PNG the first time a browser requests
-it.
+hand-set `avatar`. The CMS draws every icon at once, records them in
+`icons.json` with a hash of the bytes they came from, and draws them again when
+that upload changes. It draws them when Settings > General is shown, or in the
+background on the first page render that needs them. Until they are drawn, the
+head links no icon. Icon names are served only under the site icon's upload.
 
 `siteIcons` returns an empty list in these cases, and the packaged theme then
 links no icon:
 
 - the site has no icon
-- the icon is a file that no icon can be made from
+- the icon is a file that no icon can be made from, or that is missing or
+  cannot be decoded
+- the icons have not been drawn yet
 - `imageOptimization` is off
 
 A head never links a URL that this server would answer with 404.

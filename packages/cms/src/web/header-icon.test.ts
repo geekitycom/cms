@@ -5,6 +5,7 @@ import { after, describe, it } from 'node:test';
 
 import sharp from 'sharp';
 
+import { deriveSiteIcons, iconSetting } from '../images/icons.ts';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 
@@ -38,7 +39,11 @@ async function site(
     await writeFile(file, contents);
   }
 
-  return box.open({ contentDir, dataDir, ...config });
+  const cms = await box.open({ contentDir, dataDir, ...config });
+  // A site's icons are linked once they have been drawn, which the first
+  // render after the setting changes starts in the background.
+  await deriveSiteIcons(cms.config, iconSetting(settings));
+  return cms;
 }
 
 async function png(): Promise<Buffer> {

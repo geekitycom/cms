@@ -7,8 +7,16 @@ import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts
 import { writeFileAtomically } from '../files/atomic.ts';
 import { encodePath } from '../util/url.ts';
 import { ICON_SOURCES, parseIconSetting } from './icon-setting.ts';
-import { DECODE_OPTIONS, decodable, MAX_INPUT_PIXELS, sourceVersion, versioned } from './paths.ts';
+import {
+  DECODE_OPTIONS,
+  decodable,
+  locateUpload,
+  MAX_INPUT_PIXELS,
+  sourceVersion,
+  versioned,
+} from './paths.ts';
 import type { ImageConfig, Upload } from './paths.ts';
+import { deriveSet, settledSet } from './derived-sets.ts';
 import type { DerivedKind } from './derived-sets.ts';
 import { messageOf } from '../util/errors.ts';
 
@@ -27,10 +35,9 @@ import { messageOf } from '../util/errors.ts';
  * `icon-32.png` rather than `32.png` so it can never be confused with the
  * width of that number.
  *
- * Nothing is derived until somebody asks: the head and the manifest link URLs,
- * and the first browser to follow one encodes it. That keeps the sizes out of
- * every upload's variant set, where they would turn up in a `srcset` as
- * candidates nobody wants.
+ * They are their own derived set, drawn only from the site icon's upload,
+ * which keeps the sizes out of every upload's variant set, where they would
+ * turn up in a `srcset` as candidates nobody wants.
  */
 
 /** One icon as the head links it. */
@@ -138,8 +145,7 @@ export function iconSetting(site: { icon?: unknown; avatar?: unknown }): string 
  * directory, or `undefined` when there is none to derive from.
  *
  * None when the setting is empty, names no upload of this site, names a file
- * no icon can be made of, or when image optimization is off, because nothing
- * may link a file this server would answer 404 for.
+ * no icon can be made of, or when image optimization is off.
  */
 export function siteIconSource(
   config: ImageConfig,
@@ -148,12 +154,58 @@ export function siteIconSource(
   return config.imageOptimization ? iconSource(setting) : undefined;
 }
 
+/**
+ * The site icon's upload and the version of its bytes, once the icons have
+ * been drawn from those bytes.
+ *
+ * Nothing may link a file this server would answer 404 for, and only drawing
+ * the icons shows whether the upload is there and can be read. So a version
+ * not drawn yet is drawn in the background and links nothing until it is,
+ * the way a page's images stay plain until their variants exist.
+ */
+function drawnIcons(
+  config: ImageConfig,
+  setting: string | undefined,
+): { source: string; version: string } | undefined {
+  const named = siteIconSource(config, setting);
+  const upload = named === undefined ? undefined : locateUpload(config, named);
+  if (upload === undefined) return undefined;
+  const version = sourceVersion(config, upload.source);
+  if (version === undefined) return undefined;
+
+  const known = settledSet(SITE_ICONS, upload, version);
+  if (known === undefined) {
+    void deriveSet(SITE_ICONS, upload, version).catch((error: unknown) => {
+      console.warn(`Could not derive the site's icons from ${upload.source}: ${messageOf(error)}`);
+    });
+    return undefined;
+  }
+  return known.set === undefined ? undefined : { source: upload.source, version };
+}
+
+/**
+ * Draw the site's icons now if the bytes the setting names have not been
+ * drawn from, so a page that shows them right after the setting changes has
+ * them to show.
+ */
+export async function deriveSiteIcons(
+  config: ImageConfig,
+  setting: string | undefined,
+): Promise<void> {
+  const named = siteIconSource(config, setting);
+  const upload = named === undefined ? undefined : locateUpload(config, named);
+  if (upload === undefined) return;
+  const version = sourceVersion(config, upload.source);
+  if (version === undefined || settledSet(SITE_ICONS, upload, version) !== undefined) return;
+  await deriveSet(SITE_ICONS, upload, version);
+}
+
 /** The icons the head of a site whose icon setting is this links, or none at all. */
 export function siteIcons(config: ImageConfig, setting: string | undefined): SiteIcon[] {
-  const source = siteIconSource(config, setting);
-  if (source === undefined) return [];
+  const drawn = drawnIcons(config, setting);
+  if (drawn === undefined) return [];
 
-  const version = sourceVersion(config, source);
+  const { source, version } = drawn;
   const svg: SiteIcon[] = isSvg(source)
     ? [{ rel: 'icon', sizes: '', type: 'image/svg+xml', href: uploadHref(source) }]
     : [];
@@ -170,10 +222,10 @@ export function siteIcons(config: ImageConfig, setting: string | undefined): Sit
 
 /** The icons a web app manifest lists for a site whose icon setting is this. */
 export function manifestIcons(config: ImageConfig, setting: string | undefined): ManifestIcon[] {
-  const source = siteIconSource(config, setting);
-  if (source === undefined) return [];
+  const drawn = drawnIcons(config, setting);
+  if (drawn === undefined) return [];
 
-  const version = sourceVersion(config, source);
+  const { source, version } = drawn;
   const svg: ManifestIcon[] = isSvg(source)
     ? [{ src: uploadHref(source), sizes: 'any', type: 'image/svg+xml' }]
     : [];
