@@ -28,6 +28,7 @@ describe('where the Federation settings live', () => {
       [
         ['followers', 'Followers', '/admin/federation'],
         ['settings', 'Settings', '/admin/federation/settings'],
+        ['resend', 'Resend', '/admin/federation/resend'],
       ],
     );
     assert.equal(

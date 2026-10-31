@@ -175,16 +175,31 @@ describe('the health widget (TASK-450)', () => {
     const html = await dashboard(agent);
 
     assert.deepEqual(rows(html), [
-      ['Resend failed', '/admin/federation#resend', '2'],
+      ['Resend failed', '/admin/federation/resend', '2'],
       ['Metadata sweep failed', '/admin/tools/maintenance#strip-metadata', '1'],
       ['Site export running for over an hour', '/admin/tools/export', '1'],
-      ['Failed federation deliveries', '/admin/federation#delivery', '2'],
+      ['Failed federation deliveries', '/admin/federation#failures', '2'],
       ['Federation deliveries being retried', '/admin/federation#delivery', '1'],
       ['Failed webmentions', '/admin/federation#delivery', '1'],
     ]);
     const words = text(html);
     assert.ok(words.indexOf('At a glance') < words.indexOf('Needs attention'), words);
     assert.ok(words.indexOf('Needs attention') < words.indexOf('Activity'), words);
+  });
+
+  it('leaves out a failure a later activity about the same post reached that recipient with', async () => {
+    const { cms, agent } = await site();
+    cms.admin.recordDelivery(delivery({ status: 'failed', error: '400', attemptedAt: ago(3) }));
+    cms.admin.recordDelivery(
+      delivery({
+        activityId: 'https://blog.example/activities/2',
+        activityType: 'Update',
+        status: 'sent',
+        attemptedAt: ago(2),
+      }),
+    );
+
+    assert.doesNotMatch(await dashboard(agent), /Needs attention/);
   });
 
   it('leaves out what a later retry or run put right (AC #3)', async () => {

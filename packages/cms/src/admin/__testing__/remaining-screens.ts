@@ -41,6 +41,7 @@ export const REMAINING_SCREENS = {
   settingsDiscussion: '/admin/settings/discussion',
   settingsEmail: '/admin/settings/email',
   settingsPrivacy: '/admin/settings/privacy',
+  federationResend: '/admin/federation/resend',
   federationSettings: '/admin/federation/settings',
   tools: '/admin/tools',
   personalData: '/admin/tools/personal-data',

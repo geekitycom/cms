@@ -111,6 +111,7 @@ const WORDS: Record<RemainingScreen, readonly string[]> = {
     'Send test email',
   ],
   settingsPrivacy: ['Location on posts', 'Uploads'],
+  federationResend: ['Resend', 'Resend every announced post'],
   federationSettings: ['Relays'],
   tools: ['Documents', 'Followers', 'Inbox activities', 'Comments', 'Rebuild the index'],
   toolsConfirm: ['Rebuild the index now?', 'Rebuild it', 'Cancel'],

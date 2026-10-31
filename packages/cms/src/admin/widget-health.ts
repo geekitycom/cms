@@ -6,18 +6,16 @@ import type { JobStatus } from '../jobs/types.ts';
 import type { PluginScreenCell } from '../plugin.ts';
 import { countRetryingDeliveries } from '../store/queue-database.ts';
 import { EXPORT_PATH } from './export.ts';
-import { DELIVERY_PANEL, RESEND_PANEL } from './federation.ts';
+import { DELIVERY_PANEL, FAILURES_PANEL, FAILURE_WINDOW_MS, RESEND_PANEL } from './federation.ts';
 import { MAINTENANCE_PATH, STRIP_METADATA_PANEL } from './maintenance.ts';
 import type { CoreWidget } from './widgets.ts';
-
-const FAILURES_SINCE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const LONG_RUNNING_MS = 60 * 60 * 1000;
 
 const JOB_PANELS: Readonly<Record<string, { readonly label: string; readonly href: string }>> = {
   [STRIP_METADATA_JOB.name]: { label: 'Metadata sweep', href: STRIP_METADATA_PANEL },
   [RESEND_JOB.name]: { label: 'Resend', href: RESEND_PANEL },
-  [RETRY_DELIVERIES_JOB.name]: { label: 'Retry deliveries', href: DELIVERY_PANEL },
+  [RETRY_DELIVERIES_JOB.name]: { label: 'Retry deliveries', href: FAILURES_PANEL },
   [SITE_EXPORT_JOB_NAME]: { label: 'Site export', href: EXPORT_PATH },
 };
 
@@ -78,7 +76,7 @@ export const HEALTH_WIDGET: CoreWidget = {
   placement: 'alerts',
   async load(vars) {
     const now = vars.config.now().getTime();
-    const since = new Date(now - FAILURES_SINCE_MS).toISOString();
+    const since = new Date(now - FAILURE_WINDOW_MS).toISOString();
     const jobs = await vars.jobs.list(['failed', 'interrupted', 'finished', 'running']);
 
     const problems: Problem[] = [
@@ -86,8 +84,8 @@ export const HEALTH_WIDGET: CoreWidget = {
       ...longRunningJobs(jobs, new Date(now - LONG_RUNNING_MS).toISOString()),
       {
         text: 'Failed federation deliveries',
-        href: DELIVERY_PANEL,
-        count: vars.admin.countFailedDeliveriesSince(since),
+        href: FAILURES_PANEL,
+        count: vars.admin.listStandingFailuresSince(since).length,
       },
       {
         text: 'Federation deliveries being retried',

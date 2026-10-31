@@ -12,6 +12,8 @@ import { absoluteUrl } from '../util/url.ts';
 import { avatarUrl } from '../federation/actor.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 import { RESEND_JOB } from '../federation/resend-job.ts';
+import type { ResendActivity, ResendPost } from '../federation/resend-job.ts';
+import { RETRY_DELIVERIES_JOB } from '../federation/retry-job.ts';
 import { finishedResult } from '../jobs/types.ts';
 import {
   selectedTargets,
@@ -60,14 +62,21 @@ export const FEDERATION_PATH = `${ADMIN_PREFIX}/federation`;
  */
 export const FEDERATION_SETTINGS_PATH = `${FEDERATION_PATH}/settings`;
 
-/** Where a post's Resend button posts. */
+/** Federation > Resend, which is also where a post's Resend button posts. */
 export const RESEND_PATH = `${FEDERATION_PATH}/resend`;
 
 export const RESEND_ALL_PATH = `${FEDERATION_PATH}/resend-all`;
 
-export const RESEND_PANEL = `${FEDERATION_PATH}#resend`;
+export const RESEND_PANEL = RESEND_PATH;
 
 export const DELIVERY_PANEL = `${FEDERATION_PATH}#delivery`;
+
+export const FAILURES_PANEL = `${FEDERATION_PATH}#failures`;
+
+export const FAILURE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Where a failed delivery's Retry button posts. */
+export const RETRY_PATH = `${FEDERATION_PATH}/retry`;
 
 const RESEND_BUSY = 'A resend is already queued or running. Nothing new was queued.';
 
@@ -75,7 +84,7 @@ const RESEND_BUSY = 'A resend is already queued or running. Nothing new was queu
 export const RELAY_RETRY_PATH = `${FEDERATION_PATH}/relays/retry`;
 
 /** The fields the screen's forms submit. */
-export const FEDERATION_FIELDS = { slug: 'slug', relay: 'relay' } as const;
+export const FEDERATION_FIELDS = { slug: 'slug', relay: 'relay', inbox: 'inbox' } as const;
 
 /** What each relay state reads as on the screen. */
 export const RELAY_STATE_LABELS: Readonly<Record<RelayState, string>> = {
@@ -122,8 +131,8 @@ export function mountFederationScreen(
   const { render } = options;
 
   app.get(FEDERATION_PATH, async (c) => {
-    const latestResend = await c.var.jobs.latest(RESEND_JOB.name);
-    const report = finishedResult(RESEND_JOB, latestResend);
+    const latestRetry = await c.var.jobs.latest(RETRY_DELIVERIES_JOB.name);
+    const failuresSince = new Date(c.var.config.now().getTime() - FAILURE_WINDOW_MS).toISOString();
     const admin = c.var.admin;
     const baseUrl = c.var.config.baseUrl;
     const cited: CitedPageReader = (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart);
@@ -140,13 +149,14 @@ export function mountFederationScreen(
       section: 'federation',
       child: 'followers',
       resendUrl: RESEND_PATH,
-      resendAllUrl: RESEND_ALL_PATH,
-      resend: jobStatusView(latestResend),
+      resendPageUrl: RESEND_PATH,
       federationUrl: FEDERATION_PATH,
-      resendResult: report && {
-        sent: report.posts.filter((post) => post.resent),
-        nothing: report.posts.flatMap((post) => (post.resent ? [] : [post.slug])),
-      },
+      retryUrl: RETRY_PATH,
+      retry: jobStatusView(latestRetry),
+      retryResult: finishedResult(RETRY_DELIVERIES_JOB, latestRetry),
+      failures: admin
+        .listStandingFailuresSince(failuresSince)
+        .map((failure) => ({ ...failure, post: post(failure.objectId) })),
       fields: FEDERATION_FIELDS,
       actors: users.map((user) =>
         actorSummary(user, {
@@ -192,6 +202,19 @@ export function mountFederationScreen(
     });
   });
 
+  app.get(RESEND_PATH, async (c) => {
+    const latest = await c.var.jobs.latest(RESEND_JOB.name);
+    const report = finishedResult(RESEND_JOB, latest);
+    return render(c, ADMIN_TEMPLATES.federationResend, {
+      section: 'federation',
+      child: 'resend',
+      resendUrl: RESEND_PATH,
+      resendAllUrl: RESEND_ALL_PATH,
+      resend: jobStatusView(latest),
+      resendResult: report && resendResult(report.posts),
+    });
+  });
+
   /**
    * Send one relay's `Follow` again.
    *
@@ -216,6 +239,26 @@ export function mountFederationScreen(
     }
 
     return c.redirect(FEDERATION_PATH, 303);
+  });
+
+  app.post(RETRY_PATH, async (c) => {
+    const body = await c.req.parseBody();
+    const slug = body[FEDERATION_FIELDS.slug];
+    const inbox = body[FEDERATION_FIELDS.inbox];
+    if (typeof slug !== 'string' || slug === '' || typeof inbox !== 'string' || inbox === '') {
+      flash(c, 'error', 'That form named no post and inbox to retry, so nothing was sent.');
+      return c.redirect(FAILURES_PANEL, 303);
+    }
+    return queueJobFromForm(
+      c,
+      RETRY_DELIVERIES_JOB,
+      { slug, inbox },
+      {
+        panel: FAILURES_PANEL,
+        queued: `Queued a retry of ${slug} to ${inbox}. Its progress is below.`,
+        busy: 'A retry is already queued or running. Nothing new was queued.',
+      },
+    );
   });
 
   /**
@@ -256,6 +299,30 @@ export function mountFederationScreen(
       },
     ),
   );
+}
+
+/** What the resend panel shows of a finished resend. */
+interface ResendResult {
+  readonly sent: readonly Extract<ResendPost, { resent: true }>[];
+  readonly nothing: readonly string[];
+  readonly totals: Pick<ResendActivity, 'inboxes' | 'reached' | 'queued' | 'failed'>;
+}
+
+function resendResult(posts: readonly ResendPost[]): ResendResult {
+  const sent = posts.filter((post) => post.resent);
+  const totals = { inboxes: 0, reached: 0, queued: 0, failed: 0 };
+  for (const { activity } of sent) {
+    if (activity === null || activity.heldByDevMode) continue;
+    totals.inboxes += activity.inboxes;
+    totals.reached += activity.reached;
+    totals.queued += activity.queued;
+    totals.failed += activity.failed;
+  }
+  return {
+    sent,
+    nothing: posts.flatMap((post) => (post.resent ? [] : [post.slug])),
+    totals,
+  };
 }
 
 /** One post the fediverse holds a copy of, and how it last landed. */

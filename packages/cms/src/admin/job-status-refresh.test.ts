@@ -58,10 +58,10 @@ const SCREENS = [
     refresh: '/admin/tools/export',
   },
   {
-    screen: 'Federation',
-    url: '/admin/federation',
+    screen: 'Federation > Resend',
+    url: '/admin/federation/resend',
     job: RESEND_JOB.name,
-    refresh: '/admin/federation#resend',
+    refresh: '/admin/federation/resend',
   },
   {
     screen: 'the media library notice',
