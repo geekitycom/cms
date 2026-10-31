@@ -203,6 +203,8 @@ export function reviewFrontMatter(review: Review | undefined): {
 export interface ReviewHtmlOptions {
   readonly library?: AltTextLibrary | undefined;
   readonly baseUrl?: string | undefined;
+  /** The id of a popover that shows the item's picture full size when it is pressed. */
+  readonly enlarge?: string | undefined;
 }
 
 export function reviewHtml(review: Review | undefined, options: ReviewHtmlOptions = {}): string {
@@ -245,7 +247,7 @@ export function reviewHtml(review: Review | undefined, options: ReviewHtmlOption
   ].filter((part) => part !== undefined);
   return (
     `<div class="review-item p-item ${root}">` +
-    (item.photo === undefined ? '' : picture(item.photo, options)) +
+    (item.photo === undefined ? '' : picture(item.photo, words.picture, options)) +
     `<p class="review-of">Review of ${linked}` +
     (about.length === 0 ? '' : ` (${about.join(', ')})`) +
     by +
@@ -253,6 +255,9 @@ export function reviewHtml(review: Review | undefined, options: ReviewHtmlOption
     '</p>' +
     (details.length === 0 ? '' : `<p class="review-details">${details.join('. ')}.</p>`) +
     '</div>\n' +
+    (item.photo === undefined || options.enlarge === undefined
+      ? ''
+      : fullPicture(item.photo, options.enlarge, options)) +
     (rating === undefined ? '' : ratingHtml(rating))
   );
 }
@@ -348,13 +353,31 @@ function address(
   return parts.length === 0 ? undefined : parts.join(', ');
 }
 
-function picture(photo: Photo, { library, baseUrl }: ReviewHtmlOptions): string {
-  const src = baseUrl === undefined ? photo.url : absoluteUrl(photo.url, baseUrl);
-  const alt = photoAlt(photo, library ?? new Map()) ?? '';
+function picture(photo: Photo, word: string, options: ReviewHtmlOptions): string {
+  const img = `<img class="u-photo" src="${escapeAttribute(pictureSrc(photo, options))}" alt="${escapeAttribute(pictureAlt(photo, options))}">`;
+  if (options.enlarge === undefined) return `<span class="review-picture">${img}</span>`;
   return (
-    `<span class="review-picture"><img class="u-photo" src="${escapeAttribute(src)}"` +
-    ` alt="${escapeAttribute(alt)}"></span>`
+    `<span class="review-picture"><button type="button" class="review-picture-open"` +
+    ` popovertarget="${escapeAttribute(options.enlarge)}"` +
+    ` aria-label="Show the ${escapeAttribute(word.toLowerCase())} full size">${img}</button></span>`
   );
+}
+
+function fullPicture(photo: Photo, id: string, options: ReviewHtmlOptions): string {
+  return (
+    `<div class="review-picture-full" id="${escapeAttribute(id)}" popover>` +
+    `<img src="${escapeAttribute(pictureSrc(photo, options))}" alt="${escapeAttribute(pictureAlt(photo, options))}" sizes="90vw" loading="lazy">` +
+    `<button type="button" class="review-picture-close" popovertarget="${escapeAttribute(id)}" popovertargetaction="hide">Close</button>` +
+    '</div>\n'
+  );
+}
+
+function pictureSrc(photo: Photo, { baseUrl }: ReviewHtmlOptions): string {
+  return baseUrl === undefined ? photo.url : absoluteUrl(photo.url, baseUrl);
+}
+
+function pictureAlt(photo: Photo, { library }: ReviewHtmlOptions): string {
+  return photoAlt(photo, library ?? new Map()) ?? '';
 }
 
 function uidLabel(uid: string): string {

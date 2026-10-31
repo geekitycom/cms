@@ -153,7 +153,7 @@ describe('a review’s page (TASK-432)', () => {
         html,
       )?.[0];
     assert.ok(block !== undefined, 'the review block is on the page');
-    assert.match(block, /<span class="review-picture"><picture>/);
+    assert.match(block, /<span class="review-picture"><button [^>]*><picture>/);
     assert.match(block, /<img [^>]*sizes="8rem"/);
     assert.match(
       text(block),
@@ -161,6 +161,39 @@ describe('a review’s page (TASK-432)', () => {
     );
     assert.match(text(block), /Watched on 18 October 2026/);
     assert.doesNotMatch(html, /class="post-photos"/);
+  });
+
+  it('opens the picture full size in a popover when it is pressed', async () => {
+    const html = await get('/2026/10/dune/');
+    const button =
+      /<button type="button" class="review-picture-open" popovertarget="([^"]+)" aria-label="([^"]+)">/.exec(
+        html,
+      );
+    assert.ok(button !== null, 'the picture is a button');
+    const [, id, label] = button;
+    assert.equal(label, 'Show the poster full size');
+    const popover = new RegExp(
+      `<div class="review-picture-full" id="${id ?? ''}" popover>[\\s\\S]*?</div>`,
+    ).exec(html)?.[0];
+    assert.ok(popover !== undefined, 'the popover is on the page');
+    assert.match(popover, new RegExp(`<img [^>]*alt="${ALT}"`));
+    assert.match(popover, /<img [^>]*sizes="90vw"/);
+    assert.match(popover, /<button type="button" [^>]*popovertargetaction="hide"/);
+    assert.doesNotMatch(popover, /u-photo/);
+    const review = reviewOn(html, `${BASE}/2026/10/dune/`);
+    const [item] = review.properties['item'] as Parsed[];
+    assert.equal((item?.properties['photo'] ?? []).length, 1, 'the item has one photo');
+  });
+
+  it('gives each listed review its own popover', async () => {
+    const html = await get('/');
+    const ids = [...html.matchAll(/popovertarget="([^"]+)"/g)].map((match) => match[1]);
+    const popovers = [...html.matchAll(/class="review-picture-full" id="([^"]+)"/g)].map(
+      (match) => match[1],
+    );
+    assert.ok(popovers.length > 0, 'the listed review has a popover');
+    assert.equal(new Set(popovers).size, popovers.length, 'no two popovers share an id');
+    for (const id of popovers) assert.ok(ids.includes(id));
   });
 
   it('shows the rating as stars hidden from a screen reader, and as words', async () => {

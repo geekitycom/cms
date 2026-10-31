@@ -1074,6 +1074,30 @@
     @apply block h-auto max-h-48 w-auto max-w-32 rounded-sm;
   }
 
+  .review-picture-open {
+    @apply block cursor-zoom-in rounded-sm border-0 bg-transparent p-0;
+  }
+
+  .review-picture-full {
+    @apply m-auto flex-col items-center gap-3 border-0 bg-transparent p-0;
+  }
+
+  .review-picture-full:popover-open {
+    @apply flex;
+  }
+
+  .review-picture-full::backdrop {
+    background: rgb(0 0 0 / 0.8);
+  }
+
+  .review-picture-full img {
+    @apply block h-auto max-h-[85vh] w-auto max-w-[90vw] rounded-sm;
+  }
+
+  .review-picture-close {
+    @apply bg-paper text-ink cursor-pointer rounded-sm border-0 px-3 py-1 font-sans text-sm;
+  }
+
   .review-of {
     @apply text-base;
   }

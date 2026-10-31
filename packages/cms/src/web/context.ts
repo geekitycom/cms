@@ -438,12 +438,15 @@ function reviewContext(
 ): DocumentContext['review'] {
   const review = reviewOf(document.extra);
   if (review === undefined) return undefined;
+  const enlarge = `review-picture-${document.slug}`;
   const html =
     images === undefined
-      ? reviewHtml(review)
-      : siteImageMarkup(images, reviewHtml(review, { library: readAltTexts(images.contentDir) }), {
-          sizes: '8rem',
-        });
+      ? reviewHtml(review, { enlarge })
+      : siteImageMarkup(
+          images,
+          reviewHtml(review, { library: readAltTexts(images.contentDir), enlarge }),
+          { sizes: '8rem' },
+        );
   return {
     item: review.item,
     kindLabel: REVIEW_KIND_WORDS[review.item.kind].label,
