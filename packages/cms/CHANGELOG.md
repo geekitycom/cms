@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.49.0](https://github.com/geekitycom/cms/compare/v0.48.1...v0.49.0) (2026-10-31)
+
+
+### Features
+
+* **cms:** accept the Delete of an account whose key is gone ([9e0b2d1](https://github.com/geekitycom/cms/commit/9e0b2d14d17f196805ccfc4b3a546f4f4005f224))
+
+
+### Bug Fixes
+
+* **cms:** count a duplicate-delivery answer as delivered ([f68272b](https://github.com/geekitycom/cms/commit/f68272b401d0c8eef017dc909ee91c1e28b2d0f1))
+* **cms:** preview each post kind the way a save would write it ([c70a0ba](https://github.com/geekitycom/cms/commit/c70a0baa0d91d810691bbc5282208bf0499ae7bf))
+* **cms:** send no inReplyTo for a reply to a page off the fediverse ([db42875](https://github.com/geekitycom/cms/commit/db42875f32aab1dd62fa9155d7e187c3a0a53d6c))
+* **cms:** sign the shared inbox's key fetches ([d2180a6](https://github.com/geekitycom/cms/commit/d2180a6f05acb7c7b4026ab933cd4f2812162431))
+
 ## [0.48.1](https://github.com/geekitycom/cms/compare/v0.48.0...v0.48.1) (2026-10-30)
 
 
