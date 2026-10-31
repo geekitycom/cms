@@ -11,12 +11,7 @@ import { ADMIN_ASSET_PREFIX, ADMIN_PREFIX } from '../site/admin-paths.ts';
  */
 export const COMPRESSION_THRESHOLD = 1024;
 
-/**
- * Above this many bytes a response goes out as it is. Compressing means
- * holding the whole body in memory and encoding it again on every request,
- * which for a large upload costs far more than the bytes it saves.
- */
-export const COMPRESSION_LIMIT = 2 * 1024 * 1024;
+export const COMPRESSION_MAX_BYTES = 2 * 1024 * 1024;
 
 /** The encodings the CMS produces, in the order it prefers them. */
 type Encoding = 'br' | 'gzip';
@@ -90,7 +85,7 @@ export function compression(): MiddlewareHandler {
       plain = new Uint8Array(await response.arrayBuffer());
       size = plain.byteLength;
     }
-    if (size < COMPRESSION_THRESHOLD || size > COMPRESSION_LIMIT) {
+    if (size < COMPRESSION_THRESHOLD || size > COMPRESSION_MAX_BYTES) {
       c.res = new Response(plain ?? response.body, response);
       addVary(c.res.headers);
       return;

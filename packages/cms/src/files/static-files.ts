@@ -21,9 +21,7 @@ export interface StaticAsset {
  *
  * Returns `undefined` when the request escapes its root, names a directory, or
  * matches nothing. Traversal is checked after resolution rather than by
- * inspecting the request, so an encoded `..` cannot slip past, and again on
- * the file's real path, so a symbolic link cannot lead out of the root either.
- * The root itself may be a link.
+ * inspecting the request, so an encoded `..` cannot slip past.
  */
 export function findAsset(relative: string, roots: string[]): StaticAsset | undefined {
   const normalized = normalizeAssetPath(relative);

@@ -95,10 +95,6 @@ export function themeAssetUrl(relative: string, themeDirs: readonly string[]): s
   return `${pathname}?${ASSET_VERSION_PARAM}=${assetVersion(asset)}`;
 }
 
-/**
- * The answer to a GET or HEAD for a whole asset: a 304 when the request's
- * validators say the client's copy is current, the file otherwise.
- */
 export function assetReply(
   asset: StaticAsset,
   request: Headers,
@@ -110,20 +106,19 @@ export function assetReply(
 }
 
 /**
- * Whether a request's validators say the client's copy of this asset is
- * current. `If-None-Match` decides alone when it is sent; `If-Modified-Since`
- * is read only without it, as RFC 9110 §13.2.2 orders them.
+ * `If-None-Match` decides alone when it is sent; `If-Modified-Since` is read
+ * only without it, as RFC 9110 §13.2.2 orders them.
  */
 export function isNotModified(asset: StaticAsset, request: Headers): boolean {
   const ifNoneMatch = request.get('if-none-match');
   if (ifNoneMatch !== null) return matchesEtag(ifNoneMatch, asset.etag);
   const since = Date.parse(request.get('if-modified-since') ?? '');
-  return !Number.isNaN(since) && lastModified(asset) <= since;
+  return !Number.isNaN(since) && lastModifiedSecond(asset) <= since;
 }
 
 /** The response body and headers for an asset. */
 export function assetResponse(asset: StaticAsset, options: AssetResponseOptions = {}): Response {
-  return new Response(fileBody(asset, 0, asset.stats.size - 1), {
+  return new Response(lazyFileBody(asset, 0, asset.stats.size - 1), {
     headers: assetHeaders(asset, options),
   });
 }
@@ -177,7 +172,7 @@ export function assetRangeResponse(
 
   headers.set('content-length', String(end - start + 1));
   headers.set('content-range', `bytes ${String(start)}-${String(end)}/${String(size)}`);
-  return new Response(fileBody(asset, start, end), { status: 206, headers });
+  return new Response(lazyFileBody(asset, start, end), { status: 206, headers });
 }
 
 /**
@@ -188,11 +183,12 @@ export function assetRangeResponse(
  */
 function stillNamed(asset: StaticAsset, ifRange: string): boolean {
   if (ifRange.startsWith('"') || ifRange.startsWith('W/')) return ifRange === asset.etag;
-  return Date.parse(ifRange) === lastModified(asset) && Date.now() - asset.stats.mtimeMs >= 1000;
+  return (
+    Date.parse(ifRange) === lastModifiedSecond(asset) && Date.now() - asset.stats.mtimeMs >= 1000
+  );
 }
 
-/** The asset's modification time at the one-second precision of an HTTP date. */
-function lastModified(asset: StaticAsset): number {
+function lastModifiedSecond(asset: StaticAsset): number {
   return Math.floor(asset.stats.mtimeMs / 1000) * 1000;
 }
 
@@ -226,18 +222,13 @@ export function matchesEtag(ifNoneMatch: string | undefined, etag: string): bool
 
 const CHUNK_BYTES = 64 * 1024;
 
-/**
- * The bytes `start` to `end` of an asset, inclusive, read from the file only
- * once something reads the body.
- *
- * A body that is never read, as for a HEAD request or a client that goes
- * away first, never opens the file, and a cancelled one closes it: a
- * descriptor held by an abandoned stream is not given back until the process
- * exits. The file is checked against the stat the headers came from as it is
- * opened, so a file replaced in between fails the response rather than
- * sending bytes its headers do not describe.
- */
-function fileBody(asset: StaticAsset, start: number, end: number): ReadableStream<Uint8Array> {
+const PULL_ONLY_WHEN_READ = { highWaterMark: 0 };
+
+function lazyFileBody(
+  asset: StaticAsset,
+  start: number,
+  endInclusive: number,
+): ReadableStream<Uint8Array> {
   let handle: FileHandle | undefined;
   let position = start;
 
@@ -251,8 +242,8 @@ function fileBody(asset: StaticAsset, start: number, end: number): ReadableStrea
     {
       async pull(controller) {
         try {
-          handle ??= await openDescribed(asset);
-          const length = Math.min(CHUNK_BYTES, end + 1 - position);
+          handle ??= await openUnchangedSinceStat(asset);
+          const length = Math.min(CHUNK_BYTES, endInclusive + 1 - position);
           if (length > 0) {
             const { bytesRead, buffer } = await handle.read(
               new Uint8Array(length),
@@ -264,7 +255,7 @@ function fileBody(asset: StaticAsset, start: number, end: number): ReadableStrea
             position += bytesRead;
             controller.enqueue(buffer.subarray(0, bytesRead));
           }
-          if (position > end) {
+          if (position > endInclusive) {
             await close();
             controller.close();
           }
@@ -275,11 +266,11 @@ function fileBody(asset: StaticAsset, start: number, end: number): ReadableStrea
       },
       cancel: close,
     },
-    { highWaterMark: 0 },
+    PULL_ONLY_WHEN_READ,
   );
 }
 
-async function openDescribed(asset: StaticAsset): Promise<FileHandle> {
+async function openUnchangedSinceStat(asset: StaticAsset): Promise<FileHandle> {
   const handle = await open(asset.file, 'r');
   const opened = await handle.stat();
   const { stats } = asset;
@@ -302,7 +293,7 @@ function assetHeaders(asset: StaticAsset, options: AssetResponseOptions): Header
     'content-type': asset.contentType,
     'content-length': String(asset.stats.size),
     'cache-control': `public, max-age=${String(maxAge)}${immutable}`,
-    'last-modified': new Date(lastModified(asset)).toUTCString(),
+    'last-modified': new Date(lastModifiedSecond(asset)).toUTCString(),
     etag: asset.etag,
   });
 }

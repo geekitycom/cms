@@ -10,7 +10,7 @@ import { after, describe, it } from 'node:test';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 
 import { browser, csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
-import { COMPRESSION_LIMIT } from './compression.ts';
+import { COMPRESSION_MAX_BYTES } from './compression.ts';
 import { sessionCookieName } from './session.ts';
 import type { GeekityConfig } from '../config.ts';
 import type { Cms } from '../index.ts';
@@ -195,7 +195,7 @@ describe('compression', () => {
   it('sends a body above the size limit as it is, for GET and HEAD', async () => {
     const contentDir = await box.dir('geekity-compression-large-');
     await mkdir(path.join(contentDir, 'uploads'), { recursive: true });
-    const large = PARAGRAPH.repeat(Math.ceil((COMPRESSION_LIMIT + 1) / PARAGRAPH.length));
+    const large = PARAGRAPH.repeat(Math.ceil((COMPRESSION_MAX_BYTES + 1) / PARAGRAPH.length));
     await writeFile(path.join(contentDir, 'uploads', 'large.txt'), large);
     const cms = await box.site({ contentDir });
 

@@ -27,41 +27,36 @@ function openDescriptors(): number {
   return readdirSync(process.platform === 'linux' ? '/proc/self/fd' : '/dev/fd').length;
 }
 
-async function settled(): Promise<number> {
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  return openDescriptors();
-}
-
 describe('asset response bodies', () => {
   it('leave no descriptor open after HEAD requests', async () => {
-    const before = await settled();
+    const before = openDescriptors();
     for (let i = 0; i < 50; i += 1) {
       const response = await cms.app.request(EPISODE, { method: 'HEAD' });
       assert.equal(response.status, 200);
       assert.equal(response.headers.get('content-length'), String(SIZE));
     }
-    assert.ok((await settled()) - before < 5, 'HEAD requests held files open');
+    assert.ok(openDescriptors() - before < 5, 'HEAD requests held files open');
   });
 
   it('leave no descriptor open for GETs whose bodies are never read', async () => {
-    const before = await settled();
+    const before = openDescriptors();
     const unread = [];
     for (let i = 0; i < 50; i += 1) {
       unread.push(await cms.app.request(EPISODE));
       unread.push(await cms.app.request(EPISODE, { headers: { range: 'bytes=100-150000' } }));
     }
-    assert.ok((await settled()) - before < 5, 'unread bodies held files open');
+    assert.ok(openDescriptors() - before < 5, 'unread bodies held files open');
     assert.equal(unread.length, 100);
   });
 
   it('close the file when a partly read body is cancelled', async () => {
-    const before = await settled();
+    const before = openDescriptors();
     for (let i = 0; i < 20; i += 1) {
       const reader = (await cms.app.request(EPISODE)).body!.getReader();
       assert.equal((await reader.read()).done, false);
       await reader.cancel();
     }
-    assert.ok((await settled()) - before < 5, 'cancelled bodies held files open');
+    assert.ok(openDescriptors() - before < 5, 'cancelled bodies held files open');
   });
 
   it('still deliver the whole file and a range of it', async () => {
