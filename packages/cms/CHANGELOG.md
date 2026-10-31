@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.50.0](https://github.com/geekitycom/cms/compare/v0.49.0...v0.50.0) (2026-10-31)
+
+
+### Features
+
+* **cms:** move resend to its own page, Federation &gt; Resend ([6645d1c](https://github.com/geekitycom/cms/commit/6645d1cb6de54aa85274e3391d93131537749365))
+* **cms:** open a review's cover, poster or album art full size in a popover ([8aaccab](https://github.com/geekitycom/cms/commit/8aaccabce010e1ff421f0ce2053aa37236bef1d3))
+
+
+### Bug Fixes
+
+* **cms:** preview an untitled post without an Untitled heading ([09f1875](https://github.com/geekitycom/cms/commit/09f18753d0efde1bc6dcd09a00bc54cb5c19318a))
+* **cms:** show failed deliveries where the dashboard links, with a retry ([a69ec20](https://github.com/geekitycom/cms/commit/a69ec20b881a592dc88a3f0177348855dad18efe))
+
 ## [0.49.0](https://github.com/geekitycom/cms/compare/v0.48.1...v0.49.0) (2026-10-31)
 
 
