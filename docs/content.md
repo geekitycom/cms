@@ -694,6 +694,10 @@ These rules decide what an alias does:
 
 On a post or a page, `aliases` is an ordinary unmodelled key and does nothing.
 
+The wiki editor lists the documents that name a page or one of its aliases
+without linking to it, and can link the first mention in each. See
+[Unlinked mentions](admin.md#unlinked-mentions).
+
 A published wiki page is on these parts of the site:
 
 | Where                                                   | A wiki page                                                                                   |
