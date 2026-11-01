@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.51.0](https://github.com/geekitycom/cms/compare/v0.50.1...v0.51.0) (2026-11-01)
+
+
+### Features
+
+* **cms:** let wiki pages take aliases that redirect to them ([ff049b2](https://github.com/geekitycom/cms/commit/ff049b2a9ae51ced1cfa6e7db3a0dbdbff9380ba))
+* **cms:** link unlinked wiki mentions from the wiki editor ([90953c3](https://github.com/geekitycom/cms/commit/90953c3329917c31fde32ce1855809e0621f928a))
+* **cms:** name the answered item's feed on source:inReplyTo ([636f07a](https://github.com/geekitycom/cms/commit/636f07ad8e30bbbc4b64eab5caac6b51bf613956))
+
 ## [0.50.1](https://github.com/geekitycom/cms/compare/v0.50.0...v0.50.1) (2026-10-31)
 
 
