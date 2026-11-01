@@ -2,6 +2,7 @@ import type { Document } from '../document.ts';
 import { NO_REDIRECTS } from '../redirects.ts';
 import { linksInto, siteLinkKey, spelling } from '../site-links.ts';
 import type { BacklinkReader, BacklinkSite } from '../store.ts';
+import { aliasPathsOf } from '../wiki-aliases.ts';
 import { LISTED_CLAUSE, SERVED_CLAUSE } from './clauses.ts';
 import { nowKey, cachedStatement, stringOrUndefined } from './database.ts';
 import type { IndexDatabase, Row } from './database.ts';
@@ -52,11 +53,11 @@ function listBacklinks(index: IndexDatabase, document: Document, site: BacklinkS
 
 /**
  * The paths a link to `document` may name: its permalink, and each of its
- * former ones that the site still answers with it rather than with a live
- * document holding it now or another document claiming it.
+ * former ones and alias paths that the site still answers with it rather than
+ * with a live document holding it now or another document claiming it.
  */
 function linkKeysOf(index: IndexDatabase, document: Document): string[] {
-  const former = (document.redirectFrom ?? []).filter(
+  const former = [...(document.redirectFrom ?? []), ...aliasPathsOf(document)].filter(
     (url) =>
       cachedStatement(index, BY_PERMALINK_SQL).get(url) === undefined &&
       stringOrUndefined(

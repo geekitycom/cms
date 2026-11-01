@@ -52,6 +52,7 @@ import { zoneLabel } from '../content/time.ts';
 import { moveDocumentFile } from '../content/trash.ts';
 import { isVisibility, visibilityOf } from '../content/visibility.ts';
 import type { StoredVisibility } from '../content/visibility.ts';
+import { aliasSlugsOf } from '../content/wiki-aliases.ts';
 import { conflictWith, missingAltText, writeDocument } from '../content/write.ts';
 import { currentUsername, documentSite } from '../web/document-site.ts';
 import type { Conflict } from '../content/write.ts';
@@ -99,6 +100,7 @@ import { AUTOSAVE_DISCARD_JSON_PATH, AUTOSAVE_DISCARD_PATH, AUTOSAVE_PATH } from
 import { laterOrOnlyKnown } from './autosave-client.ts';
 import { ADMIN_PREFIX, PREVIEW_PATH, WIKI_ADMIN_PATH } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
+import { LINK_ALL_FIELD, LINK_FIELD, linkMentions, mentionRows } from './wiki-mentions.ts';
 
 /**
  * Everything that differs between the posts, pages and wiki screens.
@@ -331,6 +333,15 @@ export function mountDocumentScreens(
     });
   });
 
+  if (kind.aliased) {
+    app.post(`${kind.basePath}/:slug/mentions`, async (c) => {
+      const page = findBySlug(c.var.store, kind, c.req.param('slug'));
+      if (page === undefined || isTrashedPath(page.path)) return c.notFound();
+      await linkMentions(c, page, await c.req.parseBody());
+      return c.redirect(editorPath(kind, page.slug), 303);
+    });
+  }
+
   app.post(`${kind.basePath}/:slug`, async (c) => {
     const document = findEdited(c.var.store, kind, c.req.param('slug'), c.req.query('path'));
     if (document === undefined) return c.notFound();
@@ -423,6 +434,7 @@ export function submittedForm(
     visibility: formVisibility(stringOrEmpty(body['visibility'])),
     exclude: body['exclude'] !== undefined,
     contact: body['contact'] !== undefined,
+    aliases: trimmedField(body, 'aliases'),
     comments: commentSetting(stringOrEmpty(body['comments'])),
     location: kind.located ? readLocationForm(body) : BLANK_LOCATION_FORM,
     body: normalizeBody(stringOrEmpty(body['body'])),
@@ -969,10 +981,8 @@ const KINDLESS_COPY_LABELS: Readonly<Record<DocumentType, string>> = {
 };
 
 function linkableWikiSlugs(store: CatalogReader): string[] {
-  return store
-    .listAll({ type: 'wiki', draft: undefined, trashed: false })
-    .map((page) => page.slug)
-    .sort();
+  const pages = store.listAll({ type: 'wiki', draft: undefined, trashed: false });
+  return [...new Set(pages.flatMap((page) => [page.slug, ...aliasSlugsOf(page)]))].sort();
 }
 
 function siteDefaultLabel(type: DocumentType, policy: CommentPolicy): string {
@@ -1119,6 +1129,10 @@ async function editorModel(
       timezone,
     }),
     viewUrl: document !== undefined && isServed(document, now) ? document.permalink : undefined,
+    mentions:
+      kind.aliased && document !== undefined && !trashed
+        ? mentionsPanel(c, kind, document)
+        : undefined,
     // Named beside the date field, because a wall clock with no zone on it is
     // exactly the ambiguity storing dates as UTC instants exists to remove.
     ...(kind.dated ? { dateZone: zoneLabel(form.date, timezone, now) } : {}),
@@ -1127,6 +1141,18 @@ async function editorModel(
       ? {}
       : { error: options.refusal.message, errorField: options.refusal.field }),
     open: openGroups(form, options.refusal?.field),
+  };
+}
+
+function mentionsPanel(c: Context<GeekityEnv>, kind: DocumentScreens, page: Document) {
+  return {
+    url: `${editorPath(kind, page.slug)}/mentions`,
+    linkField: LINK_FIELD,
+    linkAllField: LINK_ALL_FIELD,
+    rows: mentionRows(c, page).map((row) => ({
+      ...row,
+      editUrl: editorPath(DOCUMENT_SCREENS[row.type], row.slug),
+    })),
   };
 }
 

@@ -208,4 +208,22 @@ export const MIGRATIONS: readonly Migration[] = [
       UPDATE documents SET keys_base = NULL;
     `,
   },
+  {
+    version: 12,
+    sql: `
+      -- The paths a wiki page's \`aliases\` claim under the wiki base, which
+      -- answer with a redirect to the page as a former permalink does. The
+      -- key was kept in \`extra\` before, and a file that already carried it
+      -- hashes the same, so the wiki rows are dropped for the next scan to
+      -- read those files again.
+      CREATE TABLE document_aliases (
+        path TEXT NOT NULL REFERENCES documents (path) ON DELETE CASCADE,
+        url  TEXT NOT NULL,
+        PRIMARY KEY (path, url)
+      );
+      CREATE INDEX document_aliases_url ON document_aliases (url);
+      DELETE FROM documents_fts WHERE path IN (SELECT path FROM documents WHERE type = 'wiki');
+      DELETE FROM documents WHERE type = 'wiki';
+    `,
+  },
 ];

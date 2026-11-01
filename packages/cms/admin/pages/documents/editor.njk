@@ -8,7 +8,7 @@
 
 {% import "components/fields.njk" as field %}
 {% from "components/alert.njk" import alert %}
-{% from "components/badge.njk" import badge %}
+{% from "components/badge.njk" import badge, status %}
 {% from "components/button.njk" import button, buttonLink %}
 {% from "components/card.njk" import card, cardActions %}
 {% from "components/collapse.njk" import collapse %}
@@ -627,6 +627,10 @@
           {% set permalinkHint %}Leave it empty to let the {{ kind.singular }} take the URL its slug implies.{% endset %}
           {{ field.text('editor-permalink', 'permalink', 'Permalink', value=form.permalink, hintHtml=permalinkHint) }}
         {% endif %}
+        {% if kind.aliased %}
+          {% set aliasesHint %}Other names for this page, separated by commas. Writes <code>aliases:</code> into the front matter. Each name’s slug under the wiki base leads here, so <code>[[Name]]</code> reaches this page.{% endset %}
+          {{ field.text('editor-aliases', 'aliases', 'Aliases', value=form.aliases, autocomplete='off', error=(error if errorField == 'editor-aliases' else ''), hintHtml=aliasesHint) }}
+        {% endif %}
       {% endcall %}
 
       {% call collapse('Summary and language', open.summary, fields=true) %}
@@ -687,6 +691,41 @@
       {% endcall %}
     </div>
   </form>
+
+  {% if mentions %}
+    <section class="mt-6" id="wiki-mentions" aria-labelledby="wiki-mentions-heading">
+      {% call card(size='sm') %}
+        <h2 class="card-title" id="wiki-mentions-heading">Unlinked mentions</h2>
+        {% if mentions.rows | length %}
+          <p class="text-sm text-base-content/70">Posts, pages and wiki pages that name this page or one of its aliases without linking to it. Link wraps the first mention in <code>[[ ]]</code> and saves the document.</p>
+          <form method="post" action="{{ mentions.url }}">
+            <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+            <ul class="list">
+              {% for row in mentions.rows %}
+                <li class="list-row items-center" data-mention="{{ row.path }}">
+                  <div class="list-col-grow min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <a class="link link-hover font-semibold" href="{{ row.editUrl }}">{{ row.title }}</a>
+                      {{ status(row.status | lower, row.status) }}
+                      {% if row.federated %}{{ badge('Followers get an update', color='info', style='soft') }}{% endif %}
+                    </div>
+                    <p class="text-sm text-base-content/70 break-words">{{ row.before }}<mark>{{ row.text }}</mark>{{ row.after }}</p>
+                  </div>
+                  {{ button('Link', type='submit', name=mentions.linkField, value=row.path, style='soft') }}
+                </li>
+              {% endfor %}
+            </ul>
+            {% call cardActions() %}
+              {{ button('Link all', type='submit', name=mentions.linkAllField, value='1', color='primary') }}
+            {% endcall %}
+          </form>
+        {% else %}
+          <p class="text-sm text-base-content/70">Nothing else mentions this page without linking to it.</p>
+        {% endif %}
+      {% endcall %}
+    </section>
+  {% endif %}
+
   {% if editorActions | length %}
     <form id="editor-suggestions" hidden></form>
   {% endif %}

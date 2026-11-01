@@ -33,6 +33,11 @@ export interface DocumentKind {
    */
   contactable: boolean;
   /**
+   * Whether it takes `aliases`, other names whose slugs under the wiki base
+   * lead to it. Wiki pages only.
+   */
+  aliased: boolean;
+  /**
    * Whether a document of this kind can reply to another, the mf2
    * `in-reply-to`, and so has a post type to name it by.
    */
@@ -60,6 +65,7 @@ export const POST_KIND: DocumentKind = {
   categorised: true,
   excludable: false,
   contactable: false,
+  aliased: false,
   replies: true,
   located: true,
   federated: true,
@@ -75,6 +81,7 @@ export const PAGE_KIND: DocumentKind = {
   categorised: false,
   excludable: true,
   contactable: true,
+  aliased: false,
   replies: false,
   located: false,
   federated: false,
@@ -89,6 +96,7 @@ export const WIKI_KIND: DocumentKind = {
   categorised: false,
   excludable: false,
   contactable: false,
+  aliased: true,
   replies: false,
   located: false,
   federated: false,

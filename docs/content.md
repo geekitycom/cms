@@ -644,10 +644,59 @@ A wiki page does not read these front matter keys: `permalink`, `date`, `tags`,
 `categories` and `in-reply-to`. If a file has any of them, the scan logs a
 warning that names them, and the next save in the admin drops them. The other
 keys work as they do on a page, including `description`, `lang`, `updated`,
-`draft`, `visibility` and `comments`.
+`draft`, `visibility` and `comments`. A wiki page also reads `aliases`. See
+[Aliases](#aliases).
 
 The CMS refuses to save a post or a page with a permalink under the wiki base,
 and the refusal names the base.
+
+### Aliases
+
+A wiki page can list other names for itself under `aliases` (decision-67). A
+`[[Name]]` link to any of them reaches the page:
+
+```markdown
+---
+title: Gabe Newport
+aliases:
+  - Gabe
+  - The Captain
+---
+
+The captain of the _Marigold_.
+```
+
+Each alias claims the path its slug names under the wiki base. With the default
+base, `/wiki/gabe/` and `/wiki/the-captain/` answer 301 to
+`/wiki/gabe-newport/`, and their `index.md`, `index.gmi` and `index.json`
+answer 301 to the page's own. The paths are worked out when the file is read,
+as the page's URL is, so a change of wiki base moves the aliases too. One alias
+may be a bare string, `aliases: Gabe`.
+
+`[[Gabe]]` still renders as a link to `/wiki/gabe/`, and a visitor who follows
+it takes one redirect. The stored HTML does not depend on which aliases exist.
+See [Wiki links](#wiki-links).
+
+These rules decide what an alias does:
+
+- Only a published, served wiki page answers at its aliases. The aliases of a
+  draft or of a page in the trash answer 404.
+- A published wiki page whose own slug is an alias slug is served at that path
+  instead of the redirect.
+- A link through an alias counts as a backlink of the page.
+- An alias whose slug is the page's own slug, or repeats another alias's slug,
+  is dropped when the page is saved.
+- The admin and the MCP wiki tools refuse to save an alias whose slug another
+  wiki page outside the trash already holds, as its slug or as one of its
+  aliases. The refusal names that page. A file edited by hand is not checked.
+  If two published pages claim one alias path, the one updated most recently
+  gets it.
+
+On a post or a page, `aliases` is an ordinary unmodelled key and does nothing.
+
+The wiki editor lists the documents that name a page or one of its aliases
+without linking to it, and can link the first mention in each. See
+[Unlinked mentions](admin.md#unlinked-mentions).
 
 A published wiki page is on these parts of the site:
 

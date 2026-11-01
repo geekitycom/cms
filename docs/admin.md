@@ -476,7 +476,8 @@ Links in code spans and code blocks, and an escaped `\[[`, are not marked,
 because the site does not render them as links.
 
 A draft wiki page counts as present, and a page in the trash counts as
-missing. The editor reads the list of wiki pages when it opens, from
+missing. A target whose slug is an alias of a wiki page counts as present on the
+same terms. The editor reads the list of wiki pages when it opens, from
 `data-wiki-slugs` on `#editor-enhance`. A page created in another tab counts
 only after you reload the editor. The editor slugifies a target with the
 function the server renders with, so the mark agrees with the link the page
@@ -652,8 +653,12 @@ The wiki editor is the page editor without the fields a wiki page does not
 have:
 
 - It has a title, which it requires, a slug and the body.
-- Under **Address** it has the slug only. A wiki page's URL is the wiki base
-  and the slug, so there is no **Permalink** field.
+- Under **Address** it has the slug and **Aliases**. A wiki page's URL is the
+  wiki base and the slug, so there is no **Permalink** field. **Aliases** takes
+  other names for the page, separated by commas, and writes them as
+  `aliases:`. The save drops an alias whose slug is the page's own, and refuses
+  one that another wiki page already answers to. See
+  [Aliases](content.md#aliases).
 - It has no date, tags, categories, reply, location or kind of post.
 - It keeps the description, the language, the visibility and the comments
   choice. No Discussion setting applies to wiki pages, so "Follow the site
@@ -670,6 +675,50 @@ here. See [Creating a missing page](content.md#creating-a-missing-page).
 The dashboard's **Wiki pages** tile counts the published, listed wiki pages.
 The MCP tools `create_wiki_page`, `get_wiki_page` and `update_wiki_page` write
 wiki pages from an MCP client. See [MCP](mcp.md).
+
+### Unlinked mentions
+
+Under the editor of a saved wiki page outside the trash, the **Unlinked
+mentions** panel lists every post, page and wiki page that names the page in
+plain text without linking to it. Drafts and scheduled posts are included. The
+trash and the page itself are not.
+
+A document is listed when its body contains the page's title or one of its
+aliases as a whole word, in any case, and has no wiki link whose target
+slugifies to the page's slug or an alias slug. A link to the page's URL or an
+alias URL also counts as a link. These parts of the body do not count as a
+mention:
+
+- Markdown links and images, reference links and reference definitions.
+- Wiki links, including a wiki link to another page.
+- Code spans, fenced code blocks and indented code blocks.
+- HTML tags, HTML blocks, and the text of an HTML `<a>` element.
+- Bare URLs, autolinks, email addresses and fediverse handles.
+
+Where names overlap, the longest wins: with the title `Gabe Newport` and the
+alias `Gabe`, the text `Gabe Newport` is one mention of the title.
+
+Each entry shows the document's title, which links to its editor, its status
+(Published, Draft or Scheduled) and the text around the first mention. A
+published post carries **Followers get an update**, because saving it sends
+its followers an ActivityPub `Update`.
+
+**Link** wraps the first mention in that document in `[[` and `]]`, as written:
+`Gabe's hat` becomes `[[Gabe]]'s hat`. The rest of the body is not changed.
+When the text does not slugify to the page's slug or an alias slug, as when
+the file name is not the slug of the title, or when it contains `#`, the link
+names the page's slug and keeps the text as its label:
+`[[gabe|Gabriel Newport]]`. **Link all** does the same for every listed
+document.
+
+Linking saves each document through the editor's save path, as a save in its editor would, so
+search, backlinks, webmentions and federation see the change as they see any
+edit. It does not change a document's draft state. Each document is read again
+when the button is pressed and its first mention is found in that text, so a
+panel left open while the document changed does not write at an old position.
+If the file on disk changed since the index last read it, the document is not
+linked and an error says so. A flash message names the documents that were
+linked.
 
 ## Users
 

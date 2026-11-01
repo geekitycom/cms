@@ -717,6 +717,7 @@ describe('the wiki tools', () => {
         title: 'Seeds',
         body: 'Beans and peas.',
         draft: true,
+        aliases: [],
         hash: cms.store.getByPath('wiki/seeds.md')?.hash,
       });
     }
@@ -764,6 +765,41 @@ describe('the wiki tools', () => {
       await readFile(path.join(cms.config.contentDir, 'wiki', 'seeds.md'), 'utf8'),
       /Overwritten/,
     );
+  });
+
+  it('set and read a wiki page’s aliases, refusing one another page holds', async () => {
+    const { cms, token } = await authoringSite(EVERY);
+    await call(cms, token, 'create_wiki_page', { title: 'Rosa', body: 'Her.', draft: false });
+
+    const created = await call(cms, token, 'create_wiki_page', {
+      title: 'Gabe Newport',
+      body: 'The hero.',
+      aliases: ['Gabe', 'Gabe Newport', 'The Captain'],
+      draft: false,
+    });
+    assert.equal(created.isError, false, created.text);
+    const read = await call(cms, token, 'get_wiki_page', { page: 'gabe-newport' });
+    assert.deepEqual(read.structured['aliases'], ['Gabe', 'The Captain']);
+    const moved = await cms.app.request('/wiki/gabe/');
+    assert.equal(moved.headers.get('location'), '/wiki/gabe-newport/');
+
+    const updated = await call(cms, token, 'update_wiki_page', {
+      page: 'gabe-newport',
+      hash: read.structured['hash'],
+      aliases: ['Cap'],
+    });
+    assert.equal(updated.isError, false, updated.text);
+    const again = await call(cms, token, 'get_wiki_page', { page: 'gabe-newport' });
+    assert.deepEqual(again.structured['aliases'], ['Cap']);
+    assert.equal(again.structured['body'], 'The hero.');
+
+    const clash = await call(cms, token, 'update_wiki_page', {
+      page: 'gabe-newport',
+      hash: again.structured['hash'],
+      aliases: ['Rosa'],
+    });
+    assert.equal(clash.isError, true);
+    assert.match(clash.text, /wiki page Rosa\b/);
   });
 
   it('need the publish scope to publish a wiki page through an update', async () => {

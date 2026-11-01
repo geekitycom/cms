@@ -9,8 +9,12 @@ export const BY_PERMALINK_SQL =
 
 export const BY_FORMER_PERMALINK_SQL = `
   SELECT documents.* FROM documents
-  JOIN document_redirects ON document_redirects.path = documents.path
-  WHERE document_redirects.url = ?
+  JOIN (
+    SELECT path, url FROM document_redirects
+    UNION ALL
+    SELECT path, url FROM document_aliases
+  ) AS former ON former.path = documents.path
+  WHERE former.url = ?
     AND ${SERVED_CLAUSE}
   ORDER BY documents.updated DESC, documents.path DESC
   LIMIT 1
