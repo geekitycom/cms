@@ -101,11 +101,6 @@ export async function linkMentions(
   }
 }
 
-/**
- * Wrap the first unlinked mention in a document as it reads now, and save it
- * the way the editor does, with the hash it was read with, so a file that
- * moved on since is refused rather than overwritten.
- */
 async function linkFirstMention(
   c: Context<GeekityEnv>,
   document: Document,
@@ -160,7 +155,6 @@ function label(c: Context<GeekityEnv>, document: Document): string {
 
 const CONTEXT = 60;
 
-/** The words either side of a mention, on one line. */
 function around(body: string, mention: Mention): { before: string; text: string; after: string } {
   const start = Math.max(0, mention.from - CONTEXT);
   const end = Math.min(body.length, mention.to + CONTEXT);

@@ -42,7 +42,7 @@ export function unlinkedMention(body: string, target: MentionTarget): Mention | 
   if (linksTo(body, target)) return undefined;
   const pattern = namePattern(target.names);
   if (pattern === undefined) return undefined;
-  const prose = maskedProse(body);
+  const prose = blankNonProseKeepingOffsets(body);
   const match = pattern.exec(prose);
   if (match === null) return undefined;
   return { from: match.index, to: match.index + match[0].length, text: match[0] };
@@ -73,12 +73,7 @@ function namePattern(names: readonly string[]): RegExp | undefined {
     .filter((name) => !NOT_IN_A_WIKI_LINK.test(name))
     .sort((a, b) => b.length - a.length);
   if (usable.length === 0) return undefined;
-  const alternatives = usable.map((name) =>
-    name
-      .split(/\s+/)
-      .map((word) => word.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&'))
-      .join('[ \\t]+'),
-  );
+  const alternatives = usable.map((name) => name.split(/\s+/).map(escapeRegExp).join('[ \\t]+'));
   return new RegExp(`(?<![${WORD}])(?:${alternatives.join('|')})(?![${WORD}])`, 'iu');
 }
 
@@ -86,27 +81,16 @@ const blocks: MarkdownItInstance = new MarkdownIt({ html: true });
 
 const BLOCKS_LEFT_OUT = new Set(['fence', 'code_block', 'html_block']);
 
-/** Inline text that is not prose, each matched where it starts. */
-const INLINE_LEFT_OUT: readonly RegExp[] = [
-  // An image or a link with its destination or its reference label.
-  /!?\[[^\]\n]*\](?:\([^)\n]*\)|\[[^\]\n]*\])/g,
-  // A reference definition.
-  /^ {0,3}\[[^\]\n]+\]:.*$/gm,
-  // An HTML link and what it says.
-  /<a\b[^>]*>[\s\S]*?<\/a\s*>/gi,
-  // An HTML tag or an autolink.
-  /<[^>\n]*>/g,
-  // A bare address.
-  /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>]+/gi,
-  // An email address or a fediverse handle.
-  /@?[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu,
-];
+const INLINE_LEFT_OUT = {
+  linkOrImage: /!?\[[^\]\n]*\](?:\([^)\n]*\)|\[[^\]\n]*\])/g,
+  referenceDefinition: /^ {0,3}\[[^\]\n]+\]:.*$/gm,
+  htmlLink: /<a\b[^>]*>[\s\S]*?<\/a\s*>/gi,
+  htmlTagOrAutolink: /<[^>\n]*>/g,
+  bareAddress: /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>]+/gi,
+  emailOrHandle: /@?[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu,
+} as const satisfies Record<string, RegExp>;
 
-/**
- * The body with everything that is not prose blanked out, character for
- * character, so offsets into it are offsets into the body.
- */
-function maskedProse(body: string): string {
+function blankNonProseKeepingOffsets(body: string): string {
   const masked = body.split('');
   const blank = (from: number, to: number): void => {
     for (let index = from; index < to; index += 1) {
@@ -126,14 +110,13 @@ function maskedProse(body: string): string {
 
   for (const span of codeSpans(body)) blank(span.from, span.to);
   for (const link of wikiLinksIn(body)) blank(link.from, link.to);
-  for (const pattern of [...INLINE_LEFT_OUT, ...shortcutReferences(body)]) {
+  for (const pattern of [...Object.values(INLINE_LEFT_OUT), ...shortcutReferences(body)]) {
     for (const match of body.matchAll(pattern)) blank(match.index, match.index + match[0].length);
   }
 
   return masked.join('');
 }
 
-/** Each run of backticks closed by a run of the same length. */
 function codeSpans(body: string): { from: number; to: number }[] {
   const spans: { from: number; to: number }[] = [];
   const runs = [...body.matchAll(/`+/g)];
@@ -153,9 +136,12 @@ function codeSpans(body: string): { from: number; to: number }[] {
   return spans;
 }
 
-/** `[label]` written alone, for each label a reference definition names. */
 function shortcutReferences(body: string): RegExp[] {
   return [...body.matchAll(/^ {0,3}\[([^\]\n]+)\]:/gm)].map(
-    ([, label = '']) => new RegExp(`\\[${label.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&')}\\]`, 'gi'),
+    ([, label = '']) => new RegExp(`\\[${escapeRegExp(label)}\\]`, 'gi'),
   );
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&');
 }

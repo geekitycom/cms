@@ -145,11 +145,6 @@ export async function writeDocument(
   return await persist(site, aliased, checked, identity);
 }
 
-/**
- * The write with its aliases tidied: the page's own slug and repeats dropped.
- * Refused when another wiki page outside the trash already holds an alias's
- * slug, as its own or as one of its aliases, since one path leads to one page.
- */
 function claimAliases(
   site: DocumentSite,
   write: DocumentWrite,
