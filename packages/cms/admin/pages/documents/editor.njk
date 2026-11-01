@@ -627,6 +627,10 @@
           {% set permalinkHint %}Leave it empty to let the {{ kind.singular }} take the URL its slug implies.{% endset %}
           {{ field.text('editor-permalink', 'permalink', 'Permalink', value=form.permalink, hintHtml=permalinkHint) }}
         {% endif %}
+        {% if kind.aliased %}
+          {% set aliasesHint %}Other names for this page, separated by commas. Writes <code>aliases:</code> into the front matter. Each name’s slug under the wiki base leads here, so <code>[[Name]]</code> reaches this page.{% endset %}
+          {{ field.text('editor-aliases', 'aliases', 'Aliases', value=form.aliases, autocomplete='off', error=(error if errorField == 'editor-aliases' else ''), hintHtml=aliasesHint) }}
+        {% endif %}
       {% endcall %}
 
       {% call collapse('Summary and language', open.summary, fields=true) %}

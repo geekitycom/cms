@@ -5,6 +5,7 @@ import { ownSiteLinks } from '../site-links.ts';
 import { DuplicatePermalinkError } from '../store.ts';
 import type { IndexWriter } from '../store.ts';
 import { tagKey, uniqueTags } from '../tags.ts';
+import { aliasPathsOf } from '../wiki-aliases.ts';
 import { inTransaction, cachedStatement, stringOrUndefined } from './database.ts';
 import type { IndexDatabase, Row } from './database.ts';
 import { repliesKeysOf, toDocument, toRow } from './rows.ts';
@@ -121,6 +122,13 @@ function writeTerms(index: IndexDatabase, document: Document): void {
       'INSERT INTO document_redirects (path, url, position) VALUES (?, ?, ?)',
     ).run(contentPath, url, position);
   });
+  cachedStatement(index, 'DELETE FROM document_aliases WHERE path = ?').run(contentPath);
+  for (const url of aliasPathsOf(document)) {
+    cachedStatement(index, 'INSERT INTO document_aliases (path, url) VALUES (?, ?)').run(
+      contentPath,
+      url,
+    );
+  }
 }
 
 /**
@@ -169,6 +177,7 @@ function clearIndex(index: IndexDatabase): void {
     index.db.exec('DELETE FROM document_tags');
     index.db.exec('DELETE FROM document_categories');
     index.db.exec('DELETE FROM document_redirects');
+    index.db.exec('DELETE FROM document_aliases');
     index.db.exec('DELETE FROM document_links');
     index.db.exec('DELETE FROM documents');
   });

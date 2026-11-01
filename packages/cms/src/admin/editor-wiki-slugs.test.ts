@@ -12,9 +12,10 @@ after(() => box.cleanup());
 
 const CONTENT: Record<string, string> = {
   '_data/site.json': JSON.stringify({ title: 'A Site' }),
-  'wiki/garden-tools.md': '---\ntitle: Garden tools\n---\n\nA spade.\n',
-  'wiki/unfinished.md': '---\ntitle: Unfinished\ndraft: true\n---\n\nNot yet.\n',
-  '_trash/wiki/binned.md': '---\ntitle: Binned\n---\n\nGone.\n',
+  'wiki/garden-tools.md': '---\ntitle: Garden tools\naliases: [Tools, Shed]\n---\n\nA spade.\n',
+  'wiki/unfinished.md':
+    '---\ntitle: Unfinished\naliases: [Not done]\ndraft: true\n---\n\nNot yet.\n',
+  '_trash/wiki/binned.md': '---\ntitle: Binned\naliases: [Rubbish]\n---\n\nGone.\n',
   'posts/2026-09-01-hello.md':
     "---\ntitle: Hello\ndate: '2026-09-01T09:00:00Z'\n---\n\nSee [[Garden tools]].\n",
   'pages/about.md': '---\ntitle: About\npermalink: /about/\n---\n\nAbout.\n',
@@ -45,7 +46,7 @@ async function wikiSlugs(agent: Browser, url: string): Promise<unknown> {
 }
 
 describe('the editor’s wiki pages', () => {
-  it('are on the post, page and wiki editors', async () => {
+  it('are on the post, page and wiki editors, with the alias slugs of all but the trash', async () => {
     const agent = await site();
     for (const url of [
       '/admin/posts/new?kind=note',
@@ -54,14 +55,18 @@ describe('the editor’s wiki pages', () => {
       '/admin/wiki/new',
       '/admin/wiki/garden-tools',
     ]) {
-      assert.deepEqual(await wikiSlugs(agent, url), ['garden-tools', 'unfinished'], url);
+      assert.deepEqual(
+        await wikiSlugs(agent, url),
+        ['garden-tools', 'not-done', 'shed', 'tools', 'unfinished'],
+        url,
+      );
     }
   });
 
   it('take in a page written since the last load', async () => {
     const agent = await site();
     const before = await wikiSlugs(agent, '/admin/pages/new');
-    assert.deepEqual(before, ['garden-tools', 'unfinished']);
+    assert.deepEqual(before, ['garden-tools', 'not-done', 'shed', 'tools', 'unfinished']);
 
     const form = await (await agent.get('/admin/wiki/new')).text();
     const saved = await agent.post(saveUrlOf(form) ?? '', {
@@ -75,6 +80,9 @@ describe('the editor’s wiki pages', () => {
     assert.deepEqual(await wikiSlugs(agent, '/admin/pages/new'), [
       'compost',
       'garden-tools',
+      'not-done',
+      'shed',
+      'tools',
       'unfinished',
     ]);
   });

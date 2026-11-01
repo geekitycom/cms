@@ -23,7 +23,7 @@ import type { PostLocation } from './location.ts';
 import { resolveLocation } from './location-form.ts';
 import { postLocations } from './locations.ts';
 import { renderMarkdown } from './markdown.ts';
-import { parseDocument } from './parser.ts';
+import { parseDocument, slugForPermalink } from './parser.ts';
 import { photosOf } from './photo.ts';
 import type { Photo } from './photo.ts';
 import { resolvePhotos } from './photo-form.ts';
@@ -35,10 +35,11 @@ import { RSVP_VALUES, rsvpValue } from './rsvp.ts';
 import { contentFilePath, freeSlug, saveDocument } from './save.ts';
 import { htmlToText } from './search.ts';
 import { isServed } from './served.ts';
-import { defaultPermalink, slugify } from './slug.ts';
+import { defaultPermalink, slugify, wikiBaseOf } from './slug.ts';
 import { DuplicatePermalinkError, isTrashedPath, TRASH_DIRECTORY } from './store.ts';
 import type {
   ArchiveReader,
+  CatalogReader,
   DocumentLookup,
   IndexClock,
   IndexWriter,
@@ -50,6 +51,7 @@ import { respellTags } from './tags.ts';
 import { DEFAULT_PERMALINK_BASES } from './taxonomy.ts';
 import type { Respelling } from './tags.ts';
 import { calendarDayIn, toUtcInstant } from './time.ts';
+import { aliasSlugsOf, distinctAliases } from './wiki-aliases.ts';
 
 export interface SiteRecords {
   readonly users: () => readonly AuthorUser[];
@@ -66,7 +68,12 @@ export interface WriteConfig {
 
 /** What a write needs from the site, as plain values rather than a request. */
 export interface DocumentSite extends SiteRecords {
-  readonly store: DocumentLookup & ArchiveReader & TaxonomyReader & IndexWriter & IndexClock;
+  readonly store: DocumentLookup &
+    ArchiveReader &
+    CatalogReader &
+    TaxonomyReader &
+    IndexWriter &
+    IndexClock;
   readonly config: WriteConfig;
   readonly announce: (change: DocumentChange) => Promise<void>;
   /** The username of whoever is writing: the author a new document starts on. */
@@ -133,7 +140,40 @@ export async function writeDocument(
   const identity = await resolveIdentity(site, write, checked);
   const intrudes = refusePermalinkUnderWikiBase(site, write.kind, identity.permalink);
   if (intrudes !== undefined) return intrudes;
-  return await persist(site, write, checked, identity);
+  const aliased = claimAliases(site, write, identity.permalink);
+  if ('outcome' in aliased) return aliased;
+  return await persist(site, aliased, checked, identity);
+}
+
+/**
+ * The write with its aliases tidied: the page's own slug and repeats dropped.
+ * Refused when another wiki page outside the trash already holds an alias's
+ * slug, as its own or as one of its aliases, since one path leads to one page.
+ */
+function claimAliases(
+  site: DocumentSite,
+  write: DocumentWrite,
+  permalink: string,
+): DocumentWrite | Refused {
+  if (!write.kind.aliased) return write;
+  const aliases = distinctAliases(splitTags(write.form.aliases), slugForPermalink(permalink) ?? '');
+  const others = site.store
+    .listAll({ type: 'wiki', draft: undefined, trashed: false })
+    .filter((page) => page.path !== write.document?.path);
+  for (const alias of aliases) {
+    const slug = slugify(alias);
+    const holder =
+      others.find((page) => page.slug === slug) ??
+      others.find((page) => aliasSlugsOf(page).includes(slug));
+    if (holder === undefined) continue;
+    const base = wikiBaseOf({ type: 'wiki', permalink }) ?? DEFAULT_PERMALINK_BASES.wiki;
+    const name = holder.title === '' ? holder.slug : holder.title;
+    return refused(
+      `The wiki page ${name} already answers at /${base}/${slug}/, so ${alias} cannot be an alias of this page.`,
+      'editor-aliases',
+    );
+  }
+  return { ...write, form: { ...write.form, aliases: aliases.join(', ') } };
 }
 
 function refusePermalinkUnderWikiBase(

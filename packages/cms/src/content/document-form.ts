@@ -20,6 +20,7 @@ import type { Review } from './review.ts';
 import { BLANK_REVIEW_FORM } from './review-form.ts';
 import type { ReviewForm } from './review-form.ts';
 import { wallClockIn } from './time.ts';
+import { ALIASES_FRONT_MATTER_KEY, aliasesOf } from './wiki-aliases.ts';
 import { VISIBILITY_FRONT_MATTER_KEY, visibilityOf } from './visibility.ts';
 import type { StoredVisibility } from './visibility.ts';
 
@@ -106,6 +107,8 @@ export interface EditorForm {
   exclude: boolean;
   /** Whether the page offers a contact form. Pages only. */
   contact: boolean;
+  /** The other names a wiki page answers to, separated by commas. Wiki pages only. */
+  aliases: string;
   /** Whether the post is pinned to its author's profile. Posts only. */
   pinned: boolean;
   /**
@@ -197,6 +200,7 @@ export function blankForm(kind: DocumentKind, timezone: string, now: Date): Edit
     visibility: 'public',
     exclude: false,
     contact: false,
+    aliases: '',
     comments: COMMENT_SETTINGS.site,
     location: BLANK_LOCATION_FORM,
     body: '',
@@ -241,6 +245,7 @@ export function formFor(
     visibility: visibilityOf(document),
     exclude: document.extra[EXCLUDE_KEY] === true,
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
+    aliases: aliasesOf(document).join(', '),
     comments: commentSettingOf(document),
     location: kind.located ? locationForm(location) : BLANK_LOCATION_FORM,
     body: document.body,
@@ -320,6 +325,12 @@ export function extraFromForm(
     // and false mean the same thing to everything that reads it.
     if (form.contact) extra[CONTACT_FRONT_MATTER_KEY] = true;
     else delete extra[CONTACT_FRONT_MATTER_KEY];
+  }
+
+  if (kind.aliased) {
+    const aliases = splitTags(form.aliases);
+    if (aliases.length > 0) extra[ALIASES_FRONT_MATTER_KEY] = aliases;
+    else delete extra[ALIASES_FRONT_MATTER_KEY];
   }
 
   return extra;

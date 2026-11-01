@@ -32,8 +32,8 @@ const GROUPS: Readonly<Record<EditorGroup, GroupRule>> = {
   },
   taxonomy: { filled: alwaysOpen, fieldPrefixes: [] },
   address: {
-    filled: (form) => filledIn(form.slug, form.permalink),
-    fieldPrefixes: ['editor-slug', 'editor-permalink'],
+    filled: (form) => filledIn(form.slug, form.permalink, form.aliases),
+    fieldPrefixes: ['editor-slug', 'editor-permalink', 'editor-aliases'],
   },
   summary: {
     filled: (form) => filledIn(form.description, form.lang),

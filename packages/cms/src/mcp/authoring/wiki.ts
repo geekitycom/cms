@@ -3,6 +3,7 @@ import { DOCUMENT_DIRECTORIES } from '../../content/content-tree.ts';
 import type { Document } from '../../content/document.ts';
 import { blankForm, formFor } from '../../content/document-form.ts';
 import { WIKI_KIND } from '../../content/document-kind.ts';
+import { aliasesOf } from '../../content/wiki-aliases.ts';
 import { permalinkOfObjectId } from '../../content/permalinks.ts';
 import { writeDocument } from '../../content/write.ts';
 import { listUsers } from '../../site/users.ts';
@@ -17,6 +18,13 @@ import { unsaved } from './shared.ts';
 const PAGE_INPUT = {
   type: 'string',
   description: 'The wiki page: its slug or its address.',
+} as const;
+
+const ALIASES_INPUT = {
+  type: 'array',
+  items: { type: 'string' },
+  description:
+    'Other names the page answers to. [[Name]] for each one leads here. A name another wiki page already answers to is refused, and a comma inside a name splits it in two.',
 } as const;
 
 const WIKI_WRITTEN = {
@@ -71,6 +79,7 @@ export const createWikiPage = defineTool({
         type: 'string',
         description: 'The file name and the end of the URL. Made from the title unless given.',
       },
+      aliases: ALIASES_INPUT,
       draft: { type: 'boolean', description: 'true unless given.' },
     },
     required: ['title', 'body'],
@@ -90,6 +99,7 @@ export const createWikiPage = defineTool({
       ...blankForm(WIKI_KIND, site.siteAtRequestStart.timezone, store.now()),
       title: args.title.trim(),
       slug: args.slug?.trim() ?? '',
+      aliases: (args.aliases ?? []).join(', '),
       body: args.body,
     };
     const written = await writeDocument(documentSiteFrom(site, user.username), {
@@ -116,7 +126,7 @@ export const getWikiPage = defineTool({
   name: 'get_wiki_page',
   title: 'Read a wiki page',
   description:
-    'One of your wiki pages as it is written: its title, its Markdown body and whether it is a draft. Returns the hash update_wiki_page needs, so an edit fails rather than overwrites when the page changed in between.',
+    'One of your wiki pages as it is written: its title, its aliases, its Markdown body and whether it is a draft. Returns the hash update_wiki_page needs, so an edit fails rather than overwrites when the page changed in between.',
   scope: 'update',
   annotations: READ_ONLY,
   inputSchema: {
@@ -133,9 +143,10 @@ export const getWikiPage = defineTool({
       title: { type: 'string' },
       body: { type: 'string', description: 'The page in Markdown.' },
       draft: { type: 'boolean' },
+      aliases: { type: 'array', items: { type: 'string' } },
       hash: { type: 'string', description: 'The version read. Pass it to update_wiki_page.' },
     },
-    required: ['url', 'slug', 'title', 'body', 'draft', 'hash'],
+    required: ['url', 'slug', 'title', 'body', 'draft', 'aliases', 'hash'],
   },
   run: (args, { user, site }) => {
     const document = ownWikiPage(site, user, args.page);
@@ -150,6 +161,7 @@ export const getWikiPage = defineTool({
         title: document.title,
         body: document.body,
         draft: document.draft,
+        aliases: aliasesOf(document),
         hash: document.hash,
       },
     });
@@ -160,7 +172,7 @@ export const updateWikiPage = defineTool({
   name: 'update_wiki_page',
   title: 'Edit a wiki page',
   description:
-    'Change the title, the body or the draft state of one of your wiki pages, leaving what is not given as it is. Read the page with get_wiki_page first and pass its hash: when the page changed since, nothing is written. Changing a published page, or setting draft to false, needs the publish scope as well.',
+    'Change the title, the aliases, the body or the draft state of one of your wiki pages, leaving what is not given as it is. Read the page with get_wiki_page first and pass its hash: when the page changed since, nothing is written. Changing a published page, or setting draft to false, needs the publish scope as well.',
   scope: 'update',
   annotations: {
     readOnlyHint: false,
@@ -174,6 +186,7 @@ export const updateWikiPage = defineTool({
       page: PAGE_INPUT,
       hash: { type: 'string', description: 'The hash get_wiki_page returned.' },
       title: { type: 'string' },
+      aliases: { ...ALIASES_INPUT, description: `${ALIASES_INPUT.description} The whole list.` },
       body: { type: 'string', description: 'The whole page in Markdown.' },
       draft: { type: 'boolean' },
     },
@@ -188,8 +201,13 @@ export const updateWikiPage = defineTool({
   run: async (args, { user, token, site }) => {
     const document = ownWikiPage(site, user, args.page);
     if (isRefused(document)) return document;
-    if (args.title === undefined && args.body === undefined && args.draft === undefined) {
-      return refused('Give a title, a body or a draft state to change.');
+    if (
+      args.title === undefined &&
+      args.aliases === undefined &&
+      args.body === undefined &&
+      args.draft === undefined
+    ) {
+      return refused('Give a title, aliases, a body or a draft state to change.');
     }
     const draft = args.draft ?? document.draft;
     if ((!document.draft || !draft) && !token.scopes.includes('publish')) {
@@ -203,6 +221,7 @@ export const updateWikiPage = defineTool({
       form: {
         ...form,
         title: args.title?.trim() ?? form.title,
+        aliases: args.aliases?.join(', ') ?? form.aliases,
         body: args.body ?? form.body,
         hash: args.hash,
       },

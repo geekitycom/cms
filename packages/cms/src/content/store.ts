@@ -67,10 +67,10 @@ export interface DocumentLookup {
    */
   getByStoredObjectId(objectId: string): Document | undefined;
   /**
-   * The published document whose `redirect_from` names this URL, or
-   * `undefined`.
+   * The published document whose `redirect_from` names this URL, or the
+   * published wiki page one of whose `aliases` claims it, or `undefined`.
    *
-   * What a URL a document used to live at resolves to. Only a
+   * What a URL a document used to live at, or an alias names, resolves to. Only a
    * public document answers, so an old URL of something since drafted or
    * trashed 404s rather than redirecting to a 404. Should two claim one URL,
    * the one updated most recently wins.

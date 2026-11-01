@@ -52,6 +52,7 @@ import { zoneLabel } from '../content/time.ts';
 import { moveDocumentFile } from '../content/trash.ts';
 import { isVisibility, visibilityOf } from '../content/visibility.ts';
 import type { StoredVisibility } from '../content/visibility.ts';
+import { aliasSlugsOf } from '../content/wiki-aliases.ts';
 import { conflictWith, missingAltText, writeDocument } from '../content/write.ts';
 import { currentUsername, documentSite } from '../web/document-site.ts';
 import type { Conflict } from '../content/write.ts';
@@ -423,6 +424,7 @@ export function submittedForm(
     visibility: formVisibility(stringOrEmpty(body['visibility'])),
     exclude: body['exclude'] !== undefined,
     contact: body['contact'] !== undefined,
+    aliases: trimmedField(body, 'aliases'),
     comments: commentSetting(stringOrEmpty(body['comments'])),
     location: kind.located ? readLocationForm(body) : BLANK_LOCATION_FORM,
     body: normalizeBody(stringOrEmpty(body['body'])),
@@ -969,10 +971,8 @@ const KINDLESS_COPY_LABELS: Readonly<Record<DocumentType, string>> = {
 };
 
 function linkableWikiSlugs(store: CatalogReader): string[] {
-  return store
-    .listAll({ type: 'wiki', draft: undefined, trashed: false })
-    .map((page) => page.slug)
-    .sort();
+  const pages = store.listAll({ type: 'wiki', draft: undefined, trashed: false });
+  return [...new Set(pages.flatMap((page) => [page.slug, ...aliasSlugsOf(page)]))].sort();
 }
 
 function siteDefaultLabel(type: DocumentType, policy: CommentPolicy): string {

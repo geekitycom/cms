@@ -476,7 +476,8 @@ Links in code spans and code blocks, and an escaped `\[[`, are not marked,
 because the site does not render them as links.
 
 A draft wiki page counts as present, and a page in the trash counts as
-missing. The editor reads the list of wiki pages when it opens, from
+missing. A target whose slug is an alias of a wiki page counts as present on the
+same terms. The editor reads the list of wiki pages when it opens, from
 `data-wiki-slugs` on `#editor-enhance`. A page created in another tab counts
 only after you reload the editor. The editor slugifies a target with the
 function the server renders with, so the mark agrees with the link the page
@@ -652,8 +653,12 @@ The wiki editor is the page editor without the fields a wiki page does not
 have:
 
 - It has a title, which it requires, a slug and the body.
-- Under **Address** it has the slug only. A wiki page's URL is the wiki base
-  and the slug, so there is no **Permalink** field.
+- Under **Address** it has the slug and **Aliases**. A wiki page's URL is the
+  wiki base and the slug, so there is no **Permalink** field. **Aliases** takes
+  other names for the page, separated by commas, and writes them as
+  `aliases:`. The save drops an alias whose slug is the page's own, and refuses
+  one that another wiki page already answers to. See
+  [Aliases](content.md#aliases).
 - It has no date, tags, categories, reply, location or kind of post.
 - It keeps the description, the language, the visibility and the comments
   choice. No Discussion setting applies to wiki pages, so "Follow the site
