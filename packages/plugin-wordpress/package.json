@@ -60,7 +60,7 @@
     "@geekity/plugin-post-summary": "workspace:*",
     "@geekity/plugin-tag-suggest": "workspace:*",
     "@hono/node-server": "^2.1.5",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/sax": "^1.2.7",
     "esbuild": "^0.28.2",
     "js-yaml": "^5.5.0",
