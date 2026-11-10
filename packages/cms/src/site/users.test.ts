@@ -606,10 +606,17 @@ describe('changing a password', () => {
     await createUser({ dataDir, username: 'grace', password: 'a password of her own' });
     const hers = findUser(dataDir, 'grace')?.passwordHash;
 
-    assert.equal(await setUserPassword({ dataDir, userId: ada.id, password: 'a new one' }), true);
+    const now = new Date('2026-11-10T12:00:00.000Z');
+    assert.equal(
+      await setUserPassword({ dataDir, userId: ada.id, password: 'a new one', now }),
+      true,
+    );
 
     assert.equal(verifyUserPassword(dataDir, 'ada', 'correct horse'), undefined);
-    assert.deepEqual(verifyUserPassword(dataDir, 'ada', 'a new one'), ada);
+    assert.deepEqual(verifyUserPassword(dataDir, 'ada', 'a new one'), {
+      ...ada,
+      sessionsValidAfter: now.toISOString(),
+    });
     assert.equal(findUser(dataDir, 'grace')?.passwordHash, hers, 'nobody else was touched');
   });
 
@@ -617,7 +624,12 @@ describe('changing a password', () => {
     const dataDir = await temporaryDir();
 
     assert.equal(
-      await setUserPassword({ dataDir, userId: 404, password: 'a password nobody will use' }),
+      await setUserPassword({
+        dataDir,
+        userId: 404,
+        password: 'a password nobody will use',
+        now: new Date(),
+      }),
       false,
     );
   });

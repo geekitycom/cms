@@ -51,6 +51,7 @@ import {
   retireOldSessionCookie,
   sessionIdFrom,
   setSessionCookie,
+  startSession,
 } from '../web/session.ts';
 import { CSRF_FIELD } from '../forms/protection.ts';
 import type { AdminStore, Session } from '../store/admin-store.ts';
@@ -409,16 +410,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
   /** The session to hang a CSRF token on, made on the spot if there is none. */
   function anonymousSession(c: Context<GeekityEnv>): Session {
-    const existing = c.var.session;
-    if (existing !== undefined) return existing;
-
-    const session = c.var.admin.createSession({
-      userId: null,
-      lifetimeSeconds: c.var.config.sessionLifetime,
-    });
-    setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
-    c.set('session', session);
-    return session;
+    return c.var.session ?? startSession(c, undefined);
   }
 
   /** Re-render the setup form with a message, and the status a bad form gets. */
@@ -443,13 +435,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     // Logging in is rare and cheap; it is a good moment to sweep the table.
     admin.pruneSessions();
 
-    const session = admin.createSession({
-      userId: user.id,
-      userUid: user.uid,
-      lifetimeSeconds: c.var.config.sessionLifetime,
-    });
-    setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
-    c.set('session', session);
+    startSession(c, user);
     return c.redirect(returnTo ?? ADMIN_PREFIX, 303);
   }
 }
@@ -578,7 +564,11 @@ function liveSession(
   session: Session | undefined,
 ): Session | undefined {
   if (session === undefined || session.userId === null) return session;
-  const issued = { userId: session.userId, userUid: session.userUid };
+  const issued = {
+    userId: session.userId,
+    userUid: session.userUid,
+    issuedAt: session.createdAt,
+  };
   if (userIssuedTo(dataDir, issued) !== undefined) return session;
 
   admin.deleteSession(session.id);

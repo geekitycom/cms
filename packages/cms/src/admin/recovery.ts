@@ -204,7 +204,10 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
     const spent = c.var.admin.spendPasswordReset(token);
     // The account may have gone while the link was in flight, and the id may
     // now belong to somebody new whose own links are good.
-    const user = spent === undefined ? undefined : userIssuedTo(dataDir, spent);
+    const user =
+      spent === undefined
+        ? undefined
+        : userIssuedTo(dataDir, { ...spent, issuedAt: spent.createdAt });
     if (user === undefined) return refuseToken(c);
 
     // Everything that was a way into this account is now closed: every other
@@ -215,7 +218,7 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
     const ended = c.var.admin.deleteSessionsForUser(user.id);
     const disconnected = await revokeTokensForUser(dataDir, user.id, c.var.config.now());
 
-    await setUserPassword({ dataDir, userId: user.id, password });
+    await setUserPassword({ dataDir, userId: user.id, password, now: c.var.config.now() });
 
     if (user.email !== undefined) {
       // The other half of the OWASP guidance: whoever owns the address hears

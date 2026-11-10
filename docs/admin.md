@@ -790,6 +790,11 @@ does not work for the new user. A user written by an earlier version has no
 `uid`, and the server does not add one. Sessions, links and tokens issued to
 that user before the upgrade also have none, so they keep working.
 
+Setting a password, on the users screen or through a reset link, writes the
+time of the change to the user's `sessionsValidAfter` in `data/users.json`. The
+server refuses any session or password reset link created before that time,
+even when an older copy of `data/geekity.db` brings its row back.
+
 Passwords are hashed with argon2id through `node:crypto`, so there is no native
 module to build. Each hash stores its cost parameters. If the parameters are
 raised later, every stored password still verifies.
@@ -824,7 +829,8 @@ nobody else. If you leave that page without copying the password, the only fix
 is to delete the user and add them again.
 
 Changing your own password asks for the current one first. It then ends **every
-other session that login has** and keeps the one you are using. People usually
+session that login has**, including the one you are using, and signs your
+browser in again on a new session, so you stay signed in. People usually
 change a password because someone else may have it. If the other browsers
 stayed signed in, the change would fix nothing. For the same reason it
 disconnects **every app connected to your account**, listed on Users >

@@ -33,6 +33,7 @@ import { revokeTokensForUser } from '../indieauth/tokens.ts';
 import { autosaveCopies } from '../autosave/index.ts';
 import { discardWritingLedger } from '../writing/ledger.ts';
 import { stringOrEmpty } from '../util/forms.ts';
+import { startSession } from '../web/session.ts';
 import { ADMIN_THEMES, adminTheme } from '../site/admin-theme.ts';
 import { confirmedUser } from './confirm-password.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
@@ -195,8 +196,17 @@ async function changePassword(c: Context<GeekityEnv>, render: AdminRender): Prom
     );
   }
 
-  await setUserPassword({ dataDir: c.var.config.dataDir, userId: user.id, password: next });
+  await setUserPassword({
+    dataDir: c.var.config.dataDir,
+    userId: user.id,
+    password: next,
+    now: c.var.config.now(),
+  });
   const ended = c.var.admin.deleteSessionsForUser(user.id, { except: session.id });
+  // The browser that made the change stays signed in, on an id nobody could
+  // have copied before it.
+  c.var.admin.deleteSession(session.id);
+  startSession(c, user);
   c.var.admin.deletePasswordResetsForUser(user.id);
   const disconnected = await revokeTokensForUser(c.var.config.dataDir, user.id, c.var.config.now());
 

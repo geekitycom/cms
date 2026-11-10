@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -464,6 +466,62 @@ describe('a second request', () => {
     assert.equal(older.status, 400, 'the older link was refused');
     const newer = await browser(cms).get(pathOf(linkIn(provider.sent[1])));
     assert.equal(newer.status, 200, 'the newer link opens the form');
+  });
+});
+
+describe('a link from before a password change', () => {
+  it('is refused when an older database brings its row back', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+    await askForReset(cms, 'ada');
+    const token = new URL(linkIn(provider.sent[0])).searchParams.get('token');
+    assert.ok(token !== null);
+
+    const database = path.join(cms.config.dataDir, 'geekity.db');
+    const read = new DatabaseSync(database);
+    const backup = read.prepare('SELECT * FROM password_resets').all() as Record<
+      string,
+      string | number | null
+    >[];
+    read.close();
+    assert.ok(backup.length > 0, 'there was a reset row to keep');
+
+    const here = await signIn(cms);
+    const csrf = csrfField(await (await here.get('/admin/users')).text());
+    assert.ok(csrf !== undefined);
+    const changed = await here.post('/admin/users/password', {
+      csrf_token: csrf,
+      current_password: FIRST_ADMIN.password,
+      new_password: 'the password she chose',
+      new_password_confirmation: 'the password she chose',
+    });
+    assert.equal(changed.status, 303, 'the password was changed');
+
+    const restore = new DatabaseSync(database);
+    for (const row of backup) {
+      const columns = Object.keys(row);
+      restore
+        .prepare(
+          `INSERT OR REPLACE INTO password_resets (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+        )
+        .run(...columns.map((column) => row[column] ?? null));
+    }
+    restore.close();
+
+    const agent = browser(cms);
+    const form = csrfField(await (await agent.get('/admin/login')).text());
+    assert.ok(form !== undefined);
+    const response = await agent.post(RESET_PATH, {
+      csrf_token: form,
+      token,
+      password: 'a password from the old link',
+      password_confirmation: 'a password from the old link',
+    });
+
+    assert.equal(response.status, 400, 'the restored link was refused');
+    assert.ok(
+      verifyUserPassword(cms.config.dataDir, 'ada', 'the password she chose') !== undefined,
+      'the password set after the link was asked for is still the one',
+    );
   });
 });
 

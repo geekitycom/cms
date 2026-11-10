@@ -47,6 +47,7 @@ export function signedInAccount(c: Context<GeekityEnv>): SignedInAccount | undef
   const user = userIssuedTo(c.var.config.dataDir, {
     userId: session.userId,
     userUid: session.userUid,
+    issuedAt: session.createdAt,
   });
   if (user === undefined) return undefined;
 

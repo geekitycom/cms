@@ -1261,6 +1261,73 @@ describe('changing your own password', () => {
     assert.equal(other.headers.get('location'), '/admin/login');
   });
 
+  it('gives this browser a new session and ends the one it had', async () => {
+    const cms = await box.site();
+    const here = await signedIn(cms);
+    const before = here.session();
+    assert.ok(before !== undefined, 'signed in with a session cookie');
+
+    const { token } = await usersScreen(here);
+    const response = await here.post('/admin/users/password', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      new_password: 'a brand new password',
+      new_password_confirmation: 'a brand new password',
+    });
+    assert.equal(response.status, 303, 'the password was changed');
+
+    const copied = browser(cms);
+    copied.setSession(before);
+    const stale = await copied.get('/admin');
+    assert.equal(stale.status, 302, 'the cookie from before the change is anonymous');
+    assert.equal(stale.headers.get('location'), '/admin/login');
+    assert.notEqual(here.session(), before, 'the browser that changed it has a new session id');
+    assert.match(
+      (await editScreen(here, idOf(cms.config.dataDir, 'ada'))).html,
+      /Your password was changed/,
+      'it stays signed in, and the notice followed it to the new session',
+    );
+  });
+
+  it('keeps a session from before the change out when its row comes back', async () => {
+    const cms = await box.site();
+    const earlier = (await signedIn(cms)).session();
+    assert.ok(earlier !== undefined);
+    const ada = idOf(cms.config.dataDir, 'ada');
+    const database = path.join(cms.config.dataDir, 'geekity.db');
+    const columns = ['id', 'user_id', 'user_uid', 'csrf_token', 'created_at', 'expires_at'];
+    const read = new DatabaseSync(database);
+    const backup = read
+      .prepare(`SELECT ${columns.join(', ')} FROM sessions WHERE user_id = ?`)
+      .all(ada) as Record<string, string | number | null>[];
+    read.close();
+    assert.ok(backup.length > 0, 'there was a session row to keep');
+
+    const here = await signIn(cms);
+    const { token } = await usersScreen(here);
+    const changed = await here.post('/admin/users/password', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      new_password: 'a brand new password',
+      new_password_confirmation: 'a brand new password',
+    });
+    assert.equal(changed.status, 303);
+
+    const restore = new DatabaseSync(database);
+    const insert = restore.prepare(
+      `INSERT OR REPLACE INTO sessions (${columns.join(', ')}) VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    for (const row of backup) insert.run(...columns.map((column) => row[column] ?? null));
+    restore.close();
+
+    const copied = browser(cms);
+    copied.setSession(earlier);
+    const response = await copied.get('/admin');
+    assert.equal(response.status, 302, 'the restored row does not sign in');
+    assert.equal(response.headers.get('location'), '/admin/login');
+    assert.equal((await here.get('/admin')).status, 200, 'the browser that changed it is still in');
+  });
+
   it('disconnects every app the account had connected, and says so', async () => {
     const cms = await box.site();
     const here = await signedIn(cms);
