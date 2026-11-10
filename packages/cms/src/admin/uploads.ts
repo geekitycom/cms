@@ -1,4 +1,4 @@
-import type { Hono, MiddlewareHandler } from 'hono';
+import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../web/env.ts';
 import {
@@ -25,35 +25,22 @@ export interface UploadResult {
   markdown: string;
 }
 
+/** The most an upload request may weigh: the larger file limit plus the multipart envelope. */
+export function uploadBodyLimit(config: Parameters<typeof largestUploadLimit>[0]): number {
+  return largestUploadLimit(config) + UPLOAD_ENVELOPE_BYTES;
+}
+
 /**
- * Refuse an oversized upload by its headers, before anything reads it.
- *
- * This is registered in front of the admin guard on purpose. The guard finds
- * the CSRF token by parsing the form, and parsing a multipart form pulls the
- * whole file into the process — so by the time the request has been
- * authenticated, a gigabyte has already been read. Checking the declared
- * length first is the only place a body can be turned away before that
- * happens. It gives nothing away: that `/admin/uploads` exists is in the
- * package's own source.
+ * The 413 for an upload refused before it was read: JSON for the editor's
+ * control, which reads it, and plain text for the media screen's form, which
+ * is a navigation and would show a browser a bare JSON object.
  */
-export const refuseOversizedUpload: MiddlewareHandler<GeekityEnv> = async (c, next) => {
-  if (c.req.method !== 'POST') return next();
-
-  const declared = Number(c.req.header('content-length') ?? '');
-  const limit = largestUploadLimit(c.var.config);
-  if (Number.isFinite(declared) && declared > limit + UPLOAD_ENVELOPE_BYTES) {
-    // JSON for the editor's control, which reads it, and plain text for the
-    // media screen's form, which is a navigation: a browser that has just
-    // submitted a form and been shown a JSON object has been told nothing.
-    // There is no session yet — the guard has not run — so a flash and a
-    // redirect are not available here.
-    return submittedFromABrowser(c.req.header('accept'))
-      ? c.text(tooLargeMessage(limit), 413)
-      : c.json({ error: tooLargeMessage(limit) }, 413);
-  }
-
-  await next();
-};
+export function uploadTooLarge(c: Context<GeekityEnv>): Response {
+  const message = tooLargeMessage(largestUploadLimit(c.var.config));
+  return submittedFromABrowser(c.req.header('accept'))
+    ? c.text(message, 413)
+    : c.json({ error: message }, 413);
+}
 
 /** Whether a request wants a page back rather than the editor's JSON. */
 function submittedFromABrowser(accept: string | undefined): boolean {

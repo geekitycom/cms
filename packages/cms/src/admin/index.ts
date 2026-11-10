@@ -319,7 +319,7 @@ export {
   PACKAGED_ADMIN_DIR,
 } from './templates.ts';
 export type { CreateAdminTemplateEnvironmentOptions } from './templates.ts';
-export { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
+export { mountUploads, UPLOADS_PATH } from './uploads.ts';
 export {
   refusedUpload,
   storeUpload,

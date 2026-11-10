@@ -17,6 +17,7 @@ import {
   signedIn,
 } from './__testing__/harness.ts';
 import { addUser } from './__testing__/users.ts';
+import { UPLOADS_PATH } from './uploads.ts';
 
 /**
  * The session hardening of TASK-132: a `__Host-` cookie under https, Fetch
@@ -263,5 +264,59 @@ describe('a users file that is started again', () => {
     await createUser({ dataDir: cms.config.dataDir, ...GRACE });
 
     assert.equal((await agent.get('/admin')).status, 200);
+  });
+});
+
+describe('an upload that declares no length', () => {
+  it('is refused with 413 once it passes the upload limit, before the rest is read', async () => {
+    const limit = 64 * 1024;
+    const cms = await box.site({ uploadMaxBytes: limit, uploadMediaMaxBytes: limit });
+    const agent = await signedIn(cms);
+    const sessionId = agent.session();
+    assert.ok(sessionId !== undefined);
+
+    const boundary = 'streamedboundary';
+    const chunk = new Uint8Array(64 * 1024).fill(0x61);
+    const totalChunks = 160;
+    let sent = 0;
+    let pulled = 0;
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent === 0) {
+          controller.enqueue(
+            encoder.encode(
+              `--${boundary}\r\nContent-Disposition: form-data; name="csrf_token"\r\n\r\nwrong\r\n` +
+                `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="a.png"\r\n` +
+                'Content-Type: image/png\r\n\r\n',
+            ),
+          );
+        } else if (sent <= totalChunks) {
+          pulled += chunk.length;
+          controller.enqueue(chunk);
+        } else {
+          controller.enqueue(encoder.encode(`\r\n--${boundary}--\r\n`));
+          controller.close();
+        }
+        sent += 1;
+      },
+    });
+
+    const response = await cms.app.request(UPLOADS_PATH, {
+      method: 'POST',
+      headers: {
+        cookie: `${PLAIN_COOKIE}=${sessionId}`,
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+
+    assert.equal(response.status, 413);
+    assert.match(((await response.json()) as { error: string }).error, /65536 bytes/);
+    assert.ok(
+      pulled < totalChunks * chunk.length,
+      `read ${String(pulled)} of ${String(totalChunks * chunk.length)} bytes`,
+    );
   });
 });

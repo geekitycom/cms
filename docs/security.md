@@ -46,6 +46,22 @@ on only when a reverse proxy in front of the site sets that header. The server
 then uses the leftmost entry. When neither address is available, as when the
 app runs in process instead of behind a server, the username is the only key.
 
+## Request size
+
+The admin reads the body of every `POST` under `/admin` before it checks the
+CSRF token, and stops reading once the body passes a limit. It counts the bytes
+as they arrive, so a body sent without `Content-Length` is held to the same
+limit. Past the limit, the response is `413` and no handler runs.
+
+| Request                                                                      | Limit                                                                  |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| A form from somebody who is not signed in: setup, sign-in, password recovery | 64 KiB                                                                 |
+| A signed-in upload to `/admin/uploads` or `/admin/media/upload`              | The larger of `uploadMaxBytes` and `uploadMediaMaxBytes`, plus 8 KiB   |
+| Any other signed-in form                                                     | 8 MiB, which covers an editor save, preview or autosave of a long post |
+
+A request from somebody who is not signed in to any other admin URL is
+redirected to the login form before its body is read.
+
 ## Session hardening
 
 Three measures protect a signed-in session in addition to the cookie flags and

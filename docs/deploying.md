@@ -122,7 +122,10 @@ location / {
 Set the proxy's body limit to at least the larger of
 `GEEKITY_UPLOAD_MAX_BYTES` and `GEEKITY_UPLOAD_MEDIA_MAX_BYTES`, which is
 200 MiB by default. Otherwise the proxy refuses an episode with a 413 before
-Geekity CMS sees it. Proxy limits:
+Geekity CMS sees it. Geekity CMS applies its own, smaller limits to every
+other admin form, as [Request size](security.md#request-size) describes, so a
+large proxy limit does not let an anonymous form through at that size. Proxy
+limits:
 
 - nginx defaults to 1 MiB.
 - Caddy sets no limit unless the site block has

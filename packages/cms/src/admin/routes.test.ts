@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { chmod } from 'node:fs/promises';
-import { after, describe, it } from 'node:test';
+import { after, describe, it, mock } from 'node:test';
 
 import { Hono } from 'hono';
 
@@ -318,6 +318,88 @@ describe('the guard', () => {
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.getSetCookie().length, 0, 'a public page carries no session');
+  });
+});
+
+describe('the size of an admin form', () => {
+  /** A urlencoded body that arrives in pieces, with no `Content-Length` to trust. */
+  function streamed(text: string): ReadableStream<Uint8Array> {
+    const bytes = new TextEncoder().encode(text);
+    let offset = 0;
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (offset >= bytes.length) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(bytes.subarray(offset, offset + 16 * 1024));
+        offset += 16 * 1024;
+      },
+    });
+  }
+
+  it('refuses a sign-in form over the anonymous limit before the guard or the handler reads it', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    const agent = browser(cms);
+    const token = csrfField(await (await agent.get('/admin/login')).text());
+    assert.ok(token !== undefined);
+
+    const warn = mock.method(console, 'warn', () => {});
+    try {
+      const response = await agent.post('/admin/login', {
+        csrf_token: token,
+        username: 'ada',
+        password: 'x',
+        padding: 'p'.repeat(10 * 1024 * 1024),
+      });
+      assert.equal(response.status, 413);
+      assert.equal(warn.mock.callCount(), 0, 'the sign-in handler did not run');
+    } finally {
+      warn.mock.restore();
+    }
+  });
+
+  it('counts the bytes of a sign-in form that declares no length', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    const agent = browser(cms);
+    const token = csrfField(await (await agent.get('/admin/login')).text());
+    assert.ok(token !== undefined);
+    const cookie = `geekity_session=${agent.session() ?? ''}`;
+    const form = new URLSearchParams({ csrf_token: token, username: 'ada', password: 'x' });
+
+    const small = await cms.app.request('/admin/login', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      body: streamed(form.toString()),
+      duplex: 'half',
+    } as RequestInit);
+    assert.equal(small.status, 401, 'a small streamed form reaches the handler');
+
+    form.set('padding', 'p'.repeat(1024 * 1024));
+    const large = await cms.app.request('/admin/login', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      body: streamed(form.toString()),
+      duplex: 'half',
+    } as RequestInit);
+    assert.equal(large.status, 413);
+  });
+
+  it('takes a signed-in editor save far larger than the anonymous limit', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+    const token = csrfField(await (await agent.get('/admin/posts/new?kind=note')).text());
+    assert.ok(token !== undefined);
+
+    const response = await agent.post('/admin/posts/new', {
+      csrf_token: token,
+      title: 'A long one',
+      body: 'word '.repeat(200_000),
+      action: 'save-draft',
+    });
+    assert.equal(response.status, 303);
   });
 });
 

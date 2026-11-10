@@ -68,7 +68,8 @@ import { mountEditorActions } from './editor-actions.ts';
 import { mountItemLookup, mountItemSearch } from './item-lookup.ts';
 import { mountPluginsScreen, pluginScreens } from './plugins.ts';
 import type { LoginThrottle } from '../web/throttle.ts';
-import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
+import { mountUploads, uploadBodyLimit, uploadTooLarge, UPLOADS_PATH } from './uploads.ts';
+import { readWithin } from '../webmention/fetch-public.ts';
 import { mountUsers } from './users.ts';
 import { createConfirmPassword } from './confirm-password.ts';
 import { mountWritingGoals } from './writing-goals.ts';
@@ -201,13 +202,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const response = adminAssetResponse(decodePath(pathname), c.req.raw.headers);
     return response ?? c.notFound();
   });
-
-  // In front of the guard, because the guard parses the form to find the CSRF
-  // token and parsing a multipart form reads the whole file into memory. Every
-  // multipart endpoint needs it: the editor's uploads and the media screen's
-  // own form.
-  app.use(UPLOADS_PATH, refuseOversizedUpload);
-  app.use(MEDIA_UPLOAD_PATH, refuseOversizedUpload);
 
   app.use(ADMIN_PREFIX, guard);
   app.use(`${ADMIN_PREFIX}/*`, guard);
@@ -541,6 +535,8 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   }
 
   if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
+    const oversized = await refuseOversizedBody(c, pathname, session?.userId != null);
+    if (oversized !== undefined) return oversized;
     if (session === undefined || !csrfTokenMatches(session.csrfToken, await submittedToken(c))) {
       return c.text('That form was stale or came from somewhere else. Reload and try again.', 403);
     }
@@ -576,6 +572,46 @@ function liveSession(
 
   admin.deleteSession(session.id);
   return undefined;
+}
+
+/** The most a form from somebody not signed in may weigh: setup, sign-in and password recovery. */
+const ANONYMOUS_FORM_MAX_BYTES = 64 * 1024;
+
+/**
+ * The most any other signed-in form may weigh. The largest are an editor save,
+ * preview or autosave, each carrying a whole Markdown body.
+ */
+const SIGNED_IN_FORM_MAX_BYTES = 8 * 1024 * 1024;
+
+const UPLOAD_PATHS: ReadonlySet<string> = new Set([UPLOADS_PATH, MEDIA_UPLOAD_PATH]);
+
+/**
+ * Read the body up to its limit, counting bytes rather than trusting
+ * `Content-Length`, and answer 413 past it. This runs before the CSRF check
+ * because that check parses the form, which would otherwise buffer a body of
+ * any size; and after the redirects, so a visitor who is not signed in can
+ * never send more than the anonymous limit.
+ */
+async function refuseOversizedBody(
+  c: Context<GeekityEnv>,
+  pathname: string,
+  signedIn: boolean,
+): Promise<Response | undefined> {
+  if (c.req.raw.body === null) return undefined;
+  const upload = signedIn && UPLOAD_PATHS.has(pathname);
+  const limit = upload
+    ? uploadBodyLimit(c.var.config)
+    : signedIn
+      ? SIGNED_IN_FORM_MAX_BYTES
+      : ANONYMOUS_FORM_MAX_BYTES;
+
+  const read = await readWithin(c.req.raw, limit, 'refuse');
+  if (read !== undefined) {
+    c.req.raw = new Request(c.req.raw, { body: read.body });
+    return undefined;
+  }
+  if (upload) return uploadTooLarge(c);
+  return c.text(`That form is larger than the ${String(limit)} bytes the admin accepts.`, 413);
 }
 
 /** The CSRF token in the request body, if the body is a form at all. */
