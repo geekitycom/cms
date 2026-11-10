@@ -1864,3 +1864,105 @@ describe('a form naming a user who is already gone', () => {
     }
   }
 });
+
+describe('a profile or email form older than the stored one', () => {
+  function hiddenField(html: string, name: string): string {
+    const match = new RegExp(`name="${name}"\\s+value="([^"]*)"`).exec(html);
+    assert.ok(match?.[1] !== undefined, `the screen carried ${name}`);
+    return match[1];
+  }
+
+  async function profileForm(agent: Browser, id: number): Promise<Record<string, string>> {
+    const { html, token } = await editScreen(agent, id);
+    return {
+      csrf_token: token,
+      user_id: String(id),
+      profile_hash: hiddenField(html, 'profile_hash'),
+      display_name: '',
+      bio: '',
+      avatar: '',
+      job_title: '',
+      location: '',
+      links: '',
+    };
+  }
+
+  it('refuses a profile save from a form loaded before a newer save, and keeps the newer one', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const dataDir = cms.config.dataDir;
+    const ada = idOf(dataDir, 'ada');
+    const first = await profileForm(agent, ada);
+    const second = await profileForm(agent, ada);
+
+    const one = await agent.post('/admin/users/profile', {
+      ...first,
+      bio: 'Wrote the first program.',
+    });
+    assert.equal(one.status, 303);
+
+    const two = await agent.post('/admin/users/profile', {
+      ...second,
+      display_name: 'Ada Lovelace',
+    });
+
+    assert.equal(two.status, 409);
+    const html = await two.text();
+    assert.match(html, /changed since this form was loaded/);
+    assert.match(html, /Wrote the first program\./, 'the stored version is shown');
+    assert.match(html, /value="Ada Lovelace"/, 'what was typed is still in the box');
+    assert.equal(findUserById(dataDir, ada)?.profile?.bio, 'Wrote the first program.');
+    assert.equal(findUserById(dataDir, ada)?.profile?.displayName, undefined);
+
+    const again = await agent.post('/admin/users/profile', {
+      ...second,
+      profile_hash: hiddenField(html, 'profile_hash'),
+      display_name: 'Ada Lovelace',
+    });
+    assert.equal(again.status, 303, 'saving from the conflict screen is a deliberate overwrite');
+    assert.equal(findUserById(dataDir, ada)?.profile?.displayName, 'Ada Lovelace');
+  });
+
+  it('takes a save from an older form that changes nothing stored', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const dataDir = cms.config.dataDir;
+    const ada = idOf(dataDir, 'ada');
+    const first = await profileForm(agent, ada);
+    const second = await profileForm(agent, ada);
+    const same = { bio: '  Wrote the first program.  ', links: 'https://ada.example' };
+
+    assert.equal((await agent.post('/admin/users/profile', { ...first, ...same })).status, 303);
+    const two = await agent.post('/admin/users/profile', { ...second, ...same });
+
+    assert.equal(two.status, 303);
+  });
+
+  it('refuses an email save from a form loaded before a newer one, and keeps the newer address', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const dataDir = cms.config.dataDir;
+    const ada = idOf(dataDir, 'ada');
+    const { html, token } = await editScreen(agent, ada);
+    const form = {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      user_id: String(ada),
+      email_hash: hiddenField(html, 'email_hash'),
+    };
+
+    const one = await agent.post('/admin/users/email', { ...form, email: 'ada@example.com' });
+    assert.equal(one.status, 303);
+    const two = await agent.post('/admin/users/email', { ...form, email: 'ada@example.org' });
+
+    assert.equal(two.status, 409);
+    const refused = await two.text();
+    assert.match(refused, /changed since this form was loaded/);
+    assert.match(refused, /ada@example\.com/, 'the stored address is shown');
+    assert.match(refused, /value="ada@example\.org"/, 'what was typed is still in the box');
+    assert.equal(findUserById(dataDir, ada)?.email, 'ada@example.com');
+
+    const same = await agent.post('/admin/users/email', { ...form, email: 'ada@example.com' });
+    assert.equal(same.status, 303, 'an older form that changes nothing is taken');
+  });
+});

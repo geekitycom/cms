@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 
 import type { Context, Hono } from 'hono';
 
@@ -16,10 +16,11 @@ import {
   setUserNotification,
   setUserNotificationMode,
   setUserPassword,
+  cleanProfile,
   setUserProfile,
   UserRemovalRefusedError,
 } from '../site/users.ts';
-import type { ProfileLink, User, UserRemovalRefusal } from '../site/users.ts';
+import type { ProfileLink, User, UserProfile, UserRemovalRefusal } from '../site/users.ts';
 import type { FlashKind } from '../store/admin-store.ts';
 import { authorHref } from '../content/authors.ts';
 import { isLinkUrl, LINK_REL_RULE, LINK_URL_RULE, splitLinkRel } from '../site/navigation.ts';
@@ -99,6 +100,8 @@ export const USER_FIELDS = {
   location: 'location',
   links: 'links',
   adminTheme: 'admin_theme',
+  profileHash: 'profile_hash',
+  emailHash: 'email_hash',
 } as const;
 
 export interface MountUsersOptions {
@@ -113,7 +116,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
   app.get(ADD_USER_PATH, (c) => showAddUser(c, render));
   app.post(ADD_USER_PATH, (c) => addUser(c, options));
   app.post(CHANGE_PASSWORD_PATH, (c) => changePassword(c, options));
-  app.post(USER_EMAIL_PATH, (c) => saveEmail(c, options.confirmPassword));
+  app.post(USER_EMAIL_PATH, (c) => saveEmail(c, options));
   app.post(USER_PROFILE_PATH, (c) => saveProfile(c, render));
   app.post(USER_NOTIFICATIONS_PATH, saveNotification);
   app.post(USER_NOTIFICATION_MODE_PATH, saveNotificationMode);
@@ -239,7 +242,7 @@ async function changePassword(
 
 async function saveEmail(
   c: Context<GeekityEnv>,
-  confirmPassword: ConfirmPassword,
+  { render, confirmPassword }: MountUsersOptions,
 ): Promise<Response> {
   const named = await namedUser(c);
   if (named instanceof Response) return named;
@@ -258,9 +261,18 @@ async function saveEmail(
   const problem = emailProblem(email);
   if (problem !== undefined) return backToUser(c, 'error', problem, target);
 
+  const previous = target.email;
+  if (staleForm(body[USER_FIELDS.emailHash], previous) && email !== (previous ?? '')) {
+    c.status(409);
+    return render(
+      c,
+      ADMIN_TEMPLATES.usersEdit,
+      userScreen(c, target, { emailConflict: { submitted: email, current: previous ?? '' } }),
+    );
+  }
+
   await setUserEmail({ dataDir, userId: target.id, email });
 
-  const previous = target.email;
   if (previous !== email) {
     c.var.admin.deletePasswordResetsForUser(target.id);
     if (previous !== undefined && c.var.mailConfigured) {
@@ -287,6 +299,26 @@ async function saveProfile(c: Context<GeekityEnv>, render: AdminRender): Promise
   if (named instanceof Response) return named;
   const { dataDir, body, target } = named;
   const typed = typedProfile(body);
+  const profile = { ...typed, links: parseProfileLinks(typed.links) };
+
+  if (staleForm(body[USER_FIELDS.profileHash], target.profile) && !sameProfile(profile, target)) {
+    c.status(409);
+    return render(
+      c,
+      ADMIN_TEMPLATES.usersEdit,
+      userScreen(
+        c,
+        target,
+        {
+          profileConflict: {
+            submitted: profileText(cleanProfile(profile)),
+            current: profileText(target.profile),
+          },
+        },
+        typed,
+      ),
+    );
+  }
 
   const problems = profileProblems(typed);
   if (Object.keys(problems).length > 0) {
@@ -298,11 +330,7 @@ async function saveProfile(c: Context<GeekityEnv>, render: AdminRender): Promise
     );
   }
 
-  const changed = await setUserProfile({
-    dataDir,
-    userId: target.id,
-    profile: { ...typed, links: parseProfileLinks(typed.links) },
-  });
+  const changed = await setUserProfile({ dataDir, userId: target.id, profile });
 
   // A follower's copy of somebody's name, bio and picture is only as fresh as
   // the last `Update` they were sent.
@@ -315,6 +343,40 @@ async function saveProfile(c: Context<GeekityEnv>, render: AdminRender): Promise
     `Saved ${target.username}’s profile.${toldFollowers(told)}`,
     target,
   );
+}
+
+/**
+ * Whether a form was filled in from a stored value that has since changed. A
+ * post with no version on it is not judged, as before the forms carried one.
+ */
+function staleForm(posted: unknown, stored: unknown): boolean {
+  const hash = stringOrEmpty(posted);
+  return hash !== '' && hash !== storedVersion(stored);
+}
+
+function storedVersion(stored: unknown): string {
+  return createHash('sha256')
+    .update(JSON.stringify(stored ?? null))
+    .digest('hex');
+}
+
+function sameProfile(submitted: UserProfile, target: User): boolean {
+  return (
+    JSON.stringify(cleanProfile(submitted) ?? null) ===
+    JSON.stringify(cleanProfile(target.profile ?? {}) ?? null)
+  );
+}
+
+function profileText(profile: UserProfile | undefined): string {
+  return [
+    `Display name: ${profile?.displayName ?? ''}`,
+    `Bio: ${profile?.bio ?? ''}`,
+    `Avatar: ${profile?.avatar ?? ''}`,
+    `Job title: ${profile?.jobTitle ?? ''}`,
+    `Location: ${profile?.location ?? ''}`,
+    `Links:`,
+    formatProfileLinks(profile?.links),
+  ].join('\n');
 }
 
 function typedProfile(body: Readonly<Record<string, unknown>>) {
@@ -714,6 +776,8 @@ function row(
       location: user.profile?.location ?? '',
       links: formatProfileLinks(user.profile?.links),
     },
+    profileHash: storedVersion(user.profile),
+    emailHash: storedVersion(user.email),
     archiveUrl: authorHref(user.username),
     storedActorId: user.actorId ?? '',
     notifications: notificationSwitches(user),

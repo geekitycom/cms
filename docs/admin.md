@@ -888,6 +888,13 @@ A form with a problem returns a 400, with one message under each field, and
 nothing is written. The add form keeps the submitted username. The password
 forms keep nothing, because a password does not belong in rendered HTML.
 
+The profile and email forms carry a hash of the stored value they were loaded
+from. When that value has been saved since, from another tab or by another
+admin, the save is refused with a 409 and nothing is written. The page shows
+your version and the stored version side by side, and the form keeps what you
+typed. Saving again from that page replaces the stored version. A save that
+would store what is already there is not refused.
+
 **An email address is optional.** You can set it on the add form, or inline on
 any row, including another user's. With one role, every user already has every
 permission, and an admin who has just added a colleague can enter their

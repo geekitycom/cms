@@ -12,10 +12,31 @@
    lands back here, so a Save always shows its own result. #}
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/alert.njk" import alert %}
 {% from "components/badge.njk" import badge, status %}
 {% from "components/button.njk" import button %}
 {% from "components/card.njk" import card, cardActions %}
 {% from "components/upload.njk" import uploadControl %}
+
+{# A save refused because the stored value changed after the form loaded, laid
+   out as the document editor's conflict screen is: both versions in full, and
+   the form below still holding what was typed with the stored value's version,
+   so saving again is a choice made by somebody who has read both. #}
+{% macro conflict(id, noun, versions, rows) %}
+  <div class="mb-4 flex flex-col gap-4">
+    {% call alert(color='error', style='soft', polite=true) %}
+      <span>
+        Nothing was saved. This {{ noun }} changed since this form was loaded:
+        somebody else, or another tab, saved it. Read both versions, then save
+        again to keep yours, or reload the page to keep the stored one.
+      </span>
+    {% endcall %}
+    <div class="grid gap-4 sm:grid-cols-2">
+      {{ field.textarea(id + '-conflict-submitted', '', 'Your version', value=versions.submitted, rows=rows, readonly=true) }}
+      {{ field.textarea(id + '-conflict-current', '', 'The stored version', value=versions.current, rows=rows, readonly=true) }}
+    </div>
+  </div>
+{% endmacro %}
 
 {% block title %}Edit {{ account.username }}{% endblock %}
 
@@ -30,6 +51,11 @@
   <form method="post" action="{{ userEmailUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
     <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+    <input type="hidden" name="{{ fields.emailHash }}" value="{{ account.emailHash }}" />
+
+    {% if emailConflict %}
+      {{ conflict('email', 'address', emailConflict, 2) }}
+    {% endif %}
 
     <p>
       Signs in as <strong>{{ account.username }}</strong>, and writes at
@@ -58,7 +84,8 @@
         Optional, and this site sends no mail yet, so nothing will be sent to one. Choose a provider on <a class="link" href="{{ adminUrl }}/settings/email">Settings &rsaquo; Email</a> to turn password recovery on.
       {% endif %}
     {% endset %}
-    {{ field.text('user-email', fields.email, 'Email address', account.email,
+    {{ field.text('user-email', fields.email, 'Email address',
+         emailConflict.submitted if emailConflict else account.email,
          type='email', autocomplete='email', hintHtml=emailHint) }}
 
     {{ field.password('user-email-current-password', fields.currentPassword, 'Your password',
@@ -78,6 +105,11 @@
   <form method="post" action="{{ userProfileUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
     <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+    <input type="hidden" name="{{ fields.profileHash }}" value="{{ account.profileHash }}" />
+
+    {% if profileConflict %}
+      {{ conflict('profile', 'profile', profileConflict, 8) }}
+    {% endif %}
 
     <p class="text-sm">
       A profile is public. Nothing in it is required — a user with no profile
