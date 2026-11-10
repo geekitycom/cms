@@ -4,6 +4,7 @@
  * one, including where to go to find out how to get a good one.
  */
 import assert from 'node:assert/strict';
+import { rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { after, describe, it } from 'node:test';
 
@@ -24,6 +25,7 @@ import {
 } from '../indieauth/tokens.ts';
 import { INDIEAUTH_TOKENS, dataPath } from '../files/data-files.ts';
 import { addUser } from '../admin/__testing__/users.ts';
+import { createUser, usersFile } from '../site/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -80,6 +82,25 @@ function withHeader(token: string, body = ''): RequestInit {
 }
 
 describe('a route behind the bearer guard', () => {
+  it('refuses a token issued before the users file was started again', async () => {
+    const { cms, grant } = await site();
+    const { accessToken } = await issueTokens(cms.config.dataDir, grant, new Date());
+    const app = guarded(cms, { audience: MICROPUB });
+    assert.equal((await app.request('/thing', withHeader(accessToken))).status, 200);
+
+    rmSync(usersFile(cms.config.dataDir));
+    const grace = await createUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    });
+    assert.equal(grace.id, grant.userId, 'the new user has the id the token names');
+
+    const response = await app.request('/thing', withHeader(accessToken));
+    assert.equal(response.status, 401);
+    assert.equal(((await response.json()) as { error: string }).error, 'invalid_token');
+  });
+
   it('is handed the user and the granted scopes for a token in the header', async () => {
     const { cms, grant } = await site();
     const { accessToken } = await issueTokens(cms.config.dataDir, grant, new Date());

@@ -2,7 +2,7 @@ import type { Context, Hono } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { findUserById, findUserByIdentifier, setUserPassword } from '../site/users.ts';
+import { findUserByIdentifier, setUserPassword, userIssuedTo } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { passwordProblem } from './credentials.ts';
@@ -144,6 +144,7 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
       c.var.admin.prunePasswordResets();
       const reset = c.var.admin.createPasswordReset({
         userId: user.id,
+        userUid: user.uid,
         lifetimeSeconds: RESET_TOKEN_LIFETIME_SECONDS,
       });
 
@@ -195,11 +196,12 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
       return render(c, ADMIN_TEMPLATES.reset, resetScreen(token, { problem }));
     }
 
-    const user = findUserById(dataDir, reset.userId);
+    const user = userIssuedTo(dataDir, reset);
     if (user === undefined) {
       // The account went while the link was in flight. The token is worthless
-      // now, and saying so beats a 500 from a write against nobody.
-      c.var.admin.deletePasswordResetsForUser(reset.userId);
+      // now, and saying so beats a 500 from a write against nobody. Only this
+      // link goes: the id may belong to somebody new whose own links are good.
+      c.var.admin.deletePasswordReset(token);
       return refuseToken(c);
     }
 

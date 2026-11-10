@@ -4,7 +4,7 @@ import type { AdminRender } from './documents.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { findUserById, listUsers } from '../site/users.ts';
+import { findUserById, listUsers, userIssuedTo } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { isPrivateHost } from '../util/public-address.ts';
@@ -67,7 +67,7 @@ export function mountAuthorizationEndpoint(app: Hono<GeekityEnv>): void {
       return c.json({ error: redeemed.error, error_description: redeemed.description }, 400);
     }
     const { grant } = redeemed;
-    const user = findUserById(config.dataDir, grant.userId);
+    const user = userIssuedTo(config.dataDir, grant);
     if (user === undefined) {
       return c.json(
         { error: 'invalid_grant', error_description: 'The person who approved this is gone.' },
@@ -195,6 +195,7 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
       redirectUri: request.redirectUri,
       codeChallenge: request.codeChallenge,
       userId: user.id,
+      ...(user.uid === undefined ? {} : { userUid: user.uid }),
       me: pending.me,
       scopes: request.scopes.filter((scope) => ticked.has(scope)),
       ...(request.resource === undefined ? {} : { resource: request.resource }),

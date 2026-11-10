@@ -28,6 +28,7 @@ import {
   UnknownUserError,
   updateUser,
   UserRemovalRefusedError,
+  userIssuedTo,
   usersFile,
   verifyUserPassword,
 } from './users.ts';
@@ -102,6 +103,55 @@ describe('the users file', () => {
       ['ada'],
       'the file holds what was created',
     );
+  });
+});
+
+describe('who a session, link or token was issued to', () => {
+  it('is a new user only for what was issued to that user, not to an earlier holder of the id', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    assert.ok(ada.uid !== undefined, 'a new user has a uid');
+    assert.equal(userIssuedTo(dataDir, { userId: ada.id, userUid: ada.uid })?.username, 'ada');
+
+    await rm(usersFile(dataDir));
+    const grace = await createUser({ dataDir, username: 'grace', password: 'battery staple' });
+
+    assert.equal(grace.id, ada.id);
+    assert.notEqual(grace.uid, ada.uid);
+    assert.equal(userIssuedTo(dataDir, { userId: ada.id, userUid: ada.uid }), undefined);
+    assert.equal(userIssuedTo(dataDir, { userId: ada.id }), undefined);
+    assert.equal(
+      userIssuedTo(dataDir, { userId: grace.id, userUid: grace.uid })?.username,
+      'grace',
+    );
+  });
+
+  it('is a user written before uids existed for what was issued with none', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada' }]);
+
+    assert.equal(userIssuedTo(dataDir, { userId: 1 })?.username, 'ada');
+    assert.equal(userIssuedTo(dataDir, { userId: 1, userUid: 'someone-else' }), undefined);
+  });
+
+  it('keeps the uid through a save of something else', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+
+    await setUserEmail({ dataDir, userId: ada.id, email: 'ada@example.com' });
+
+    assert.equal(findUserById(dataDir, ada.id)?.uid, ada.uid);
+  });
+
+  it('refuses a file whose uid is not a string', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada' }]);
+    const file = usersFile(dataDir);
+    const parsed = JSON.parse(await readFile(file, 'utf8')) as { users: Record<string, unknown>[] };
+    parsed.users[0] = { ...parsed.users[0], uid: 7 };
+    await writeFile(file, JSON.stringify(parsed));
+
+    assert.throws(() => countUsers(dataDir), /Entry 1 of "users" has a uid that is not a string/);
   });
 });
 

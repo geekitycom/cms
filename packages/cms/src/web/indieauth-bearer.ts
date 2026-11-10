@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 
 import type { GeekityEnv } from './env.ts';
-import { findUserById } from '../site/users.ts';
+import { userIssuedTo } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { PROTECTED_RESOURCE_METADATA_PATH } from './indieauth-discovery.ts';
 import type { Scope } from '../indieauth/request.ts';
@@ -75,7 +75,7 @@ export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
       guard.audience === 'authorization-server'
         ? findAccessToken(config.dataDir, presented, now)
         : verifyAccessToken(config.dataDir, presented, guard.audience, now);
-    const user = token === undefined ? undefined : findUserById(config.dataDir, token.userId);
+    const user = token === undefined ? undefined : userIssuedTo(config.dataDir, token);
     if (token === undefined || user === undefined) {
       const description = 'The access token is unknown, expired, revoked or not for this resource.';
       return refuse(401, 'invalid_token', description, { error: 'invalid_token' });

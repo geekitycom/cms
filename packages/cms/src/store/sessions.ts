@@ -15,6 +15,8 @@ export interface Session {
   readonly id: string;
   /** The user, or `null` while the session is anonymous. */
   readonly userId: number | null;
+  /** The uid that user had at login, when they had one. */
+  readonly userUid?: string | undefined;
   /**
    * The token every mutating form on this session has to send back. It is a
    * second secret rather than the session id, so a token that leaks through a
@@ -49,6 +51,7 @@ export interface FlashMessage {
 export interface CreateSessionInput {
   /** The user logging in, or `null` for the pre-login CSRF session. */
   userId: number | null;
+  userUid?: string | undefined;
   /** How long the session lasts, in seconds. */
   lifetimeSeconds: number;
   /** The clock, injectable so expiry is testable. Defaults to now. */
@@ -103,8 +106,8 @@ export function openSessionStore(
   const statements = {
     deleteSessionsForUser: db.prepare('DELETE FROM sessions WHERE user_id = ? AND id IS NOT ?'),
     insertSession: db.prepare(`
-      INSERT INTO sessions (id, user_id, csrf_token, created_at, expires_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO sessions (id, user_id, user_uid, csrf_token, created_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `),
     sessionById: db.prepare('SELECT * FROM sessions WHERE id = ?'),
     deleteSession: db.prepare('DELETE FROM sessions WHERE id = ?'),
@@ -138,6 +141,7 @@ export function openSessionStore(
       const session: Session = {
         id: randomToken(),
         userId: input.userId,
+        ...(input.userUid === undefined ? {} : { userUid: input.userUid }),
         csrfToken: randomToken(),
         createdAt: now.toISOString(),
         expiresAt: new Date(now.getTime() + input.lifetimeSeconds * 1000).toISOString(),
@@ -145,6 +149,7 @@ export function openSessionStore(
       statements.insertSession.run(
         session.id,
         session.userId,
+        session.userUid ?? null,
         session.csrfToken,
         session.createdAt,
         session.expiresAt,
@@ -224,9 +229,11 @@ function isFlashMessage(value: unknown): value is FlashMessage {
 
 function toSession(row: Row): Session {
   const userId = row['user_id'];
+  const userUid = row['user_uid'];
   return {
     id: String(row['id']),
     userId: userId === null || userId === undefined ? null : Number(userId),
+    ...(typeof userUid === 'string' ? { userUid } : {}),
     csrfToken: String(row['csrf_token']),
     createdAt: String(row['created_at']),
     expiresAt: String(row['expires_at']),

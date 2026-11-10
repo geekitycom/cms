@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { after, describe, it } from 'node:test';
 
 import { CONTACT_POST_PATH } from '../contact/form.ts';
 import { MODERATE_PATH, UNSUBSCRIBE_PATH } from '../notifications/links.ts';
+import { createUser, usersFile } from '../site/users.ts';
 import { WEBMENTION_PATH } from '../webmention/endpoint.ts';
 import {
   browser,
@@ -11,6 +13,7 @@ import {
   sandbox,
   setCookie,
   setUpFirstAdmin,
+  signIn,
   signedIn,
 } from './__testing__/harness.ts';
 import { addUser } from './__testing__/users.ts';
@@ -199,5 +202,66 @@ describe('logout', () => {
     const agent = await signedIn(cms);
 
     assert.equal((await agent.get('/admin')).headers.get('clear-site-data'), null);
+  });
+});
+
+describe('a users file that is started again', () => {
+  const GRACE = { username: 'grace', password: 'a password of her own' };
+
+  async function signedOut(agent: ReturnType<typeof browser>): Promise<void> {
+    const response = await agent.get('/admin');
+    assert.equal(response.status, 302, 'the old cookie is anonymous');
+    assert.equal(response.headers.get('location'), '/admin/login');
+  }
+
+  it('does not hand the new first admin a session the old one had', async () => {
+    const cms = await box.site();
+    const old = await signedIn(cms);
+    assert.equal((await old.get('/admin')).status, 200, 'the old cookie is signed in');
+
+    rmSync(usersFile(cms.config.dataDir));
+    const created = await setUpFirstAdmin(browser(cms), GRACE);
+    assert.equal(created.status, 303, 'setup made the new admin');
+
+    await signedOut(old);
+  });
+
+  it('does the same for a first admin who was made by setup', async () => {
+    const cms = await box.site();
+    const old = browser(cms);
+    assert.equal((await setUpFirstAdmin(old)).status, 303);
+    assert.equal((await old.get('/admin')).status, 200, 'setup signed her in');
+
+    rmSync(usersFile(cms.config.dataDir));
+    assert.equal((await setUpFirstAdmin(browser(cms), GRACE)).status, 303);
+
+    await signedOut(old);
+  });
+
+  it('does not hand a user added after an older copy is restored the session of the user it replaced', async () => {
+    const cms = await box.site();
+    const dataDir = cms.config.dataDir;
+    assert.equal((await setUpFirstAdmin(browser(cms))).status, 303);
+    const backup = readFileSync(usersFile(dataDir), 'utf8');
+
+    const bob = { username: 'bob', password: 'bob has a password' };
+    await createUser({ dataDir, ...bob });
+    const old = await signIn(cms, bob);
+    assert.equal((await old.get('/admin')).status, 200, 'bob is signed in');
+
+    writeFileSync(usersFile(dataDir), backup);
+    const carol = await createUser({ dataDir, username: 'carol', password: 'carol has one too' });
+    assert.equal(carol.id, 2, 'the restored file hands out the id bob had');
+
+    await signedOut(old);
+  });
+
+  it('keeps a session working while the file still holds the person it was made for', async () => {
+    const cms = await box.site();
+    const agent = browser(cms);
+    assert.equal((await setUpFirstAdmin(agent)).status, 303);
+    await createUser({ dataDir: cms.config.dataDir, ...GRACE });
+
+    assert.equal((await agent.get('/admin')).status, 200);
   });
 });

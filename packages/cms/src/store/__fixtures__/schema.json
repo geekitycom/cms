@@ -292,13 +292,13 @@
       "type": "table",
       "name": "password_resets",
       "tbl_name": "password_resets",
-      "sql": "CREATE TABLE password_resets (\n        token_hash TEXT PRIMARY KEY,\n        user_id    INTEGER NOT NULL,\n        created_at TEXT NOT NULL,\n        expires_at TEXT NOT NULL\n      )"
+      "sql": "CREATE TABLE password_resets (\n        token_hash TEXT PRIMARY KEY,\n        user_id    INTEGER NOT NULL,\n        created_at TEXT NOT NULL,\n        expires_at TEXT NOT NULL\n      , user_uid TEXT)"
     },
     {
       "type": "table",
       "name": "sessions",
       "tbl_name": "sessions",
-      "sql": "CREATE TABLE \"sessions\" (\n        id         TEXT PRIMARY KEY,\n        user_id    INTEGER,\n        csrf_token TEXT NOT NULL,\n        created_at TEXT NOT NULL,\n        expires_at TEXT NOT NULL,\n        flash      TEXT\n      , cleared_autosaves TEXT)"
+      "sql": "CREATE TABLE \"sessions\" (\n        id         TEXT PRIMARY KEY,\n        user_id    INTEGER,\n        csrf_token TEXT NOT NULL,\n        created_at TEXT NOT NULL,\n        expires_at TEXT NOT NULL,\n        flash      TEXT\n      , cleared_autosaves TEXT, user_uid TEXT)"
     },
     {
       "type": "table",
@@ -334,6 +334,6 @@
   "userVersion": 0,
   "ledger": [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-    27
+    27, 28
   ]
 }

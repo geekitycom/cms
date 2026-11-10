@@ -778,6 +778,17 @@ exists is not a login. Deleting `data/geekity.db` signs everyone out and loses
 nothing else. Restoring an old database cannot bring back a deleted account or
 a changed password.
 
+Each user created by this version also gets a random `uid` in
+`data/users.json`, which is never given to anybody else. Sessions, password
+reset links and app tokens record the `uid` of the user they were issued to,
+and the server accepts one only while the user with that id has the same
+`uid`. An id is reused when `data/users.json` is deleted and setup runs again,
+or when an older copy of the file is restored and a user is added. In both
+cases, a session, reset link or token issued to the earlier holder of the id
+does not work for the new user. A user written by an earlier version has no
+`uid`, and the server does not add one. Sessions, links and tokens issued to
+that user before the upgrade also have none, so they keep working.
+
 Passwords are hashed with argon2id through `node:crypto`, so there is no native
 module to build. Each hash stores its cost parameters. If the parameters are
 raised later, every stored password still verifies.

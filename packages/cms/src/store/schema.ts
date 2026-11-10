@@ -591,6 +591,16 @@ export const MIGRATIONS: readonly Migration[] = [
     version: 27,
     sql: `ALTER TABLE sessions ADD COLUMN cleared_autosaves TEXT;`,
   },
+  {
+    // The uid of the user a login or a reset link was issued to, so a users
+    // file started again cannot hand either to whoever gets the same id next.
+    // NULL for rows issued to a user who has no uid.
+    version: 28,
+    sql: `
+      ALTER TABLE sessions ADD COLUMN user_uid TEXT;
+      ALTER TABLE password_resets ADD COLUMN user_uid TEXT;
+    `,
+  },
 ];
 
 export function openAdminDatabase(dataDir: string, now: Clock): DatabaseSync {

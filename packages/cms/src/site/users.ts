@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
 import { adminTheme } from './admin-theme.ts';
@@ -48,6 +49,17 @@ export function usersFile(dataDir: string): string {
 export interface User {
   /** Its id, stable for the life of the user, and what a session names. */
   readonly id: number;
+  /**
+   * A random name for this one person, never handed to anybody else.
+   *
+   * An id is never reused only while the file lasts: a file deleted to start
+   * again, or restored from an older copy, hands out ids that sessions, reset
+   * links and tokens elsewhere in `data/` still name. Each of those carries the
+   * uid it was issued to, and {@link userIssuedTo} accepts it only for the same
+   * one. Absent for a user written before uids existed; nothing fills it in,
+   * so what was issued to them before then keeps working.
+   */
+  readonly uid?: string | undefined;
   /** Login name, unique and compared case sensitively. */
   readonly username: string;
   /**
@@ -265,6 +277,22 @@ export function findUserById(dataDir: string, id: number): User | undefined {
   return found === undefined ? undefined : withoutHash(found);
 }
 
+/** Who a session, reset link or token was issued to. */
+export interface IssuedTo {
+  readonly userId: number;
+  readonly userUid?: string | undefined;
+}
+
+/**
+ * The user `issued` names, when the file still holds that same person under
+ * its id: the uids must match, and one issued with none matches only a user
+ * who has none.
+ */
+export function userIssuedTo(dataDir: string, issued: IssuedTo): User | undefined {
+  const user = findUserById(dataDir, issued.userId);
+  return user?.uid === issued.userUid ? user : undefined;
+}
+
 /**
  * The user a forgot-password form named, by either of the two things somebody
  * might type: their username or their email address.
@@ -326,6 +354,7 @@ export async function createUser(input: CreateUserInput): Promise<User> {
     if (taken !== undefined) throw new DuplicateUsernameError(taken.username);
     created = {
       id: contents.nextId,
+      uid: randomUUID(),
       username: input.username,
       // Absent rather than empty, so a user with no email has no key for one
       // and the file says only what somebody actually filled in.
@@ -341,7 +370,7 @@ export async function createUser(input: CreateUserInput): Promise<User> {
   return withoutHash(created);
 }
 
-export type UserChange = Partial<Omit<StoredUser, 'id' | 'username' | 'createdAt'>>;
+export type UserChange = Partial<Omit<StoredUser, 'id' | 'uid' | 'username' | 'createdAt'>>;
 
 export async function updateUser(
   dataDir: string,
@@ -700,6 +729,7 @@ export function verifyUserPassword(
 function withoutHash(user: StoredUser): User {
   return {
     id: user.id,
+    ...(user.uid === undefined ? {} : { uid: user.uid }),
     username: user.username,
     ...(user.email === undefined ? {} : { email: user.email }),
     ...(user.notifications === undefined ? {} : { notifications: user.notifications }),
@@ -837,6 +867,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
 
   const record = entry as Record<string, unknown>;
   const id = record['id'];
+  const uid = record['uid'];
   const username = record['username'];
   const email = record['email'];
   const preferences = notificationsFrom(record['notifications']);
@@ -852,6 +883,9 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
     throw unusableUsersFile(file, new Error(`${where} has no id.`));
   }
+  if (uid !== undefined && (typeof uid !== 'string' || uid === '')) {
+    throw unusableUsersFile(file, new Error(`${where} has a uid that is not a string.`));
+  }
   if (typeof username !== 'string' || username === '') {
     throw unusableUsersFile(file, new Error(`${where} has no username.`));
   }
@@ -861,8 +895,9 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
 
   return {
     id,
+    ...(uid === undefined ? {} : { uid }),
     username,
-    // Unlike the three above, a bad email is dropped rather than refused: it
+    // Unlike the checks above, a bad email is dropped rather than refused: it
     // is not what anybody signs in with, and a site whose whole admin refused
     // to load over a mistyped address would be a worse failure than the one it
     // is guarding against.

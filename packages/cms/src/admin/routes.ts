@@ -13,6 +13,7 @@ import {
   DuplicateUsernameError,
   findUserById,
   SetupClosedError,
+  userIssuedTo,
   verifyUserPassword,
 } from '../site/users.ts';
 import type { User } from '../site/users.ts';
@@ -444,6 +445,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
     const session = admin.createSession({
       userId: user.id,
+      userUid: user.uid,
       lifetimeSeconds: c.var.config.sessionLifetime,
     });
     setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
@@ -566,7 +568,7 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
  * somebody who was not there. The accounts are a file now and the sessions are
  * a cache in a database that may be deleted, restored or rebuilt on its own,
  * so the join is made here instead: a session naming a user the file does not
- * hold is deleted, and the request is anonymous. That is exactly what makes a
+ * hold, or holds under another uid, is deleted, and the request is anonymous. That is exactly what makes a
  * login survive a rebuilt database only as far as the file still holds the
  * person it was made for.
  */
@@ -576,7 +578,8 @@ function liveSession(
   session: Session | undefined,
 ): Session | undefined {
   if (session === undefined || session.userId === null) return session;
-  if (findUserById(dataDir, session.userId) !== undefined) return session;
+  const issued = { userId: session.userId, userUid: session.userUid };
+  if (userIssuedTo(dataDir, issued) !== undefined) return session;
 
   admin.deleteSession(session.id);
   return undefined;

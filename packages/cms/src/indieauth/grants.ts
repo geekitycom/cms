@@ -10,6 +10,7 @@ export interface AuthorizationCode {
   readonly redirectUri: string;
   readonly codeChallenge: CodeChallenge;
   readonly userId: number;
+  readonly userUid?: string | undefined;
   /** The canonical me URL the client is handed back. */
   readonly me: string;
   /** The scopes the person left ticked. */

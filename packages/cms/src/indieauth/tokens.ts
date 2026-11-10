@@ -40,6 +40,8 @@ interface Connection {
   /** Stable for the life of the connection, so a screen can name it. */
   readonly id: string;
   readonly userId: number;
+  /** The uid of the user who approved it, when they had one. */
+  readonly userUid?: string;
   readonly me: string;
   readonly scopes: readonly Scope[];
   /** The RFC 8707 resource the token is good at, or absent when the client named none. */
@@ -73,6 +75,7 @@ export type StoredToken = AppConnection | CreatedToken;
 
 interface TokenRequest {
   readonly userId: number;
+  readonly userUid?: string | undefined;
   readonly me: string;
   readonly name: string;
   readonly scopes: readonly Scope[];
@@ -134,6 +137,7 @@ export async function issueTokens(
   const token: AppConnection = {
     id: randomBytes(16).toString('base64url'),
     userId: grant.userId,
+    ...(grant.userUid === undefined ? {} : { userUid: grant.userUid }),
     me: grant.me,
     clientId: grant.clientId,
     ...(grant.clientName === undefined ? {} : { clientName: grant.clientName }),
@@ -156,6 +160,7 @@ export async function createToken(
     kind: 'created',
     id: randomBytes(16).toString('base64url'),
     userId: request.userId,
+    ...(request.userUid === undefined ? {} : { userUid: request.userUid }),
     me: request.me,
     name: request.name,
     scopes: request.scopes,

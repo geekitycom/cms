@@ -17,6 +17,8 @@ import { randomToken } from './sessions.ts';
 export interface PasswordReset {
   /** Whose password this sets. */
   readonly userId: number;
+  /** That user's uid when the link was asked for, when they had one. */
+  readonly userUid?: string | undefined;
   /** When it was asked for, as an ISO 8601 instant. */
   readonly createdAt: string;
   /** When it stops working, as an ISO 8601 instant. */
@@ -36,6 +38,7 @@ export interface IssuedPasswordReset extends PasswordReset {
 export interface CreatePasswordResetInput {
   /** Whose password the link will set. */
   userId: number;
+  userUid?: string | undefined;
   /** How long the link lasts, in seconds. */
   lifetimeSeconds: number;
   /** The clock, injectable so expiry is testable. Defaults to now. */
@@ -84,8 +87,8 @@ export interface TokenStore {
 export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
   const statements = {
     insertPasswordReset: db.prepare(`
-      INSERT INTO password_resets (token_hash, user_id, created_at, expires_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO password_resets (token_hash, user_id, user_uid, created_at, expires_at)
+      VALUES (?, ?, ?, ?, ?)
     `),
     passwordResetByHash: db.prepare('SELECT * FROM password_resets WHERE token_hash = ?'),
     deletePasswordReset: db.prepare('DELETE FROM password_resets WHERE token_hash = ?'),
@@ -103,6 +106,7 @@ export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
       const reset: IssuedPasswordReset = {
         token,
         userId: input.userId,
+        ...(input.userUid === undefined ? {} : { userUid: input.userUid }),
         createdAt: now.toISOString(),
         expiresAt: new Date(now.getTime() + input.lifetimeSeconds * 1000).toISOString(),
       };
@@ -110,6 +114,7 @@ export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
       statements.insertPasswordReset.run(
         hashToken(token),
         reset.userId,
+        reset.userUid ?? null,
         reset.createdAt,
         reset.expiresAt,
       );
@@ -122,6 +127,7 @@ export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
         statements.passwordResetByHash,
         (row): PasswordReset => ({
           userId: Number(row['user_id']),
+          ...(typeof row['user_uid'] === 'string' ? { userUid: row['user_uid'] } : {}),
           createdAt: String(row['created_at']),
           expiresAt: String(row['expires_at']),
         }),
