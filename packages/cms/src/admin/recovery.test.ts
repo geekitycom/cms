@@ -247,6 +247,39 @@ describe('the reset link (AC #3)', () => {
     assert.doesNotMatch(confirmation.text, /token=/, 'a confirmation carries no way back in');
   });
 
+  it('sets the password once when the same link is posted twice at the same moment', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+    await askForReset(cms, 'ada');
+    const token = new URL(linkIn(provider.sent[0])).searchParams.get('token') ?? '';
+
+    const tabs = await Promise.all(
+      [0, 1].map(async () => {
+        const agent = browser(cms);
+        const csrf = csrfField(await (await agent.get(`${RESET_PATH}?token=${token}`)).text());
+        assert.ok(csrf !== undefined);
+        return { agent, csrf };
+      }),
+    );
+    const passwords = ['the first new password', 'the second new password'];
+
+    const responses = await Promise.all(
+      tabs.map(({ agent, csrf }, i) =>
+        agent.post(RESET_PATH, {
+          csrf_token: csrf,
+          token,
+          password: passwords[i] ?? '',
+          password_confirmation: passwords[i] ?? '',
+        }),
+      ),
+    );
+
+    assert.deepEqual(responses.map((response) => response.status).sort(), [303, 400]);
+    const working = passwords.filter(
+      (password) => verifyUserPassword(cms.config.dataDir, 'ada', password) !== undefined,
+    );
+    assert.equal(working.length, 1);
+  });
+
   it('refuses a token nobody was ever sent, and one that has expired', async () => {
     const { cms, provider } = await site({ email: 'ada@example.com' });
     const agent = browser(cms);

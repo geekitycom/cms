@@ -197,23 +197,22 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
       return render(c, ADMIN_TEMPLATES.reset, resetScreen(token, { problem }));
     }
 
-    const user = userIssuedTo(dataDir, reset);
-    if (user === undefined) {
-      // The account went while the link was in flight. The token is worthless
-      // now, and saying so beats a 500 from a write against nobody. Only this
-      // link goes: the id may belong to somebody new whose own links are good.
-      c.var.admin.deletePasswordReset(token);
-      return refuseToken(c);
-    }
+    // Spent before anything is written, so of two posts of one link only one
+    // gets past here, and a crash part way through leaves no live link behind.
+    const spent = c.var.admin.spendPasswordReset(token);
+    // The account may have gone while the link was in flight, and the id may
+    // now belong to somebody new whose own links are good.
+    const user = spent === undefined ? undefined : userIssuedTo(dataDir, spent);
+    if (user === undefined) return refuseToken(c);
 
-    await setUserPassword({ dataDir, userId: user.id, password });
-
-    // Everything that was a way into this account is now closed: the link that
-    // was just used, every other link asked for while it was in flight, and
-    // every browser that was signed in. Nobody is spared, because the person
-    // doing this is not signed in — they are about to be.
+    // Everything that was a way into this account is now closed: every other
+    // link asked for while this one was in flight, and every browser that was
+    // signed in. Nobody is spared, because the person doing this is not signed
+    // in — they are about to be.
     c.var.admin.deletePasswordResetsForUser(user.id);
     const ended = c.var.admin.deleteSessionsForUser(user.id);
+
+    await setUserPassword({ dataDir, userId: user.id, password });
 
     if (user.email !== undefined) {
       // The other half of the OWASP guidance: whoever owns the address hears
