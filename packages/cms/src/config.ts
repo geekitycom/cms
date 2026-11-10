@@ -244,8 +244,10 @@ export interface GeekityConfig {
    */
   requireAltText?: boolean;
   /**
-   * How many failed sign-ins a username or a client address may make before
-   * the admin locks it out. Default 5. Overridden by `GEEKITY_LOGIN_ATTEMPTS`.
+   * How many failed sign-ins a client address may make, at one username or in
+   * all, before the admin locks it out. A username alone, counted over every
+   * address, locks at ten times this. Default 5. Overridden by
+   * `GEEKITY_LOGIN_ATTEMPTS`.
    */
   loginAttempts?: number;
   /**

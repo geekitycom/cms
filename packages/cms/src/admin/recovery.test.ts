@@ -455,6 +455,40 @@ describe('repeated requests (AC #4)', () => {
   });
 });
 
+describe('a completed reset and earlier failures', () => {
+  async function logIn(agent: Browser, password: string): Promise<Response> {
+    const token = csrfField(await (await agent.get('/admin/login')).text());
+    assert.ok(token !== undefined);
+    return agent.post('/admin/login', { csrf_token: token, username: 'ada', password });
+  }
+
+  it('lets the new password sign in after the username was locked out', async () => {
+    const { cms, provider } = await site({
+      email: 'ada@example.com',
+      config: { loginAttempts: 3, loginLockout: 900 },
+    });
+    const stranger = browser(cms);
+    for (let i = 0; i < 3; i += 1) assert.equal((await logIn(stranger, 'guess')).status, 401);
+    for (let i = 0; i < 3; i += 1) await askForReset(cms, 'ada@example.com');
+    assert.equal((await askForReset(cms, 'ada@example.com')).response.status, 429);
+
+    const { agent } = await askForReset(cms, 'ada');
+    const link = linkIn(provider.sent.at(-1));
+    const csrf = csrfField(await (await agent.get(pathOf(link))).text());
+    assert.ok(csrf !== undefined);
+    const reset = await agent.post(RESET_PATH, {
+      csrf_token: csrf,
+      token: new URL(link).searchParams.get('token') ?? '',
+      password: 'a brand new password',
+      password_confirmation: 'a brand new password',
+    });
+    assert.equal(reset.status, 303);
+
+    assert.equal((await logIn(agent, 'a brand new password')).status, 303);
+    assert.equal((await askForReset(cms, 'ada@example.com')).response.status, 200);
+  });
+});
+
 describe('a second request', () => {
   it('ends the link the first one sent', async () => {
     const { cms, provider } = await site({ email: 'ada@example.com' });

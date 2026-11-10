@@ -57,7 +57,7 @@ import { CSRF_FIELD } from '../forms/protection.ts';
 import type { AdminStore, Session } from '../store/admin-store.ts';
 import { mountTaxonomyScreens, TAXONOMY_KINDS } from './taxonomy.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
-import { clientAddress, createLoginThrottle, describeWait, loginKeys } from '../web/throttle.ts';
+import { clientAddress, createSignInThrottle, describeWait } from '../web/throttle.ts';
 import { mountToolsScreen } from './tools.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { DEV_MODE_PATH, mountDevModeScreen } from './dev-mode.ts';
@@ -67,7 +67,7 @@ import { mountPersonalDataScreen } from './personal-data.ts';
 import { mountEditorActions } from './editor-actions.ts';
 import { mountItemLookup, mountItemSearch } from './item-lookup.ts';
 import { mountPluginsScreen, pluginScreens } from './plugins.ts';
-import type { LoginThrottle } from '../web/throttle.ts';
+import type { SignInThrottle } from '../web/throttle.ts';
 import { mountUploads, uploadBodyLimit, uploadTooLarge, UPLOADS_PATH } from './uploads.ts';
 import { readWithin } from '../webmention/fetch-public.ts';
 import { mountUsers } from './users.ts';
@@ -113,10 +113,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // nothing but recent failures, so it belongs to the process rather than to
   // the database — a restart clears it, which is the right trade for state an
   // anonymous caller can create.
-  let throttled: LoginThrottle | undefined;
+  let throttled: SignInThrottle | undefined;
 
-  function loginThrottle(config: ResolvedConfig): LoginThrottle {
-    throttled ??= createLoginThrottle({
+  function loginThrottle(config: ResolvedConfig): SignInThrottle {
+    throttled ??= createSignInThrottle({
       attempts: config.loginAttempts,
       lockoutSeconds: config.loginLockout,
       now: config.now,
@@ -131,10 +131,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // would let a stranger lock somebody out of signing in by asking for their
   // password to be reset over and over, which would turn the recovery feature
   // into a weapon against the person it exists for.
-  let recoveryThrottled: LoginThrottle | undefined;
+  let recoveryThrottled: SignInThrottle | undefined;
 
-  function recoveryThrottle(config: ResolvedConfig): LoginThrottle {
-    recoveryThrottled ??= createLoginThrottle({
+  function recoveryThrottle(config: ResolvedConfig): SignInThrottle {
+    recoveryThrottled ??= createSignInThrottle({
       attempts: config.loginAttempts,
       lockoutSeconds: config.loginLockout,
       now: config.now,
@@ -255,7 +255,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // Forgetting a password. Registered beside the login form, and named in the
   // guard below, because both of its screens are reached by somebody who by
   // definition cannot sign in.
-  mountRecovery(app, { render, anonymousSession, throttle: recoveryThrottle });
+  mountRecovery(app, { render, anonymousSession, throttle: recoveryThrottle, loginThrottle });
 
   app.post(LOGIN_PATH, async (c) => {
     const config = c.var.config;
@@ -265,7 +265,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const returnTo = returnPath(body[RETURN_TO_FIELD]);
 
     const address = clientAddress(c, config);
-    const keys = loginKeys(username, address);
+    const keys = { username, address };
     const attempted = `${shortened(username)} from ${address === undefined ? 'an unknown address' : shortened(address)}`;
     // A name longer than any username could be is not put back in the form.
     const shown = username.length > MAXIMUM_USERNAME_LENGTH ? '' : username;

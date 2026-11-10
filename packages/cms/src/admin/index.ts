@@ -172,11 +172,16 @@ export {
 export {
   clientAddress,
   createLoginThrottle,
+  createSignInThrottle,
   describeWait,
   LOCKOUT_GROWTH_LIMIT,
-  loginKeys,
 } from '../web/throttle.ts';
-export type { LoginThrottle, LoginThrottleOptions } from '../web/throttle.ts';
+export type {
+  LoginThrottle,
+  LoginThrottleOptions,
+  SignInAttempt,
+  SignInThrottle,
+} from '../web/throttle.ts';
 export { mountPreview } from './preview.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from '../site/passwords.ts';
 export { guard, LOGOUT_PATH, mountAdmin, postEditorPath, SETUP_PATH } from './routes.ts';

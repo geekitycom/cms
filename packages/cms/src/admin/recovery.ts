@@ -12,8 +12,8 @@ import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import type { Session } from '../store/admin-store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
-import { clientAddress, describeWait, loginKeys } from '../web/throttle.ts';
-import type { LoginThrottle } from '../web/throttle.ts';
+import { clientAddress, describeWait } from '../web/throttle.ts';
+import type { SignInThrottle } from '../web/throttle.ts';
 
 /**
  * Forgetting a password, and getting back in without a shell.
@@ -98,12 +98,14 @@ export interface MountRecoveryOptions {
    * and over — turning a recovery feature into a denial of service against the
    * person it exists to help.
    */
-  throttle: (config: ResolvedConfig) => LoginThrottle;
+  throttle: (config: ResolvedConfig) => SignInThrottle;
+  /** The sign-in throttle, which a spent reset link clears for its user. */
+  loginThrottle: (config: ResolvedConfig) => SignInThrottle;
 }
 
 /** Register the forgot-password and reset screens. */
 export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptions): void {
-  const { render, anonymousSession, throttle } = options;
+  const { render, anonymousSession, throttle, loginThrottle } = options;
 
   app.get(FORGOT_PATH, (c) => {
     anonymousSession(c);
@@ -116,7 +118,7 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
     const identifier = stringOrEmpty(body[RECOVERY_FIELDS.identifier]).trim();
 
     const address = clientAddress(c, config);
-    const keys = loginKeys(identifier, address);
+    const keys = { username: identifier, address };
     const throttled = throttle(config);
 
     const wait = throttled.retryAfter(keys);
@@ -211,6 +213,11 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
     const disconnected = await revokeTokensForUser(dataDir, user.id, c.var.config.now());
 
     await setUserPassword({ dataDir, userId: user.id, password, now: c.var.config.now() });
+
+    loginThrottle(c.var.config).forget(user.username);
+    const recovery = throttle(c.var.config);
+    recovery.forget(user.username);
+    if (user.email !== undefined) recovery.forget(user.email);
 
     if (user.email !== undefined) {
       // The other half of the OWASP guidance: whoever owns the address hears

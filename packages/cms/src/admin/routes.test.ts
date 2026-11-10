@@ -723,6 +723,29 @@ describe('the login throttle', () => {
     );
   });
 
+  it('lets the right password in from another address while one is locked out', async () => {
+    const cms = await site({ trustProxy: true, loginAttempts: 3, loginLockout: 120 });
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    async function from(agent: Browser, address: string, password: string): Promise<Response> {
+      const token = csrfField(await (await agent.get('/admin/login')).text());
+      assert.ok(token !== undefined);
+      return agent.post(
+        '/admin/login',
+        { csrf_token: token, username: 'ada', password },
+        { 'x-forwarded-for': address },
+      );
+    }
+
+    const stranger = browser(cms);
+    for (let i = 0; i < 3; i += 1) {
+      assert.equal((await from(stranger, '198.51.100.1', 'guess')).status, 401);
+    }
+    assert.equal((await from(stranger, '198.51.100.1', FIRST_ADMIN.password)).status, 429);
+
+    const owner = await from(browser(cms), '203.0.113.9', FIRST_ADMIN.password);
+    assert.equal(owner.status, 303);
+  });
+
   it('holds the lockout longer each time it is tripped again', async () => {
     const clock = movableClock();
     const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 60 });

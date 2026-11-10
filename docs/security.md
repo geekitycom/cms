@@ -2,12 +2,23 @@
 
 ## Login hardening
 
-`/admin/login` counts failed sign-ins against two keys: the submitted
-username, and the address the request came from. When either key reaches
-`loginAttempts` failures (default five), the admin refuses further attempts
-from that key for `loginLockout` seconds (default fifteen minutes). During the
-lockout it answers `429` with a `Retry-After` header and a message that says
-how long is left.
+`/admin/login` counts failed sign-ins against three keys: the submitted
+username and the address the request came from together, the address alone,
+and the username alone.
+
+- When the username and address together, or the address alone, reach
+  `loginAttempts` failures (default five), the admin refuses further attempts
+  from that key for `loginLockout` seconds (default fifteen minutes). One
+  address gets a few guesses at any username.
+- The username alone counts failures from every address and locks at ten times
+  `loginAttempts`. That lockout lasts `loginLockout` seconds, does not grow,
+  and the count starts over when it ends. It slows guessing spread across many
+  addresses. Because usernames are public, a failure from one address does not
+  lock the username for other addresses: someone who knows the owner's username
+  cannot keep the owner out by failing once each time a lockout ends.
+
+During a lockout the admin answers `429` with a `Retry-After` header and a
+message that says how long is left.
 
 Three details are deliberate:
 
@@ -15,31 +26,37 @@ Three details are deliberate:
   lockout is refused too. If the server verified the password first, an
   attacker who guessed right on the attempt that tripped the limit would get
   in.
-- **The wait doubles each time the lockout trips again**, up to sixteen times
-  the first wait. At the default that is four hours. The server adds no pause
-  to an individual attempt. A `sleep` in the handler holds a connection open
-  for as long as it lasts, so it costs the server more than the attacker.
+- **The wait for the address keys doubles each time the lockout trips again**,
+  up to sixteen times the first wait. At the default that is four hours. The
+  server adds no pause to an individual attempt. A `sleep` in the handler holds
+  a connection open for as long as it lasts, so it costs the server more than
+  the attacker.
 - **The message says nothing about which accounts exist.** The server counts
   and locks out a username that has no account the same way as a real one. The
   lockout cannot be used to enumerate accounts, and a wrong password and an
   unknown username get the same message.
 
-A successful sign-in clears both keys. A key that stops failing also expires
-over time. The counts live in memory, so a restart clears them. This is
-intentional: a failed login writes nothing to disk. A guessing attack runs
-over minutes, and a restart does not happen often enough to help it. The
-memory is bounded too: each key keeps at most 320 characters of the name or
-address, and the server remembers at most 4,096 keys, forgetting the one that
-failed longest ago first. The server logs both refusals with the username and
+A successful sign-in clears the keys it was counted against. Spending a reset
+link clears every count against that user's username, so the new password
+works straight away. A key that stops failing also expires over time. The
+counts live in memory, so a restart clears them. This is intentional: a failed
+login writes nothing to disk. A guessing attack runs over minutes, and a
+restart does not happen often enough to help it. The memory is bounded too:
+each key keeps at most 320 characters of the name or address, and the server
+remembers at most 4,096 keys. When it is full it forgets keys that are not
+locked first, the one that failed longest ago first, so a flood of new names
+does not clear a lockout. The server logs both refusals with the username and
 the address, each cut to 64 characters, and does not put a name longer than
 any username back into the form.
 
 Forms that ask a signed-in user for their password again use the same counts:
 changing your password, adding a user, changing an email address, exporting
 the site, and installing, updating or removing a plugin. A wrong password
-there counts against the signed-in user's username and the address. A
-lockout on either refuses the form, even with the right password, and says how
-long is left; the forms that render a page answer `429` with `Retry-After`.
+there counts against the signed-in user's username and the address as a
+sign-in does, and also against the signed-in user at `loginAttempts` with the
+growing lockout, from any address. A lockout refuses the form, even with the
+right password, and says how long is left; the forms that render a page answer
+`429` with `Retry-After`.
 
 `trustProxy` decides where the address comes from. It defaults to `false`,
 and the address is the socket's own. Any client can send `X-Forwarded-For`. On
@@ -47,7 +64,8 @@ a site reached directly, trusting it would let one attacker give each guess a
 different fake address and never be locked out by address. Turn `trustProxy`
 on only when a reverse proxy in front of the site sets that header. The server
 then uses the leftmost entry. When neither address is available, as when the
-app runs in process instead of behind a server, the username is the only key.
+app runs in process instead of behind a server, the username is counted with
+an empty address.
 
 ## Request size
 
@@ -152,9 +170,10 @@ back in. A user who did not request the reset finds out about it. The message
 and the sign-in screen's notice say when apps were disconnected. Each app has
 to be connected again through the consent screen.
 
-The server rate limits reset requests by username and by address in the same
-way as sign-ins: the same limits, the same growing lockout, `429` and
-`Retry-After`. Resets have their own throttle. If they shared the login
+The server rate limits reset requests by username or email address and by
+address in the same way as sign-ins: the same keys, the same limits, `429` and
+`Retry-After`. Spending a reset link clears the counts against that user's
+username and email address. Resets have their own throttle. If they shared the login
 throttle, a stranger could lock a user out of signing in by requesting resets
 for them over and over.
 
