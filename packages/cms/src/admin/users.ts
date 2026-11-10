@@ -345,13 +345,11 @@ async function saveProfile(c: Context<GeekityEnv>, render: AdminRender): Promise
   );
 }
 
-/**
- * Whether a form was filled in from a stored value that has since changed. A
- * post with no version on it is not judged, as before the forms carried one.
- */
 function staleForm(posted: unknown, stored: unknown): boolean {
-  const hash = stringOrEmpty(posted);
-  return hash !== '' && hash !== storedVersion(stored);
+  const formVersion = stringOrEmpty(posted);
+  const unversionedForm = formVersion === '';
+  if (unversionedForm) return false;
+  return formVersion !== storedVersion(stored);
 }
 
 function storedVersion(stored: unknown): string {
@@ -361,10 +359,7 @@ function storedVersion(stored: unknown): string {
 }
 
 function sameProfile(submitted: UserProfile, target: User): boolean {
-  return (
-    JSON.stringify(cleanProfile(submitted) ?? null) ===
-    JSON.stringify(cleanProfile(target.profile ?? {}) ?? null)
-  );
+  return storedVersion(cleanProfile(submitted)) === storedVersion(target.profile);
 }
 
 function profileText(profile: UserProfile | undefined): string {

@@ -18,10 +18,6 @@
 {% from "components/card.njk" import card, cardActions %}
 {% from "components/upload.njk" import uploadControl %}
 
-{# A save refused because the stored value changed after the form loaded, laid
-   out as the document editor's conflict screen is: both versions in full, and
-   the form below still holding what was typed with the stored value's version,
-   so saving again is a choice made by somebody who has read both. #}
 {% macro conflict(id, noun, versions, rows) %}
   <div class="mb-4 flex flex-col gap-4">
     {% call alert(color='error', style='soft', polite=true) %}

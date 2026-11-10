@@ -471,9 +471,7 @@ export async function setUserProfile(input: {
  *
  * Trimming here rather than at the form is what makes a hand-edited file and a
  * saved one read the same: a bio of three spaces is a bio nobody wrote, and a
- * link with no URL is not somewhere this person is. Links and the avatar are
- * held to {@link isLinkUrl} here too, so a file the users screen did not write
- * cannot put any other scheme on the public bio.
+ * link with no URL is not somewhere this person is.
  */
 export function cleanProfile(profile: UserProfile): UserProfile | undefined {
   const displayName = (profile.displayName ?? '').trim();
@@ -505,14 +503,14 @@ export function cleanProfile(profile: UserProfile): UserProfile | undefined {
   return Object.keys(cleaned).length === 0 ? undefined : cleaned;
 }
 
-/**
- * Whether a stored avatar is one the site will print: a site path or an
- * absolute http(s) URL, the same rule a profile link is held to. A path that
- * starts `//` names a host, so it has to resolve as well; the actor's `icon`
- * is built from it.
- */
+const ANY_SITE = 'https://site.invalid/';
+
 export function isAvatarUrl(avatar: string): boolean {
-  return isLinkUrl(avatar) && URL.canParse(avatar, 'https://site.invalid/');
+  return isLinkUrl(avatar) && resolvesOnAnySite(avatar);
+}
+
+function resolvesOnAnySite(path: string): boolean {
+  return URL.canParse(path, ANY_SITE);
 }
 
 /**
@@ -964,9 +962,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
  * nothing usable.
  *
  * Read through the same {@link cleanProfile} a save goes through, so a file
- * written by hand and one written by the users screen are read identically:
- * whitespace is trimmed, an empty field is no field, and a link or avatar
- * that breaks the link rule is dropped.
+ * written by hand and one written by the users screen are read identically.
  */
 function profileFrom(value: unknown): UserProfile | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
