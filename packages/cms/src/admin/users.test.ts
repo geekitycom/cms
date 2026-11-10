@@ -16,6 +16,7 @@ import {
   setUserProfile,
   verifyUserPassword,
 } from '../site/users.ts';
+import { createToken, findAccessToken } from '../indieauth/tokens.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import { addUser, writeUsers } from './__testing__/users.ts';
 import {
@@ -1210,6 +1211,37 @@ describe('changing your own password', () => {
     const other = await elsewhere.get('/admin');
     assert.equal(other.status, 302);
     assert.equal(other.headers.get('location'), '/admin/login');
+  });
+
+  it('disconnects every app the account had connected, and says so', async () => {
+    const cms = await box.site();
+    const here = await signedIn(cms);
+    const dataDir = cms.config.dataDir;
+    const ada = idOf(dataDir, 'ada');
+    const { accessToken } = await createToken(
+      dataDir,
+      {
+        userId: ada,
+        me: 'http://localhost/',
+        name: 'A connected app',
+        scopes: ['create'],
+        resource: 'http://localhost/_geekity/mcp',
+        lifetimeMs: 86_400_000,
+      },
+      cms.config.now(),
+    );
+    const { token } = await editScreen(here, ada);
+
+    const changed = await here.post('/admin/users/password', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      new_password: 'a brand new password',
+      new_password_confirmation: 'a brand new password',
+    });
+
+    assert.equal(changed.status, 303);
+    assert.equal(findAccessToken(dataDir, accessToken, cms.config.now()), undefined);
+    assert.match((await editScreen(here, ada)).html, /1 connected app was disconnected/);
   });
 
   it('replaces the password, so only the new one logs in', async () => {

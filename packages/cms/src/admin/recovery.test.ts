@@ -9,7 +9,8 @@ import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { createUser, usersFile, verifyUserPassword } from '../site/users.ts';
+import { createToken, findAccessToken } from '../indieauth/tokens.ts';
+import { createUser, findUser, usersFile, verifyUserPassword } from '../site/users.ts';
 import { addUser } from './__testing__/users.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
@@ -245,6 +246,42 @@ describe('the reset link (AC #3)', () => {
     );
     assert.match(confirmation.subject, /password/i);
     assert.doesNotMatch(confirmation.text, /token=/, 'a confirmation carries no way back in');
+  });
+
+  it('disconnects every app the account had connected, and says so in the confirmation', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+    const dataDir = cms.config.dataDir;
+    const ada = findUser(dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { accessToken } = await createToken(
+      dataDir,
+      {
+        userId: ada.id,
+        me: 'https://blog.example/',
+        name: 'A connected app',
+        scopes: ['create'],
+        resource: 'https://blog.example/_geekity/mcp',
+        lifetimeMs: 86_400_000,
+      },
+      cms.config.now(),
+    );
+    await askForReset(cms, 'ada');
+    const token = new URL(linkIn(provider.sent[0])).searchParams.get('token') ?? '';
+
+    const agent = browser(cms);
+    const csrf = csrfField(await (await agent.get(`${RESET_PATH}?token=${token}`)).text());
+    assert.ok(csrf !== undefined);
+    const response = await agent.post(RESET_PATH, {
+      csrf_token: csrf,
+      token,
+      password: 'a brand new password',
+      password_confirmation: 'a brand new password',
+    });
+    assert.equal(response.status, 303);
+    await cms.mail.settled();
+
+    assert.equal(findAccessToken(dataDir, accessToken, cms.config.now()), undefined);
+    assert.match(provider.sent[1]?.text ?? '', /app connected to the account was disconnected/);
   });
 
   it('sets the password once when the same link is posted twice at the same moment', async () => {

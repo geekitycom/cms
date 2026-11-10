@@ -824,8 +824,12 @@ password, the only fix is to delete the user and add them again.
 Changing your own password asks for the current one first. It then ends **every
 other session that login has** and keeps the one you are using. People usually
 change a password because someone else may have it. If the other browsers
-stayed signed in, the change would fix nothing. The flash says how many
-sessions were signed out.
+stayed signed in, the change would fix nothing. For the same reason it
+disconnects **every app connected to your account**, listed on Users >
+Connected apps: IndieAuth, Micropub and MCP clients, and tokens you created
+there. Each app's next request gets 401 `invalid_token`, and you connect it
+again through the consent screen. The flash says how many sessions were signed
+out and how many apps were disconnected.
 
 The admin does not let you change another user's password. To give a colleague
 a login, create a fresh account for them. This keeps the current-password check

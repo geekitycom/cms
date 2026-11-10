@@ -118,9 +118,13 @@ anywhere else. The server then invalidates:
 - the link that was used
 - every other reset link that user had outstanding
 - every session the user was signed in on
+- every app connected to the account: each IndieAuth, Micropub and MCP
+  connection, and each token made on Users > Connected apps
 
 The server then sends the theme's `password-changed` message, which has no link
-back in. A user who did not request the reset finds out about it.
+back in. A user who did not request the reset finds out about it. The message
+and the sign-in screen's notice say when apps were disconnected. Each app has
+to be connected again through the consent screen.
 
 The server rate limits reset requests by username and by address in the same
 way as sign-ins: the same limits, the same growing lockout, `429` and
@@ -128,8 +132,10 @@ way as sign-ins: the same limits, the same growing lockout, `429` and
 throttle, a stranger could lock a user out of signing in by requesting resets
 for them over and over.
 
-Changing a password on the users screen, or changing a user's email address
-there, also ends every reset link that user had outstanding. A link already
+Changing a password on the users screen also disconnects every app connected
+to that account, as a reset does. Changing a password there, or changing a
+user's email address there, also ends every reset link that user had
+outstanding. A link already
 sent to an old address stops working once the address changes.
 
 Reset tokens live in the database, so a restart leaves them working until they

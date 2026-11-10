@@ -38,6 +38,7 @@ import { confirmedUser } from './confirm-password.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
 import { flashAndRedirect } from './flash.ts';
+import { appsDisconnectedPhrase } from './recovery.ts';
 import { editUserPath, USERS_PATH } from '../site/admin-paths.ts';
 import { toldFollowers } from './settings-page.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -199,13 +200,18 @@ async function changePassword(c: Context<GeekityEnv>, render: AdminRender): Prom
   await setUserPassword({ dataDir: c.var.config.dataDir, userId: user.id, password: next });
   const ended = c.var.admin.deleteSessionsForUser(user.id, { except: session.id });
   c.var.admin.deletePasswordResetsForUser(user.id);
+  const disconnected = await revokeTokensForUser(c.var.config.dataDir, user.id, c.var.config.now());
 
+  const closed = [
+    ...(ended === 0 ? [] : [`${signedOut(ended)} signed out`]),
+    ...(disconnected === 0 ? [] : [appsDisconnectedPhrase(disconnected)]),
+  ];
   return backToUser(
     c,
     'notice',
-    ended === 0
+    closed.length === 0
       ? 'Your password was changed.'
-      : `Your password was changed, and ${signedOut(ended)} signed out.`,
+      : `Your password was changed, and ${closed.join(' and ')}.`,
     user,
   );
 }

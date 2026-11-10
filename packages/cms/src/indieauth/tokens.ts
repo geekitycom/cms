@@ -314,14 +314,16 @@ export async function recordUse(dataDir: string, token: StoredToken, now: Date):
   );
 }
 
-/** Revoke every token `userId` holds. */
+/** Revoke every token `userId` holds, and answer how many there were. */
 export async function revokeTokensForUser(
   dataDir: string,
   userId: number,
   now: Date,
-): Promise<void> {
-  if (listTokens(dataDir).every((token) => token.userId !== userId)) return;
+): Promise<number> {
+  const held = listTokens(dataDir).filter((token) => token.userId === userId).length;
+  if (held === 0) return 0;
   await update(dataDir, now, (tokens) => tokens.filter((token) => token.userId !== userId));
+  return held;
 }
 
 /**
