@@ -568,9 +568,9 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
  * somebody who was not there. The accounts are a file now and the sessions are
  * a cache in a database that may be deleted, restored or rebuilt on its own,
  * so the join is made here instead: a session naming a user the file does not
- * hold, or holds under another uid, is deleted, and the request is anonymous. That is exactly what makes a
- * login survive a rebuilt database only as far as the file still holds the
- * person it was made for.
+ * hold, or holds under another uid, is deleted, and the request is anonymous.
+ * That is exactly what makes a login survive a rebuilt database only as far as
+ * the file still holds the person it was made for.
  */
 function liveSession(
   admin: AdminStore,

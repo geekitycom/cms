@@ -24,8 +24,7 @@ import type { SerialQueue } from '../util/queue.ts';
  *   {@link updateFileAtomically} puts the read inside that queue as well,
  *   which is what stops the second writer reading the file before the first
  *   has written it and then overwriting what it wrote. It also holds a lock
- *   file beside the target for that step, because the CLI and the server are
- *   two processes that change the same files, `users.json` among them.
+ *   file beside the target for that step.
  *
  * The queue is per path, so writes to different files still run at once, and
  * a path is forgotten again as soon as its queue drains.
@@ -219,10 +218,6 @@ export function readFileIfPresentSync(file: string): string | undefined {
   }
 }
 
-/**
- * Only a file that is not there reads as empty. A file that is there but
- * cannot be read would otherwise be rewritten from nothing by the next update.
- */
 function isAbsent(error: unknown): boolean {
   return (error as { code?: unknown } | null)?.code === 'ENOENT';
 }

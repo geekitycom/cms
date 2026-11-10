@@ -50,14 +50,8 @@ export interface User {
   /** Its id, stable for the life of the user, and what a session names. */
   readonly id: number;
   /**
-   * A random name for this one person, never handed to anybody else.
-   *
-   * An id is never reused only while the file lasts: a file deleted to start
-   * again, or restored from an older copy, hands out ids that sessions, reset
-   * links and tokens elsewhere in `data/` still name. Each of those carries the
-   * uid it was issued to, and {@link userIssuedTo} accepts it only for the same
-   * one. Absent for a user written before uids existed; nothing fills it in,
-   * so what was issued to them before then keeps working.
+   * A random name for this one person, never handed to anybody else. Absent
+   * for a user written before uids existed; nothing fills it in.
    */
   readonly uid?: string | undefined;
   /** Login name, unique and compared case sensitively. */
@@ -676,10 +670,7 @@ export class UserRemovalRefusedError extends Error {
  * Take a user out of the file. Returns whether they were there.
  *
  * Throws {@link UserRemovalRefusedError} rather than leave the site with
- * nobody, which reopens first-run setup, or let `signedInAs` remove
- * themselves. Both checks are inside the write for the reason
- * {@link createUser}'s duplicate check is: two removals at the same moment
- * queue on the file, so the second one sees the first one's result.
+ * nobody or let `signedInAs` remove themselves.
  */
 export async function removeUserRecord(input: {
   dataDir: string;
@@ -826,10 +817,6 @@ function parseUsersFile(source: string | undefined, file: string): UsersFileCont
   };
 }
 
-/**
- * Every lookup and write keys on the id or the username, so two entries that
- * share one would take each other's password changes and deletes.
- */
 function refuseRepeats(users: readonly StoredUser[], file: string): void {
   const ids = new Map<number, number>();
   const usernames = new Map<string, number>();
@@ -1050,23 +1037,13 @@ function write(
       const read = parseUsersFile(current, file);
       const next = produce(read);
       if (current === undefined) return usersJsonText(next);
-      return `${JSON.stringify(ontoSource(JSON.parse(current) as Record<string, unknown>, read, next), null, 2)}\n`;
+      return `${JSON.stringify(keepingUnreadFields(JSON.parse(current) as Record<string, unknown>, read, next), null, 2)}\n`;
     },
     { mode: USERS_FILE_MODE },
   );
 }
 
-/**
- * The next contents written over the file as it was, rather than over what
- * this version read of it.
- *
- * The reader drops what it cannot use so one bad line does not take the admin
- * down, and a field from a newer release is one of those. Writing the reader's
- * model back would make every such drop permanent on the first unrelated save,
- * so each user keeps their stored entry with only the fields this save changed,
- * and keys outside `users` stay as they were.
- */
-function ontoSource(
+function keepingUnreadFields(
   source: Record<string, unknown>,
   read: UsersFileContents,
   next: UsersFileContents,
@@ -1086,7 +1063,6 @@ function ontoSource(
   };
 }
 
-/** `entry` with each field that differs between `before` and `after` set to its new value. */
 function changedFields(
   entry: Record<string, unknown>,
   before: StoredUser,
