@@ -103,6 +103,10 @@ subdomain cannot set or overwrite it to plant a session. The prefix requires
 whose `baseUrl` is `http://localhost:3000` therefore keeps the name
 `geekity_session`, and local development works as before.
 
+Because these protections follow the base URL, `geekity serve` warns at boot
+when the base URL is a localhost one. See
+[The base URL](configuration.md#the-base-url).
+
 **The upgrade signs people out once.** A session created before this change
 lives in a cookie named `geekity_session`. Under https the server never accepts
 that name as a login again. Accepting it would reopen the sibling-subdomain
@@ -137,13 +141,26 @@ act on no session:
 - a comment from a visitor who is not signed in
 - the one-click moderate and unsubscribe links in an email
 
-**Logout clears the site's data in the browser.** The logout response sends
-`Clear-Site-Data: "cache", "cookies", "storage"`. A shared computer keeps no
-admin pages in its cache and nothing the site stored. Browsers honour the
-header only on a secure origin, which includes `http://localhost`. The
-`cookies` directive clears cookies for the whole registrable domain. Signing
-out of `blog.example.com` also signs the browser out of other sites under
-`example.com`.
+**Logout clears the site's cache in the browser.** The logout response sends
+`Clear-Site-Data: "cache"`, so a shared computer keeps no admin pages in its
+cache. Browsers honour the header only on a secure origin, which includes
+`http://localhost`. The header does not clear cookies: the deleted session row
+and the cleared session cookie already end the sign-in, and the `cookies`
+directive would also clear cookies of other sites under the same registrable
+domain. It does not clear storage either, so the editor's copies of unsaved
+work in localStorage stay in the browser that made them, under a key that
+names the user. Somebody else who uses the same browser profile can read them.
+
+**The public site and the admin share one origin.** The session cookie has
+`Path=/`, and a page drawn for a signed-in reader carries the admin bar with
+that reader's CSRF token. A script that runs on a public page while an admin
+reads it can therefore send requests to `/admin` as that admin. This includes
+a theme's scripts, a plugin's page tags, and anything they load from another
+host. Load only scripts you trust from a theme or plugin. The CMS passes
+`signedIn` to every plugin's page tags, so a plugin can leave its tags off the
+pages a signed-in reader sees. The Umami plugin does this unless **Count
+signed-in visits** is on. Serving the admin from an origin of its own would
+separate the two. The CMS does not do that yet.
 
 ## Forgotten passwords
 

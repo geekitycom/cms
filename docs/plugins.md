@@ -472,6 +472,11 @@ drawn for a signed-in reader is never cached or answered with `304`, and the
 `ETag` of a listing changes when its tags change, so a reader never gets a copy
 that carries another reader's tags.
 
+A script a page tag loads runs on the admin's origin. On a page drawn for a
+signed-in reader it can act as that reader in the admin, so leave a
+third-party script off those pages unless the site owner asks for it. See
+[Session hardening](security.md#session-hardening).
+
 Return no tags while a setting the tags need is unset. An analytics plugin also
 returns none for a signed-in reader and in dev mode, so the site's own visits
 are not counted:

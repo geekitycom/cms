@@ -149,4 +149,25 @@ describe('geekity serve', () => {
     assert.match(running.stdout, /Dev mode is on/, running.stdout);
     assert.ok(await exists(path.join(site, 'data', 'dev-mode.json')), 'the boot latched it');
   });
+
+  it('warns at boot when the base URL is a localhost one, since it listens on every address', async () => {
+    const site = await temporaryDir('geekity-serve-local-base-');
+    await fs.mkdir(path.join(site, 'content'));
+
+    const running = await serve(site, {});
+    await running.stop();
+
+    assert.match(running.stdout, /^Warning: the base URL is http:\/\/localhost:/m, running.stdout);
+    assert.match(running.stdout, /GEEKITY_BASE_URL/, running.stdout);
+  });
+
+  it('says nothing of the base URL when it names the public address', async () => {
+    const site = await temporaryDir('geekity-serve-public-base-');
+    await fs.mkdir(path.join(site, 'content'));
+
+    const running = await serve(site, { GEEKITY_BASE_URL: 'https://blog.example' });
+    await running.stop();
+
+    assert.doesNotMatch(running.stdout, /Warning/, running.stdout);
+  });
 });

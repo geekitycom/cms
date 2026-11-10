@@ -321,8 +321,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const session = c.var.session;
     if (session !== undefined) c.var.admin.deleteSession(session.id);
     clearSessionCookie(c, c.var.config);
-    // A shared computer keeps what the admin cached and stored after the
-    // cookie is gone. This asks the browser to forget all of it for the site.
+    // Only the cache: the cookie directive reaches sibling sites on the same
+    // registrable domain, and storage holds the editor's local copies of
+    // unsaved work, which outlive a sign-out on purpose.
     c.header('Clear-Site-Data', CLEAR_ON_LOGOUT);
     return c.redirect(LOGIN_PATH, 303);
   });
@@ -466,8 +467,8 @@ function shortened(text: string): string {
   return JSON.stringify(cut) + (cut.length < text.length ? '…' : '');
 }
 
-/** `Clear-Site-Data` on logout: every kind of data a browser keeps for the site. */
-const CLEAR_ON_LOGOUT = '"cache", "cookies", "storage"';
+/** `Clear-Site-Data` on logout, so a shared computer keeps no admin pages. */
+const CLEAR_ON_LOGOUT = '"cache"';
 
 /** What somebody signed in under the pre-`__Host-` cookie reads on the login form. */
 const RENAMED_COOKIE_NOTICE =

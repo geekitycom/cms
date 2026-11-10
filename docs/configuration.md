@@ -141,6 +141,12 @@ sets a value, the site uses the stored setting instead of the
 `http://localhost:<port>` fallback.
 [The base URL setting](settings.md#the-base-url-setting) has the full rule.
 
+`geekity serve` listens on every network address. When the base URL it ends
+up with is a localhost one, it prints a warning at boot: until the base URL is
+the https address people use, the session cookie is not marked `Secure`, no
+HSTS header is sent, and password reset links point at localhost. Local
+development can ignore the warning.
+
 ## The Gemini certificate
 
 Gemini is off until `site.gemini` is on. Turn it on with **Serve over
