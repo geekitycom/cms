@@ -55,6 +55,7 @@ themes/default/
     test.*.njk              the Send test email message
     password-reset.*.njk    the forgot-password link
     password-changed.*.njk  the notice sent once a password has been set
+    email-changed.*.njk     the notice sent to an address that was replaced
     comment-pending.*.njk   the moderation notice
     comment-digest.*.njk    the hourly or daily digest of what is waiting
     comment-reply.*.njk     the notice a commenter gets about a reply

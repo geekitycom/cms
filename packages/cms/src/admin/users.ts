@@ -71,6 +71,8 @@ export const USER_NOTIFICATION_MODE_PATH = `${USER_NOTIFICATIONS_PATH}/mode`;
 
 export const USER_THEME_PATH = `${USERS_PATH}/theme`;
 
+const EMAIL_CHANGED_TEMPLATE = 'email-changed';
+
 export const USER_FIELDS = {
   username: 'username',
   password: 'password',
@@ -213,10 +215,24 @@ async function saveEmail(c: Context<GeekityEnv>): Promise<Response> {
   const { dataDir, body, target } = named;
   const email = stringOrEmpty(body[USER_FIELDS.email]).trim();
 
+  if (!passwordConfirmed(c, body)) {
+    return backToUser(c, 'error', `${WRONG_PASSWORD} the address was not changed.`, target);
+  }
+
   const problem = emailProblem(email);
   if (problem !== undefined) return backToUser(c, 'error', problem, target);
 
   await setUserEmail({ dataDir, userId: target.id, email });
+
+  const previous = target.email;
+  if (previous !== undefined && previous !== email && c.var.mailConfigured) {
+    void c.var.mail.send({
+      to: previous,
+      template: EMAIL_CHANGED_TEMPLATE,
+      data: { username: target.username, email },
+    });
+  }
+
   return backToUser(
     c,
     'notice',

@@ -1,0 +1,16 @@
+{# The plain text body of the notice to the address an account used to have.
+   Like the password-changed notice it carries no link back in. #}
+Hello {{ username }},
+
+The email address for {{ username }} on {{ site.title }} has just been
+{% if email %}changed to {{ email }}{% else %}removed{% endif %}. This address will
+not get password reset links or notices from the site any more.
+
+If you or another admin of this site made that change, there is nothing to do.
+
+If nobody did, sign in at {{ baseUrl }}/admin/login and change your password,
+or ask whoever runs this site to look at the account.
+
+--
+{{ site.title }}
+{{ baseUrl }}

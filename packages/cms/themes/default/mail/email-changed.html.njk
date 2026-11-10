@@ -1,0 +1,18 @@
+{# The HTML twin of the notice. No link back in, on purpose. #}
+<p>Hello {{ username }},</p>
+
+<p>
+  The email address for <strong>{{ username }}</strong> on {{ site.title }} has
+  just been {% if email %}changed to {{ email }}{% else %}removed{% endif %}. This address will not get
+  password reset links or notices from the site any more.
+</p>
+
+<p>If you or another admin of this site made that change, there is nothing to do.</p>
+
+<p>
+  If nobody did, sign in at
+  <a href="{{ baseUrl }}/admin/login">{{ baseUrl }}/admin/login</a> and change
+  your password, or ask whoever runs this site to look at the account.
+</p>
+
+<p>&mdash; {{ site.title }}</p>

@@ -16,6 +16,7 @@ import {
   setUserProfile,
   verifyUserPassword,
 } from '../site/users.ts';
+import { createMemoryMailProvider } from '../mail/memory.ts';
 import { addUser, writeUsers } from './__testing__/users.ts';
 import {
   browser,
@@ -86,7 +87,12 @@ async function withEmail(
   email = 'someone@example.com',
 ): Promise<{ html: string; token: string }> {
   const { token } = await editScreen(agent, id);
-  await agent.post('/admin/users/email', { csrf_token: token, user_id: String(id), email });
+  await agent.post('/admin/users/email', {
+    csrf_token: token,
+    current_password: FIRST_ADMIN.password,
+    user_id: String(id),
+    email,
+  });
   return editScreen(agent, id);
 }
 
@@ -305,6 +311,7 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     const { token } = await editScreen(agent, ada);
     await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(ada),
       email: 'ada@example.com',
     });
@@ -415,6 +422,7 @@ describe('saving from the edit user screen (TASK-97 AC #3)', () => {
 
     const saved = await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(grace),
       email: 'grace@example.com',
     });
@@ -435,6 +443,7 @@ describe('saving from the edit user screen (TASK-97 AC #3)', () => {
 
     const refused = await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(ada),
       email: 'not-an-address',
     });
@@ -631,6 +640,7 @@ describe('a user email address (AC #1)', () => {
 
     const saved = await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(grace.id),
       email: 'grace@example.com',
     });
@@ -639,6 +649,7 @@ describe('a user email address (AC #1)', () => {
 
     await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(grace.id),
       email: '',
     });
@@ -654,6 +665,7 @@ describe('a user email address (AC #1)', () => {
 
     const response = await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(ada.id),
       email: 'not-an-address',
     });
@@ -661,6 +673,90 @@ describe('a user email address (AC #1)', () => {
     assert.equal(response.status, 303);
     assert.equal(findUser(cms.config.dataDir, 'ada')?.email, undefined);
     assert.match(await (await agent.get('/admin/users')).text(), /email address looks like/i);
+  });
+
+  for (const [label, typed] of [
+    ['with no password', undefined],
+    ['with the wrong password', 'not the right one'],
+  ] as const) {
+    it(`is not changed ${label}`, async () => {
+      const cms = await box.site();
+      const agent = await signedIn(cms);
+      const dataDir = cms.config.dataDir;
+      const grace = addUser({
+        dataDir,
+        username: 'grace',
+        password: 'a password of her own',
+        email: 'grace@example.com',
+      });
+      const { token } = await editScreen(agent, grace.id);
+
+      const response = await agent.post('/admin/users/email', {
+        csrf_token: token,
+        ...(typed === undefined ? {} : { current_password: typed }),
+        user_id: String(grace.id),
+        email: 'someone-else@example.com',
+      });
+
+      assert.equal(response.status, 303);
+      assert.equal(findUserById(dataDir, grace.id)?.email, 'grace@example.com');
+      assert.match(
+        (await editScreen(agent, grace.id)).html,
+        /Your password was not right, so the address was not changed\./,
+      );
+    });
+  }
+
+  it('asks for your password on the edit screen', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { html } = await editScreen(agent, idOf(cms.config.dataDir, 'ada'));
+
+    const form = /<form method="post" action="\/admin\/users\/email">[\s\S]*?<\/form>/.exec(
+      html,
+    )?.[0];
+    assert.ok(form !== undefined, 'the screen has the email form');
+    assert.match(form, /name="current_password"/);
+  });
+
+  it('tells the previous address when it changes, and nobody when there was none', async () => {
+    const provider = createMemoryMailProvider();
+    const cms = await box.site({
+      mail: { provider, backoffMs: () => 0, logger: { info: () => {}, warn: () => {} } },
+    });
+    const agent = await signedIn(cms);
+    const dataDir = cms.config.dataDir;
+    const grace = addUser({ dataDir, username: 'grace', password: 'a password of her own' });
+    const { token } = await editScreen(agent, grace.id);
+
+    const change = (email: string) =>
+      agent.post('/admin/users/email', {
+        csrf_token: token,
+        current_password: FIRST_ADMIN.password,
+        user_id: String(grace.id),
+        email,
+      });
+
+    await change('grace@example.com');
+    await cms.mail.settled();
+    assert.equal(provider.sent.length, 0, 'there was no previous address to tell');
+
+    await change('grace@example.com');
+    await cms.mail.settled();
+    assert.equal(provider.sent.length, 0, 'the same address is not a change');
+
+    await change('grace@elsewhere.example');
+    await cms.mail.settled();
+    assert.equal(provider.sent.length, 1);
+    const notice = provider.sent[0];
+    assert.ok(notice !== undefined);
+    assert.deepEqual(
+      notice.to.map((recipient) => recipient.address),
+      ['grace@example.com'],
+    );
+    assert.match(notice.subject, /email address/i);
+    assert.match(notice.text, /grace/);
+    assert.match(notice.text, /grace@elsewhere\.example/);
   });
 });
 

@@ -61,6 +61,9 @@
     {{ field.text('user-email', fields.email, 'Email address', account.email,
          type='email', autocomplete='email', hintHtml=emailHint) }}
 
+    {{ field.password('user-email-current-password', fields.currentPassword, 'Your password',
+         autocomplete='current-password', required=true) }}
+
     <div class="mt-2">{{ button('Save email address', type='submit', color='primary') }}</div>
   </form>
   {% endcall %}
