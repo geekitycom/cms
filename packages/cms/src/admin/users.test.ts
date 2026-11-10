@@ -562,6 +562,7 @@ describe('adding a user', () => {
 
     const response = await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'grace',
       password: 'a password of her own',
     });
@@ -581,6 +582,7 @@ describe('adding a user', () => {
 
     await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'grace',
       password: '',
       generate: '1',
@@ -607,6 +609,7 @@ describe('a user email address (AC #1)', () => {
 
     await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'grace',
       password: 'a password of her own',
       email: 'grace@example.com',
@@ -940,6 +943,33 @@ describe('how often a notice arrives (AC #1)', () => {
 });
 
 describe('a bad add form', () => {
+  for (const [label, typed] of [
+    ['no password of your own', {}],
+    ['a wrong password of your own', { current_password: 'not the password' }],
+  ] as const) {
+    it(`adds nobody with ${label}`, async () => {
+      const cms = await box.site();
+      const agent = await signedIn(cms);
+      const form = await agent.get('/admin/users/new');
+      const token = csrfField(await form.text());
+      assert.ok(token !== undefined);
+
+      const response = await agent.post('/admin/users/new', {
+        csrf_token: token,
+        username: 'grace',
+        password: 'a password of her own',
+        email: '',
+        ...typed,
+      });
+
+      assert.equal(response.status, 400);
+      const html = await response.text();
+      assert.match(html, /Your password was not right, so nobody was added/);
+      assert.match(html, /value="grace"/, 'the field still holds what was typed');
+      assert.equal(countUsers(cms.config.dataDir), 1, 'nothing was written');
+    });
+  }
+
   it('refuses a name that could not be an author URL (TASK-67 AC #4)', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
@@ -947,6 +977,7 @@ describe('a bad add form', () => {
 
     const response = await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: '..',
       password: 'a password of their own',
     });
@@ -963,6 +994,7 @@ describe('a bad add form', () => {
 
     const response = await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'grace hopper',
       password: 'a password of her own',
     });
@@ -981,6 +1013,7 @@ describe('a bad add form', () => {
 
     const response = await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'grace',
       password: 'short',
     });
@@ -997,6 +1030,7 @@ describe('a bad add form', () => {
 
     const response = await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'ada',
       password: 'a completely different password',
     });

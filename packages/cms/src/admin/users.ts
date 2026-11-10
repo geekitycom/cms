@@ -34,6 +34,7 @@ import { autosaveCopies } from '../autosave/index.ts';
 import { discardWritingLedger } from '../writing/ledger.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { ADMIN_THEMES, adminTheme } from '../site/admin-theme.ts';
+import { confirmedUser } from './confirm-password.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
 import { flashAndRedirect } from './flash.ts';
@@ -130,6 +131,9 @@ async function addUser(c: Context<GeekityEnv>, render: AdminRender): Promise<Res
 
   const password = generate ? generatePassword() : supplied;
   const problems = addUserProblems(username, password, generate, email);
+  if (!passwordConfirmed(c, body)) {
+    problems.currentPassword = `${WRONG_PASSWORD} nobody was added.`;
+  }
 
   if (Object.keys(problems).length === 0) {
     try {
@@ -395,6 +399,15 @@ function userInForm(dataDir: string, body: Readonly<Record<string, unknown>>): U
   return Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
 }
 
+const WRONG_PASSWORD = 'Your password was not right, so';
+
+function passwordConfirmed(
+  c: Context<GeekityEnv>,
+  body: Readonly<Record<string, unknown>>,
+): boolean {
+  return confirmedUser(c, stringOrEmpty(body[USER_FIELDS.currentPassword])) !== undefined;
+}
+
 function signedInUser(c: Context<GeekityEnv>): User | undefined {
   const userId = c.var.session?.userId;
   return userId == null ? undefined : findUserById(c.var.config.dataDir, userId);
@@ -466,7 +479,12 @@ function signedOut(count: number): string {
   return count === 1 ? '1 other session was' : `${String(count)} other sessions were`;
 }
 
-export type AddUserProblems = { username?: string; password?: string; email?: string };
+export type AddUserProblems = {
+  username?: string;
+  password?: string;
+  email?: string;
+  currentPassword?: string;
+};
 
 export function addUserProblems(
   username: string,

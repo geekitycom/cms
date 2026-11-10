@@ -19,11 +19,12 @@
   <form method="post" action="{{ addUserUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
 
-    {% if addProblems.username or addProblems.password or addProblems.email %}
+    {% if addProblems.username or addProblems.password or addProblems.email or addProblems.currentPassword %}
       {% call field.summary('Nobody was added. Fix the fields marked below and try again.') %}
         {{ field.problem('add-username', addProblems.username) }}
         {{ field.problem('add-email', addProblems.email) }}
         {{ field.problem('add-password', addProblems.password) }}
+        {{ field.problem('add-current-password', addProblems.currentPassword) }}
       {% endcall %}
     {% endif %}
 
@@ -39,6 +40,9 @@
     {{ field.checkbox('add-generate', fields.generate,
          'Generate one instead, and show it to me once', checked=addForm.generate,
          hint='A generated password is shown on the next page and nowhere else. Copy it before you leave.') }}
+
+    {{ field.password('add-current-password', fields.currentPassword, 'Your password',
+         error=addProblems.currentPassword, autocomplete='current-password', required=true) }}
 
     <div class="mt-2">{{ button('Add user', type='submit', color='primary') }}</div>
   </form>
