@@ -85,14 +85,29 @@ export function setSessionCookie(
   });
 }
 
+/**
+ * How long a session with nobody signed in lasts, in seconds. It only has to
+ * carry a CSRF token from a sign-in or recovery form to its answer, and every
+ * cookieless visit to one of those forms makes one.
+ */
+export const ANONYMOUS_SESSION_SECONDS = 60 * 60;
+
+/**
+ * Start a session for a user, or an anonymous one when there is none, and set
+ * its cookie. Making an anonymous session also sweeps expired rows, so the
+ * table holds no more than the last hour of visits to the sign-in forms.
+ */
 export function startSession(
   c: Context<GeekityEnv>,
   user: Pick<User, 'id' | 'uid'> | undefined,
 ): Session {
-  const session = c.var.admin.createSession({
+  const admin = c.var.admin;
+  const lifetime = c.var.config.sessionLifetime;
+  if (user === undefined) admin.pruneSessions();
+  const session = admin.createSession({
     userId: user?.id ?? null,
     ...(user?.uid === undefined ? {} : { userUid: user.uid }),
-    lifetimeSeconds: c.var.config.sessionLifetime,
+    lifetimeSeconds: user === undefined ? Math.min(lifetime, ANONYMOUS_SESSION_SECONDS) : lifetime,
   });
   setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
   c.set('session', session);

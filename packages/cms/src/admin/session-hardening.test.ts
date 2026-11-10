@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { CONTACT_POST_PATH } from '../contact/form.ts';
@@ -18,6 +20,7 @@ import {
 } from './__testing__/harness.ts';
 import { addUser } from './__testing__/users.ts';
 import { UPLOADS_PATH } from './uploads.ts';
+import type { Cms } from '../index.ts';
 
 /**
  * The session hardening of TASK-132: a `__Host-` cookie under https, Fetch
@@ -318,5 +321,119 @@ describe('an upload that declares no length', () => {
       pulled < totalChunks * chunk.length,
       `read ${String(pulled)} of ${String(totalChunks * chunk.length)} bytes`,
     );
+  });
+});
+
+describe('the anonymous session behind the sign-in forms', () => {
+  const HOUR = 60 * 60 * 1000;
+
+  function sessionRows(cms: Cms): Record<string, unknown>[] {
+    const db = new DatabaseSync(path.join(cms.config.dataDir, 'geekity.db'));
+    try {
+      return db.prepare('SELECT * FROM sessions').all() as Record<string, unknown>[];
+    } finally {
+      db.close();
+    }
+  }
+
+  async function siteAt(start: string): Promise<{ cms: Cms; advance: (ms: number) => void }> {
+    let now = new Date(start);
+    const cms = await box.site({ now: () => now });
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    return { cms, advance: (ms) => (now = new Date(now.getTime() + ms)) };
+  }
+
+  it('lasts an hour, not the length of a login', async () => {
+    const { cms } = await siteAt('2026-11-10T12:00:00Z');
+    await cms.app.request('/admin/login');
+
+    const anonymous = sessionRows(cms).filter((row) => row['user_id'] === null);
+    assert.equal(anonymous.length, 1);
+    for (const row of anonymous) {
+      const lifetime =
+        Date.parse(String(row['expires_at'])) - Date.parse(String(row['created_at']));
+      assert.ok(lifetime <= HOUR, `the anonymous session lasts ${lifetime / 1000} s`);
+    }
+  });
+
+  it('leaves only the last hour of cookieless visits in the table', async () => {
+    const { cms, advance } = await siteAt('2026-11-10T12:00:00Z');
+
+    for (let hour = 0; hour < 5; hour += 1) {
+      for (let i = 0; i < 20; i += 1) {
+        assert.equal((await cms.app.request('/admin/login')).status, 200);
+        advance(HOUR / 20);
+      }
+    }
+
+    const rows = sessionRows(cms).length;
+    assert.ok(rows <= 21, `100 visits over five hours left ${rows} session rows`);
+  });
+
+  it('is cleared away once expired without anybody signing in', async () => {
+    const { cms } = await siteAt('2026-11-10T12:00:00Z');
+    const db = new DatabaseSync(path.join(cms.config.dataDir, 'geekity.db'));
+    try {
+      db.prepare(
+        'INSERT INTO sessions (id, user_id, csrf_token, created_at, expires_at) VALUES (?, NULL, ?, ?, ?)',
+      ).run('expired-anonymous', 'x', '2020-01-01T00:00:00.000Z', '2020-01-15T00:00:00.000Z');
+    } finally {
+      db.close();
+    }
+
+    await cms.app.request('/admin/login');
+
+    const ids = sessionRows(cms).map((row) => row['id']);
+    assert.ok(!ids.includes('expired-anonymous'), 'the expired row is still there');
+  });
+
+  it('turns a sign-in form left open past it into a message to try again', async () => {
+    const { cms, advance } = await siteAt('2026-11-10T12:00:00Z');
+    const agent = browser(cms);
+    const token = csrfField(await (await agent.get('/admin/login')).text());
+    assert.ok(token !== undefined);
+
+    advance(2 * HOUR);
+    const response = await agent.post('/admin/login', {
+      csrf_token: token,
+      username: FIRST_ADMIN.username,
+      password: FIRST_ADMIN.password,
+    });
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/login');
+    const form = await (await agent.get('/admin/login')).text();
+    assert.match(form, /form expired/i);
+
+    const retried = await agent.post('/admin/login', {
+      csrf_token: csrfField(form) ?? '',
+      username: FIRST_ADMIN.username,
+      password: FIRST_ADMIN.password,
+    });
+    assert.equal(retried.status, 303);
+    assert.equal(retried.headers.get('location'), '/admin');
+  });
+
+  it('sends an expired reset form back to its link, which still works', async () => {
+    const { cms, advance } = await siteAt('2026-11-10T12:00:00Z');
+    const { token } = cms.admin.createPasswordReset({ userId: 1, lifetimeSeconds: 4 * HOUR });
+    const agent = browser(cms);
+    const page = await agent.get(`/admin/reset?token=${token}`);
+    const csrf = csrfField(await page.text());
+    assert.ok(csrf !== undefined);
+
+    advance(2 * HOUR);
+    const response = await agent.post('/admin/reset', {
+      csrf_token: csrf,
+      token,
+      password: 'a brand new password',
+      password_confirmation: 'a brand new password',
+    });
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), `/admin/reset?token=${token}`);
+    const form = await agent.get(`/admin/reset?token=${token}`);
+    assert.equal(form.status, 200);
+    assert.match(await form.text(), /form expired/i);
   });
 });

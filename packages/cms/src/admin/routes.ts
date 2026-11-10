@@ -40,7 +40,7 @@ import { adminMenu } from './menu.ts';
 import { mountMessagesScreen } from './messages.ts';
 import { mountNavigationScreen } from './navigation.ts';
 import { mountPreview } from './preview.ts';
-import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
+import { FORGOT_PATH, mountRecovery, RECOVERY_FIELDS, RESET_PATH } from './recovery.ts';
 import { mountSettings } from './settings-pages.ts';
 import { mountSyndicationTargetsScreen } from './syndication-targets.ts';
 import {
@@ -50,7 +50,6 @@ import {
   csrfTokenMatches,
   retireOldSessionCookie,
   sessionIdFrom,
-  setSessionCookie,
   startSession,
 } from '../web/session.ts';
 import { CSRF_FIELD } from '../forms/protection.ts';
@@ -508,8 +507,7 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
     sessionId === undefined ? undefined : admin.getSession(sessionId),
   );
   if (retireOldSessionCookie(c) && session === undefined) {
-    session = admin.createSession({ userId: null, lifetimeSeconds: c.var.config.sessionLifetime });
-    setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
+    session = startSession(c, undefined);
     admin.pushFlash(session.id, { kind: 'notice', message: RENAMED_COOKIE_NOTICE });
   }
   c.set('session', session);
@@ -542,7 +540,11 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
     const oversized = await refuseOversizedBody(c, pathname, session?.userId != null);
     if (oversized !== undefined) return oversized;
-    if (session === undefined || !csrfTokenMatches(session.csrfToken, await submittedToken(c))) {
+    const token = await submittedToken(c);
+    if (session === undefined && (isSetup || isAnonymous) && typeof token === 'string') {
+      return expiredForm(c, pathname);
+    }
+    if (session === undefined || !csrfTokenMatches(session.csrfToken, token)) {
       return c.text('That form was stale or came from somewhere else. Reload and try again.', 403);
     }
   }
@@ -621,6 +623,10 @@ async function refuseOversizedBody(
 
 /** The CSRF token in the request body, if the body is a form at all. */
 async function submittedToken(c: Context<GeekityEnv>): Promise<unknown> {
+  return submittedField(c, CSRF_FIELD);
+}
+
+async function submittedField(c: Context<GeekityEnv>, name: string): Promise<unknown> {
   const contentType = c.req.header('content-type') ?? '';
   if (
     !contentType.includes('application/x-www-form-urlencoded') &&
@@ -630,7 +636,31 @@ async function submittedToken(c: Context<GeekityEnv>): Promise<unknown> {
   }
   // Hono caches the parsed form, so the handler behind this parses nothing twice.
   const body = await c.req.parseBody();
-  return body[CSRF_FIELD];
+  return body[name];
+}
+
+const EXPIRED_FORM_NOTICE = 'That form expired before it was sent. Please try again.';
+
+/**
+ * Send a sign-in, setup or recovery form whose anonymous session has run out
+ * back to a fresh copy of itself, with a message, rather than a bare 403. Only
+ * a post carrying a token gets this: one with none never came from the form. The
+ * reset form keeps its link's token and the sign-in form its return address.
+ */
+async function expiredForm(c: Context<GeekityEnv>, pathname: string): Promise<Response> {
+  const session = startSession(c, undefined);
+  c.var.admin.pushFlash(session.id, { kind: 'warning', message: EXPIRED_FORM_NOTICE });
+
+  const query = new URLSearchParams();
+  if (pathname === RESET_PATH) {
+    const token = await submittedField(c, RECOVERY_FIELDS.token);
+    if (typeof token === 'string' && token !== '') query.set(RECOVERY_FIELDS.token, token);
+  } else if (pathname === LOGIN_PATH) {
+    const returnTo = returnPath(await submittedField(c, RETURN_TO_FIELD));
+    if (returnTo !== undefined) query.set(RETURN_TO_FIELD, returnTo);
+  }
+  const search = query.size === 0 ? '' : `?${query.toString()}`;
+  return c.redirect(`${pathname}${search}`, 303);
 }
 
 /**
