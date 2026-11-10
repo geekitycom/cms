@@ -16,14 +16,23 @@
     <h1 class="card-title text-2xl">Forgotten password</h1>
 
     {% if not configured %}
-      {# No provider and no credential, so there is nothing to send a link
-         with. Saying so beats a form that quietly does nothing. #}
-      <p>This site cannot send email, so a password cannot be reset from here.</p>
+      {# Nothing would deliver a link: no provider, no credential, or dev mode
+         holding every message. Saying so beats a form that quietly does
+         nothing. #}
+      {% if devMode %}
+        <p>This site is in dev mode, which holds every outgoing email, so a password cannot be reset from here.</p>
+      {% else %}
+        <p>This site cannot send email, so a password cannot be reset from here.</p>
+      {% endif %}
       <p>
-        Whoever runs the server can add an account from a shell with
-        <code>geekity user add &lt;username&gt;</code>, and sign in with that to
-        change anything else. Turning on a mail provider under
-        <strong>Settings &rarr; Email</strong> makes this page work.
+        Whoever runs the server can set a new password from a shell with
+        <code>geekity user password &lt;username&gt;</code>.
+        {% if devMode %}
+          Turning dev mode off makes this page work.
+        {% else %}
+          Turning on a mail provider under <strong>Settings &rarr; Email</strong>
+          makes this page work.
+        {% endif %}
       </p>
       <p><a class="link" href="{{ loginUrl }}">Back to the login form</a></p>
     {% elif sent %}

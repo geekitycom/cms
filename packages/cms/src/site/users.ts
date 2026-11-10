@@ -728,10 +728,15 @@ export async function removeUserRecord(input: {
   userId: number;
   /** The user asking for the removal, when it is a person. */
   signedInAs?: number | null | undefined;
+  /**
+   * Runs once the removal is allowed and before the record goes, with the
+   * file still locked. When it throws, the user stays, so a retry finds them.
+   */
+  beforeRemoval?: ((userId: number) => void | Promise<void>) | undefined;
 }): Promise<boolean> {
   let deleted = false;
 
-  await write(input.dataDir, (contents) => {
+  await write(input.dataDir, async (contents) => {
     const target = contents.users.find((user) => user.id === input.userId);
     deleted = target !== undefined;
     if (target === undefined) return contents;
@@ -741,6 +746,7 @@ export async function removeUserRecord(input: {
     if (target.id === input.signedInAs) {
       throw new UserRemovalRefusedError('own-account', target.username);
     }
+    await input.beforeRemoval?.(target.id);
     return { ...contents, users: contents.users.filter((user) => user.id !== input.userId) };
   });
 
@@ -1109,18 +1115,18 @@ function unusableUsersFile(file: string, cause: unknown): Error {
 /** Read the file, decide what it should say next, and write it, as one step. */
 function write(
   dataDir: string,
-  produce: (contents: UsersFileContents) => UsersFileContents,
+  produce: (contents: UsersFileContents) => UsersFileContents | Promise<UsersFileContents>,
 ): Promise<void> {
   const file = usersFile(dataDir);
   return updateFileAtomically(
     file,
-    (current) => {
+    async (current) => {
       const read = parseUsersFile(current, file);
-      const next = produce(read);
+      const next = await produce(read);
       if (current === undefined) return usersJsonText(next);
       return `${JSON.stringify(keepingUnreadFields(JSON.parse(current) as Record<string, unknown>, read, next), null, 2)}\n`;
     },
-    { mode: USERS_FILE_MODE },
+    { mode: USERS_FILE_MODE, durable: true },
   );
 }
 

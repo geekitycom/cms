@@ -166,6 +166,7 @@ export function migrateSettingsToFile(db: DatabaseSync, contentDir: string): voi
     writeFileAtomicallySync(
       file,
       `${JSON.stringify(fileWith(SITE, settings, existing), null, 2)}\n`,
+      { durable: true },
     );
   }
 
@@ -210,7 +211,10 @@ export function migrateActorKeysToFiles(db: DatabaseSync, dataDir: string): void
       // newline every file here ends with — a key is not something to
       // re-encode on the way past.
       if (readFileIfPresentSync(file) === undefined) {
-        writeFileAtomicallySync(file, `${row.privateJwk.trimEnd()}\n`, { mode: KEY_FILE_MODE });
+        writeFileAtomicallySync(file, `${row.privateJwk.trimEnd()}\n`, {
+          mode: KEY_FILE_MODE,
+          durable: true,
+        });
       }
     }
   }
@@ -255,6 +259,7 @@ export function migrateUsersToFile(db: DatabaseSync, dataDir: string): void {
     const highest = users.reduce((top, user) => Math.max(top, user.id), 0);
     writeFileAtomicallySync(file, usersJsonText({ users, nextId: highest + 1 }), {
       mode: USERS_FILE_MODE,
+      durable: true,
     });
   }
 

@@ -1,5 +1,14 @@
-import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import {
+  closeSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { lockFileFor, withLockFile } from './lock-file.ts';
@@ -43,6 +52,12 @@ export interface WriteFileAtomicallyOptions {
    * file happened to have.
    */
   mode?: number | undefined;
+  /**
+   * Flush the file before the rename and its directory after, so a power cut
+   * cannot leave it empty or missing. That costs milliseconds per write, so it
+   * is for files nothing else can rebuild: accounts, keys and tokens.
+   */
+  durable?: boolean | undefined;
 }
 
 /** What a write puts in a file: text, or bytes as they are. */
@@ -189,8 +204,19 @@ export function writeFileAtomicallySync(
   const temporary = temporaryName(file);
 
   try {
-    writeFileSync(temporary, contents, options.mode === undefined ? {} : { mode: options.mode });
+    if (options.durable === true) {
+      const fd = openSync(temporary, 'w', options.mode);
+      try {
+        writeFileSync(fd, contents);
+        fsyncSync(fd);
+      } finally {
+        closeSync(fd);
+      }
+    } else {
+      writeFileSync(temporary, contents, options.mode === undefined ? {} : { mode: options.mode });
+    }
     renameSync(temporary, file);
+    if (options.durable === true) syncDirectorySync(path.dirname(file));
   } catch (error) {
     try {
       unlinkSync(temporary);
@@ -246,8 +272,23 @@ async function write(
   const temporary = temporaryName(file);
 
   try {
-    await writeFile(temporary, contents, options.mode === undefined ? {} : { mode: options.mode });
+    if (options.durable === true) {
+      const handle = await open(temporary, 'w', options.mode);
+      try {
+        await handle.writeFile(contents);
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    } else {
+      await writeFile(
+        temporary,
+        contents,
+        options.mode === undefined ? {} : { mode: options.mode },
+      );
+    }
     await rename(temporary, file);
+    if (options.durable === true) await syncDirectory(path.dirname(file));
   } catch (error) {
     try {
       await unlink(temporary);
@@ -272,4 +313,27 @@ let sequence = 0;
 export function temporaryName(file: string): string {
   sequence += 1;
   return `${file}.${process.pid.toString(36)}-${sequence.toString(36)}.tmp`;
+}
+
+// Windows cannot open a directory to flush it; NTFS orders the rename itself.
+const DIRECTORIES_FLUSH = process.platform !== 'win32';
+
+async function syncDirectory(directory: string): Promise<void> {
+  if (!DIRECTORIES_FLUSH) return;
+  const handle = await open(directory, 'r');
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+function syncDirectorySync(directory: string): void {
+  if (!DIRECTORIES_FLUSH) return;
+  const fd = openSync(directory, 'r');
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
 }

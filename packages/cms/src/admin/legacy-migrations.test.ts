@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { after, describe, it } from 'node:test';
+import { after, describe, it, mock } from 'node:test';
 
 import { databaseFile } from '../cache.ts';
 import {
@@ -12,6 +14,7 @@ import {
   legacySettings,
   legacyUsers,
   migrateSettingsToFile,
+  migrateUsersToFile,
 } from './legacy-migrations.ts';
 import { adminStoreOwning, openAdminDatabase } from '../store/admin-store.ts';
 import type { AdminStore } from '../store/admin-store.ts';
@@ -206,6 +209,55 @@ describe('the users table an older version wrote', () => {
     const reopened = openAdminDatabase(dataDir, systemClock);
     assert.equal(legacyUsers(reopened), undefined, 'and stays gone across a boot');
     reopened.close();
+  });
+
+  it('is dropped only after users.json is flushed to disk', async () => {
+    const dataDir = await temporaryDir();
+    const legacy = new DatabaseSync(path.join(dataDir, 'geekity.db'));
+    legacy.exec(`
+      CREATE TABLE admin_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+      INSERT INTO admin_migrations (version, applied_at) VALUES (1, '2026-09-01T00:00:00.000Z');
+      CREATE TABLE users (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        username      TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at    TEXT NOT NULL
+      );
+      CREATE TABLE sessions (
+        id         TEXT PRIMARY KEY,
+        user_id    INTEGER REFERENCES users (id) ON DELETE CASCADE,
+        csrf_token TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+      INSERT INTO users (id, username, password_hash, created_at)
+      VALUES (7, 'ada', '$argon2id$v=19$m=1,t=1,p=1$c2FsdA$aGFzaA', '2026-09-01T00:00:00.000Z');
+    `);
+    legacy.close();
+    const db = openAdminDatabase(dataDir, systemClock);
+    openDatabases.push(db);
+
+    const tableAtEachFlush: boolean[] = [];
+    const original = fs.fsyncSync;
+    const spy = mock.method(fs, 'fsyncSync', (fd: number) => {
+      tableAtEachFlush.push(legacyUsers(db) !== undefined);
+      original(fd);
+    });
+    syncBuiltinESMExports();
+    try {
+      migrateUsersToFile(db, dataDir);
+    } finally {
+      spy.mock.restore();
+      syncBuiltinESMExports();
+    }
+
+    assert.deepEqual(
+      tableAtEachFlush,
+      [true, true],
+      'the file and its directory, table still there',
+    );
+    assert.equal(legacyUsers(db), undefined);
+    assert.match(await readFile(path.join(dataDir, 'users.json'), 'utf8'), /"ada"/);
   });
 
   it('is dropped on a database this version created, where it was never used', async () => {

@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict';
 import { execFile as execFileCallback } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import fs, { existsSync, fstatSync, readFileSync } from 'node:fs';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, describe, it, mock } from 'node:test';
 import { promisify } from 'node:util';
 
 import {
@@ -346,5 +358,82 @@ describe('refuseWritesUnder', () => {
     } finally {
       release();
     }
+  });
+});
+
+describe('a durable write', () => {
+  /** What was flushed, in order: the file before it was in place, then its directory. */
+  type Flush = { directory: boolean; targetInPlace: boolean };
+
+  it('flushes the new file before the rename and the directory after it', async () => {
+    const dir = await temporaryDir();
+    const file = path.join(dir, 'users.json');
+    const probe = await open(path.join(dir, 'probe'), 'w');
+    const prototype = Object.getPrototypeOf(probe) as FileHandle;
+    await probe.close();
+    await rm(path.join(dir, 'probe'));
+
+    const flushes: Flush[] = [];
+    const original = Reflect.get(prototype, 'sync') as (this: FileHandle) => Promise<void>;
+    const spy = mock.method(prototype, 'sync', async function (this: FileHandle) {
+      flushes.push({
+        directory: (await this.stat()).isDirectory(),
+        targetInPlace: existsSync(file),
+      });
+      return await original.call(this);
+    });
+    try {
+      await updateFileAtomically(file, () => '{"users":[]}\n', { durable: true });
+    } finally {
+      spy.mock.restore();
+    }
+
+    assert.deepEqual(flushes, [
+      { directory: false, targetInPlace: false },
+      { directory: true, targetInPlace: true },
+    ]);
+    assert.equal(await readFile(file, 'utf8'), '{"users":[]}\n');
+  });
+
+  it('does the same for a caller that cannot await', async () => {
+    const dir = await temporaryDir();
+    const file = path.join(dir, 'users.json');
+
+    const flushes: Flush[] = [];
+    const original = fs.fsyncSync;
+    const spy = mock.method(fs, 'fsyncSync', (fd: number) => {
+      flushes.push({ directory: fstatSync(fd).isDirectory(), targetInPlace: existsSync(file) });
+      original(fd);
+    });
+    syncBuiltinESMExports();
+    try {
+      writeFileAtomicallySync(file, '{"users":[]}\n', { mode: 0o600, durable: true });
+    } finally {
+      spy.mock.restore();
+      syncBuiltinESMExports();
+    }
+
+    assert.deepEqual(flushes, [
+      { directory: false, targetInPlace: false },
+      { directory: true, targetInPlace: true },
+    ]);
+    assert.equal((await stat(file)).mode & 0o777, 0o600);
+  });
+
+  it('is not what a write gets unless it asks', async () => {
+    const dir = await temporaryDir();
+    const original = fs.fsyncSync;
+    const spy = mock.method(fs, 'fsyncSync', (fd: number) => {
+      original(fd);
+    });
+    syncBuiltinESMExports();
+    try {
+      writeFileAtomicallySync(path.join(dir, 'draft.json'), '{}\n');
+    } finally {
+      spy.mock.restore();
+      syncBuiltinESMExports();
+    }
+
+    assert.equal(spy.mock.callCount(), 0);
   });
 });

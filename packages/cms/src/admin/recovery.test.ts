@@ -565,6 +565,70 @@ describe('a link from before a password change', () => {
   });
 });
 
+describe('a request while the database refuses writes', () => {
+  it('answers a known name exactly as it answers an unknown one', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+
+    async function formFor(): Promise<{ agent: Browser; token: string }> {
+      const agent = browser(cms);
+      const token = csrfField(await (await agent.get(FORGOT_PATH)).text());
+      assert.ok(token !== undefined);
+      return { agent, token };
+    }
+    const known = await formFor();
+    const unknown = await formFor();
+
+    cms.admin.setReadOnly(true);
+    try {
+      const knownAnswer = await known.agent.post(FORGOT_PATH, {
+        csrf_token: known.token,
+        identifier: 'ada',
+      });
+      const unknownAnswer = await unknown.agent.post(FORGOT_PATH, {
+        csrf_token: unknown.token,
+        identifier: 'nobody-at-all',
+      });
+
+      assert.equal(knownAnswer.status, 200);
+      assert.equal(unknownAnswer.status, 200);
+      assert.equal(bodyText(await knownAnswer.text()), bodyText(await unknownAnswer.text()));
+    } finally {
+      cms.admin.setReadOnly(false);
+    }
+    await cms.mail.settled();
+    assert.equal(provider.sent.length, 0);
+  });
+});
+
+describe('a site in dev mode', () => {
+  it('shows the shell instructions instead of the form, and sends nothing when posted', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+    await cms.settings.set('dev_mode', new Map([['on', true]]), 'cli');
+
+    const agent = browser(cms);
+    const html = await (await agent.get(FORGOT_PATH)).text();
+
+    assert.match(html, /dev mode/i);
+    assert.match(html, /geekity user password/);
+    assert.doesNotMatch(html, /name="identifier"/);
+
+    const token = csrfField(await (await agent.get('/admin/login')).text());
+    assert.ok(token !== undefined);
+    const response = await agent.post(FORGOT_PATH, { csrf_token: token, identifier: 'ada' });
+    assert.equal(response.status, 200);
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 0);
+    const read = new DatabaseSync(cms.admin.file);
+    try {
+      const row = read.prepare('SELECT COUNT(*) AS n FROM password_resets').get();
+      assert.equal(row?.['n'], 0);
+    } finally {
+      read.close();
+    }
+  });
+});
+
 describe('a site that sends no email (AC #5)', () => {
   it('says recovery is unavailable and names the command that gets back in', async () => {
     const cms = await siteWithoutMail();
@@ -573,7 +637,7 @@ describe('a site that sends no email (AC #5)', () => {
     const html = await (await agent.get(FORGOT_PATH)).text();
 
     assert.match(html, /cannot send email|is not available|no email/i);
-    assert.match(html, /geekity user add/);
+    assert.match(html, /geekity user password/);
     // With nothing to send, there is no form to fill in.
     assert.doesNotMatch(html, /name="identifier"/);
   });

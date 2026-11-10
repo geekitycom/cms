@@ -857,7 +857,8 @@ out and how many apps were disconnected.
 
 The admin does not let you change another user's password. To give a colleague
 a login, create a fresh account for them. This keeps the current-password check
-meaningful.
+meaningful. Whoever runs the server can set any user's password from a shell
+with [`geekity user password`](cli.md#setting-a-password-from-the-command-line).
 
 Deleting a user deletes their sessions. The server refuses any session that
 survives the deletion, for example in a database restored from a backup,

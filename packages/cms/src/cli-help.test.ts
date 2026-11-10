@@ -26,6 +26,7 @@ Usage:
   geekity export [--out <file>] [--with-credentials] [--without-content] [--list] [--config <file>]
   geekity import <file> [--replace] [--dev-mode] [--new-base-url] [--config <file>]
   geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
+  geekity user password <username> [--password <pw>] [--config <file>]
   geekity plugin (add <package>[@version] | remove <package>) [--config <file>]
   geekity plugin upgrade [<package>...] [--check] [--config <file>]
 
@@ -96,6 +97,9 @@ Commands:
                    and the command to retry.
   user add         Create an admin user, so a site can get its first login
                    without the setup screen.
+  user password    Set a user's password, ending their sessions, reset links
+                   and connected apps. The way back in for a user who cannot
+                   sign in and has no working email.
   plugin add       Install a plugin package's bundle from the npm registry
                    (npm_config_registry, or registry.npmjs.org) into the
                    plugins folder, GEEKITY_PLUGINS_DIR. It installs only the
@@ -114,10 +118,11 @@ Commands:
 Options:
   --config <file>  Config file to load. Defaults to the first of
                    geekity.config.ts, geekity.config.js, geekity.config.mjs found in the working directory.
-  --password <pw>  The new user's password. Left off, it is asked for without
-                   echo, or read as one line when standard input is a pipe.
-                   A password on the command line is visible in the process
-                   list and in shell history, so prefer being asked.
+  --password <pw>  With user add or user password: the password. Left off,
+                   it is asked for without echo, or read as one line when
+                   standard input is a pipe. A password on the command line
+                   is visible in the process list and in shell history, so
+                   the command warns; prefer being asked.
   --email <addr>   The new user's email address. Optional; it is what a
                    forgotten password is recovered through.
   --until <time>   With maintenance on: when the site should be back, as an
@@ -233,9 +238,10 @@ describe('a command used wrongly', () => {
     ],
     [['--bogus'], 'Unknown option "--bogus". Run geekity --help to see what is available.'],
     [['init'], 'geekity init <directory> needs the directory to create.'],
-    [['user'], 'geekity user add <username> needs a subcommand. The only one is: add.'],
-    [['user', 'remove'], 'Unknown user subcommand "remove". The only one is: add.'],
+    [['user'], 'geekity user needs a subcommand. The subcommands are: add, password.'],
+    [['user', 'remove'], 'Unknown user subcommand "remove". The subcommands are: add, password.'],
     [['user', 'add'], 'geekity user add <username> needs the name of the user to create.'],
+    [['user', 'password'], 'geekity user password <username> needs the name of the user.'],
     [['maintenance'], 'geekity maintenance needs on, off or status.'],
     [['dev-mode'], 'geekity dev-mode needs on, off or status.'],
     [

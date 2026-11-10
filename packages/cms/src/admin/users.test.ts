@@ -21,7 +21,7 @@ import {
   verifyUserPassword,
 } from '../site/users.ts';
 import type { UsersFileContents } from '../site/users.ts';
-import { createToken, findAccessToken } from '../indieauth/tokens.ts';
+import { createToken, findAccessToken, tokensFile } from '../indieauth/tokens.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import { addUser, writeUsers } from './__testing__/users.ts';
 import {
@@ -1663,6 +1663,35 @@ describe('deleting a user', () => {
     const after = await (await agent.get('/admin/users')).text();
     assert.match(after, /Deleted grace\./, 'the screen says what happened');
     assert.doesNotMatch(after, /href="\/author\/grace\/"/, 'and she is no longer in the table');
+  });
+
+  it('keeps the user when a later step of the deletion fails, so it can be tried again', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const grace = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    });
+    const tokens = tokensFile(cms.config.dataDir);
+    writeFileSync(tokens, '{ not json');
+
+    const failed = await agent.post('/admin/users/delete', {
+      csrf_token: (await usersScreen(agent)).token,
+      user_id: String(grace.id),
+    });
+
+    assert.equal(failed.status, 500);
+    assert.equal(findUser(cms.config.dataDir, 'grace')?.id, grace.id, 'grace is still listed');
+
+    writeFileSync(tokens, '{"tokens":[]}\n');
+    const retried = await agent.post('/admin/users/delete', {
+      csrf_token: (await usersScreen(agent)).token,
+      user_id: String(grace.id),
+    });
+
+    assert.equal(retried.status, 303);
+    assert.equal(findUser(cms.config.dataDir, 'grace'), undefined);
   });
 
   it('refuses to delete you, even when somebody else is left', async () => {

@@ -787,8 +787,9 @@ while the mode was on counts as announced, so its next edit goes out as an
 `Update`. A relay added while the mode was on stays pending. Press Retry on the
 Federation screen after the site is live.
 
-The site also holds password recovery mail, so in dev mode, reset a password
-from the shell. A peer that followed while the mode was on never got its
+The site also holds password recovery mail, so in dev mode the forgot-password
+page offers no form; set a password from the shell with
+[`geekity user password`](cli.md#setting-a-password-from-the-command-line). A peer that followed while the mode was on never got its
 `Accept`, and must follow again.
 
 ### Dev mode on Docker

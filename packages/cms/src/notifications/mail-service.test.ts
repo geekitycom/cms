@@ -285,6 +285,32 @@ describe('a send that fails (AC #4)', () => {
     assert.match(log.lines.at(-1) ?? '', /gave up/i);
   });
 
+  it('resolves with a failure, never rejecting, when the settings cannot be read', async () => {
+    const log = new Log();
+    const contentDir = await dir('geekity-mail-unreadable-content-');
+    const dataDir = await dir('geekity-mail-unreadable-data-');
+    const settings = settingsOver({ contentDir, dataDir });
+    const mail = createMailService({
+      config: {
+        baseUrl: 'https://blog.example',
+        contentDir,
+        dataDir,
+        now: systemClock,
+        themesDir: await dir('geekity-mail-unreadable-themes-'),
+        watch: false,
+      },
+      settings: { ...settings, values: () => Promise.reject(new Error('settings unreadable')) },
+      provider: createMemoryMailProvider(),
+      logger: log,
+    });
+
+    const result = await mail.send({ to: 'ada@example.com', template: 'test' });
+
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /settings unreadable/);
+    assert.match(log.lines.at(-1) ?? '', /warn:.*settings unreadable/);
+  });
+
   it('does not lose the message when the template will not render', async () => {
     const log = new Log();
     const { mail } = await site({ provider: createMemoryMailProvider(), log });

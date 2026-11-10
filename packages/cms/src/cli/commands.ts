@@ -219,11 +219,22 @@ export const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
     run: importCommand,
   },
   user: {
-    synopsis: ['user add <username> [--password <pw>] [--email <address>] [--config <file>]'],
+    synopsis: [
+      'user add <username> [--password <pw>] [--email <address>] [--config <file>]',
+      'user password <username> [--password <pw>] [--config <file>]',
+    ],
     help: [
       [
         'user add',
         ['Create an admin user, so a site can get its first login', 'without the setup screen.'],
+      ],
+      [
+        'user password',
+        [
+          "Set a user's password, ending their sessions, reset links",
+          'and connected apps. The way back in for a user who cannot',
+          'sign in and has no working email.',
+        ],
       ],
     ],
     run: userCommand,

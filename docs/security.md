@@ -195,11 +195,12 @@ expire. A `geekity rebuild` or a deleted `data/geekity.db` ends every
 outstanding link, and the user then has to click Forgot password again.
 
 With no mail provider or credential, `/admin/forgot` shows no form. It says the
-site cannot send email and links to
-[`geekity user add`](cli.md#creating-an-admin-from-the-command-line). Use that
-command from a shell to create a fresh admin on a site nobody can sign in to.
-Saving a credential under [Settings → Email](email.md) turns the form on for
-the next visitor, with no restart.
+site cannot send email and names
+[`geekity user password`](cli.md#setting-a-password-from-the-command-line). Use
+that command from a shell to set a new password on the account. Saving a
+credential under [Settings → Email](email.md) turns the form on for the next
+visitor, with no restart. In [dev mode](deploying.md#dev-mode), which holds every
+outgoing message, the page shows the same text and creates no reset link.
 
 ## Security headers
 
