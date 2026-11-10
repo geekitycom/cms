@@ -1321,6 +1321,20 @@ describe('the JSON-LD graph (TASK-81 AC #3)', () => {
     }
   });
 
+  it('lists a profile link given as a site path as an absolute URL in sameAs', async () => {
+    const cms = await siteWearingAnAvatar({ url: 'https://example.com', author: 'ada' });
+    await addProfiledUser(cms, 'ada', {
+      displayName: 'Ada Lovelace',
+      links: [{ label: 'About', href: '/about/' }],
+    });
+
+    const person = node(graph(await body(cms, '/')), 'Person');
+    assert.deepEqual(person?.['sameAs'], [
+      'https://example.com/about/',
+      'https://example.com/author/ada/',
+    ]);
+  });
+
   it('adds a ProfilePage on an author archive', async () => {
     const cms = await siteOfAda();
     const nodes = graph(await body(cms, '/author/ada/'));

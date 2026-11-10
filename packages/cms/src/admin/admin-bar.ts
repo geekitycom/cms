@@ -17,6 +17,7 @@ import { PRIVATE_CACHE_CONTROL } from '../web/negotiate.ts';
 import { drawnForSignedInReader } from '../web/render-scope.ts';
 import { requestPath } from '../web/request.ts';
 import { formatDate } from '../theme/templates.ts';
+import { findStartTag } from '../util/html-tree.ts';
 
 /** Built on the first signed-in page; the admin's own is closed over by its mount. */
 let environment: Environment | undefined;
@@ -144,25 +145,25 @@ const ROOT_CLASS = 'geekity-admin-bar';
  * on `<html>`; unchanged when it has no `<body>` tag to put the bar after.
  */
 function withAdminBar(html: string, bar: string): string {
-  const body = /<body\b[^>]*>/i.exec(html);
-  if (body === null) return html;
-  const afterBody = body.index + body[0].length;
-  return withRootClass(`${html.slice(0, afterBody)}${bar}${html.slice(afterBody)}`);
+  const body = findStartTag(html, 'body');
+  if (body === undefined) return html;
+  return withRootClass(`${html.slice(0, body.end)}${bar}${html.slice(body.end)}`);
 }
 
 /** `html` with ROOT_CLASS added to its `<html>` tag's classes. */
 function withRootClass(html: string): string {
-  const tag = /<html\b[^>]*>/i.exec(html);
-  if (tag === null) return html;
+  const found = findStartTag(html, 'html');
+  if (found === undefined) return html;
+  const tag = html.slice(found.start, found.end);
   const attribute = /(\sclass\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i;
-  const classed = attribute.test(tag[0])
-    ? tag[0].replace(
+  const classed = attribute.test(tag)
+    ? tag.replace(
         attribute,
         (_match, lead: string, double?: string, single?: string, bare?: string) =>
           `${lead}"${ROOT_CLASS} ${(double ?? single ?? bare ?? '').replaceAll('"', '&quot;')}"`,
       )
-    : tag[0].replace(/^<html\b/i, `<html class="${ROOT_CLASS}"`);
-  return `${html.slice(0, tag.index)}${classed}${html.slice(tag.index + tag[0].length)}`;
+    : tag.replace(/^<html\b/i, `<html class="${ROOT_CLASS}"`);
+  return `${html.slice(0, found.start)}${classed}${html.slice(found.end)}`;
 }
 
 function capitalized(word: string): string {

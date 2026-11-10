@@ -12,6 +12,7 @@ import { hashPassword, passwordHashIsCurrent } from './passwords.ts';
 import {
   cleanProfile,
   ConflictingActorIdError,
+  InvalidActorIdError,
   countUsers,
   createUser,
   DuplicateUsernameError,
@@ -609,10 +610,13 @@ describe('setting a stored actor id', () => {
     const dataDir = await temporaryDir();
     await createUser({ dataDir, username: 'ada', password: 'correct horse' });
 
-    assert.equal(await setUserActorId({ dataDir, username: 'ada', actorId: STORED }), true);
+    assert.equal(
+      await setUserActorId({ dataDir, baseUrl: BASE, username: 'ada', actorId: STORED }),
+      true,
+    );
     assert.equal(findUser(dataDir, 'ada')?.actorId, STORED);
     assert.equal(
-      await setUserActorId({ dataDir, username: 'ada', actorId: STORED }),
+      await setUserActorId({ dataDir, baseUrl: BASE, username: 'ada', actorId: STORED }),
       false,
       'the same id again changes nothing',
     );
@@ -622,19 +626,95 @@ describe('setting a stored actor id', () => {
     const dataDir = await temporaryDir();
     await createUser({ dataDir, username: 'ada', password: 'correct horse' });
     await createUser({ dataDir, username: 'grace', password: 'correct horse' });
-    await setUserActorId({ dataDir, username: 'ada', actorId: STORED });
+    await setUserActorId({ dataDir, baseUrl: BASE, username: 'ada', actorId: STORED });
 
     await assert.rejects(
-      setUserActorId({ dataDir, username: 'nobody', actorId: STORED }),
+      setUserActorId({ dataDir, baseUrl: BASE, username: 'nobody', actorId: STORED }),
       UnknownUserError,
     );
     await assert.rejects(
-      setUserActorId({ dataDir, username: 'grace', actorId: STORED }),
+      setUserActorId({ dataDir, baseUrl: BASE, username: 'grace', actorId: STORED }),
       (error: unknown) => error instanceof ConflictingActorIdError && error.username === 'ada',
     );
     assert.equal(findUser(dataDir, 'grace')?.actorId, undefined);
   });
 });
+
+describe('the stored actor id check', () => {
+  async function adaAndGrace(): Promise<string> {
+    const dataDir = await temporaryDir();
+    await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    await createUser({ dataDir, username: 'grace', password: 'correct horse' });
+    await setUserActorId({ dataDir, baseUrl: BASE, username: 'ada', actorId: STORED });
+    return dataDir;
+  }
+
+  it('treats spellings of one URL as the same id', async () => {
+    const dataDir = await adaAndGrace();
+
+    for (const spelling of [` ${STORED} `, 'HTTPS://OLD.EXAMPLE/?author=2']) {
+      await assert.rejects(
+        setUserActorId({ dataDir, baseUrl: BASE, username: 'grace', actorId: spelling }),
+        (error: unknown) => error instanceof ConflictingActorIdError && error.username === 'ada',
+        spelling,
+      );
+    }
+    assert.equal(findUser(dataDir, 'grace')?.actorId, undefined);
+  });
+
+  it('stores the id in its normal form and reports a respelling as no change', async () => {
+    const dataDir = await adaAndGrace();
+
+    assert.equal(
+      await setUserActorId({
+        dataDir,
+        baseUrl: BASE,
+        username: 'ada',
+        actorId: ' HTTPS://Old.Example/?author=2 ',
+      }),
+      false,
+    );
+    assert.equal(findUser(dataDir, 'ada')?.actorId, STORED);
+  });
+
+  it('refuses an id that is not an http(s) URL', async () => {
+    const dataDir = await adaAndGrace();
+
+    for (const actorId of ['not a url', '/author/grace/', 'ftp://old.example/grace']) {
+      await assert.rejects(
+        setUserActorId({ dataDir, baseUrl: BASE, username: 'grace', actorId }),
+        InvalidActorIdError,
+        actorId,
+      );
+    }
+    assert.equal(findUser(dataDir, 'grace')?.actorId, undefined);
+  });
+
+  it("refuses another user's author URL on this site, and allows a user's own", async () => {
+    const dataDir = await adaAndGrace();
+
+    await assert.rejects(
+      setUserActorId({
+        dataDir,
+        baseUrl: BASE,
+        username: 'ada',
+        actorId: `${BASE}/author/grace/`,
+      }),
+      (error: unknown) => error instanceof ConflictingActorIdError && error.username === 'grace',
+    );
+    assert.equal(
+      await setUserActorId({
+        dataDir,
+        baseUrl: BASE,
+        username: 'grace',
+        actorId: `${BASE}/author/grace/`,
+      }),
+      true,
+    );
+  });
+});
+
+const BASE = 'https://site.example';
 
 /** An id somebody was published under before this site. */
 const STORED = 'https://old.example/?author=2';

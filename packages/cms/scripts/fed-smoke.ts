@@ -466,7 +466,12 @@ async function main(): Promise<void> {
     );
     await loadActorKeyPairs(dataDir, MIGRATED_USERNAME);
     assert.ok(
-      await setUserActorId({ dataDir, username: MIGRATED_USERNAME, actorId: storedActorId }),
+      await setUserActorId({
+        dataDir,
+        baseUrl,
+        username: MIGRATED_USERNAME,
+        actorId: storedActorId,
+      }),
       'the stored id was written',
     );
     ok(`${MIGRATED_USERNAME} carries ${storedActorId} and the exported key`);

@@ -2407,6 +2407,33 @@ describe('a user’s own profile', () => {
     );
   });
 
+  it('sends no Update when a save leaves the profile as it was', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    const fields = { display_name: 'Ada Lovelace', bio: 'Writes about engines.' };
+
+    assert.equal((await saveProfile(agent, fields)).status, 303);
+    await cms.delivery.settled();
+    assert.equal(delivered('Update').length, 1);
+
+    assert.equal(
+      (await saveProfile(agent, { ...fields, bio: ' Writes about engines. ' })).status,
+      303,
+    );
+    await cms.delivery.settled();
+
+    assert.equal(
+      delivered('Update').length,
+      1,
+      'the second save changed nothing, so it sent nothing',
+    );
+    assert.doesNotMatch(
+      await (await agent.get('/admin/users')).text(),
+      /follower has been told/,
+      'and the screen does not say anybody was told',
+    );
+  });
+
   it('keeps the attribution domain on the actor it sends (TASK-210 AC #1)', async () => {
     // Mastodon hands an Update's embedded actor straight to the code that
     // reads `attributionDomains`, and an actor without it clears the list.

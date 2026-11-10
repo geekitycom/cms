@@ -17,6 +17,8 @@ import {
 import { systemClock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
 import { isLinkUrl, relText } from './navigation.ts';
+import { authorHref } from '../content/authors.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { hashPassword, passwordHashIsCurrent, verifyPasswordHash } from './passwords.ts';
 import { USERS, dataPath, fileToken } from '../files/data-files.ts';
 
@@ -451,8 +453,9 @@ export async function setUserEmail(input: {
  * what the form on the users screen submits: four boxes and a Save, and a
  * field somebody cleared is a field they no longer want. {@link cleanProfile}
  * drops the empties, so a profile with nothing left in it leaves the user with
- * no `profile` key rather than with an empty object. Returns `false` when
- * there is no such user.
+ * no `profile` key rather than with an empty object. Returns whether the
+ * stored profile changed, so `false` both when there is no such user and when
+ * the save left it as it was.
  */
 export async function setUserProfile(input: {
   /** Which site's users file to write. */
@@ -463,7 +466,12 @@ export async function setUserProfile(input: {
   profile: UserProfile;
 }): Promise<boolean> {
   const profile = cleanProfile(input.profile);
-  return updateUser(input.dataDir, input.userId, () => ({ profile }));
+  let changed = false;
+  await updateUser(input.dataDir, input.userId, (user) => {
+    changed = !isDeepStrictEqual(user.profile, profile);
+    return { profile };
+  });
+  return changed;
 }
 
 /**
@@ -617,6 +625,15 @@ export class ConflictingActorIdError extends Error {
   }
 }
 
+/** Thrown when an actor id is not an absolute http(s) URL. */
+export class InvalidActorIdError extends Error {
+  override readonly name = 'InvalidActorIdError';
+
+  constructor(actorId: string) {
+    super(`The actor id ${actorId} is not an absolute http(s) URL.`);
+  }
+}
+
 /**
  * Write the actor id a user was published under elsewhere.
  *
@@ -625,32 +642,41 @@ export class ConflictingActorIdError extends Error {
  * something a form should be able to retype. A plugin's import command is
  * what calls this.
  *
- * The id has to be unique across the file, and the check is inside the write
- * for the reason {@link createUser}'s duplicate check is: it is a rule about
- * the file rather than about one user. Returns whether the id
+ * The id is stored in the form a peer and the request matchers compare, and
+ * has to be unique across the file, counting each other user's author URL,
+ * which is the id they answer to when they have no stored one. The check is
+ * inside the write for the reason {@link createUser}'s duplicate check is: it
+ * is a rule about the file rather than about one user. Returns whether the id
  * changed, so a second run with the same id reports nothing new.
  */
 export async function setUserActorId(input: {
   /** Which site's users file to write. */
   dataDir: string;
+  /** The site's base URL, which its users' author URLs are on. */
+  baseUrl: string;
   /** Whose record, by login name. */
   username: string;
   /** The id they were published under, query string and all. */
   actorId: string;
 }): Promise<boolean> {
+  const actorId = storedActorIdFrom(input.actorId);
+  if (actorId === undefined) throw new InvalidActorIdError(input.actorId);
   const mine = findUser(input.dataDir, input.username);
   if (mine === undefined) throw new UnknownUserError(input.username);
   let changed = false;
 
   const found = await updateUser(input.dataDir, mine.id, (user, everyone) => {
     const holder = everyone.find(
-      (other) => other.id !== user.id && other.actorId === input.actorId,
+      (other) =>
+        other.id !== user.id &&
+        (other.actorId === actorId ||
+          absoluteUrl(authorHref(other.username), input.baseUrl) === actorId),
     );
     if (holder !== undefined) {
-      throw new ConflictingActorIdError(holder.username, `The actor id ${input.actorId}`);
+      throw new ConflictingActorIdError(holder.username, `The actor id ${actorId}`);
     }
-    changed = user.actorId !== input.actorId;
-    return { actorId: input.actorId };
+    changed = user.actorId !== actorId;
+    return { actorId };
   });
   if (!found) throw new UnknownUserError(input.username);
 
@@ -1011,7 +1037,7 @@ function storedActorIdFrom(value: unknown): string | undefined {
 
   try {
     const url = new URL(wanted);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? wanted : undefined;
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : undefined;
   } catch {
     return undefined;
   }
