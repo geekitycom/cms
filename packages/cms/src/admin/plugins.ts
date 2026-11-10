@@ -29,7 +29,7 @@ import {
 } from '../plugins/manage.ts';
 import type { ManageOptions, ManageResult } from '../plugins/manage.ts';
 import { describeUpgrade } from '../plugins/upgrade.ts';
-import { refuseConfirmation } from './confirm-password.ts';
+import { answerRefusal } from './confirm-password.ts';
 import type { ConfirmPassword } from './confirm-password.ts';
 import type { Supervision } from '../supervisor/supervision.ts';
 import { PACKAGE_NAME } from '../plugins/registry.ts';
@@ -272,7 +272,7 @@ export function mountPluginsScreen(
     const typed = { package: name, version };
     const confirmation = confirmPassword(c, stringOrEmpty(body[PASSWORD_FIELD]));
     if (confirmation.kind !== 'confirmed') {
-      const password = refuseConfirmation(c, confirmation, `${WRONG_PASSWORD} installed.`);
+      const password = answerRefusal(c, confirmation, `${WRONG_PASSWORD} installed.`);
       return drawAddPage(c, { ...typed, problems: { password } });
     }
     const user = confirmation.username;
@@ -342,7 +342,7 @@ export function mountPluginsScreen(
     const confirmation = confirmPassword(c, stringOrEmpty(body[PASSWORD_FIELD]));
     if (confirmation.kind !== 'confirmed') {
       const verb = action === 'remove' ? 'removed' : 'updated';
-      const error = refuseConfirmation(c, confirmation, `${WRONG_PASSWORD} ${verb}.`);
+      const error = answerRefusal(c, confirmation, `${WRONG_PASSWORD} ${verb}.`);
       return await drawConfirm(c, installer.pluginsDir, action, name, error);
     }
     const user = confirmation.username;

@@ -85,10 +85,6 @@ export function setSessionCookie(
   });
 }
 
-/**
- * Start a session for `user`, or an anonymous one, and make it this request's
- * session and the browser's cookie.
- */
 export function startSession(
   c: Context<GeekityEnv>,
   user: Pick<User, 'id' | 'uid'> | undefined,

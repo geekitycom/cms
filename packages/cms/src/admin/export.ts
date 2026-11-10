@@ -9,7 +9,7 @@ import { pendingWork } from '../export/site-export.ts';
 import { finishedResult } from '../jobs/types.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { refuseConfirmation } from './confirm-password.ts';
+import { answerRefusal } from './confirm-password.ts';
 import type { ConfirmPassword } from './confirm-password.ts';
 import type { AdminRender } from './documents.ts';
 import { jobStatusView, queueJobFromForm } from './job-status.ts';
@@ -68,7 +68,7 @@ export function mountExportScreen(
     const withCredentials = body[FIELDS.withCredentials] !== undefined;
     const confirmation = options.confirmPassword(c, stringOrEmpty(body[FIELDS.password]));
     if (confirmation.kind !== 'confirmed') {
-      const problem = refuseConfirmation(c, confirmation, WRONG_PASSWORD);
+      const problem = answerRefusal(c, confirmation, WRONG_PASSWORD);
       return await show(c, { withCredentials, problem });
     }
     return await queueJobFromForm(

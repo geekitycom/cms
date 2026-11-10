@@ -34,7 +34,7 @@ import { discardWritingLedger } from '../writing/ledger.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { startSession } from '../web/session.ts';
 import { ADMIN_THEMES, adminTheme } from '../site/admin-theme.ts';
-import { lockedMessage, lockedOut } from './confirm-password.ts';
+import { lockedMessage, answerLockedOut } from './confirm-password.ts';
 import type { ConfirmPassword } from './confirm-password.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
@@ -74,6 +74,8 @@ export const USER_NOTIFICATION_MODE_PATH = `${USER_NOTIFICATIONS_PATH}/mode`;
 export const USER_THEME_PATH = `${USERS_PATH}/theme`;
 
 const EMAIL_CHANGED_TEMPLATE = 'email-changed';
+
+const WRONG_PASSWORD = 'Your password was not right, so';
 
 export const USER_FIELDS = {
   username: 'username',
@@ -161,7 +163,8 @@ async function addUser(
 
   if (Object.keys(problems).length > 0) {
     c.status(400);
-    if (confirmation.kind === 'locked') problems.currentPassword = lockedOut(c, confirmation.wait);
+    if (confirmation.kind === 'locked')
+      problems.currentPassword = answerLockedOut(c, confirmation.wait);
     return render(
       c,
       ADMIN_TEMPLATES.usersNew,
@@ -199,7 +202,7 @@ async function changePassword(
 
   if (Object.keys(problems).length > 0) {
     c.status(400);
-    if (confirmed.kind === 'locked') problems.currentPassword = lockedOut(c, confirmed.wait);
+    if (confirmed.kind === 'locked') problems.currentPassword = answerLockedOut(c, confirmed.wait);
     return render(
       c,
       ADMIN_TEMPLATES.usersEdit,
@@ -214,8 +217,6 @@ async function changePassword(
     now: c.var.config.now(),
   });
   const ended = c.var.admin.deleteSessionsForUser(user.id, { except: session.id });
-  // The browser that made the change stays signed in, on an id nobody could
-  // have copied before it.
   c.var.admin.deleteSession(session.id);
   startSession(c, user);
   c.var.admin.deletePasswordResetsForUser(user.id);
@@ -259,13 +260,15 @@ async function saveEmail(
   await setUserEmail({ dataDir, userId: target.id, email });
 
   const previous = target.email;
-  if (previous !== email) c.var.admin.deletePasswordResetsForUser(target.id);
-  if (previous !== undefined && previous !== email && c.var.mailConfigured) {
-    void c.var.mail.send({
-      to: previous,
-      template: EMAIL_CHANGED_TEMPLATE,
-      data: { username: target.username, email },
-    });
+  if (previous !== email) {
+    c.var.admin.deletePasswordResetsForUser(target.id);
+    if (previous !== undefined && c.var.mailConfigured) {
+      void c.var.mail.send({
+        to: previous,
+        template: EMAIL_CHANGED_TEMPLATE,
+        data: { username: target.username, email },
+      });
+    }
   }
 
   return backToUser(
@@ -449,8 +452,6 @@ function userInForm(dataDir: string, body: Readonly<Record<string, unknown>>): U
   const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
   return Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
 }
-
-const WRONG_PASSWORD = 'Your password was not right, so';
 
 function signedInUser(c: Context<GeekityEnv>): User | undefined {
   const userId = c.var.session?.userId;

@@ -58,11 +58,6 @@ export interface TokenStore {
    * deleted on the way past, as an expired session's is.
    */
   getPasswordReset(token: string, now?: Date): PasswordReset | undefined;
-  /**
-   * Spend a token and hand back what it entitled its holder to, or `undefined`
-   * when there was nothing left to spend: no such token, one already spent, or
-   * one that has expired.
-   */
   spendPasswordReset(token: string, now?: Date): PasswordReset | undefined;
   /**
    * Cancel every reset a user has outstanding, and say how many went.
@@ -144,8 +139,6 @@ export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
     },
 
     spendPasswordReset(token, now = clock()) {
-      // One statement rather than a read then a delete: two posts of the same
-      // link arriving together must not both find it and both act.
       return getRow(
         statements.spendPasswordReset,
         passwordResetFromRow,

@@ -13,14 +13,8 @@ export type Confirmation =
 
 export type Refusal = Exclude<Confirmation, { kind: 'confirmed' }>;
 
-/** Checks the signed-in user's own password, as a form that asks for it again does. */
 export type ConfirmPassword = (c: Context<GeekityEnv>, password: string) => Confirmation;
 
-/**
- * Counted on the sign-in throttle's keys, so a session alone gives no more
- * guesses at the password than the sign-in form does, and a lockout refuses
- * the right password too.
- */
 export function createConfirmPassword(
   throttle: (config: ResolvedConfig) => LoginThrottle,
 ): ConfirmPassword {
@@ -45,22 +39,13 @@ export function createConfirmPassword(
   };
 }
 
-/**
- * Sets the status a refusal answers with, and returns what to tell the person:
- * `wrong` when the password was wrong, the wait when they are locked out.
- */
-export function refuseConfirmation(
-  c: Context<GeekityEnv>,
-  refusal: Refusal,
-  wrong: string,
-): string {
-  if (refusal.kind === 'locked') return lockedOut(c, refusal.wait);
+export function answerRefusal(c: Context<GeekityEnv>, refusal: Refusal, wrong: string): string {
+  if (refusal.kind === 'locked') return answerLockedOut(c, refusal.wait);
   c.status(400);
   return wrong;
 }
 
-/** Sets the 429 a lockout answers with, and returns what to tell the person. */
-export function lockedOut(c: Context<GeekityEnv>, wait: number): string {
+export function answerLockedOut(c: Context<GeekityEnv>, wait: number): string {
   c.status(429);
   c.header('Retry-After', String(wait));
   return lockedMessage(wait);

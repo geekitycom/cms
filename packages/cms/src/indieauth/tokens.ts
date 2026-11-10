@@ -314,7 +314,7 @@ export async function recordUse(dataDir: string, token: StoredToken, now: Date):
   );
 }
 
-/** Revoke every token `userId` holds, and answer how many there were. */
+/** Revoke every token `userId` holds. */
 export async function revokeTokensForUser(
   dataDir: string,
   userId: number,

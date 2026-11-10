@@ -199,21 +199,13 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
       return render(c, ADMIN_TEMPLATES.reset, resetScreen(token, { problem }));
     }
 
-    // Spent before anything is written, so of two posts of one link only one
-    // gets past here, and a crash part way through leaves no live link behind.
     const spent = c.var.admin.spendPasswordReset(token);
-    // The account may have gone while the link was in flight, and the id may
-    // now belong to somebody new whose own links are good.
     const user =
       spent === undefined
         ? undefined
         : userIssuedTo(dataDir, { ...spent, issuedAt: spent.createdAt });
     if (user === undefined) return refuseToken(c);
 
-    // Everything that was a way into this account is now closed: every other
-    // link asked for while this one was in flight, every browser that was
-    // signed in, and every app that was connected. Nobody is spared, because
-    // the person doing this is not signed in — they are about to be.
     c.var.admin.deletePasswordResetsForUser(user.id);
     const ended = c.var.admin.deleteSessionsForUser(user.id);
     const disconnected = await revokeTokensForUser(dataDir, user.id, c.var.config.now());
@@ -288,7 +280,6 @@ function resetScreen(token: string, extra: Record<string, unknown> = {}): Record
   };
 }
 
-/** How a flash says that a password change disconnected `count` apps. */
 export function appsDisconnectedPhrase(count: number): string {
   return count === 1
     ? '1 connected app was disconnected'

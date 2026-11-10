@@ -129,12 +129,6 @@ export interface User {
    * stored, query string and all, because that is what has to be matched.
    */
   readonly actorId?: string | undefined;
-  /**
-   * The instant this person's password was last set, as an ISO 8601 instant,
-   * when it has been set since this was recorded. A session or link issued
-   * before it is refused, because the database that holds those may be
-   * restored from a copy older than the change.
-   */
   readonly sessionsValidAfter?: string | undefined;
   /** When the user was created, as an ISO 8601 instant. */
   readonly createdAt: string;
@@ -282,25 +276,22 @@ export function findUserById(dataDir: string, id: number): User | undefined {
 export interface IssuedTo {
   readonly userId: number;
   readonly userUid?: string | undefined;
-  /** When it was issued, for what a password change has to end. */
   readonly issuedAt?: string | undefined;
 }
 
 /**
  * The user `issued` names, when the file still holds that same person under
  * its id: the uids must match, and one issued with none matches only a user
- * who has none. One issued before the user's password was last set names
- * nobody.
+ * who has none.
  */
 export function userIssuedTo(dataDir: string, issued: IssuedTo): User | undefined {
   const user = findUserById(dataDir, issued.userId);
   if (user === undefined || user.uid !== issued.userUid) return undefined;
   const { sessionsValidAfter } = user;
-  // ISO 8601 in UTC sorts the way time runs, so string order is time order.
   if (
     sessionsValidAfter !== undefined &&
     issued.issuedAt !== undefined &&
-    issued.issuedAt < sessionsValidAfter
+    Date.parse(issued.issuedAt) < Date.parse(sessionsValidAfter)
   ) {
     return undefined;
   }
@@ -408,10 +399,8 @@ export async function updateUser(
 }
 
 /**
- * Hash a new password and put it on a user, replacing the old one, and mark
- * every session issued before `now` as ended. Returns `false` when there is
- * no such user. The session rows are left alone; deleting them is the
- * caller's business, as is giving the browser that made the change a new one.
+ * Hash a new password and put it on a user, replacing the old one. Returns
+ * `false` when there is no such user.
  */
 export async function setUserPassword(input: {
   /** Which site's users file to write. */
@@ -420,7 +409,6 @@ export async function setUserPassword(input: {
   userId: number;
   /** The new plain password, hashed on the way in. */
   password: string;
-  /** When the password changes. */
   now: Date;
 }): Promise<boolean> {
   // Hashed before the write rather than inside it, so a hash that throws

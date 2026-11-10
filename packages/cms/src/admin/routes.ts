@@ -123,9 +123,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return throttled;
   }
 
-  // Forms that ask a signed-in person for their password again count wrong
-  // answers on the sign-in throttle, so holding a session gives no extra
-  // guesses at the password.
   const confirmPassword = createConfirmPassword(loginThrottle);
 
   // A second throttle, on the same machinery and the same limits, for the
