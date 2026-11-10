@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from '
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { lockFileFor, withLockFile } from './lock-file.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import type { SerialQueue } from '../util/queue.ts';
 
@@ -22,7 +23,9 @@ import type { SerialQueue } from '../util/queue.ts';
  *   process, so two requests that both rewrite `site.json` cannot interleave.
  *   {@link updateFileAtomically} puts the read inside that queue as well,
  *   which is what stops the second writer reading the file before the first
- *   has written it and then overwriting what it wrote.
+ *   has written it and then overwriting what it wrote. It also holds a lock
+ *   file beside the target for that step, because the CLI and the server are
+ *   two processes that change the same files, `users.json` among them.
  *
  * The queue is per path, so writes to different files still run at once, and
  * a path is forgotten again as soon as its queue drains.
@@ -133,13 +136,16 @@ export function updateFileAtomically(
   options: WriteFileAtomicallyOptions = {},
 ): Promise<void> {
   return withFileLock(file, async () => {
-    let current: string | undefined;
-    try {
-      current = await readFile(file, 'utf8');
-    } catch (error) {
-      if (!isAbsent(error)) throw error;
-    }
-    await write(file, await produce(current), options);
+    assertWritable(file);
+    await withLockFile(lockFileFor(file), async () => {
+      let current: string | undefined;
+      try {
+        current = await readFile(file, 'utf8');
+      } catch (error) {
+        if (!isAbsent(error)) throw error;
+      }
+      await write(file, await produce(current), options);
+    });
   });
 }
 

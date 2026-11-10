@@ -89,7 +89,7 @@ const ALLOWED: readonly Allowance[] = [
     because: `the supervisor's crash and settle windows; ${ELAPSED_WALL_TIME}`,
   },
   {
-    file: 'jobs/lock-file.ts',
+    file: 'files/lock-file.ts',
     line: 'if (Date.now() - info.mtimeMs > STALE_LOCK_MS) return true;',
     because: 'measures how long a lock file has been held, against the file system clock',
   },

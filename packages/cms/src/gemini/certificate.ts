@@ -12,7 +12,7 @@ import { isIP } from 'node:net';
 import type { ResolvedConfig } from '../config.ts';
 import { writeFileAtomicallySync } from '../files/atomic.ts';
 import { GEMINI_CERTIFICATE, GEMINI_KEY, dataFolder, dataPath } from '../files/data-files.ts';
-import { lockFileFor, withLockFile } from '../jobs/lock-file.ts';
+import { lockFileFor, withLockFile } from '../files/lock-file.ts';
 import { messageOf } from '../util/errors.ts';
 
 export type GeminiCertificateConfig = Pick<ResolvedConfig, 'dataDir' | 'geminiCert' | 'geminiKey'>;

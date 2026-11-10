@@ -5,7 +5,7 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 
 import { databaseFiles, discardDatabase } from '../cache.ts';
-import { guardFileFor, lockFileFor, withLockFile } from '../jobs/lock-file.ts';
+import { guardFileFor, lockFileFor, withLockFile } from './lock-file.ts';
 import { temporaryName } from './atomic.ts';
 import {
   ACTOR_KEYS,
@@ -111,10 +111,13 @@ describe('the core declarations', () => {
     assert.equal(classOf('keys/ada.pem'), undefined);
   });
 
-  it('declare the content scratch: atomic writes and the watcher probe', () => {
+  it('declare the content scratch: atomic writes, _data locks and the watcher probe', () => {
     const scratch = (relative: string) =>
       dataFileFor(CONTENT_SCRATCH_FILES, relative)?.dataClass.kind;
     assert.equal(scratch('posts/hello.md.1a2b-3.tmp'), 'scratch');
+    assert.equal(scratch('_data/media.json.lock'), 'scratch');
+    assert.equal(scratch('_data/media.json.lock.takeover'), 'scratch');
+    assert.equal(scratch('_data/federation/followers.json.lock'), 'scratch');
     assert.equal(scratch('.geekity-watch-0f3e/probe'), 'scratch');
     assert.equal(scratch('.geekity-watch-0f3e'), 'scratch');
     assert.equal(scratch('posts/hello.md'), undefined);

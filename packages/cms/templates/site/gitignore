@@ -1,3 +1,7 @@
 node_modules/
 data/
 .env
+
+# Held while an update to a content/_data file runs
+content/_data/**/*.lock
+content/_data/**/*.lock.takeover

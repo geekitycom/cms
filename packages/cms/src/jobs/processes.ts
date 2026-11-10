@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 
+import { isAlive } from '../util/process-alive.ts';
 import type { Claimer } from './types.ts';
 
 let self: Claimer | undefined;
@@ -25,15 +26,6 @@ export function isClaimerAlive(claimer: Claimer): boolean {
     return false;
   }
   return claimer.since === undefined || startOf(claimer.pid) === claimer.since;
-}
-
-export function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
 }
 
 function startOf(pid: number): string | undefined {

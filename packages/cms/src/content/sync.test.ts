@@ -13,7 +13,7 @@ import type { WatchDebounce } from './watch-debounce.ts';
 import { heldDebounce } from '../__testing__/debounce.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { liveWatchers } from '../__testing__/watchers.ts';
-import { writeFileAtomically } from '../files/atomic.ts';
+import { updateFileAtomically, writeFileAtomically } from '../files/atomic.ts';
 
 const temporaryDirs: string[] = [];
 const openStores: ContentStore[] = [];
@@ -745,6 +745,37 @@ describe('the watcher', () => {
     await caughtUp(content, dir);
 
     assert.equal(index.upserts, writesAfterBoot + 1, 'only the sentinel was written');
+    assert.deepEqual(besidesSentinel(changes), []);
+  });
+
+  it('hears nothing of the lock and temporary files an update under _data leaves', async () => {
+    const dir = await contentDir({
+      'pages/about.md': markdown({ title: 'About', permalink: '/about/' }),
+      '_data/media.json': '{}',
+    });
+    const heard: string[] = [];
+    const { sync: content, changes } = await sync(dir, {
+      watch: true,
+      debounce: (relativePath, run) => {
+        heard.push(relativePath);
+        return debounceFor(20)(relativePath, run);
+      },
+    });
+    await content.start();
+    changes.length = 0;
+    heard.length = 0;
+
+    for (const alt of ['One', 'Two', 'Three']) {
+      await updateFileAtomically(path.join(dir, '_data', 'media.json'), () =>
+        JSON.stringify({ 'uploads/a.jpg': { alt } }),
+      );
+    }
+    await caughtUp(content, dir);
+
+    assert.deepEqual(
+      heard.filter((relativePath) => relativePath.startsWith('_data')),
+      [],
+    );
     assert.deepEqual(besidesSentinel(changes), []);
   });
 

@@ -391,8 +391,22 @@ export const WATCH_PROBE = declareDataFile({
   lost: 'Nothing. The content watcher makes it and removes it to check that it works.',
 });
 
+export const CONTENT_DATA_LOCK_FILES = declareDataFile({
+  pattern: '_data/**/*.lock',
+  dataClass: SCRATCH,
+  lost: 'Nothing. An update to a _data file holds it while it runs, and a stale one is taken over.',
+});
+
+export const CONTENT_DATA_LOCK_TAKEOVER_FILES = declareDataFile({
+  pattern: '_data/**/*.lock.takeover',
+  dataClass: SCRATCH,
+  lost: 'Nothing. A waiter holds it while it removes a stale lock.',
+});
+
 export const CONTENT_SCRATCH_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
+  CONTENT_DATA_LOCK_FILES,
+  CONTENT_DATA_LOCK_TAKEOVER_FILES,
   IMPORT_MARKER,
   IMPORT_STAGING,
   IMPORT_ASIDE,

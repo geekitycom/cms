@@ -183,7 +183,8 @@ The archive holds these entries, in this order:
 
 1. `manifest.json`.
 2. `content/`, apart from scratch files: the `<file>.<pid>-<n>.tmp` files of
-   writes in progress and the watcher's `.geekity-watch-*` probe.
+   writes in progress, the `*.lock` and `*.lock.takeover` files under
+   `content/_data/`, and the watcher's `.geekity-watch-*` probe.
    `--without-content` leaves `content/` out.
 3. Each file under `data/` whose class is `kept`, such as `users.json`, the
    actor keys in `keys/`, `notification-secret` and the comment emails.
