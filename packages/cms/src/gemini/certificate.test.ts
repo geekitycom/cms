@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { X509Certificate, createPrivateKey, generateKeyPairSync } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -167,6 +167,30 @@ describe('the Gemini certificate', () => {
     );
     assert.equal(x509.fingerprint256, first.fingerprint256, 'the certificate is left alone');
   });
+
+  it(
+    'is a problem, not replaced, when the stored certificate cannot be read',
+    { skip: process.getuid?.() === 0 || process.platform === 'win32' },
+    async () => {
+      const config = await site();
+      certified(await ensureGeminiCertificate(config, 'shll.me', NOW));
+      const certFile = dataPath(config.dataDir, GEMINI_CERTIFICATE);
+      const before = await readFile(certFile, 'utf8');
+      await chmod(certFile, 0o000);
+
+      try {
+        const ensured = await ensureGeminiCertificate(config, 'shll.me', NOW);
+        const read = await readGeminiCertificate(config, 'shll.me');
+        assert.equal(ensured.ok, false);
+        assert.equal(read.ok, false);
+        assert.match(ensured.ok ? '' : ensured.problem, /cannot be read/);
+      } finally {
+        await chmod(certFile, 0o644);
+      }
+
+      assert.equal(await readFile(certFile, 'utf8'), before);
+    },
+  );
 
   it('serves a TLS handshake', async () => {
     const config = await site();

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -98,6 +98,32 @@ describe('the users file', () => {
       'the file holds what was created',
     );
   });
+});
+
+describe('a users file the server cannot read', () => {
+  it(
+    'makes countUsers throw and createUser reject, and leaves the file as it was',
+    { skip: process.getuid?.() === 0 || process.platform === 'win32' },
+    async () => {
+      const dataDir = await temporaryDir();
+      writeUsers(dataDir, [{ username: 'ada' }, { username: 'grace' }]);
+      const file = usersFile(dataDir);
+      const before = await readFile(file, 'utf8');
+      await chmod(file, 0o000);
+
+      try {
+        assert.throws(() => countUsers(dataDir), { code: 'EACCES' });
+        await assert.rejects(
+          createUser({ dataDir, username: 'mallory', password: 'a new admin password' }),
+          { code: 'EACCES' },
+        );
+      } finally {
+        await chmod(file, 0o600);
+      }
+
+      assert.equal(await readFile(file, 'utf8'), before);
+    },
+  );
 });
 
 describe('a name that is taken', () => {

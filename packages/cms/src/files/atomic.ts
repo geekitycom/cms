@@ -136,8 +136,8 @@ export function updateFileAtomically(
     let current: string | undefined;
     try {
       current = await readFile(file, 'utf8');
-    } catch {
-      current = undefined;
+    } catch (error) {
+      if (!isAbsent(error)) throw error;
     }
     await write(file, await produce(current), options);
   });
@@ -207,9 +207,18 @@ export function writeFileAtomicallySync(
 export function readFileIfPresentSync(file: string): string | undefined {
   try {
     return readFileSync(file, 'utf8');
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (isAbsent(error)) return undefined;
+    throw error;
   }
+}
+
+/**
+ * Only a file that is not there reads as empty. A file that is there but
+ * cannot be read would otherwise be rewritten from nothing by the next update.
+ */
+function isAbsent(error: unknown): boolean {
+  return (error as { code?: unknown } | null)?.code === 'ENOENT';
 }
 
 /** Run a task once every task already queued for this path has finished. */

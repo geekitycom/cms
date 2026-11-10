@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { chmod } from 'node:fs/promises';
 import { after, describe, it } from 'node:test';
 
 import { Hono } from 'hono';
 
 import type { GeekityEnv } from '../web/env.ts';
-import { countUsers, listUsers } from '../site/users.ts';
+import { countUsers, listUsers, usersFile } from '../site/users.ts';
 import { adminSecurityHeaders } from './headers.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
 import {
@@ -51,6 +52,30 @@ describe('first run', () => {
     assert.ok(csrfField(html) !== undefined, 'the form carries a CSRF token');
     assert.ok(cookieValue(response, 'geekity_session') !== undefined, 'and a session to hold it');
   });
+});
+
+describe('a users file the server cannot read', () => {
+  it(
+    'does not send the admin to first-run setup',
+    { skip: process.getuid?.() === 0 || process.platform === 'win32' },
+    async () => {
+      const cms = await site();
+      addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+      const file = usersFile(cms.config.dataDir);
+      await chmod(file, 0o000);
+
+      try {
+        for (const url of ['/admin', '/admin/setup']) {
+          const response = await cms.app.request(url);
+          assert.notEqual(response.headers.get('location'), '/admin/setup', url);
+          assert.equal(response.status, 500, url);
+        }
+      } finally {
+        await chmod(file, 0o600);
+      }
+      assert.equal(countUsers(cms.config.dataDir), 1);
+    },
+  );
 });
 
 describe('setup', () => {
