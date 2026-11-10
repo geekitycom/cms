@@ -18,6 +18,7 @@ import {
   findUserByIdentifier,
   listUsers,
   setUserActorId,
+  setUserAdminTheme,
   setUserEmail,
   setUserPassword,
   setUserProfile,
@@ -119,6 +120,30 @@ describe('a users file with repeated entries', () => {
     ]);
 
     assert.throws(() => countUsers(dataDir), /"ada"/);
+  });
+});
+
+describe('a save to a users file with fields this version does not read', () => {
+  it('keeps every other field, user and top-level key as the file had them', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada' }, { username: 'bob' }]);
+    const file = usersFile(dataDir);
+    const raw = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown> & {
+      users: Record<string, unknown>[];
+    };
+    raw.users[0]!['futureField'] = 'from a newer release';
+    raw.users[0]!['adminTheme'] = 'dark';
+    raw.users[1]!['actorId'] = 'blog.example.com/?author=2';
+    raw['topLevelFuture'] = { kept: true };
+    await writeFile(file, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+
+    assert.equal(await setUserAdminTheme({ dataDir, userId: 1, theme: undefined }), true);
+
+    const after = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown> & {
+      users: Record<string, unknown>[];
+    };
+    const { adminTheme: _theme, ...ada } = raw.users[0]!;
+    assert.deepEqual(after, { ...raw, users: [ada, raw.users[1]] });
   });
 });
 

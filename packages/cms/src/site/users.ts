@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { adminTheme } from './admin-theme.ts';
 import type { AdminTheme } from './admin-theme.ts';
 import { dashboardLayout, isEmpty } from './dashboard-layout.ts';
@@ -950,7 +952,59 @@ function write(
   const file = usersFile(dataDir);
   return updateFileAtomically(
     file,
-    (current) => usersJsonText(produce(parseUsersFile(current, file))),
+    (current) => {
+      const read = parseUsersFile(current, file);
+      const next = produce(read);
+      if (current === undefined) return usersJsonText(next);
+      return `${JSON.stringify(ontoSource(JSON.parse(current) as Record<string, unknown>, read, next), null, 2)}\n`;
+    },
     { mode: USERS_FILE_MODE },
   );
+}
+
+/**
+ * The next contents written over the file as it was, rather than over what
+ * this version read of it.
+ *
+ * The reader drops what it cannot use so one bad line does not take the admin
+ * down, and a field from a newer release is one of those. Writing the reader's
+ * model back would make every such drop permanent on the first unrelated save,
+ * so each user keeps their stored entry with only the fields this save changed,
+ * and keys outside `users` stay as they were.
+ */
+function ontoSource(
+  source: Record<string, unknown>,
+  read: UsersFileContents,
+  next: UsersFileContents,
+): Record<string, unknown> {
+  const entries = source['users'] as Record<string, unknown>[];
+  const stored = new Map(
+    read.users.map((user, index) => [user.id, { user, entry: entries[index] }]),
+  );
+
+  return {
+    ...source,
+    users: next.users.map((user) => {
+      const before = stored.get(user.id);
+      return before?.entry === undefined ? user : changedFields(before.entry, before.user, user);
+    }),
+    nextId: next.nextId,
+  };
+}
+
+/** `entry` with each field that differs between `before` and `after` set to its new value. */
+function changedFields(
+  entry: Record<string, unknown>,
+  before: StoredUser,
+  after: StoredUser,
+): Record<string, unknown> {
+  const was = before as unknown as Record<string, unknown>;
+  const now = after as unknown as Record<string, unknown>;
+  const result = { ...entry };
+  for (const key of new Set([...Object.keys(was), ...Object.keys(now)])) {
+    if (isDeepStrictEqual(was[key], now[key])) continue;
+    if (now[key] === undefined) delete result[key];
+    else result[key] = now[key];
+  }
+  return result;
 }
