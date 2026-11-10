@@ -106,9 +106,10 @@ port published on every interface is reachable from the internet even when the
 firewall is closed. A client that connects to it directly can put any address
 in `X-Forwarded-For`.
 
-The proxy forwards to `http://127.0.0.1:3000`. Geekity CMS reads the **first**
-address in `X-Forwarded-For`. The proxy must replace that header with the
-address it saw. It must not append to a header the client sent. For nginx:
+The proxy forwards to `http://127.0.0.1:3000`. Geekity CMS reads the **last**
+address in `X-Forwarded-For`, the one the proxy in front of it added. Set the
+proxy to replace that header with the address it saw, so the header holds one
+address. For nginx:
 
 ```nginx
 location / {

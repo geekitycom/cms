@@ -63,9 +63,10 @@ and the address is the socket's own. Any client can send `X-Forwarded-For`. On
 a site reached directly, trusting it would let one attacker give each guess a
 different fake address and never be locked out by address. Turn `trustProxy`
 on only when a reverse proxy in front of the site sets that header. The server
-then uses the leftmost entry. When neither address is available, as when the
-app runs in process instead of behind a server, the username is counted with
-an empty address.
+then uses the rightmost entry, the one the proxy added. The throttle counts an
+IPv6 address together with the rest of its /64. When neither address is
+available, as when the app runs in process instead of behind a server, the
+username is counted with an empty address.
 
 ## Request size
 

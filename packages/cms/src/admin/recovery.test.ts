@@ -208,10 +208,13 @@ describe('the reset link (AC #3)', () => {
 
     // The new password is the real one, and the old one is not.
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', 'a brand new password') !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', 'a brand new password')) !== undefined,
       'the new password was stored',
     );
-    assert.equal(verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password), undefined);
+    assert.equal(
+      await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password),
+      undefined,
+    );
 
     // Every browser she was signed in on is signed out.
     const other = await elsewhere.get('/admin');
@@ -313,9 +316,10 @@ describe('the reset link (AC #3)', () => {
     );
 
     assert.deepEqual(responses.map((response) => response.status).sort(), [303, 400]);
-    const working = passwords.filter(
-      (password) => verifyUserPassword(cms.config.dataDir, 'ada', password) !== undefined,
+    const verified = await Promise.all(
+      passwords.map((password) => verifyUserPassword(cms.config.dataDir, 'ada', password)),
     );
+    const working = verified.filter((user) => user !== undefined);
     assert.equal(working.length, 1);
   });
 
@@ -337,7 +341,7 @@ describe('the reset link (AC #3)', () => {
     assert.equal(stale.status, 400);
     assert.match(await stale.text(), /no longer valid|expired/i);
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
       'nothing was changed',
     );
   });
@@ -363,7 +367,7 @@ describe('the reset link (AC #3)', () => {
 
     assert.equal(response.status, 400);
     assert.match(await response.text(), /no longer valid|expired/i);
-    assert.equal(verifyUserPassword(dataDir, 'grace', 'a brand new password'), undefined);
+    assert.equal(await verifyUserPassword(dataDir, 'grace', 'a brand new password'), undefined);
   });
 
   it('holds the new password to the rules the rest of the admin uses', async () => {
@@ -397,7 +401,7 @@ describe('the reset link (AC #3)', () => {
 
     // Neither refusal spent the link.
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
       'the old password still works',
     );
     const stillGood = await agent.get(`${RESET_PATH}?token=${token}`);
@@ -420,7 +424,9 @@ describe('the reset link (AC #3)', () => {
     });
 
     assert.equal(response.status, 403);
-    assert.ok(verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined);
+    assert.ok(
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
+    );
   });
 });
 
@@ -553,7 +559,7 @@ describe('a link from before a password change', () => {
 
     assert.equal(response.status, 400, 'the restored link was refused');
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', 'the password she chose') !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', 'the password she chose')) !== undefined,
       'the password set after the link was asked for is still the one',
     );
   });

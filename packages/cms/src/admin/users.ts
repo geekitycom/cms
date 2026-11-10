@@ -145,7 +145,7 @@ async function addUser(
 
   const password = generate ? generatePassword() : supplied;
   const problems = addUserProblems(username, password, generate, email);
-  const confirmation = confirmPassword(c, stringOrEmpty(body[USER_FIELDS.currentPassword]));
+  const confirmation = await confirmPassword(c, stringOrEmpty(body[USER_FIELDS.currentPassword]));
   if (confirmation.kind !== 'confirmed') {
     problems.currentPassword = `${WRONG_PASSWORD} nobody was added.`;
   }
@@ -197,7 +197,7 @@ async function changePassword(
   const next = stringOrEmpty(body[USER_FIELDS.newPassword]);
   const confirmation = stringOrEmpty(body[USER_FIELDS.newPasswordConfirmation]);
 
-  const confirmed = confirmPassword(c, current);
+  const confirmed = await confirmPassword(c, current);
   const problems = changePasswordProblems({
     correct: confirmed.kind === 'confirmed',
     next,
@@ -249,7 +249,7 @@ async function saveEmail(
   const { dataDir, body, target } = named;
   const email = stringOrEmpty(body[USER_FIELDS.email]).trim();
 
-  const confirmation = confirmPassword(c, stringOrEmpty(body[USER_FIELDS.currentPassword]));
+  const confirmation = await confirmPassword(c, stringOrEmpty(body[USER_FIELDS.currentPassword]));
   if (confirmation.kind !== 'confirmed') {
     const message =
       confirmation.kind === 'locked'

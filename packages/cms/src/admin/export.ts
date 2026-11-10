@@ -66,7 +66,7 @@ export function mountExportScreen(
   app.post(EXPORT_PATH, async (c) => {
     const body = await c.req.parseBody();
     const withCredentials = body[FIELDS.withCredentials] !== undefined;
-    const confirmation = options.confirmPassword(c, stringOrEmpty(body[FIELDS.password]));
+    const confirmation = await options.confirmPassword(c, stringOrEmpty(body[FIELDS.password]));
     if (confirmation.kind !== 'confirmed') {
       const problem = answerRefusal(c, confirmation, WRONG_PASSWORD);
       return await show(c, { withCredentials, problem });

@@ -1,4 +1,7 @@
-import { argon2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { argon2, randomBytes, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
+
+const argon2Async = promisify(argon2);
 
 /**
  * Argon2id parameters, close to the OWASP baseline for a server that also
@@ -37,10 +40,13 @@ export const ARGON2_PARAMETERS = {
  * The salt and the cost parameters travel with the hash, so
  * {@link verifyPasswordHash} needs nothing but the stored string, and a later
  * change to {@link ARGON2_PARAMETERS} leaves existing passwords verifiable.
+ *
+ * The password is hashed in Unicode NFC, so the same password typed on a
+ * keyboard that composes accents and on one that combines them is one password.
  */
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(ARGON2_PARAMETERS.saltLength);
-  const tag = derive(password, salt, {
+  const tag = await derive(password.normalize('NFC'), salt, {
     memory: ARGON2_PARAMETERS.memory,
     passes: ARGON2_PARAMETERS.passes,
     parallelism: ARGON2_PARAMETERS.parallelism,
@@ -55,20 +61,49 @@ export function hashPassword(password: string): string {
  * Whether `password` is the one `encoded` was made from.
  *
  * A hash this function cannot parse is a `false`, not a throw: a corrupted row
- * must fail the login rather than take the request down. The comparison is
- * constant time.
+ * must fail the login rather than take the request down, and so is a hash
+ * whose costs are above {@link ARGON2_COST_CEILING}, since anybody can make the
+ * server spend those costs by trying a password. The comparison is constant
+ * time.
+ *
+ * The NFC form is tried first, then the password as typed when that differs,
+ * because hashes made before passwords were normalised hold the typed form.
  */
-export function verifyPasswordHash(encoded: string, password: string): boolean {
+export async function verifyPasswordHash(encoded: string, password: string): Promise<boolean> {
   const parsed = parsePhc(encoded);
   if (parsed === undefined) return false;
 
-  const tag = derive(password, parsed.salt, {
-    memory: parsed.memory,
-    passes: parsed.passes,
-    parallelism: parsed.parallelism,
-    tagLength: parsed.tag.length,
-  });
+  const normalised = password.normalize('NFC');
+  if (await matches(parsed, normalised)) return true;
+  return normalised !== password && matches(parsed, password);
+}
 
+/** Whether a stored hash was made with the costs {@link hashPassword} uses now. */
+export function passwordHashIsCurrent(encoded: string): boolean {
+  const parsed = parsePhc(encoded);
+  return (
+    parsed !== undefined &&
+    parsed.memory === ARGON2_PARAMETERS.memory &&
+    parsed.passes === ARGON2_PARAMETERS.passes &&
+    parsed.parallelism === ARGON2_PARAMETERS.parallelism &&
+    parsed.tagLength === ARGON2_PARAMETERS.tagLength
+  );
+}
+
+/**
+ * The highest costs a stored hash may ask for: four times the current ones.
+ * Room for raising {@link ARGON2_PARAMETERS} later, and for hashes another
+ * argon2 library made at its own defaults.
+ */
+export const ARGON2_COST_CEILING = {
+  memory: ARGON2_PARAMETERS.memory * 4,
+  passes: ARGON2_PARAMETERS.passes * 4,
+  parallelism: 4,
+  tagLength: 64,
+} as const;
+
+async function matches(parsed: ParsedHash, password: string): Promise<boolean> {
+  const tag = await derive(password, parsed.salt, parsed);
   return tag.length === parsed.tag.length && timingSafeEqual(tag, parsed.tag);
 }
 
@@ -79,9 +114,13 @@ interface DeriveParameters {
   tagLength: number;
 }
 
-function derive(password: string, salt: Buffer, parameters: DeriveParameters): Buffer {
+async function derive(
+  password: string,
+  salt: Buffer,
+  parameters: DeriveParameters,
+): Promise<Buffer> {
   return Buffer.from(
-    argon2Sync('argon2id', {
+    await argon2Async('argon2id', {
       message: Buffer.from(password, 'utf8'),
       nonce: salt,
       memory: parameters.memory,
@@ -116,13 +155,28 @@ function parsePhc(encoded: string): ParsedHash | undefined {
   const memory = costs.get('m');
   const passes = costs.get('t');
   const parallelism = costs.get('p');
-  if (!isPositiveInteger(memory) || !isPositiveInteger(passes) || !isPositiveInteger(parallelism)) {
+  if (
+    !isPositiveInteger(memory) ||
+    !isPositiveInteger(passes) ||
+    !isPositiveInteger(parallelism) ||
+    parallelism > ARGON2_COST_CEILING.parallelism ||
+    passes > ARGON2_COST_CEILING.passes ||
+    memory > ARGON2_COST_CEILING.memory ||
+    // argon2 needs at least eight blocks of memory per lane.
+    memory < 8 * parallelism
+  ) {
     return undefined;
   }
 
   const salt = fromBase64(parts[4]);
   const tag = fromBase64(parts[5]);
-  if (salt === undefined || tag === undefined || salt.length === 0 || tag.length === 0) {
+  if (
+    salt === undefined ||
+    tag === undefined ||
+    salt.length < 8 ||
+    tag.length < 4 ||
+    tag.length > ARGON2_COST_CEILING.tagLength
+  ) {
     return undefined;
   }
 

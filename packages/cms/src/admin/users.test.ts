@@ -1187,7 +1187,9 @@ describe('a bad add form', () => {
     assert.match(await response.text(), /already exists/);
     assert.equal(countUsers(cms.config.dataDir), 1);
     // The name was not quietly given the new password either.
-    assert.ok(verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined);
+    assert.ok(
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
+    );
   });
 });
 
@@ -1470,7 +1472,7 @@ describe('a bad password form', () => {
     assert.match(html, /not your current password/);
     assert.doesNotMatch(html, /a brand new password/, 'no password is echoed back into the HTML');
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
       'the old password still works',
     );
   });
@@ -1495,9 +1497,30 @@ describe('a bad password form', () => {
     assert.equal(response.headers.get('retry-after'), '900');
     assert.match(await response.text(), /Too many wrong passwords\. Try again in 15 minutes\./);
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
       'the old password still works',
     );
+  });
+
+  it('counts concurrent wrong current passwords before any of them is checked', async () => {
+    const cms = await box.site({ loginAttempts: 3, loginLockout: 900 });
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        agent.post('/admin/users/password', {
+          csrf_token: token,
+          current_password: `guess ${String(i)}`,
+          new_password: 'a brand new password',
+          new_password_confirmation: 'a brand new password',
+        }),
+      ),
+    );
+
+    const statuses = responses.map((response) => response.status);
+    assert.equal(statuses.filter((status) => status === 400).length, 3, statuses.join(' '));
+    assert.equal(statuses.filter((status) => status === 429).length, 7, statuses.join(' '));
   });
 
   it('counts wrong current passwords on the add-user form against the same limit', async () => {
@@ -1546,7 +1569,7 @@ describe('a bad password form', () => {
     assert.match(await short.text(), /A password is at least 8 characters/);
 
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
       'neither refusal changed anything',
     );
   });

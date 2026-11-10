@@ -435,7 +435,7 @@ The address is off by default. An address is personal data, and a self-hosted
 blog keeps it with no retention policy unless the site owner sets one.
 `trustProxy` decides which address is logged:
 
-- When `trustProxy` is on and the proxy sets `X-Forwarded-For`, the leftmost
+- When `trustProxy` is on and the proxy sets `X-Forwarded-For`, the rightmost
   entry of that header. For a Gemini request, the address in the PROXY
   protocol header the connection opened with.
 - Otherwise, the socket's own address.

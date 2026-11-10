@@ -17,7 +17,7 @@ import {
 import { systemClock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
 import { isLinkUrl, relText } from './navigation.ts';
-import { hashPassword, verifyPasswordHash } from './passwords.ts';
+import { hashPassword, passwordHashIsCurrent, verifyPasswordHash } from './passwords.ts';
 import { USERS, dataPath, fileToken } from '../files/data-files.ts';
 
 /**
@@ -346,7 +346,7 @@ export class SetupClosedError extends Error {
  * second one reads the first one's work and is refused.
  */
 export async function createUser(input: CreateUserInput): Promise<User> {
-  const hash = hashPassword(input.password);
+  const hash = await hashPassword(input.password);
   const email = (input.email ?? '').trim();
   let created: StoredUser | undefined;
 
@@ -413,7 +413,7 @@ export async function setUserPassword(input: {
 }): Promise<boolean> {
   // Hashed before the write rather than inside it, so a hash that throws
   // leaves the stored one alone.
-  const hash = hashPassword(input.password);
+  const hash = await hashPassword(input.password);
   const sessionsValidAfter = input.now.toISOString();
   return updateUser(input.dataDir, input.userId, () => ({
     passwordHash: hash,
@@ -724,21 +724,37 @@ export async function removeUserRecord(input: {
 /**
  * The user, when the password is theirs; `undefined` when it is not, or when
  * there is no such user. The two failures are deliberately indistinguishable.
+ *
+ * A right password on a hash made at other costs than today's is hashed again
+ * at today's, so that every account comes to take as long to check as a
+ * username nobody has.
  */
-export function verifyUserPassword(
+export async function verifyUserPassword(
   dataDir: string,
   username: string,
   password: string,
-): User | undefined {
+): Promise<User | undefined> {
   const user = findUser(dataDir, username);
   if (user === undefined) {
     // Hash anyway, so a missing user and a wrong password take the same time
     // and the login form does not become a user enumerator.
-    verifyPasswordHash(dummyPasswordHash(), password);
+    await verifyPasswordHash(await dummyPasswordHash(), password);
     return undefined;
   }
-  if (!verifyPasswordHash(user.passwordHash, password)) return undefined;
+  if (!(await verifyPasswordHash(user.passwordHash, password))) return undefined;
+  if (!passwordHashIsCurrent(user.passwordHash)) await rehash(dataDir, user, password);
   return withoutHash(user);
+}
+
+async function rehash(dataDir: string, user: StoredUser, password: string): Promise<void> {
+  const passwordHash = await hashPassword(password);
+  try {
+    await updateUser(dataDir, user.id, (current) =>
+      current.passwordHash === user.passwordHash ? { passwordHash } : {},
+    );
+  } catch (error) {
+    console.warn(`Could not store a new password hash for ${user.username}:`, error);
+  }
 }
 
 /** A user as a screen may render it: everything but the hash. */
@@ -766,9 +782,9 @@ function withoutHash(user: StoredUser): User {
  * A hash of a password no user has, so a login attempt for an unknown
  * username costs the same as one for a known name with the wrong password.
  */
-let dummyHash: string | undefined;
+let dummyHash: Promise<string> | undefined;
 
-function dummyPasswordHash(): string {
+function dummyPasswordHash(): Promise<string> {
   dummyHash ??= hashPassword(
     'a password no user has, hashed once so that verification is constant time',
   );

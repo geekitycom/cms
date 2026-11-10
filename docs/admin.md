@@ -799,8 +799,17 @@ server refuses any session or password reset link created before that time,
 even when an older copy of `data/geekity.db` brings its row back.
 
 Passwords are hashed with argon2id through `node:crypto`, so there is no native
-module to build. Each hash stores its cost parameters. If the parameters are
-raised later, every stored password still verifies.
+module to build. The hash runs on the thread pool, so a sign-in does not hold
+up other requests. Each hash stores its cost parameters. If the parameters are
+raised later, every stored password still verifies, and a right password on a
+hash made at other costs is hashed again at the current ones. A hash that asks
+for more than four times the current memory or passes is refused rather than
+worked through.
+
+A password is hashed in Unicode NFC, so the same password typed with composed
+or combining accents is one password. Its length is counted in characters, not
+UTF-16 units. A hash made before passwords were normalised still verifies
+against the password as it was typed.
 
 A session id is 256 random bits in a `HttpOnly; SameSite=Lax; Path=/` cookie.
 When `baseUrl` is an `https` URL, the cookie is `Secure` and named

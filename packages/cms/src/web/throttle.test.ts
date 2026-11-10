@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { Hono } from 'hono';
+
+import type { GeekityEnv } from './env.ts';
 import {
+  clientAddress,
   createLoginThrottle,
   createSignInThrottle,
   LOCKOUT_GROWTH_LIMIT,
@@ -287,5 +291,52 @@ describe('the keys a sign-in is counted against', () => {
       signInKeys({ identifier: 'Ada', address: '203.0.113.1' }),
       signInKeys({ identifier: 'ada', address: '203.0.113.1' }),
     );
+  });
+
+  it('group an IPv6 address with the rest of its /64', () => {
+    const one = signInKeys({ identifier: 'ada', address: '2001:db8:1:2:aaaa::1' });
+    const other = signInKeys({ identifier: 'grace', address: '2001:db8:1:2:ffff:1:2:3' });
+    const outside = signInKeys({ identifier: 'ada', address: '2001:db8:1:3::1' });
+
+    const addressKey = (keys: { strict: string[] }) =>
+      keys.strict.find((key) => key.startsWith('addr:'));
+    assert.equal(addressKey(one), addressKey(other));
+    assert.notEqual(addressKey(one), addressKey(outside));
+    assert.deepEqual(
+      signInKeys({ identifier: 'ada', address: '2001:0db8:0001:0002::9' }),
+      signInKeys({ identifier: 'ada', address: '2001:db8:1:2:0:0:0:1' }),
+    );
+  });
+
+  it('keep each IPv4 address its own', () => {
+    const one = signInKeys({ identifier: 'ada', address: '203.0.113.1' });
+    const other = signInKeys({ identifier: 'ada', address: '203.0.113.2' });
+    assert.notDeepEqual(one, other);
+    assert.deepEqual(signInKeys({ identifier: 'ada', address: '::ffff:203.0.113.1' }), one);
+  });
+});
+
+describe('the client address', () => {
+  async function addressFor(
+    forwarded: string | undefined,
+    trustProxy: boolean,
+  ): Promise<string | undefined> {
+    const app = new Hono<GeekityEnv>();
+    app.get('/', (c) => c.text(clientAddress(c, { trustProxy }) ?? '(none)'));
+    const response = await app.request(
+      '/',
+      forwarded === undefined ? {} : { headers: { 'x-forwarded-for': forwarded } },
+    );
+    const text = await response.text();
+    return text === '(none)' ? undefined : text;
+  }
+
+  it('is the address the nearest proxy saw when it appends to the header', async () => {
+    assert.equal(await addressFor('198.51.100.7, 203.0.113.9', true), '203.0.113.9');
+    assert.equal(await addressFor('203.0.113.9', true), '203.0.113.9');
+  });
+
+  it('ignores the header when the site is not behind a proxy', async () => {
+    assert.equal(await addressFor('203.0.113.9', false), undefined);
   });
 });

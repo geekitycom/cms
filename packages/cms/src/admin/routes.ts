@@ -294,9 +294,11 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       });
     }
 
-    const user = verifyUserPassword(c.var.config.dataDir, username, password);
+    // Counted before the password is checked and cleared on success, because
+    // the check yields: guesses sent at once must not all pass the lock above.
+    throttle.fail(keys);
+    const user = await verifyUserPassword(c.var.config.dataDir, username, password);
     if (user === undefined) {
-      throttle.fail(keys);
       console.warn(`Failed sign-in for ${attempted}`);
       // One message for both failures, so the form cannot be used to find out
       // which usernames exist.
