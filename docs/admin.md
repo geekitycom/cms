@@ -826,6 +826,9 @@ rows where neither applies:
 - **Your own account.** Deleting it would end the session doing the deleting,
   and there is no undo. Another admin can delete it for you.
 
+Both rules are checked against `data/users.json` as the deletion writes it, so
+two deletions sent at the same moment are judged one after the other.
+
 **A profile's links** go one per line, either `Label | URL` or a bare URL that
 is its own label. The URL is a path or an absolute `http(s)` URL with no
 spaces, the same rule as a menu item's URL. The line format is the same in both

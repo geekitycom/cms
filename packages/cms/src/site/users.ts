@@ -603,14 +603,55 @@ export class UnknownUserError extends Error {
   }
 }
 
+/** Why a user could not be removed. */
+export type UserRemovalRefusal = 'only-user' | 'own-account';
+
+/** Thrown when removing a user would break a rule about who the site keeps. */
+export class UserRemovalRefusedError extends Error {
+  override readonly name = 'UserRemovalRefusedError';
+  /** Which rule the removal would have broken. */
+  readonly reason: UserRemovalRefusal;
+  /** Whose removal was refused. */
+  readonly username: string;
+
+  constructor(reason: UserRemovalRefusal, username: string) {
+    super(
+      reason === 'only-user'
+        ? `"${username}" is the only user and cannot be removed.`
+        : `"${username}" cannot remove their own account.`,
+    );
+    this.reason = reason;
+    this.username = username;
+  }
+}
+
+/**
+ * Take a user out of the file. Returns whether they were there.
+ *
+ * Throws {@link UserRemovalRefusedError} rather than leave the site with
+ * nobody, which reopens first-run setup, or let `signedInAs` remove
+ * themselves. Both checks are inside the write for the reason
+ * {@link createUser}'s duplicate check is: two removals at the same moment
+ * queue on the file, so the second one sees the first one's result.
+ */
 export async function removeUserRecord(input: {
   dataDir: string;
   userId: number;
+  /** The user asking for the removal, when it is a person. */
+  signedInAs?: number | null | undefined;
 }): Promise<boolean> {
   let deleted = false;
 
   await write(input.dataDir, (contents) => {
-    deleted = contents.users.some((user) => user.id === input.userId);
+    const target = contents.users.find((user) => user.id === input.userId);
+    deleted = target !== undefined;
+    if (target === undefined) return contents;
+    if (contents.users.length <= 1) {
+      throw new UserRemovalRefusedError('only-user', target.username);
+    }
+    if (target.id === input.signedInAs) {
+      throw new UserRemovalRefusedError('own-account', target.username);
+    }
     return { ...contents, users: contents.users.filter((user) => user.id !== input.userId) };
   });
 

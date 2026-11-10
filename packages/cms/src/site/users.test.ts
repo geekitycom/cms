@@ -17,6 +17,7 @@ import {
   findUserById,
   findUserByIdentifier,
   listUsers,
+  removeUserRecord,
   setUserActorId,
   setUserAdminTheme,
   setUserEmail,
@@ -24,6 +25,7 @@ import {
   setUserProfile,
   UnknownUserError,
   updateUser,
+  UserRemovalRefusedError,
   usersFile,
   verifyUserPassword,
 } from './users.ts';
@@ -578,10 +580,11 @@ describe('updating one user', () => {
 describe('deleting a user', () => {
   it('takes them out of the file and hands nobody else their id', async () => {
     const dataDir = await temporaryDir();
+    await createUser({ dataDir, username: 'grace', password: 'a password' });
     const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
 
     assert.equal(await deleteUser({ dataDir, userId: ada.id, now: new Date() }), true);
-    assert.equal(countUsers(dataDir), 0);
+    assert.equal(countUsers(dataDir), 1);
     assert.equal(findUser(dataDir, 'ada'), undefined);
     assert.equal(findUserById(dataDir, ada.id), undefined);
     assert.equal(
@@ -590,8 +593,52 @@ describe('deleting a user', () => {
       'and only goes once',
     );
 
-    const grace = await createUser({ dataDir, username: 'grace', password: 'a password' });
-    assert.notEqual(grace.id, ada.id, 'an id is never handed out twice');
+    const lin = await createUser({ dataDir, username: 'lin', password: 'a password' });
+    assert.notEqual(lin.id, ada.id, 'an id is never handed out twice');
+  });
+
+  it('refuses to leave the file with nobody in it', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+
+    await assert.rejects(
+      removeUserRecord({ dataDir, userId: ada.id }),
+      (error: unknown) => error instanceof UserRemovalRefusedError && error.reason === 'only-user',
+    );
+    assert.equal(countUsers(dataDir), 1);
+  });
+
+  it('refuses the record of the user asking', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada' }, { username: 'grace' }]);
+
+    await assert.rejects(
+      removeUserRecord({ dataDir, userId: 1, signedInAs: 1 }),
+      (error: unknown) =>
+        error instanceof UserRemovalRefusedError && error.reason === 'own-account',
+    );
+    assert.equal(countUsers(dataDir), 2);
+  });
+
+  it('checks against the file it writes, so two removals at once leave one user', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada' }, { username: 'grace' }]);
+
+    const results = await Promise.allSettled([
+      removeUserRecord({ dataDir, userId: 2, signedInAs: 1 }),
+      removeUserRecord({ dataDir, userId: 1, signedInAs: 2 }),
+    ]);
+
+    assert.equal(countUsers(dataDir), 1);
+    assert.deepEqual(
+      results.map((result) => result.status),
+      ['fulfilled', 'rejected'],
+    );
+    const refused = results[1];
+    assert.ok(
+      refused?.status === 'rejected' && refused.reason instanceof UserRemovalRefusedError,
+      'the second one is refused with a reason',
+    );
   });
 });
 

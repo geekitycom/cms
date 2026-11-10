@@ -16,9 +16,10 @@ import {
   setUserNotificationMode,
   setUserPassword,
   setUserProfile,
+  UserRemovalRefusedError,
   verifyUserPassword,
 } from '../site/users.ts';
-import type { ProfileLink, User } from '../site/users.ts';
+import type { ProfileLink, User, UserRemovalRefusal } from '../site/users.ts';
 import type { FlashKind } from '../store/admin-store.ts';
 import { authorHref } from '../content/authors.ts';
 import { isLinkUrl, LINK_REL_RULE, LINK_URL_RULE, splitLinkRel } from '../site/navigation.ts';
@@ -353,17 +354,22 @@ async function removeUser(c: Context<GeekityEnv>): Promise<Response> {
   const dataDir = c.var.config.dataDir;
   const target = userInForm(dataDir, await c.req.parseBody());
 
-  const refusal = deleteUserRefusal({
-    target,
-    signedInAs: c.var.session?.userId ?? null,
-    total: countUsers(dataDir),
-  });
+  if (target === undefined) return flashAndRedirect(c, 'error', GONE_USER, USERS_PATH);
 
-  if (refusal !== undefined || target === undefined) {
-    return flashAndRedirect(c, 'error', refusal ?? GONE_USER, USERS_PATH);
+  let deleted: boolean;
+  try {
+    deleted = await deleteUser({
+      dataDir,
+      userId: target.id,
+      signedInAs: c.var.session?.userId ?? null,
+      now: c.var.config.now(),
+    });
+  } catch (error) {
+    if (!(error instanceof UserRemovalRefusedError)) throw error;
+    return flashAndRedirect(c, 'error', removalRefusal(error.reason, target), USERS_PATH);
   }
+  if (!deleted) return flashAndRedirect(c, 'error', GONE_USER, USERS_PATH);
 
-  await deleteUser({ dataDir, userId: target.id, now: c.var.config.now() });
   c.var.admin.deleteSessionsForUser(target.id);
   return flashAndRedirect(c, 'notice', `Deleted ${target.username}.`, USERS_PATH);
 }
@@ -409,6 +415,7 @@ const GONE_USER = 'That user is already gone.';
 export async function deleteUser(input: {
   dataDir: string;
   userId: number;
+  signedInAs?: number | null | undefined;
   now: Date;
 }): Promise<boolean> {
   const deleted = await removeUserRecord(input);
@@ -424,13 +431,15 @@ export function deleteUserRefusal(input: {
   total: number;
 }): string | undefined {
   if (input.target === undefined) return GONE_USER;
-  if (input.total <= 1) {
-    return `${input.target.username} is the only user. Add another before deleting this one.`;
-  }
-  if (input.target.id === input.signedInAs) {
-    return 'You cannot delete your own account. Another admin can do it for you.';
-  }
+  if (input.total <= 1) return removalRefusal('only-user', input.target);
+  if (input.target.id === input.signedInAs) return removalRefusal('own-account', input.target);
   return undefined;
+}
+
+function removalRefusal(reason: UserRemovalRefusal, target: User): string {
+  return reason === 'only-user'
+    ? `${target.username} is the only user. Add another before deleting this one.`
+    : 'You cannot delete your own account. Another admin can do it for you.';
 }
 
 export type ChangePasswordProblems = { currentPassword?: string; newPassword?: string };
