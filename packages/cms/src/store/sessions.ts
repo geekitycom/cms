@@ -61,6 +61,12 @@ export interface CreateSessionInput {
   now?: Date | undefined;
 }
 
+/**
+ * The last instant an ISO 8601 string writes with a four-digit year. Expiry is
+ * compared as text, in SQL and here, and only four-digit years sort as time.
+ */
+const LATEST_EXPIRY = Date.parse('9999-12-31T23:59:59.999Z');
+
 /** How long a session id is, in bytes: 32 bytes is 256 bits. */
 export const SESSION_ID_BYTES = 32;
 
@@ -147,7 +153,9 @@ export function openSessionStore(
         ...(input.userUid === undefined ? {} : { userUid: input.userUid }),
         csrfToken: randomToken(),
         createdAt: now.toISOString(),
-        expiresAt: new Date(now.getTime() + input.lifetimeSeconds * 1000).toISOString(),
+        expiresAt: new Date(
+          Math.min(now.getTime() + input.lifetimeSeconds * 1000, LATEST_EXPIRY),
+        ).toISOString(),
       };
       statements.insertSession.run(
         hashSessionId(session.id),

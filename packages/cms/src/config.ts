@@ -174,8 +174,8 @@ export interface GeekityConfig {
    */
   watch?: boolean;
   /**
-   * How long an admin login lasts, in seconds. Default 14 days. Overridden by
-   * `GEEKITY_SESSION_LIFETIME`. The clock starts when the session is created,
+   * How long an admin login lasts, in seconds. Default 14 days, at most ten
+   * years. Overridden by `GEEKITY_SESSION_LIFETIME`. The clock starts when the session is created,
    * and an expired session is deleted rather than merely ignored.
    */
   sessionLifetime?: number;
@@ -608,6 +608,8 @@ export const DEFAULT_DATA_DIR = 'data';
 export const DEFAULT_THEMES_DIR = 'themes';
 /** How long an admin login lasts by default: fourteen days, in seconds. */
 export const DEFAULT_SESSION_LIFETIME = 14 * 24 * 60 * 60;
+/** The longest admin login a site may set: ten years, in seconds. */
+export const MAX_SESSION_LIFETIME = 10 * 365 * 24 * 60 * 60;
 /** Largest upload a site accepts by default: ten mebibytes. */
 export const DEFAULT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 /** Largest audio or video upload a site accepts by default: two hundred mebibytes. */
@@ -798,6 +800,10 @@ const SECONDS = numberKind(
   (value) => Number.isFinite(value) && value > 0,
   'a positive number of seconds',
 );
+const SESSION_SECONDS = numberKind(
+  (value) => Number.isFinite(value) && value > 0 && value <= MAX_SESSION_LIFETIME,
+  `a positive number of seconds no more than ${MAX_SESSION_LIFETIME} (ten years)`,
+);
 
 const DIRECTORY: SettingKind<string, string> = {
   fromEnv: (text, { cwd }) => path.resolve(cwd, text),
@@ -850,7 +856,7 @@ const ENV_SETTINGS = {
   themesDir: setting('GEEKITY_THEMES_DIR', DIRECTORY, DEFAULT_THEMES_DIR),
   baseUrl: setting('GEEKITY_BASE_URL', URL_KIND, undefined),
   watch: setting('GEEKITY_WATCH', BOOLEAN, true),
-  sessionLifetime: setting('GEEKITY_SESSION_LIFETIME', SECONDS, DEFAULT_SESSION_LIFETIME),
+  sessionLifetime: setting('GEEKITY_SESSION_LIFETIME', SESSION_SECONDS, DEFAULT_SESSION_LIFETIME),
   uploadMaxBytes: setting('GEEKITY_UPLOAD_MAX_BYTES', BYTES, DEFAULT_UPLOAD_MAX_BYTES),
   uploadMediaMaxBytes: setting(
     'GEEKITY_UPLOAD_MEDIA_MAX_BYTES',
