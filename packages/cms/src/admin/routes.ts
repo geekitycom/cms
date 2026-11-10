@@ -12,6 +12,7 @@ import {
   createUser,
   DuplicateUsernameError,
   findUserById,
+  SetupClosedError,
   verifyUserPassword,
 } from '../site/users.ts';
 import type { User } from '../site/users.ts';
@@ -227,11 +228,13 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
         username,
         password,
         now: c.var.config.now(),
+        onlyIfNoUsers: true,
       });
     } catch (error) {
       if (error instanceof DuplicateUsernameError) {
         return refuseSetup(c, username, error.message);
       }
+      if (error instanceof SetupClosedError) return c.redirect(LOGIN_PATH, 303);
       throw error;
     }
 

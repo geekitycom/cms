@@ -194,6 +194,8 @@ export interface CreateUserInput {
   email?: string | undefined;
   /** When the account is created. Defaults to the system clock. */
   now?: Date | undefined;
+  /** Add the user only while the file holds nobody, as first-run setup does. */
+  onlyIfNoUsers?: boolean | undefined;
 }
 
 /** Thrown when a username is already taken. Usernames are the login key. */
@@ -288,14 +290,24 @@ export function findUserByIdentifier(dataDir: string, identifier: string): User 
   return found === undefined ? undefined : withoutHash(found);
 }
 
+/** Thrown when first-run setup is asked to add a user to a site that has one. */
+export class SetupClosedError extends Error {
+  override readonly name = 'SetupClosedError';
+
+  constructor() {
+    super('This site already has a user, so setup is closed.');
+  }
+}
+
 /**
  * Hash the password and add the user to the file.
  *
- * Throws {@link DuplicateUsernameError} when the name is taken. The check is
- * inside the write, not before it, which is what makes it the rule the
- * `UNIQUE` index used to be: two requests adding the same name at the same
- * moment queue behind one another on the file, so the second one reads the
- * first one's work and is refused.
+ * Throws {@link DuplicateUsernameError} when the name is taken, and
+ * {@link SetupClosedError} when `onlyIfNoUsers` is set and the file already
+ * holds somebody. Both checks are inside the write, not before it, which is
+ * what makes the first the rule the `UNIQUE` index used to be: two requests
+ * adding at the same moment queue behind one another on the file, so the
+ * second one reads the first one's work and is refused.
  */
 export async function createUser(input: CreateUserInput): Promise<User> {
   const hash = hashPassword(input.password);
@@ -303,6 +315,9 @@ export async function createUser(input: CreateUserInput): Promise<User> {
   let created: StoredUser | undefined;
 
   await write(input.dataDir, (contents) => {
+    if (input.onlyIfNoUsers === true && contents.users.length > 0) {
+      throw new SetupClosedError();
+    }
     if (contents.users.some((user) => user.username === input.username)) {
       throw new DuplicateUsernameError(input.username);
     }

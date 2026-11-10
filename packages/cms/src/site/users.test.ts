@@ -23,6 +23,7 @@ import {
   setUserEmail,
   setUserPassword,
   setUserProfile,
+  SetupClosedError,
   UnknownUserError,
   updateUser,
   UserRemovalRefusedError,
@@ -226,6 +227,20 @@ describe('a name that is taken', () => {
     assert.equal(other.username, 'Ada');
     assert.equal(countUsers(dataDir), 2);
     assert.equal(verifyUserPassword(dataDir, 'ada', 'a password of her own'), undefined);
+  });
+
+  it('adds only the first user when asked to add one only while there are none', async () => {
+    const dataDir = await temporaryDir();
+
+    const outcomes = await Promise.allSettled([
+      createUser({ dataDir, username: 'ada', password: 'one password', onlyIfNoUsers: true }),
+      createUser({ dataDir, username: 'grace', password: 'another one', onlyIfNoUsers: true }),
+    ]);
+
+    const refused = outcomes.filter((outcome) => outcome.status === 'rejected');
+    assert.equal(refused.length, 1);
+    assert.ok(refused[0]?.reason instanceof SetupClosedError);
+    assert.equal(countUsers(dataDir), 1);
   });
 });
 

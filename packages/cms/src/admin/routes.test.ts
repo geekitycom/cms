@@ -166,6 +166,37 @@ describe('setup', () => {
     assert.equal(countUsers(cms.config.dataDir), 0);
   });
 
+  it('adds one admin when two setup forms are sent at once, and signs in only that one', async () => {
+    const cms = await site();
+    const operator = browser(cms);
+    const other = browser(cms);
+    const operatorToken = csrfField(await (await operator.get('/admin/setup')).text());
+    const otherToken = csrfField(await (await other.get('/admin/setup')).text());
+    assert.ok(operatorToken !== undefined && otherToken !== undefined);
+
+    const form = (token: string, username: string) => ({
+      csrf_token: token,
+      username,
+      password: 'correct horse battery',
+      password_confirmation: 'correct horse battery',
+    });
+    const [first, second] = await Promise.all([
+      operator.post('/admin/setup', form(operatorToken, 'ada')),
+      other.post('/admin/setup', form(otherToken, 'grace')),
+    ]);
+
+    const names = listUsers(cms.config.dataDir).map((user) => user.username);
+    assert.equal(names.length, 1, `users: ${JSON.stringify(names)}`);
+    const [winner, loser] = names[0] === 'ada' ? [operator, other] : [other, operator];
+    const refused = names[0] === 'ada' ? second : first;
+    assert.equal(refused.status, 303);
+    assert.equal(refused.headers.get('location'), '/admin/login');
+    assert.equal((await winner.get('/admin')).status, 200);
+    const stranger = await loser.get('/admin');
+    assert.equal(stranger.status, 302, 'the refused one is not signed in');
+    assert.equal(stranger.headers.get('location'), '/admin/login');
+  });
+
   it('closes the setup form once a user exists', async () => {
     const cms = await site();
     const agent = browser(cms);
