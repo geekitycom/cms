@@ -334,6 +334,19 @@ describe('Add plugin (TASK-306)', () => {
     assert.deepEqual(await record(dataDir), []);
   });
 
+  it('locks after the attempt limit of wrong passwords, even for the right one', async () => {
+    const { agent, pluginsDir } = await site({ config: { loginAttempts: 2, loginLockout: 900 } });
+    const install = (password: string) =>
+      submit(agent, PLUGINS_ADD_PATH, { package: LLM, version: '1.0.0', password });
+
+    for (let i = 0; i < 2; i += 1) assert.equal((await install(`guess ${i}`)).status, 400);
+
+    const result = await install(PASSWORD);
+    assert.equal(result.status, 429);
+    assert.match(result.html, /Too many wrong passwords/);
+    assert.equal(await folderVersion(pluginsDir, LLM), undefined);
+  });
+
   it('refuses a request without the CSRF token', async () => {
     const { agent, pluginsDir } = await site();
     const response = await agent.post(PLUGINS_ADD_PATH, { package: LLM, password: PASSWORD });

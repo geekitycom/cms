@@ -70,6 +70,7 @@ import { mountPluginsScreen, pluginScreens } from './plugins.ts';
 import type { LoginThrottle } from '../web/throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 import { mountUsers } from './users.ts';
+import { createConfirmPassword } from './confirm-password.ts';
 import { mountWritingGoals } from './writing-goals.ts';
 import { mountDashboard } from './dashboard.ts';
 
@@ -121,6 +122,11 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     });
     return throttled;
   }
+
+  // Forms that ask a signed-in person for their password again count wrong
+  // answers on the sign-in throttle, so holding a session gives no extra
+  // guesses at the password.
+  const confirmPassword = createConfirmPassword(loginThrottle);
 
   // A second throttle, on the same machinery and the same limits, for the
   // forgot-password form. Deliberately not the login one: sharing it
@@ -372,7 +378,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountEditorActions(app);
   mountItemLookup(app);
   mountItemSearch(app);
-  mountPluginsScreen(app, { render });
+  mountPluginsScreen(app, { render, confirmPassword });
 
   // The jobs a site runs rather than the things it sets: reading every file
   // back into the index, on a site that is serving.
@@ -380,7 +386,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountPersonalDataScreen(app, { render });
   mountMaintenanceScreen(app, { render });
   mountDevModeScreen(app, { render });
-  mountExportScreen(app, { render });
+  mountExportScreen(app, { render, confirmPassword });
 
   // The site's own settings, which are content/_data/site.json itself: the
   // screen reads that file and writes it back.
@@ -396,7 +402,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
   // Who may sign in: the list, the add form, and the change-password form for
   // whoever is looking at it.
-  mountUsers(app, { render });
+  mountUsers(app, { render, confirmPassword });
 
   // The fediverse side: the actor, the followers, the inbox log, and what the
   // site sent to whom.

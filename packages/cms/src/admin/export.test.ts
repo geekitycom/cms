@@ -107,6 +107,21 @@ describe('Tools > Export', () => {
     assert.equal(await cms.jobs.latest(SITE_EXPORT_JOB.name), undefined);
   });
 
+  it('locks after the attempt limit of wrong passwords, even for the right one', async () => {
+    const cms = await box.site({ loginAttempts: 2, loginLockout: 900 });
+    const agent = await signedIn(cms);
+
+    for (let i = 0; i < 2; i += 1) {
+      assert.equal((await startExport(agent, { password: `guess ${i}` })).status, 400);
+    }
+
+    const response = await startExport(agent, { password: FIRST_ADMIN.password });
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get('retry-after'), '900');
+    assert.match(section(await response.text()), /Too many wrong passwords/);
+    assert.equal(await cms.jobs.latest(SITE_EXPORT_JOB.name), undefined);
+  });
+
   it('queues the export with the right password and keeps the password out of the job (AC #1)', async () => {
     const { cms, agent } = await site();
 

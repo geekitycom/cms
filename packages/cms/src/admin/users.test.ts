@@ -1472,6 +1472,53 @@ describe('a bad password form', () => {
     );
   });
 
+  it('locks the form after the attempt limit of wrong current passwords, even for the right one', async () => {
+    const cms = await box.site({ loginAttempts: 3, loginLockout: 900 });
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+    const form = (current: string) => ({
+      csrf_token: token,
+      current_password: current,
+      new_password: 'a brand new password',
+      new_password_confirmation: 'a brand new password',
+    });
+
+    for (let i = 0; i < 3; i += 1) {
+      assert.equal((await agent.post('/admin/users/password', form(`guess ${i}`))).status, 400);
+    }
+
+    const response = await agent.post('/admin/users/password', form(FIRST_ADMIN.password));
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get('retry-after'), '900');
+    assert.match(await response.text(), /Too many wrong passwords\. Try again in 15 minutes\./);
+    assert.ok(
+      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      'the old password still works',
+    );
+  });
+
+  it('counts wrong current passwords on the add-user form against the same limit', async () => {
+    const cms = await box.site({ loginAttempts: 2, loginLockout: 900 });
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+    const form = (current: string) => ({
+      csrf_token: token,
+      username: 'grace',
+      password: 'a long enough password',
+      email: '',
+      current_password: current,
+    });
+
+    for (let i = 0; i < 2; i += 1) {
+      assert.equal((await agent.post('/admin/users/new', form(`guess ${i}`))).status, 400);
+    }
+
+    const response = await agent.post('/admin/users/new', form(FIRST_ADMIN.password));
+    assert.equal(response.status, 429);
+    assert.match(await response.text(), /Too many wrong passwords/);
+    assert.equal(countUsers(cms.config.dataDir), 1, 'nothing was written');
+  });
+
   it('refuses a confirmation that does not match, and a short new password', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);

@@ -29,7 +29,8 @@ import {
 } from '../plugins/manage.ts';
 import type { ManageOptions, ManageResult } from '../plugins/manage.ts';
 import { describeUpgrade } from '../plugins/upgrade.ts';
-import { confirmedUser } from './confirm-password.ts';
+import { refuseConfirmation } from './confirm-password.ts';
+import type { ConfirmPassword } from './confirm-password.ts';
 import type { Supervision } from '../supervisor/supervision.ts';
 import { PACKAGE_NAME } from '../plugins/registry.ts';
 import type {
@@ -141,8 +142,11 @@ export function pluginScreenPath(name: string): string {
   return `${PLUGINS_PATH}/${name}`;
 }
 
-export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: AdminRender }): void {
-  const { render } = options;
+export function mountPluginsScreen(
+  app: Hono<GeekityEnv>,
+  options: { render: AdminRender; confirmPassword: ConfirmPassword },
+): void {
+  const { render, confirmPassword } = options;
 
   app.get(PLUGINS_PATH, (c) => drawPluginsScreen(c));
 
@@ -245,9 +249,9 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
   function drawAddPage(
     c: Context<GeekityEnv>,
     form: { package: string; version: string; problems?: AddProblems },
-    status: 200 | 400 = 200,
+    status?: 400,
   ): Response {
-    c.status(status);
+    if (status !== undefined) c.status(status);
     return render(c, ADMIN_TEMPLATES.pluginAdd, {
       section: PLUGINS_SECTION,
       child: PLUGINS_CHILD,
@@ -266,14 +270,12 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     const name = stringOrEmpty(body[PACKAGE_FIELD]).trim();
     const version = stringOrEmpty(body[VERSION_FIELD]).trim();
     const typed = { package: name, version };
-    const user = confirmedUser(c, stringOrEmpty(body[PASSWORD_FIELD]));
-    if (user === undefined) {
-      return drawAddPage(
-        c,
-        { ...typed, problems: { password: `${WRONG_PASSWORD} installed.` } },
-        400,
-      );
+    const confirmation = confirmPassword(c, stringOrEmpty(body[PASSWORD_FIELD]));
+    if (confirmation.kind !== 'confirmed') {
+      const password = refuseConfirmation(c, confirmation, `${WRONG_PASSWORD} installed.`);
+      return drawAddPage(c, { ...typed, problems: { password } });
     }
+    const user = confirmation.username;
     const spec = version === '' ? name : `${name}@${version}`;
     try {
       parsePackageSpec(spec);
@@ -337,11 +339,13 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     if (installer.state !== 'on') return refuse(c, INSTALLER_REFUSALS[installer.state]);
     const body = await c.req.parseBody();
     const name = stringOrEmpty(body[PLUGIN_FIELD]);
-    const user = confirmedUser(c, stringOrEmpty(body[PASSWORD_FIELD]));
-    if (user === undefined) {
+    const confirmation = confirmPassword(c, stringOrEmpty(body[PASSWORD_FIELD]));
+    if (confirmation.kind !== 'confirmed') {
       const verb = action === 'remove' ? 'removed' : 'updated';
-      return await drawConfirm(c, installer.pluginsDir, action, name, `${WRONG_PASSWORD} ${verb}.`);
+      const error = refuseConfirmation(c, confirmation, `${WRONG_PASSWORD} ${verb}.`);
+      return await drawConfirm(c, installer.pluginsDir, action, name, error);
     }
+    const user = confirmation.username;
     return await manage(c, installer.pluginsDir, user, (options) => change(options, name));
   }
 
@@ -379,7 +383,6 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
         ready = false;
       }
     }
-    c.status(error === undefined ? 200 : 400);
     return render(c, ADMIN_TEMPLATES.pluginConfirm, {
       section: PLUGINS_SECTION,
       child: PLUGINS_CHILD,

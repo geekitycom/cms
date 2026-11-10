@@ -9,7 +9,8 @@ import { pendingWork } from '../export/site-export.ts';
 import { finishedResult } from '../jobs/types.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { confirmedUser } from './confirm-password.ts';
+import { refuseConfirmation } from './confirm-password.ts';
+import type { ConfirmPassword } from './confirm-password.ts';
 import type { AdminRender } from './documents.ts';
 import { jobStatusView, queueJobFromForm } from './job-status.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -25,7 +26,10 @@ const FIELDS = { password: 'password', withCredentials: 'with_credentials' } as 
 
 const WRONG_PASSWORD = 'Your password was not right, so nothing was exported.';
 
-export function mountExportScreen(app: Hono<GeekityEnv>, options: { render: AdminRender }): void {
+export function mountExportScreen(
+  app: Hono<GeekityEnv>,
+  options: { render: AdminRender; confirmPassword: ConfirmPassword },
+): void {
   async function show(
     c: Context<GeekityEnv>,
     form: { withCredentials: boolean; problem?: string } = { withCredentials: false },
@@ -62,9 +66,10 @@ export function mountExportScreen(app: Hono<GeekityEnv>, options: { render: Admi
   app.post(EXPORT_PATH, async (c) => {
     const body = await c.req.parseBody();
     const withCredentials = body[FIELDS.withCredentials] !== undefined;
-    if (confirmedUser(c, stringOrEmpty(body[FIELDS.password])) === undefined) {
-      c.status(400);
-      return await show(c, { withCredentials, problem: WRONG_PASSWORD });
+    const confirmation = options.confirmPassword(c, stringOrEmpty(body[FIELDS.password]));
+    if (confirmation.kind !== 'confirmed') {
+      const problem = refuseConfirmation(c, confirmation, WRONG_PASSWORD);
+      return await show(c, { withCredentials, problem });
     }
     return await queueJobFromForm(
       c,

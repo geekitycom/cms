@@ -31,6 +31,13 @@ make grow. A guessing attack runs over minutes, and a restart does not happen
 often enough to help it. The server logs both refusals with the username and
 the address.
 
+Forms that ask a signed-in user for their password again use the same counts:
+changing your password, adding a user, changing an email address, exporting
+the site, and installing, updating or removing a plugin. A wrong password
+there counts against the signed-in user's username and the address. A
+lockout on either refuses the form, even with the right password, and says how
+long is left; the forms that render a page answer `429` with `Retry-After`.
+
 `trustProxy` decides where the address comes from. It defaults to `false`,
 and the address is the socket's own. Any client can send `X-Forwarded-For`. On
 a site reached directly, trusting it would let one attacker give each guess a
