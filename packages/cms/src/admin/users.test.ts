@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { after, describe, it } from 'node:test';
 
 import {
@@ -15,9 +16,11 @@ import {
   countUsers,
   findUser,
   findUserById,
-  setUserProfile,
+  usersFile,
+  usersJsonText,
   verifyUserPassword,
 } from '../site/users.ts';
+import type { UsersFileContents } from '../site/users.ts';
 import { createToken, findAccessToken } from '../indieauth/tokens.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import { addUser, writeUsers } from './__testing__/users.ts';
@@ -1777,70 +1780,36 @@ describe('what the Links box says about itself (TASK-112)', () => {
     assert.doesNotMatch(html, /flag/, 'a rel value is not a flag, and none is refused here');
   });
 
-  it('keeps a link stored before the check existed, in the box and in the file (AC #5)', async () => {
+  it('leaves a stored link that breaks the link rule out of the box', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
     const ada = idOf(cms.config.dataDir, 'ada');
-    // What a file may hold that this box would not take: a href with a space
-    // in it, whose tail is not a list of rel values either, so it is still
-    // part of the URL and still refused.
-    const stored = { label: 'Odd', href: '/some where/' };
-    await setUserProfile({
-      dataDir: cms.config.dataDir,
-      userId: ada,
-      profile: { bio: 'Wrote the first program.', links: [stored] },
-    });
-
-    const { html, token } = await editScreen(agent, ada);
-    assert.match(html, />Odd \| \/some where\/</, 'the stored line is not shown');
-
-    // And saving the panel back is refused rather than silently dropping it:
-    // what is in the file is still in the file, and the person is told which
-    // line to fix.
-    const response = await agent.post('/admin/users/profile', {
-      csrf_token: token,
-      user_id: String(ada),
-      bio: 'Wrote the first program.',
-      links: 'Odd | /some where/',
-    });
-
-    assert.equal(response.status, 400);
-    const profile = findUserById(cms.config.dataDir, ada)?.profile;
-    assert.deepEqual(profile?.links, [stored], 'the stored link was lost on the way through');
-    assert.equal(profile?.bio, 'Wrote the first program.', 'and the rest of the profile with it');
-  });
-
-  it('repairs the shll.me line when the box it came back in is saved (TASK-114)', async () => {
-    const cms = await box.site();
-    const agent = await signedIn(cms);
-    const ada = idOf(cms.config.dataDir, 'ada');
-    // The href that sent a reader to /author/a%20%7C%20me/, as the file still
-    // holds it. It shows in the box as the line somebody meant to type, and
-    // saving that line now reads it as a URL and a rel value rather than
-    // refusing it, so the profile fixes itself on the next save.
-    await setUserProfile({
-      dataDir: cms.config.dataDir,
-      userId: ada,
-      profile: { links: [{ label: 'Mastodon', href: 'https://shll.me/@a | me' }] },
-    });
-
-    const { html, token } = await editScreen(agent, ada);
-    assert.match(
-      html,
-      />Mastodon \| https:\/\/shll\.me\/@a \| me</,
-      'the stored line is not shown',
+    const file = usersFile(cms.config.dataDir);
+    const contents = JSON.parse(readFileSync(file, 'utf8')) as UsersFileContents;
+    writeFileSync(
+      file,
+      usersJsonText({
+        ...contents,
+        users: contents.users.map((user) =>
+          user.id === ada
+            ? {
+                ...user,
+                profile: {
+                  bio: 'Wrote the first program.',
+                  links: [
+                    { label: 'Odd', href: '/some where/' },
+                    { label: 'Home', href: 'https://ada.example' },
+                  ],
+                },
+              }
+            : user,
+        ),
+      }),
     );
 
-    const response = await agent.post('/admin/users/profile', {
-      csrf_token: token,
-      user_id: String(ada),
-      links: 'Mastodon | https://shll.me/@a | me',
-    });
-
-    assert.equal(response.status, 303);
-    assert.deepEqual(findUserById(cms.config.dataDir, ada)?.profile?.links, [
-      { label: 'Mastodon', href: 'https://shll.me/@a', rel: 'me' },
-    ]);
+    const { html } = await editScreen(agent, ada);
+    assert.doesNotMatch(html, /some where/, 'the stored line is shown');
+    assert.match(html, /Home \| https:\/\/ada\.example/, 'the good line is not shown');
   });
 });
 

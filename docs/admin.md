@@ -878,9 +878,11 @@ this site, and IndieAuth uses it to confirm the link is yours. Nothing else in
 Geekity CMS reads it. Typing `| me` therefore adds nothing, and
 `| me nofollow author` puts all three values on the rendered `rel`.
 
-A link stored before the box was validated still renders and still appears in
-the box. When the panel is saved, the server refuses a line that is not a
-link and names the line to fix.
+When the panel is saved, the server refuses a line that is not a link and
+names the line to fix. The same rule applies to every profile read from
+`data/users.json`, however it was written: a link whose URL is not a path or
+an absolute `http(s)` URL is not rendered and does not appear in the box, and
+neither does an avatar that breaks the rule.
 
 A form with a problem returns a 400, with one message under each field, and
 nothing is written. The add form keeps the submitted username. The password

@@ -16,7 +16,7 @@ import {
 } from './notification-preferences.ts';
 import { systemClock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
-import { relText } from './navigation.ts';
+import { isLinkUrl, relText } from './navigation.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
 import { USERS, dataPath, fileToken } from '../files/data-files.ts';
 
@@ -471,7 +471,9 @@ export async function setUserProfile(input: {
  *
  * Trimming here rather than at the form is what makes a hand-edited file and a
  * saved one read the same: a bio of three spaces is a bio nobody wrote, and a
- * link with no URL is not somewhere this person is.
+ * link with no URL is not somewhere this person is. Links and the avatar are
+ * held to {@link isLinkUrl} here too, so a file the users screen did not write
+ * cannot put any other scheme on the public bio.
  */
 export function cleanProfile(profile: UserProfile): UserProfile | undefined {
   const displayName = (profile.displayName ?? '').trim();
@@ -488,19 +490,27 @@ export function cleanProfile(profile: UserProfile): UserProfile | undefined {
     })
     // A link needs somewhere to go; a label it does not have is the URL again,
     // because a list of blank links is worse than a list of bare addresses.
-    .filter((link) => link.href !== '')
+    .filter((link) => isLinkUrl(link.href))
     .map((link) => (link.label === '' ? { ...link, label: link.href } : link));
 
   const cleaned: UserProfile = {
     ...(displayName === '' ? {} : { displayName }),
     ...(bio === '' ? {} : { bio }),
-    ...(avatar === '' ? {} : { avatar }),
+    ...(isAvatarUrl(avatar) ? { avatar } : {}),
     ...(jobTitle === '' ? {} : { jobTitle }),
     ...(location === '' ? {} : { location }),
     ...(links.length === 0 ? {} : { links }),
   };
 
   return Object.keys(cleaned).length === 0 ? undefined : cleaned;
+}
+
+/**
+ * Whether a stored avatar is one the site will print: a site path or an
+ * absolute http(s) URL, the same rule a profile link is held to.
+ */
+export function isAvatarUrl(avatar: string): boolean {
+  return isLinkUrl(avatar);
 }
 
 /**
@@ -953,8 +963,8 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
  *
  * Read through the same {@link cleanProfile} a save goes through, so a file
  * written by hand and one written by the users screen are read identically:
- * whitespace is trimmed, an empty field is no field, and a link with no URL is
- * no link.
+ * whitespace is trimmed, an empty field is no field, and a link or avatar
+ * that breaks the link rule is dropped.
  */
 function profileFrom(value: unknown): UserProfile | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
