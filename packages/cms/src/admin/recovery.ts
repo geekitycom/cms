@@ -142,6 +142,7 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
       // A good moment to sweep: resets are rare, and this is the one handler
       // that writes a row to the table.
       c.var.admin.prunePasswordResets();
+      c.var.admin.deletePasswordResetsForUser(user.id);
       const reset = c.var.admin.createPasswordReset({
         userId: user.id,
         userUid: user.uid,

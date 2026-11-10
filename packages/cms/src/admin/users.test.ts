@@ -1239,6 +1239,69 @@ describe('changing your own password', () => {
   });
 });
 
+describe('outstanding reset links', () => {
+  it('end when the email address changes', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const grace = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+      email: 'old@example.com',
+    });
+    const reset = cms.admin.createPasswordReset({ userId: grace.id, lifetimeSeconds: 3600 });
+    const { token } = await usersScreen(agent);
+
+    const saved = await agent.post('/admin/users/email', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      user_id: String(grace.id),
+      email: 'new@example.com',
+    });
+    assert.equal(saved.status, 303);
+    assert.equal(findUser(cms.config.dataDir, 'grace')?.email, 'new@example.com');
+    assert.equal(cms.admin.getPasswordReset(reset.token), undefined);
+  });
+
+  it('stay when the same address is saved again', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const grace = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+      email: 'grace@example.com',
+    });
+    const reset = cms.admin.createPasswordReset({ userId: grace.id, lifetimeSeconds: 3600 });
+    const { token } = await usersScreen(agent);
+
+    await agent.post('/admin/users/email', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      user_id: String(grace.id),
+      email: 'grace@example.com',
+    });
+    assert.notEqual(cms.admin.getPasswordReset(reset.token), undefined);
+  });
+
+  it('end when you change your password', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = idOf(cms.config.dataDir, 'ada');
+    const reset = cms.admin.createPasswordReset({ userId: ada, lifetimeSeconds: 3600 });
+    const { token } = await usersScreen(agent);
+
+    const changed = await agent.post('/admin/users/password', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      new_password: 'a brand new password',
+      new_password_confirmation: 'a brand new password',
+    });
+    assert.equal(changed.status, 303);
+    assert.equal(cms.admin.getPasswordReset(reset.token), undefined);
+  });
+});
+
 describe('a bad password form', () => {
   it('refuses a wrong current password with a 400 and changes nothing', async () => {
     const cms = await box.site();

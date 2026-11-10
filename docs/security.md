@@ -110,6 +110,7 @@ When the name matches an account with an address, the server sends the theme's
   of `data/geekity.db` does not contain working links.
 - The token is never rendered into the page of the browser that requested it.
 - The token lasts an hour and works once.
+- Asking again ends any link sent earlier, so only the newest one works.
 
 A password set through the link must meet the same rules as a password set
 anywhere else. The server then invalidates:
@@ -127,9 +128,13 @@ way as sign-ins: the same limits, the same growing lockout, `429` and
 throttle, a stranger could lock a user out of signing in by requesting resets
 for them over and over.
 
-Reset tokens live in the database, which is a cache. A restart, a
-`geekity rebuild` or a deleted `data/geekity.db` invalidates every outstanding
-link. The user then has to click Forgot password again.
+Changing a password on the users screen, or changing a user's email address
+there, also ends every reset link that user had outstanding. A link already
+sent to an old address stops working once the address changes.
+
+Reset tokens live in the database, so a restart leaves them working until they
+expire. A `geekity rebuild` or a deleted `data/geekity.db` ends every
+outstanding link, and the user then has to click Forgot password again.
 
 With no mail provider or credential, `/admin/forgot` shows no form. It says the
 site cannot send email and links to

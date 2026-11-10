@@ -383,6 +383,20 @@ describe('repeated requests (AC #4)', () => {
   });
 });
 
+describe('a second request', () => {
+  it('ends the link the first one sent', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+    await askForReset(cms, 'ada');
+    await askForReset(cms, 'ada');
+    assert.equal(provider.sent.length, 2, 'two links were mailed');
+
+    const older = await browser(cms).get(pathOf(linkIn(provider.sent[0])));
+    assert.equal(older.status, 400, 'the older link was refused');
+    const newer = await browser(cms).get(pathOf(linkIn(provider.sent[1])));
+    assert.equal(newer.status, 200, 'the newer link opens the form');
+  });
+});
+
 describe('a site that sends no email (AC #5)', () => {
   it('says recovery is unavailable and names the command that gets back in', async () => {
     const cms = await siteWithoutMail();

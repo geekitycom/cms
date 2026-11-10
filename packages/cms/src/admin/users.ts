@@ -198,6 +198,7 @@ async function changePassword(c: Context<GeekityEnv>, render: AdminRender): Prom
 
   await setUserPassword({ dataDir: c.var.config.dataDir, userId: user.id, password: next });
   const ended = c.var.admin.deleteSessionsForUser(user.id, { except: session.id });
+  c.var.admin.deletePasswordResetsForUser(user.id);
 
   return backToUser(
     c,
@@ -225,6 +226,7 @@ async function saveEmail(c: Context<GeekityEnv>): Promise<Response> {
   await setUserEmail({ dataDir, userId: target.id, email });
 
   const previous = target.email;
+  if (previous !== email) c.var.admin.deletePasswordResetsForUser(target.id);
   if (previous !== undefined && previous !== email && c.var.mailConfigured) {
     void c.var.mail.send({
       to: previous,
