@@ -7,6 +7,7 @@ import { after, describe, it } from 'node:test';
 
 import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
+import { actorKeyFile } from '../federation/keys.ts';
 import { hashPassword } from './passwords.ts';
 import {
   ConflictingActorIdError,
@@ -218,15 +219,51 @@ describe('a name that is taken', () => {
     );
   });
 
-  it('is a different name when the case is different, as it always was', async () => {
+  it('is refused when it differs from a taken name only by case', async () => {
     const dataDir = await temporaryDir();
-    await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    writeUsers(dataDir, [{ username: 'ada' }]);
+    assert.equal(
+      actorKeyFile(dataDir, 'Ada', 'Ed25519'),
+      actorKeyFile(dataDir, 'ada', 'Ed25519'),
+      'the two names share a key file',
+    );
 
-    const other = await createUser({ dataDir, username: 'Ada', password: 'a password of her own' });
+    await assert.rejects(
+      () => createUser({ dataDir, username: 'Ada', password: 'another password here' }),
+      (error: unknown) => error instanceof DuplicateUsernameError && error.username === 'ada',
+    );
+    assert.equal(countUsers(dataDir), 1, 'and nothing was written');
+  });
 
-    assert.equal(other.username, 'Ada');
-    assert.equal(countUsers(dataDir), 2);
-    assert.equal(verifyUserPassword(dataDir, 'ada', 'a password of her own'), undefined);
+  it('is refused when it differs from a taken name only by a dot for a dash', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'a-da' }]);
+    assert.equal(
+      actorKeyFile(dataDir, 'a.da', 'Ed25519'),
+      actorKeyFile(dataDir, 'a-da', 'Ed25519'),
+      'the two names share a key file',
+    );
+
+    await assert.rejects(
+      () => createUser({ dataDir, username: 'a.da', password: 'another password here' }),
+      DuplicateUsernameError,
+    );
+    assert.equal(countUsers(dataDir), 1, 'and nothing was written');
+  });
+
+  it('still loads a file that already holds names differing only by case', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [
+      { username: 'ada', id: 1 },
+      { username: 'Ada', id: 2 },
+    ]);
+
+    assert.deepEqual(
+      listUsers(dataDir)
+        .map((user) => user.username)
+        .sort(),
+      ['Ada', 'ada'],
+    );
   });
 
   it('adds only the first user when asked to add one only while there are none', async () => {

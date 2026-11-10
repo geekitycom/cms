@@ -17,7 +17,7 @@ import { systemClock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
 import { relText } from './navigation.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
-import { USERS, dataPath } from '../files/data-files.ts';
+import { USERS, dataPath, fileToken } from '../files/data-files.ts';
 
 /**
  * Who may sign in: `data/users.json`, and everything that reads or writes it.
@@ -302,7 +302,10 @@ export class SetupClosedError extends Error {
 /**
  * Hash the password and add the user to the file.
  *
- * Throws {@link DuplicateUsernameError} when the name is taken, and
+ * Throws {@link DuplicateUsernameError} when the name is taken, or differs
+ * from a taken one only by case or punctuation: such names share a key file
+ * under `data/keys`, and fediverse servers treat handles that differ only by
+ * case as one account. Throws
  * {@link SetupClosedError} when `onlyIfNoUsers` is set and the file already
  * holds somebody. Both checks are inside the write, not before it, which is
  * what makes the first the rule the `UNIQUE` index used to be: two requests
@@ -318,9 +321,9 @@ export async function createUser(input: CreateUserInput): Promise<User> {
     if (input.onlyIfNoUsers === true && contents.users.length > 0) {
       throw new SetupClosedError();
     }
-    if (contents.users.some((user) => user.username === input.username)) {
-      throw new DuplicateUsernameError(input.username);
-    }
+    const folded = fileToken(input.username);
+    const taken = contents.users.find((user) => fileToken(user.username) === folded);
+    if (taken !== undefined) throw new DuplicateUsernameError(taken.username);
     created = {
       id: contents.nextId,
       username: input.username,

@@ -8,7 +8,7 @@ import {
   updateFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
-import { ACTOR_KEYS, dataFolder, dataPath } from '../files/data-files.ts';
+import { ACTOR_KEYS, dataFolder, dataPath, fileToken } from '../files/data-files.ts';
 import { messageOf } from '../util/errors.ts';
 
 /**
@@ -269,19 +269,6 @@ export const KEY_FILE_MODE = 0o600;
 
 /** The permissions `data/keys` is created with, when this is what creates it. */
 const KEYS_DIR_MODE = 0o700;
-
-/**
- * The part of a file name one identifier or algorithm contributes.
- *
- * Lower case, because `RSASSA-PKCS1-v1_5` on a case-insensitive filesystem is
- * the same file as `rsassa-pkcs1-v1_5` and only one of them should ever be
- * written; and anything that is not a letter, a digit, a dash or an underscore
- * becomes a dash, so nothing a name carries — a dot, a slash, a `..` — can
- * reach out of `data/keys` or split the file name into more parts than it has.
- */
-function fileToken(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
-}
 
 /**
  * Make `data/keys` before anything is written into it, so it exists with the

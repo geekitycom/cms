@@ -754,7 +754,10 @@ address, notification preferences, writing goals, a public profile and the
 [stored actor id](federation.md#a-users-stored-actor-id) they were published
 under elsewhere. Ids and usernames are unique. A file with two entries that
 share either one does not load: the server refuses it with the same error as a
-file that will not parse, and names the repeated value.
+file that will not parse, and names the repeated value. A new user also cannot
+take a name that matches an existing one when case is ignored and dots count as
+dashes, because such names share a key file in `data/keys`. A file that
+already holds two such names, such as `Ada` and `ada`, still loads.
 
 The server writes the file the same way as every file this CMS owns:
 
@@ -795,6 +798,8 @@ Adding a user enforces the same rules as `/admin/setup` and
 `geekity user add`:
 
 - a username of 1 to 64 letters, digits, dots, dashes or underscores
+- a username that does not match an existing username when case is ignored and
+  dots count as dashes
 - a password of at least 8 characters
 
 If you tick **Generate one instead**, the server makes the password with

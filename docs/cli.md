@@ -413,6 +413,9 @@ also the way back into a site that has locked out every user and cannot send
 email. It applies the same rules as the setup form:
 
 - The username is 1 to 64 letters, digits, dots, dashes or underscores.
+- The username does not match an existing username when case is ignored and
+  dots count as dashes. `Ada` is refused when `ada` exists, and `a.da` is
+  refused when `a-da` exists.
 - The password is at least 8 characters.
 
 ```sh
