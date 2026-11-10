@@ -3,11 +3,10 @@ import type { Context, Hono } from 'hono';
 import { AUTOSAVE_FIELD, autosaveCopies, parseAutosaveKey } from '../autosave/index.ts';
 import type { AutosaveKey, AutosaveRecord } from '../autosave/index.ts';
 import { CSRF_FIELD } from '../forms/protection.ts';
-import { ADMIN_PREFIX } from '../site/admin-paths.ts';
+import { ADMIN_PREFIX, returnPath } from '../site/admin-paths.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { creditWriting } from '../writing/ledger.ts';
-import { returnPath } from './documents.ts';
 import { isDocumentType } from '../content/document.ts';
 import { flash, noteClearedAutosave } from './flash.ts';
 

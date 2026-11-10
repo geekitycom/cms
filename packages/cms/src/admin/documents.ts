@@ -98,7 +98,7 @@ import { formatInTimezone } from './formatting.ts';
 import { allowGeolocation } from './headers.ts';
 import { AUTOSAVE_DISCARD_JSON_PATH, AUTOSAVE_DISCARD_PATH, AUTOSAVE_PATH } from './autosave.ts';
 import { laterOrOnlyKnown } from './autosave-client.ts';
-import { ADMIN_PREFIX, PREVIEW_PATH, WIKI_ADMIN_PATH } from '../site/admin-paths.ts';
+import { ADMIN_PREFIX, PREVIEW_PATH, returnPath, WIKI_ADMIN_PATH } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { LINK_ALL_FIELD, LINK_FIELD, linkMentions, mentionRows } from './wiki-mentions.ts';
 
@@ -947,19 +947,6 @@ function backTo(c: Context<GeekityEnv>, options: MoveDocumentOptions, message: s
     returnPath(options.returnTo) ?? documentEditorPath(options.kind, options.document),
     303,
   );
-}
-
-/**
- * A submitted return path, when it is one this admin could have rendered.
- *
- * Only paths under `/admin/` are honoured, and only ones that cannot be read
- * as another host, so the value cannot be used to bounce somebody off the site.
- */
-export function returnPath(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith(`${ADMIN_PREFIX}/`) && trimmed !== ADMIN_PREFIX) return undefined;
-  if (trimmed.startsWith('//') || trimmed.includes('\\')) return undefined;
-  return trimmed;
 }
 
 /** One of the editor's submit buttons. */

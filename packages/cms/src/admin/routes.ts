@@ -21,7 +21,13 @@ import { adminColorScheme } from '../site/admin-theme.ts';
 import { mountAppearanceScreen } from './appearance.ts';
 import { mountLookScreen } from './look.ts';
 import { adminAssetResponse } from './assets.ts';
-import { ADMIN_ASSET_PREFIX, ADMIN_PREFIX, editUserPath, LOGIN_PATH } from '../site/admin-paths.ts';
+import {
+  ADMIN_ASSET_PREFIX,
+  ADMIN_PREFIX,
+  editUserPath,
+  LOGIN_PATH,
+  returnPath,
+} from '../site/admin-paths.ts';
 import { credentialProblem, MAXIMUM_USERNAME_LENGTH } from './credentials.ts';
 import {
   editorPath,
@@ -458,23 +464,6 @@ const RETURNABLE_PATHS: ReadonlySet<string> = new Set([CONSENT_PATH]);
 function shortened(text: string): string {
   const cut = text.slice(0, MAXIMUM_USERNAME_LENGTH);
   return JSON.stringify(cut) + (cut.length < text.length ? '…' : '');
-}
-
-/**
- * A return address that stays in the admin, or `undefined`.
- *
- * Only a path under `/admin`, in printable ASCII with no backslash, which a
- * browser could read as a different host, and no space or control character,
- * which a header would refuse: the login form can never be used to send
- * somebody off the site.
- */
-function returnPath(value: unknown): string | undefined {
-  if (typeof value !== 'string' || !/^[!-[\]-~]+$/.test(value)) return undefined;
-  const url = URL.parse(value, 'http://admin.invalid');
-  if (url === null || url.origin !== 'http://admin.invalid') return undefined;
-  const { pathname } = url;
-  if (pathname !== ADMIN_PREFIX && !pathname.startsWith(`${ADMIN_PREFIX}/`)) return undefined;
-  return value.startsWith('/') ? value : undefined;
 }
 
 /** `Clear-Site-Data` on logout: every kind of data a browser keeps for the site. */

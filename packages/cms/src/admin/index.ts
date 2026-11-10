@@ -57,7 +57,6 @@ export {
   newEditorPath,
   PAGE_SCREENS,
   POST_SCREENS,
-  returnPath,
 } from './documents.ts';
 export type {
   AdminRender,
@@ -263,7 +262,7 @@ export {
   resetLink,
 } from './recovery.ts';
 export type { MountRecoveryOptions } from './recovery.ts';
-export { ADMIN_PREFIX } from '../site/admin-paths.ts';
+export { ADMIN_PREFIX, returnPath } from '../site/admin-paths.ts';
 export {
   clearSessionCookie,
   csrfTokenMatches,

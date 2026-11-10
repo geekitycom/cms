@@ -277,6 +277,43 @@ describe('login', () => {
     assert.equal(dashboard.status, 200);
     assert.match(await dashboard.text(), /ada/);
   });
+
+  it('carries no return address that does not start with a single slash', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    const returnTo = '//admin.invalid/admin/users';
+
+    const agent = browser(cms);
+    const html = await (
+      await agent.get(`/admin/login?return_to=${encodeURIComponent(returnTo)}`)
+    ).text();
+    assert.doesNotMatch(html, /name="return_to"/);
+
+    const response = await agent.post('/admin/login', {
+      csrf_token: csrfField(html) ?? '',
+      username: FIRST_ADMIN.username,
+      password: FIRST_ADMIN.password,
+      return_to: returnTo,
+    });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin');
+  });
+
+  it('returns to the address as it parses, not as it was sent', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+
+    const agent = browser(cms);
+    const token = csrfField(await (await agent.get('/admin/login')).text());
+    const response = await agent.post('/admin/login', {
+      csrf_token: token ?? '',
+      username: FIRST_ADMIN.username,
+      password: FIRST_ADMIN.password,
+      return_to: '/admin/./users/../posts?status=draft#top',
+    });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/posts?status=draft#top');
+  });
 });
 
 describe('the guard', () => {
