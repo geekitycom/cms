@@ -599,9 +599,6 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // Sessions are now keyed by the SHA-256 of the cookie value. A row keyed
-    // by the raw value can never be found again, so every session ends and
-    // everybody signs in once more.
     version: 29,
     sql: `DELETE FROM sessions;`,
   },

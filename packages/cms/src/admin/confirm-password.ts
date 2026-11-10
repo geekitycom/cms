@@ -24,7 +24,11 @@ export function createConfirmPassword(
     const user = userId == null ? undefined : findUserById(config.dataDir, userId);
     if (user === undefined) return { kind: 'wrong' };
 
-    const keys = { username: user.username, address: clientAddress(c, config), signedIn: true };
+    const keys = {
+      identifier: user.username,
+      address: clientAddress(c, config),
+      confirming: true,
+    };
     const throttled = throttle(config);
     const wait = throttled.retryAfter(keys);
     if (wait !== undefined) return { kind: 'locked', wait };

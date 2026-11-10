@@ -10,26 +10,14 @@ import type { GeekityEnv } from './env.ts';
  *
  * The lockout doubles for every failure past the threshold, so the wait after
  * `n` extra failures is `lockoutSeconds * 2^n`. The multiplier stops here —
- * with the default fifteen minutes, four hours. This bounds each wait, not how
- * long a key can be kept locked, which is why the sign-in throttle never locks
- * a username for everybody on a growing lockout.
+ * with the default fifteen minutes, four hours.
  */
 export const LOCKOUT_GROWTH_LIMIT = 16;
 
-/**
- * How many keys a throttle remembers. Past this, rows that are not locked are
- * forgotten first, the one that failed longest ago first, so a flood of
- * distinct names costs a fixed amount of memory and does not wash out a lock.
- */
 export const THROTTLE_CAPACITY = 4096;
 
-/**
- * How many times the attempt limit a username may fail, summed over every
- * address, before it is locked for everybody.
- */
 export const USERNAME_ATTEMPT_FACTOR = 10;
 
-/** The longest name or address a key keeps: the longest an email address can be. */
 const KEY_PART_LENGTH = 320;
 
 /** What {@link createLoginThrottle} needs to know. */
@@ -39,11 +27,7 @@ export interface LoginThrottleOptions {
   /** How long the first lockout lasts, in seconds. */
   lockoutSeconds: number;
   now: Clock;
-  /**
-   * Whether failures past the threshold lengthen the lockout. Without it a
-   * lockout lasts one window and the count starts over when it ends.
-   */
-  escalate?: boolean;
+  lockout?: 'escalating' | 'fixed';
 }
 
 /**
@@ -51,8 +35,7 @@ export interface LoginThrottleOptions {
  *
  * Deliberately in memory: a restart clears it. The thing it defends against is
  * a run of guesses over minutes, which no restart interrupts, and keeping it
- * out of SQLite means a failed login writes nothing to disk. The map holds at
- * most {@link THROTTLE_CAPACITY} keys of bounded length.
+ * out of SQLite means a failed login writes nothing to disk.
  */
 export interface LoginThrottle {
   /**
@@ -65,7 +48,6 @@ export interface LoginThrottle {
   fail(keys: readonly string[]): void;
   /** Forget every failure against these keys, which is what a success does. */
   succeed(keys: readonly string[]): void;
-  /** Forget every key that starts with this prefix. */
   forgetPrefix(prefix: string): void;
   /** How many keys are remembered. For the test that pins the sweeping. */
   size(): number;
@@ -95,7 +77,7 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
   const clock = options.now;
   const attempts = Math.max(1, Math.trunc(options.attempts));
   const window = Math.max(1, options.lockoutSeconds) * 1000;
-  const escalate = options.escalate ?? true;
+  const escalating = (options.lockout ?? 'escalating') === 'escalating';
   const entries = new Map<string, Attempts>();
 
   /** The row for a key, or `undefined` when it has none or its row is stale. */
@@ -109,7 +91,6 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
     return entry;
   }
 
-  /** Drop every stale row. Cheap: the map holds a bounded number of keys. */
   function sweep(at: number): void {
     for (const [key, entry] of entries) {
       if (at >= entry.expiresAt) entries.delete(key);
@@ -140,7 +121,7 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
           // Still under the threshold: the row only has to outlive the window,
           // so a slow trickle of typos never adds up to a lockout.
           entry.expiresAt = at + window;
-        } else if (escalate) {
+        } else if (escalating) {
           // The wait doubles for each failure past the threshold, and the row
           // outlives the lockout by one window so the next failure is counted
           // as the escalation it is rather than as a fresh start.
@@ -158,14 +139,7 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
         entries.set(key, entry);
       }
 
-      for (const [key, entry] of entries) {
-        if (entries.size <= THROTTLE_CAPACITY) return;
-        if (entry.lockedUntil <= at) entries.delete(key);
-      }
-      for (const key of entries.keys()) {
-        if (entries.size <= THROTTLE_CAPACITY) return;
-        entries.delete(key);
-      }
+      evictBeyondCapacity(entries, at);
     },
 
     succeed(keys) {
@@ -182,6 +156,17 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
       return entries.size;
     },
   };
+}
+
+function evictBeyondCapacity(entries: Map<string, Attempts>, at: number): void {
+  for (const [key, entry] of entries) {
+    if (entries.size <= THROTTLE_CAPACITY) return;
+    if (entry.lockedUntil <= at) entries.delete(key);
+  }
+  for (const key of entries.keys()) {
+    if (entries.size <= THROTTLE_CAPACITY) return;
+    entries.delete(key);
+  }
 }
 
 export interface RequestLimitOptions {
@@ -241,34 +226,17 @@ export function clientAddress(
   }
 }
 
-/** One attempt to prove who somebody is with a password. */
 export interface SignInAttempt {
-  /** The username or email address the attempt named. */
-  readonly username: string;
+  readonly identifier: string;
   readonly address: string | undefined;
-  /** True when a signed-in user is asked for their password again. */
-  readonly signedIn?: boolean;
+  readonly confirming?: boolean;
 }
 
-/**
- * Counts failed password attempts so that guessing is slow while the name
- * alone is not enough to keep its owner out.
- *
- * The name and address together, and the address alone, are locked hard at
- * `attempts` with a growing lockout: one address gets a handful of guesses at
- * any name. The name alone is counted over every address at
- * {@link USERNAME_ATTEMPT_FACTOR} times the limit, locked for one window and
- * then started over, so holding it shut takes a steady stream of failures from
- * many addresses rather than one failure whenever the lock lapses. A signed-in
- * user confirming their password is also locked hard by name, since only a
- * session holder can reach those forms.
- */
 export interface SignInThrottle {
   retryAfter(attempt: SignInAttempt): number | undefined;
   fail(attempt: SignInAttempt): void;
   succeed(attempt: SignInAttempt): void;
-  /** Forget every count against a name, for when its owner has proved who they are. */
-  forget(username: string): void;
+  forget(identifier: string): void;
 }
 
 export function createSignInThrottle(options: LoginThrottleOptions): SignInThrottle {
@@ -276,7 +244,7 @@ export function createSignInThrottle(options: LoginThrottleOptions): SignInThrot
   const wide = createLoginThrottle({
     ...options,
     attempts: Math.max(1, Math.trunc(options.attempts)) * USERNAME_ATTEMPT_FACTOR,
-    escalate: false,
+    lockout: 'fixed',
   });
 
   function wait(attempt: SignInAttempt): number | undefined {
@@ -298,37 +266,39 @@ export function createSignInThrottle(options: LoginThrottleOptions): SignInThrot
       strict.succeed(keys.strict);
       wide.succeed(keys.wide);
     },
-    forget(username) {
-      const name = keyPart(username);
-      strict.forgetPrefix(`pair:${name}\u0000`);
-      strict.succeed([`session:${name}`]);
-      wide.succeed([`user:${name}`]);
+    forget(identifier) {
+      const name = keyPart(identifier);
+      strict.forgetPrefix(pairKey(name, ''));
+      strict.succeed([confirmingKey(name)]);
+      wide.succeed([identifierKey(name)]);
     },
   };
 }
 
-/**
- * The keys one attempt is counted against.
- *
- * The name is folded to lower case so `Ada` and `ada` are one key, and it is
- * used whether or not any such user exists — a name nobody has locks out
- * exactly as a real one does, so the lockout cannot be used to find out which
- * usernames the site has. Both parts are cut to a length no real username,
- * email address or network address exceeds, so a key costs the same whatever
- * was posted. With no address the pair is the name alone.
- */
 export function signInKeys(attempt: SignInAttempt): { strict: string[]; wide: string[] } {
-  const name = keyPart(attempt.username);
+  const name = keyPart(attempt.identifier);
   const address =
     attempt.address === undefined ? undefined : attempt.address.slice(0, KEY_PART_LENGTH);
-  const strict = [`pair:${name}\u0000${address ?? ''}`];
+  const strict = [pairKey(name, address ?? '')];
   if (address !== undefined) strict.push(`addr:${address}`);
-  if (attempt.signedIn === true) strict.push(`session:${name}`);
-  return { strict, wide: [`user:${name}`] };
+  if (attempt.confirming === true) strict.push(confirmingKey(name));
+  return { strict, wide: [identifierKey(name)] };
 }
 
-function keyPart(username: string): string {
-  return username.slice(0, KEY_PART_LENGTH).toLowerCase();
+function keyPart(identifier: string): string {
+  return identifier.slice(0, KEY_PART_LENGTH).toLowerCase();
+}
+
+function pairKey(name: string, address: string): string {
+  return `pair:${name}\u0000${address}`;
+}
+
+function confirmingKey(name: string): string {
+  return `session:${name}`;
+}
+
+function identifierKey(name: string): string {
+  return `user:${name}`;
 }
 
 /**

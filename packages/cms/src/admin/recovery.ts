@@ -98,14 +98,13 @@ export interface MountRecoveryOptions {
    * and over — turning a recovery feature into a denial of service against the
    * person it exists to help.
    */
-  throttle: (config: ResolvedConfig) => SignInThrottle;
-  /** The sign-in throttle, which a spent reset link clears for its user. */
+  recoveryThrottle: (config: ResolvedConfig) => SignInThrottle;
   loginThrottle: (config: ResolvedConfig) => SignInThrottle;
 }
 
 /** Register the forgot-password and reset screens. */
 export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptions): void {
-  const { render, anonymousSession, throttle, loginThrottle } = options;
+  const { render, anonymousSession, recoveryThrottle, loginThrottle } = options;
 
   app.get(FORGOT_PATH, (c) => {
     anonymousSession(c);
@@ -118,8 +117,8 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
     const identifier = stringOrEmpty(body[RECOVERY_FIELDS.identifier]).trim();
 
     const address = clientAddress(c, config);
-    const keys = { username: identifier, address };
-    const throttled = throttle(config);
+    const keys = { identifier, address };
+    const throttled = recoveryThrottle(config);
 
     const wait = throttled.retryAfter(keys);
     if (wait !== undefined) {
@@ -215,7 +214,7 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
     await setUserPassword({ dataDir, userId: user.id, password, now: c.var.config.now() });
 
     loginThrottle(c.var.config).forget(user.username);
-    const recovery = throttle(c.var.config);
+    const recovery = recoveryThrottle(c.var.config);
     recovery.forget(user.username);
     if (user.email !== undefined) recovery.forget(user.email);
 

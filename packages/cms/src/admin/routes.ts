@@ -259,7 +259,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // Forgetting a password. Registered beside the login form, and named in the
   // guard below, because both of its screens are reached by somebody who by
   // definition cannot sign in.
-  mountRecovery(app, { render, anonymousSession, throttle: recoveryThrottle, loginThrottle });
+  mountRecovery(app, { render, anonymousSession, recoveryThrottle, loginThrottle });
 
   app.post(LOGIN_PATH, async (c) => {
     const config = c.var.config;
@@ -269,9 +269,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const returnTo = returnPath(body[RETURN_TO_FIELD]);
 
     const address = clientAddress(c, config);
-    const keys = { username, address };
+    const keys = { identifier: username, address };
     const attempted = `${shortened(username)} from ${address === undefined ? 'an unknown address' : shortened(address)}`;
-    // A name longer than any username could be is not put back in the form.
     const shown = username.length > MAXIMUM_USERNAME_LENGTH ? '' : username;
 
     // Checked before the password is verified, so a lockout refuses the right
@@ -460,7 +459,6 @@ const RETURN_TO_FIELD = 'return_to';
  */
 const RETURNABLE_PATHS: ReadonlySet<string> = new Set([CONSENT_PATH]);
 
-/** Posted text quoted for a log line, cut so the line stays short. */
 function shortened(text: string): string {
   const cut = text.slice(0, MAXIMUM_USERNAME_LENGTH);
   return JSON.stringify(cut) + (cut.length < text.length ? '…' : '');
@@ -528,11 +526,11 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   }
 
   if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
-    const oversized = await refuseOversizedBody(c, pathname, session?.userId != null);
-    if (oversized !== undefined) return oversized;
-    const token = await submittedToken(c);
+    const form = await boundedForm(c, pathname, session?.userId != null);
+    if (form instanceof Response) return form;
+    const token = await form.field(CSRF_FIELD);
     if (session === undefined && (isSetup || isAnonymous) && typeof token === 'string') {
-      return expiredForm(c, pathname);
+      return expiredForm(c, pathname, form);
     }
     if (session === undefined || !csrfTokenMatches(session.csrfToken, token)) {
       return c.text('That form was stale or came from somewhere else. Reload and try again.', 403);
@@ -571,30 +569,24 @@ function liveSession(
   return undefined;
 }
 
-/** The most a form from somebody not signed in may weigh: setup, sign-in and password recovery. */
 const ANONYMOUS_FORM_MAX_BYTES = 64 * 1024;
 
-/**
- * The most any other signed-in form may weigh. The largest are an editor save,
- * preview or autosave, each carrying a whole Markdown body.
- */
 const SIGNED_IN_FORM_MAX_BYTES = 8 * 1024 * 1024;
 
 const UPLOAD_PATHS: ReadonlySet<string> = new Set([UPLOADS_PATH, MEDIA_UPLOAD_PATH]);
 
-/**
- * Read the body up to its limit, counting bytes rather than trusting
- * `Content-Length`, and answer 413 past it. This runs before the CSRF check
- * because that check parses the form, which would otherwise buffer a body of
- * any size; and after the redirects, so a visitor who is not signed in can
- * never send more than the anonymous limit.
- */
-async function refuseOversizedBody(
+/** A request body already cut to its limit, so reading its fields cannot buffer more. */
+interface BoundedForm {
+  field(name: string): Promise<unknown>;
+}
+
+async function boundedForm(
   c: Context<GeekityEnv>,
   pathname: string,
   signedIn: boolean,
-): Promise<Response | undefined> {
-  if (c.req.raw.body === null) return undefined;
+): Promise<Response | BoundedForm> {
+  const form: BoundedForm = { field: (name) => submittedField(c, name) };
+  if (c.req.raw.body === null) return form;
   const upload = signedIn && UPLOAD_PATHS.has(pathname);
   const limit = upload
     ? uploadBodyLimit(c.var.config)
@@ -605,15 +597,10 @@ async function refuseOversizedBody(
   const read = await readWithin(c.req.raw, limit, 'refuse');
   if (read !== undefined) {
     c.req.raw = new Request(c.req.raw, { body: read.body });
-    return undefined;
+    return form;
   }
   if (upload) return uploadTooLarge(c);
   return c.text(`That form is larger than the ${String(limit)} bytes the admin accepts.`, 413);
-}
-
-/** The CSRF token in the request body, if the body is a form at all. */
-async function submittedToken(c: Context<GeekityEnv>): Promise<unknown> {
-  return submittedField(c, CSRF_FIELD);
 }
 
 async function submittedField(c: Context<GeekityEnv>, name: string): Promise<unknown> {
@@ -631,22 +618,20 @@ async function submittedField(c: Context<GeekityEnv>, name: string): Promise<unk
 
 const EXPIRED_FORM_NOTICE = 'That form expired before it was sent. Please try again.';
 
-/**
- * Send a sign-in, setup or recovery form whose anonymous session has run out
- * back to a fresh copy of itself, with a message, rather than a bare 403. Only
- * a post carrying a token gets this: one with none never came from the form. The
- * reset form keeps its link's token and the sign-in form its return address.
- */
-async function expiredForm(c: Context<GeekityEnv>, pathname: string): Promise<Response> {
+async function expiredForm(
+  c: Context<GeekityEnv>,
+  pathname: string,
+  form: BoundedForm,
+): Promise<Response> {
   const session = startSession(c, undefined);
   c.var.admin.pushFlash(session.id, { kind: 'warning', message: EXPIRED_FORM_NOTICE });
 
   const query = new URLSearchParams();
   if (pathname === RESET_PATH) {
-    const token = await submittedField(c, RECOVERY_FIELDS.token);
+    const token = await form.field(RECOVERY_FIELDS.token);
     if (typeof token === 'string' && token !== '') query.set(RECOVERY_FIELDS.token, token);
   } else if (pathname === LOGIN_PATH) {
-    const returnTo = returnPath(await submittedField(c, RETURN_TO_FIELD));
+    const returnTo = returnPath(await form.field(RETURN_TO_FIELD));
     if (returnTo !== undefined) query.set(RETURN_TO_FIELD, returnTo);
   }
   const search = query.size === 0 ? '' : `?${query.toString()}`;

@@ -178,8 +178,8 @@ describe('the login throttle', () => {
 });
 
 describe('the sign-in throttle', () => {
-  const owner = { username: 'ada', address: '203.0.113.9' };
-  const stranger = { username: 'ada', address: '198.51.100.1' };
+  const owner = { identifier: 'ada', address: '203.0.113.9' };
+  const stranger = { identifier: 'ada', address: '198.51.100.1' };
 
   function signInOn(clock: { now: () => Date }) {
     return createSignInThrottle({ attempts: 3, lockoutSeconds: 60, now: clock.now });
@@ -200,9 +200,9 @@ describe('the sign-in throttle', () => {
     const throttle = signInOn(clock);
 
     for (let i = 0; i < 3; i += 1)
-      throttle.fail({ username: `name-${i}`, address: stranger.address });
+      throttle.fail({ identifier: `name-${i}`, address: stranger.address });
 
-    assert.equal(throttle.retryAfter({ username: 'ada', address: stranger.address }), 60);
+    assert.equal(throttle.retryAfter({ identifier: 'ada', address: stranger.address }), 60);
   });
 
   it('cannot be held for a day by one failure each time the lock lapses', () => {
@@ -229,10 +229,10 @@ describe('the sign-in throttle', () => {
     const limit = 3 * USERNAME_ATTEMPT_FACTOR;
 
     for (let i = 0; i < limit - 1; i += 1)
-      throttle.fail({ username: 'ada', address: `10.0.0.${i}` });
+      throttle.fail({ identifier: 'ada', address: `10.0.0.${i}` });
     assert.equal(throttle.retryAfter(owner), undefined, 'under the limit');
 
-    throttle.fail({ username: 'ada', address: '10.0.1.1' });
+    throttle.fail({ identifier: 'ada', address: '10.0.1.1' });
     assert.equal(throttle.retryAfter(owner), 60);
   });
 
@@ -241,9 +241,9 @@ describe('the sign-in throttle', () => {
     const throttle = signInOn(clock);
     const limit = 3 * USERNAME_ATTEMPT_FACTOR;
 
-    for (let i = 0; i < limit; i += 1) throttle.fail({ username: 'ada', address: `10.0.0.${i}` });
+    for (let i = 0; i < limit; i += 1) throttle.fail({ identifier: 'ada', address: `10.0.0.${i}` });
     clock.advance(60);
-    throttle.fail({ username: 'ada', address: '10.0.1.1' });
+    throttle.fail({ identifier: 'ada', address: '10.0.1.1' });
 
     assert.equal(throttle.retryAfter(owner), undefined);
   });
@@ -253,10 +253,10 @@ describe('the sign-in throttle', () => {
     const throttle = signInOn(clock);
 
     for (let i = 0; i < 3; i += 1) {
-      throttle.fail({ username: 'ada', address: `10.0.0.${i}`, signedIn: true });
+      throttle.fail({ identifier: 'ada', address: `10.0.0.${i}`, confirming: true });
     }
 
-    assert.equal(throttle.retryAfter({ ...owner, signedIn: true }), 60);
+    assert.equal(throttle.retryAfter({ ...owner, confirming: true }), 60);
     assert.equal(throttle.retryAfter(owner), undefined, 'signing in is a separate count');
   });
 
@@ -265,18 +265,18 @@ describe('the sign-in throttle', () => {
     const throttle = signInOn(clock);
 
     for (let i = 0; i < 3 * USERNAME_ATTEMPT_FACTOR; i += 1) {
-      throttle.fail({ username: 'Ada', address: i < 3 ? undefined : `10.0.0.${i}` });
+      throttle.fail({ identifier: 'Ada', address: i < 3 ? undefined : `10.0.0.${i}` });
     }
     throttle.forget('ada');
 
-    assert.equal(throttle.retryAfter({ username: 'ada', address: undefined }), undefined);
+    assert.equal(throttle.retryAfter({ identifier: 'ada', address: undefined }), undefined);
     assert.equal(throttle.retryAfter(owner), undefined);
   });
 });
 
 describe('the keys a sign-in is counted against', () => {
   it('stay short however long the name and address are', () => {
-    const keys = signInKeys({ username: 'a'.repeat(100_000), address: 'b'.repeat(100_000) });
+    const keys = signInKeys({ identifier: 'a'.repeat(100_000), address: 'b'.repeat(100_000) });
 
     const longest = Math.max(...[...keys.strict, ...keys.wide].map((key) => key.length));
     assert.ok(longest <= 700, `longest key is ${longest} characters`);
@@ -284,8 +284,8 @@ describe('the keys a sign-in is counted against', () => {
 
   it('fold case so one name is one key', () => {
     assert.deepEqual(
-      signInKeys({ username: 'Ada', address: '203.0.113.1' }),
-      signInKeys({ username: 'ada', address: '203.0.113.1' }),
+      signInKeys({ identifier: 'Ada', address: '203.0.113.1' }),
+      signInKeys({ identifier: 'ada', address: '203.0.113.1' }),
     );
   });
 });

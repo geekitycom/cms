@@ -424,7 +424,6 @@ describe('the guard', () => {
 });
 
 describe('the size of an admin form', () => {
-  /** A urlencoded body that arrives in pieces, with no `Content-Length` to trust. */
   function streamed(text: string): ReadableStream<Uint8Array> {
     const bytes = new TextEncoder().encode(text);
     let offset = 0;

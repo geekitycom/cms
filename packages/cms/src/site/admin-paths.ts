@@ -39,9 +39,7 @@ export const PREVIEW_PATH = `${ADMIN_PREFIX}/preview`;
  * A return address that stays in the admin, or `undefined`.
  *
  * Only a path under `/admin` that starts with a single slash, in printable
- * ASCII with no backslash, which a browser could read as a different host, and
- * no space or control character, which a header would refuse. The address
- * handed back is the one the parser read, so what is checked is what is sent.
+ * ASCII with no backslash, which a browser could read as a different host.
  */
 export function returnPath(value: unknown): string | undefined {
   if (typeof value !== 'string' || !/^\/(?!\/)[!-[\]-~]*$/.test(value)) return undefined;

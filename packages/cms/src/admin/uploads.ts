@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
 
+import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import {
   largestUploadLimit,
@@ -25,16 +26,10 @@ export interface UploadResult {
   markdown: string;
 }
 
-/** The most an upload request may weigh: the larger file limit plus the multipart envelope. */
-export function uploadBodyLimit(config: Parameters<typeof largestUploadLimit>[0]): number {
+export function uploadBodyLimit(config: ResolvedConfig): number {
   return largestUploadLimit(config) + UPLOAD_ENVELOPE_BYTES;
 }
 
-/**
- * The 413 for an upload refused before it was read: JSON for the editor's
- * control, which reads it, and plain text for the media screen's form, which
- * is a navigation and would show a browser a bare JSON object.
- */
 export function uploadTooLarge(c: Context<GeekityEnv>): Response {
   const message = tooLargeMessage(largestUploadLimit(c.var.config));
   return submittedFromABrowser(c.req.header('accept'))

@@ -11,10 +11,7 @@ import type { Row } from './rows.ts';
  * has not logged in yet.
  */
 export interface Session {
-  /**
-   * 256 random bits, hex encoded. This is the value in the cookie; the
-   * database keeps only its SHA-256.
-   */
+  /** 256 random bits, hex encoded. This is the value in the cookie. */
   readonly id: string;
   /** The user, or `null` while the session is anonymous. */
   readonly userId: number | null;
@@ -61,10 +58,6 @@ export interface CreateSessionInput {
   now?: Date | undefined;
 }
 
-/**
- * The last instant an ISO 8601 string writes with a four-digit year. Expiry is
- * compared as text, in SQL and here, and only four-digit years sort as time.
- */
 const LATEST_EXPIRY = Date.parse('9999-12-31T23:59:59.999Z');
 
 /** How long a session id is, in bytes: 32 bytes is 256 bits. */
@@ -253,11 +246,6 @@ function toSession(row: Row): Session {
   };
 }
 
-/**
- * A session id as the database keeps it: its SHA-256, hex encoded, so a copy
- * of `geekity.db` holds no working logins. Plain SHA-256 is enough for 256
- * random bits, for the reason reset tokens use it.
- */
 function hashSessionId(id: string): string {
   return createHash('sha256').update(id, 'utf8').digest('hex');
 }
