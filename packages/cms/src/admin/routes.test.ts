@@ -312,6 +312,71 @@ describe('the guard', () => {
     assert.equal(response.status, 403);
   });
 
+  it('redirects a signed-in visit to a percent-encoded setup path to the dashboard', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+
+    const response = await agent.get('/admin/%73etup');
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get('location'), '/admin');
+  });
+
+  it('creates no user from a signed-in post to a percent-encoded setup path', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+    const token = csrfField(await (await agent.get('/admin')).text());
+    assert.ok(token !== undefined);
+
+    await agent.post('/admin/%73etup', {
+      csrf_token: token,
+      username: 'grace',
+      password: 'correct horse battery',
+      password_confirmation: 'correct horse battery',
+    });
+    assert.deepEqual(
+      listUsers(cms.config.dataDir).map((user) => user.username),
+      [FIRST_ADMIN.username],
+    );
+  });
+
+  it('lets a visitor with no login reach the anonymous screens however their path is spelled', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+
+    for (const url of ['/admin/%6Cogin', '/admin/%66orgot']) {
+      const response = await cms.app.request(url);
+      assert.equal(response.status, 200, url);
+    }
+  });
+
+  it('carries a percent-encoded consent path through the login form', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+
+    const response = await cms.app.request('/admin/indieauth/%63onsent?client_id=x');
+    assert.equal(response.status, 302);
+    assert.equal(
+      response.headers.get('location'),
+      `/admin/login?return_to=${encodeURIComponent('/admin/indieauth/consent?client_id=x')}`,
+    );
+  });
+
+  it('holds an upload to a percent-encoded upload path to the upload limit', async () => {
+    const cms = await site({ uploadMediaMaxBytes: 16 * 1024 * 1024 });
+    const agent = await signedIn(cms);
+    const token = csrfField(await (await agent.get('/admin')).text());
+    assert.ok(token !== undefined);
+
+    const bytes = new Uint8Array(9 * 1024 * 1024);
+    bytes.set(new TextEncoder().encode('ID3'));
+    const response = await agent.upload('/admin/%75ploads', token, {
+      name: 'long.mp3',
+      type: 'audio/mpeg',
+      bytes,
+    });
+    assert.equal(response.status, 201);
+  });
+
   it('leaves the public site alone', async () => {
     const cms = await site();
     const response = await cms.app.request('/');

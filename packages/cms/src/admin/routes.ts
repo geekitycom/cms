@@ -202,7 +202,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return response ?? c.notFound();
   });
 
-  app.use(ADMIN_PREFIX, guard);
   app.use(`${ADMIN_PREFIX}/*`, guard);
 
   app.get(SETUP_PATH, (c) => {
@@ -496,7 +495,9 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
 
   const admin = c.var.admin;
   const dataDir = c.var.config.dataDir;
-  const pathname = new URL(c.req.url).pathname;
+  // The decoded path the router dispatches on, so every decision below is made
+  // about the handler that will actually run.
+  const pathname = c.req.path;
 
   // Reading a session prunes it when it has expired, so an expired session is
   // gone from here on, not merely ignored.
