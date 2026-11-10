@@ -26,10 +26,13 @@ Three details are deliberate:
 
 A successful sign-in clears both keys. A key that stops failing also expires
 over time. The counts live in memory, so a restart clears them. This is
-intentional: a failed login writes nothing that an anonymous caller could
-make grow. A guessing attack runs over minutes, and a restart does not happen
-often enough to help it. The server logs both refusals with the username and
-the address.
+intentional: a failed login writes nothing to disk. A guessing attack runs
+over minutes, and a restart does not happen often enough to help it. The
+memory is bounded too: each key keeps at most 320 characters of the name or
+address, and the server remembers at most 4,096 keys, forgetting the one that
+failed longest ago first. The server logs both refusals with the username and
+the address, each cut to 64 characters, and does not put a name longer than
+any username back into the form.
 
 Forms that ask a signed-in user for their password again use the same counts:
 changing your password, adding a user, changing an email address, exporting

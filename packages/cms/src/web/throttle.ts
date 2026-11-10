@@ -17,6 +17,16 @@ import type { GeekityEnv } from './env.ts';
  */
 export const LOCKOUT_GROWTH_LIMIT = 16;
 
+/**
+ * How many keys a throttle remembers. Past this the key that failed longest ago
+ * is forgotten first, so a flood of distinct names costs a fixed amount of
+ * memory instead of an amount the sender chooses.
+ */
+export const THROTTLE_CAPACITY = 4096;
+
+/** The longest name or address a key keeps: the longest an email address can be. */
+const KEY_PART_LENGTH = 320;
+
 /** What {@link createLoginThrottle} needs to know. */
 export interface LoginThrottleOptions {
   /** Failed attempts a key may make before it is locked. */
@@ -31,7 +41,8 @@ export interface LoginThrottleOptions {
  *
  * Deliberately in memory: a restart clears it. The thing it defends against is
  * a run of guesses over minutes, which no restart interrupts, and keeping it
- * out of SQLite means a failed login writes nothing an attacker can grow.
+ * out of SQLite means a failed login writes nothing to disk. The map holds at
+ * most {@link THROTTLE_CAPACITY} keys of bounded length.
  */
 export interface LoginThrottle {
   /**
@@ -85,7 +96,7 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
     return entry;
   }
 
-  /** Drop every stale row. Cheap: the map only holds keys that failed recently. */
+  /** Drop every stale row. Cheap: the map holds a bounded number of keys. */
   function sweep(at: number): void {
     for (const [key, entry] of entries) {
       if (at >= entry.expiresAt) entries.delete(key);
@@ -125,7 +136,15 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
           entry.expiresAt = entry.lockedUntil + window;
         }
 
+        // Re-inserted so the map's order is the order keys last failed in,
+        // which is what the eviction below reads.
+        entries.delete(key);
         entries.set(key, entry);
+      }
+
+      for (const key of entries.keys()) {
+        if (entries.size <= THROTTLE_CAPACITY) break;
+        entries.delete(key);
       }
     },
 
@@ -203,11 +222,13 @@ export function clientAddress(
  * The username is folded to lower case so `Ada` and `ada` are one key, and it
  * is used whether or not any such user exists — a username nobody has locks
  * out exactly as a real one does, so the lockout cannot be used to find out
- * which usernames the site has.
+ * which usernames the site has. Both parts are cut to a length no real
+ * username, email address or network address exceeds, so a key costs the same
+ * whatever was posted.
  */
 export function loginKeys(username: string, address: string | undefined): string[] {
-  const keys = [`user:${username.toLowerCase()}`];
-  if (address !== undefined) keys.push(`addr:${address}`);
+  const keys = [`user:${username.slice(0, KEY_PART_LENGTH).toLowerCase()}`];
+  if (address !== undefined) keys.push(`addr:${address.slice(0, KEY_PART_LENGTH)}`);
   return keys;
 }
 

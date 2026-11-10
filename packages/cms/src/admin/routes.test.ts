@@ -618,6 +618,29 @@ describe('the login throttle', () => {
     return agent.post('/admin/login', { csrf_token: token, username, password });
   }
 
+  it('keeps the log line and the form short when the username is very long', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    const longName = 'a'.repeat(50_000);
+
+    const lines: string[] = [];
+    const warn = mock.method(console, 'warn', (line: unknown) => {
+      lines.push(String(line));
+    });
+    let response: Response;
+    try {
+      response = await attempt(browser(cms), longName, 'not the password');
+    } finally {
+      warn.mock.restore();
+    }
+
+    assert.equal(response.status, 401);
+    assert.ok(lines.length > 0, 'the failure was logged');
+    const longest = Math.max(...lines.map((line) => line.length));
+    assert.ok(longest <= 1000, `the log line is ${longest} characters`);
+    assert.ok(!(await response.text()).includes('a'.repeat(1000)), 'the name was not echoed');
+  });
+
   it('refuses even the right password once a username has failed too often', async () => {
     const clock = movableClock();
     const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });

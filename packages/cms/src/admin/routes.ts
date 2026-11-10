@@ -22,7 +22,7 @@ import { mountAppearanceScreen } from './appearance.ts';
 import { mountLookScreen } from './look.ts';
 import { adminAssetResponse } from './assets.ts';
 import { ADMIN_ASSET_PREFIX, ADMIN_PREFIX, editUserPath, LOGIN_PATH } from '../site/admin-paths.ts';
-import { credentialProblem } from './credentials.ts';
+import { credentialProblem, MAXIMUM_USERNAME_LENGTH } from './credentials.ts';
 import {
   editorPath,
   mountDocumentScreens,
@@ -266,6 +266,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
     const address = clientAddress(c, config);
     const keys = loginKeys(username, address);
+    const attempted = `${shortened(username)} from ${address === undefined ? 'an unknown address' : shortened(address)}`;
+    // A name longer than any username could be is not put back in the form.
+    const shown = username.length > MAXIMUM_USERNAME_LENGTH ? '' : username;
 
     // Checked before the password is verified, so a lockout refuses the right
     // password too. An attacker who found the password on the last allowed
@@ -273,16 +276,14 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const throttle = loginThrottle(config);
     const wait = throttle.retryAfter(keys);
     if (wait !== undefined) {
-      console.warn(
-        `Refused a sign-in for ${JSON.stringify(username)} from ${address ?? 'an unknown address'}: locked out for another ${wait}s`,
-      );
+      console.warn(`Refused a sign-in for ${attempted}: locked out for another ${wait}s`);
       anonymousSession(c);
       c.status(429);
       c.header('Retry-After', String(wait));
       return render(c, ADMIN_TEMPLATES.login, {
         loginUrl: LOGIN_PATH,
         forgotUrl: FORGOT_PATH,
-        username,
+        username: shown,
         returnTo,
         // Says nothing about whether that username exists: an unknown one is
         // counted and locked out exactly as a real one is.
@@ -293,9 +294,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const user = verifyUserPassword(c.var.config.dataDir, username, password);
     if (user === undefined) {
       throttle.fail(keys);
-      console.warn(
-        `Failed sign-in for ${JSON.stringify(username)} from ${address ?? 'an unknown address'}`,
-      );
+      console.warn(`Failed sign-in for ${attempted}`);
       // One message for both failures, so the form cannot be used to find out
       // which usernames exist.
       anonymousSession(c);
@@ -303,7 +302,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       return render(c, ADMIN_TEMPLATES.login, {
         loginUrl: LOGIN_PATH,
         forgotUrl: FORGOT_PATH,
-        username,
+        username: shown,
         returnTo,
         error: 'That username and password do not match.',
       });
@@ -456,6 +455,12 @@ const RETURN_TO_FIELD = 'return_to';
  * with the request intact.
  */
 const RETURNABLE_PATHS: ReadonlySet<string> = new Set([CONSENT_PATH]);
+
+/** Posted text quoted for a log line, cut so the line stays short. */
+function shortened(text: string): string {
+  const cut = text.slice(0, MAXIMUM_USERNAME_LENGTH);
+  return JSON.stringify(cut) + (cut.length < text.length ? '…' : '');
+}
 
 /**
  * A return address that stays in the admin, or `undefined`.

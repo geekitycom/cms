@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createLoginThrottle, LOCKOUT_GROWTH_LIMIT } from './throttle.ts';
+import { createLoginThrottle, LOCKOUT_GROWTH_LIMIT, loginKeys } from './throttle.ts';
 
 /** A clock a test can move, in the shape the config's `now` has. */
 function fakeClock(start = Date.UTC(2026, 8, 4, 12, 0, 0)): {
@@ -135,5 +135,40 @@ describe('the login throttle', () => {
     throttle.fail(['addr:203.0.113.1']);
 
     assert.equal(throttle.size(), 1, 'every expired entry was swept');
+  });
+
+  it('stays under a fixed size however many distinct keys fail', () => {
+    const clock = fakeClock();
+    const throttle = createLoginThrottle({ attempts: 5, lockoutSeconds: 900, now: clock.now });
+
+    for (let i = 0; i < 10_000; i += 1) throttle.fail(loginKeys(`user-${i}`, undefined));
+
+    assert.ok(throttle.size() < 10_000, `the map holds ${throttle.size()} keys`);
+  });
+
+  it('keeps the keys that failed most recently when it is full', () => {
+    const clock = fakeClock();
+    const throttle = throttleOn(clock);
+
+    for (let i = 0; i < 3; i += 1) throttle.fail(['user:ada']);
+    for (let i = 0; i < 10_000; i += 1) {
+      throttle.fail([`user:other-${i}`]);
+      if (i % 1000 === 0) throttle.fail(['user:ada']);
+    }
+
+    assert.notEqual(throttle.retryAfter(['user:ada']), undefined, 'ada is still locked');
+  });
+});
+
+describe('the keys a sign-in is counted against', () => {
+  it('stay short however long the name and address are', () => {
+    const keys = loginKeys('a'.repeat(100_000), 'b'.repeat(100_000));
+
+    const longest = Math.max(...keys.map((key) => key.length));
+    assert.ok(longest <= 400, `longest key is ${longest} characters`);
+  });
+
+  it('fold case so one name is one key', () => {
+    assert.deepEqual(loginKeys('Ada', '203.0.113.1'), loginKeys('ada', '203.0.113.1'));
   });
 });
