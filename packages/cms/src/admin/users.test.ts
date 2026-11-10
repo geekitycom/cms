@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import {
@@ -590,7 +592,7 @@ describe('adding a user', () => {
     const agent = await signedIn(cms);
     const { token } = await usersScreen(agent);
 
-    await agent.post('/admin/users/new', {
+    const response = await agent.post('/admin/users/new', {
       csrf_token: token,
       current_password: FIRST_ADMIN.password,
       username: 'grace',
@@ -598,16 +600,62 @@ describe('adding a user', () => {
       generate: '1',
     });
 
-    const after = await (await agent.get('/admin/users')).text();
-    const shown = /Their password is ([^\s]+) /.exec(after)?.[1];
+    assert.equal(response.status, 200, 'the password is shown in the answer to the form');
+    assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+    const html = await response.text();
+    const shown = /id="added-password"[^>]*value="([^"]+)"/.exec(html)?.[1];
     assert.ok(shown !== undefined, 'the generated password was shown once');
+    assert.match(html, /href="\/admin\/users"/, 'the page leads on to the users list');
+    assert.doesNotMatch(html, /id="add-username"/, 'and does not offer the filled form again');
 
-    // The password on the screen is the one that was stored, not a decoration.
     const grace = await signIn(cms, { username: 'grace', password: shown });
     assert.match(await (await grace.get('/admin')).text(), /Hoopla! grace/);
 
-    // Shown once: the flash is cleared by the page that renders it.
-    assert.doesNotMatch(await (await agent.get('/admin/users')).text(), /Their password is/);
+    assert.doesNotMatch(await (await agent.get('/admin/users')).text(), new RegExp(shown));
+  });
+
+  it('keeps a generated password out of the session store', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+
+    const response = await agent.post('/admin/users/new', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      username: 'grace',
+      password: '',
+      generate: '1',
+    });
+    const shown = /id="added-password"[^>]*value="([^"]+)"/.exec(await response.text())?.[1];
+    assert.ok(shown !== undefined, 'the generated password was shown');
+
+    const db = new DatabaseSync(path.join(cms.config.dataDir, 'geekity.db'));
+    const flashes = (db.prepare('SELECT flash FROM sessions').all() as { flash: string | null }[])
+      .map((row) => row.flash ?? '')
+      .join('\n');
+    db.close();
+    assert.ok(!flashes.includes(shown), 'no session flash holds the password');
+  });
+
+  it('adds nobody else when the generate form is sent again', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+    const form = {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      username: 'grace',
+      password: '',
+      generate: '1',
+    };
+
+    assert.equal((await agent.post('/admin/users/new', form)).status, 200);
+    const before = countUsers(cms.config.dataDir);
+
+    const again = await agent.post('/admin/users/new', form);
+    assert.equal(again.status, 400, 'a resent form is refused');
+    assert.match(await again.text(), /Nobody was added/);
+    assert.equal(countUsers(cms.config.dataDir), before);
   });
 });
 

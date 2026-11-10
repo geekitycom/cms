@@ -162,14 +162,12 @@ async function addUser(c: Context<GeekityEnv>, render: AdminRender): Promise<Res
     );
   }
 
-  return flashAndRedirect(
-    c,
-    'notice',
-    generate
-      ? `Added ${username}. Their password is ${password} — copy it now, it is not shown again.`
-      : `Added ${username}.`,
-    USERS_PATH,
-  );
+  if (generate) {
+    c.header('cache-control', 'no-store');
+    return render(c, ADMIN_TEMPLATES.usersNew, addScreen(c, { added: { username, password } }));
+  }
+
+  return flashAndRedirect(c, 'notice', `Added ${username}.`, USERS_PATH);
 }
 
 async function changePassword(c: Context<GeekityEnv>, render: AdminRender): Promise<Response> {

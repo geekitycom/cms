@@ -2,12 +2,15 @@
 
    The other half of what the listing used to hold: one form, the same chrome,
    and its own menu entry under Users. A refused add comes back here with what
-   was typed still in the boxes, so nothing is retyped to fix one field.
+   was typed still in the boxes, so nothing is retyped to fix one field. A
+   generated password is shown here, in the answer to the form, rather than
+   queued as a flash, so it is never written to the session row.
  #}
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
 {% from "components/button.njk" import button %}
 {% from "components/card.njk" import card %}
+{% from "components/alert.njk" import alert %}
 
 {% block title %}Add new user{% endblock %}
 
@@ -15,6 +18,18 @@
   <h1 class="mb-6 text-2xl font-bold">Add new user</h1>
 
   <div class="flex max-w-2xl flex-col gap-6">
+  {% if added %}
+  {% call alert(color='success', style='soft', polite=true) %}
+    <div class="w-full">
+      <p class="mb-2">Added {{ added.username }}.</p>
+      {{ field.text('added-password', 'added-password', 'Password for ' ~ added.username, added.password,
+           readonly=true, spellcheck='false',
+           hint='Copy it now. It is not shown again, and the site keeps only a hash of it.') }}
+    </div>
+  {% endcall %}
+
+  <p class="text-sm"><a class="link" href="{{ usersUrl }}">Continue to all users</a></p>
+  {% else %}
   {% call card() %}
   <form method="post" action="{{ addUserUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
@@ -49,5 +64,6 @@
   {% endcall %}
 
   <p class="text-sm"><a class="link" href="{{ usersUrl }}">Back to all users</a></p>
+  {% endif %}
   </div>
 {% endblock %}

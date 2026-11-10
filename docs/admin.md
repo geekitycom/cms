@@ -816,10 +816,12 @@ Adding a user enforces the same rules as `/admin/setup` and
 
 If you tick **Generate one instead**, the server makes the password with
 `randomInt` over an alphabet with no `0`/`O` or `1`/`l`. It shows the password
-once, in the flash on the next page. The flash lives on the session row, so a
-generated password never appears in a URL, a cookie or a browser's history. It
-is never stored in the clear. If you leave that page without copying the
-password, the only fix is to delete the user and add them again.
+once, on the page that answers the form, sent with `Cache-Control: no-store`.
+The password never appears in a URL, a cookie, a browser's history or the
+session store, and it is never stored in the clear. Reloading that page sends
+the form again, which is refused because the username is taken, so it adds
+nobody else. If you leave that page without copying the password, the only fix
+is to delete the user and add them again.
 
 Changing your own password asks for the current one first. It then ends **every
 other session that login has** and keeps the one you are using. People usually
