@@ -9,7 +9,6 @@ import {
   verifyPasswordHash,
 } from './passwords.ts';
 
-/** A PHC string built straight from node:crypto, at whatever costs the test names. */
 function encodedAt(password: string, costs: { memory: number; passes: number }): string {
   const salt = Buffer.from('sixteen bytes!!!', 'utf8');
   const tag = argon2Sync('argon2id', {

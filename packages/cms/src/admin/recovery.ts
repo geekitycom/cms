@@ -147,8 +147,6 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
       try {
         sendResetLink(c, user.email, user);
       } catch (error) {
-        // A store that refuses writes during a handover must not turn a
-        // registered address into a different answer from any other.
         console.warn(`Could not create a password reset link: ${messageOf(error)}`);
       }
     }
@@ -284,7 +282,6 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
   }
 }
 
-/** Dev mode holds every message, so a link asked for there would never arrive. */
 function canSendRecovery(c: Context<GeekityEnv>): boolean {
   return c.var.mailConfigured && !c.var.devMode;
 }

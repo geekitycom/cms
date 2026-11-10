@@ -34,8 +34,6 @@ export function createConfirmPassword(
     if (wait !== undefined) return { kind: 'locked', wait };
     if (password === '') return { kind: 'wrong' };
 
-    // Counted before the check, which yields, so concurrent guesses cannot all
-    // pass the lock above; a right password clears it again.
     throttled.fail(keys);
     if ((await verifyUserPassword(config.dataDir, user.username, password)) === undefined) {
       return { kind: 'wrong' };

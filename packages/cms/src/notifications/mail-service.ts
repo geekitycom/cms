@@ -302,8 +302,6 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
     build: (site: SiteData) => { subject: string; text: string; html?: string | undefined },
   ): Promise<MailResult> {
     const recipients = addressesOf(to);
-    // Callers drop this promise with `void`, so a rejection here would be
-    // unhandled and end the process.
     return messages.run(() =>
       send(recipients, replyTo, build).catch((thrown: unknown): MailResult => {
         const error = messageOf(thrown);

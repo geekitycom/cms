@@ -40,9 +40,6 @@ export const ARGON2_PARAMETERS = {
  * The salt and the cost parameters travel with the hash, so
  * {@link verifyPasswordHash} needs nothing but the stored string, and a later
  * change to {@link ARGON2_PARAMETERS} leaves existing passwords verifiable.
- *
- * The password is hashed in Unicode NFC, so the same password typed on a
- * keyboard that composes accents and on one that combines them is one password.
  */
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(ARGON2_PARAMETERS.saltLength);
@@ -61,13 +58,8 @@ export async function hashPassword(password: string): Promise<string> {
  * Whether `password` is the one `encoded` was made from.
  *
  * A hash this function cannot parse is a `false`, not a throw: a corrupted row
- * must fail the login rather than take the request down, and so is a hash
- * whose costs are above {@link ARGON2_COST_CEILING}, since anybody can make the
- * server spend those costs by trying a password. The comparison is constant
- * time.
- *
- * The NFC form is tried first, then the password as typed when that differs,
- * because hashes made before passwords were normalised hold the typed form.
+ * must fail the login rather than take the request down. The comparison is
+ * constant time.
  */
 export async function verifyPasswordHash(encoded: string, password: string): Promise<boolean> {
   const parsed = parsePhc(encoded);
@@ -78,7 +70,6 @@ export async function verifyPasswordHash(encoded: string, password: string): Pro
   return normalised !== password && matches(parsed, password);
 }
 
-/** Whether a stored hash was made with the costs {@link hashPassword} uses now. */
 export function passwordHashIsCurrent(encoded: string): boolean {
   const parsed = parsePhc(encoded);
   return (
@@ -90,11 +81,6 @@ export function passwordHashIsCurrent(encoded: string): boolean {
   );
 }
 
-/**
- * The highest costs a stored hash may ask for: four times the current ones.
- * Room for raising {@link ARGON2_PARAMETERS} later, and for hashes another
- * argon2 library made at its own defaults.
- */
 export const ARGON2_COST_CEILING = {
   memory: ARGON2_PARAMETERS.memory * 4,
   passes: ARGON2_PARAMETERS.passes * 4,
@@ -159,9 +145,7 @@ function parsePhc(encoded: string): ParsedHash | undefined {
     !isPositiveInteger(memory) ||
     !isPositiveInteger(passes) ||
     !isPositiveInteger(parallelism) ||
-    parallelism > ARGON2_COST_CEILING.parallelism ||
-    passes > ARGON2_COST_CEILING.passes ||
-    memory > ARGON2_COST_CEILING.memory ||
+    !withinCostCeiling({ memory, passes, parallelism }) ||
     // argon2 needs at least eight blocks of memory per lane.
     memory < 8 * parallelism
   ) {
@@ -181,6 +165,18 @@ function parsePhc(encoded: string): ParsedHash | undefined {
   }
 
   return { memory, passes, parallelism, tagLength: tag.length, salt, tag };
+}
+
+function withinCostCeiling(costs: {
+  memory: number;
+  passes: number;
+  parallelism: number;
+}): boolean {
+  return (
+    costs.memory <= ARGON2_COST_CEILING.memory &&
+    costs.passes <= ARGON2_COST_CEILING.passes &&
+    costs.parallelism <= ARGON2_COST_CEILING.parallelism
+  );
 }
 
 function isPositiveInteger(value: number | undefined): value is number {

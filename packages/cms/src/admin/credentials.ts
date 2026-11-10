@@ -46,10 +46,6 @@ export function usernameProblem(username: string): string | undefined {
   );
 }
 
-/**
- * What is wrong with a password, or `undefined` when nothing is. Its length is
- * counted in code points of the NFC form, the form it is hashed in.
- */
 export function passwordProblem(password: string): string | undefined {
   if ([...password.normalize('NFC')].length >= MINIMUM_PASSWORD_LENGTH) return undefined;
   return `A password is at least ${String(MINIMUM_PASSWORD_LENGTH)} characters.`;

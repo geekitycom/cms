@@ -294,8 +294,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       });
     }
 
-    // Counted before the password is checked and cleared on success, because
-    // the check yields: guesses sent at once must not all pass the lock above.
     throttle.fail(keys);
     const user = await verifyUserPassword(c.var.config.dataDir, username, password);
     if (user === undefined) {
@@ -321,9 +319,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const session = c.var.session;
     if (session !== undefined) c.var.admin.deleteSession(session.id);
     clearSessionCookie(c, c.var.config);
-    // Only the cache: the cookie directive reaches sibling sites on the same
-    // registrable domain, and storage holds the editor's local copies of
-    // unsaved work, which outlive a sign-out on purpose.
+    // Only the cache: the `cookies` directive clears the whole registrable
+    // domain, sibling sites included.
     c.header('Clear-Site-Data', CLEAR_ON_LOGOUT);
     return c.redirect(LOGIN_PATH, 303);
   });
@@ -467,7 +464,6 @@ function shortened(text: string): string {
   return JSON.stringify(cut) + (cut.length < text.length ? '…' : '');
 }
 
-/** `Clear-Site-Data` on logout, so a shared computer keeps no admin pages. */
 const CLEAR_ON_LOGOUT = '"cache"';
 
 /** What somebody signed in under the pre-`__Host-` cookie reads on the login form. */

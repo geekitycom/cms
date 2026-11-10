@@ -190,12 +190,6 @@ export function parseHtml(source: string): HtmlElement {
  */
 const UNPARSED: ReadonlySet<string> = new Set([...RAW_TEXT, 'noscript', 'textarea', 'title']);
 
-/**
- * Where the first `name` start tag of a page begins and ends, skipping
- * comments and the content of elements that hold text rather than markup.
- * It reads only as far as that tag, so a page's head is all it walks to find
- * the `<body>`.
- */
 export function findStartTag(
   source: string,
   name: string,

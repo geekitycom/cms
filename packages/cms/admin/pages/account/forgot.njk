@@ -16,9 +16,6 @@
     <h1 class="card-title text-2xl">Forgotten password</h1>
 
     {% if not configured %}
-      {# Nothing would deliver a link: no provider, no credential, or dev mode
-         holding every message. Saying so beats a form that quietly does
-         nothing. #}
       {% if devMode %}
         <p>This site is in dev mode, which holds every outgoing email, so a password cannot be reset from here.</p>
       {% else %}

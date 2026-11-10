@@ -12,7 +12,6 @@ import { openAdminStore } from './store/admin-store.ts';
 
 after(cleanupTemporaryDirs);
 
-/** The usernames in a site's `data/users.json`, read as the CMS reads it. */
 function usernames(directory: string): string[] {
   return listUsers(path.join(directory, 'data')).map((user) => user.username);
 }

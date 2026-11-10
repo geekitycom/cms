@@ -139,7 +139,6 @@ const SPECULATIVE_THEME: Record<string, string> = {
   ),
 };
 
-/** The bare theme with `<body` written in its head, where it is not a tag. */
 const BODY_IN_HEAD_THEME: Record<string, string> = {
   ...BARE_THEME,
   'layouts/base.njk': BARE_BASE.replace(

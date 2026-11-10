@@ -105,9 +105,6 @@ async function changePassword(
     }
 
     const now = config.now();
-    // The new time on the user ends every session and reset link issued
-    // before it, even ones a copy of the database brings back; deleting
-    // the rows below only tidies what this connection can reach.
     await setUserPassword({ dataDir: config.dataDir, userId: user.id, password, now });
     const disconnected = await revokeTokensForUser(config.dataDir, user.id, now);
     let ended = 0;
@@ -131,7 +128,6 @@ async function changePassword(
   }
 }
 
-/** The password from the prompt or stdin, or from the flag with a warning. */
 async function passwordFor(username: string, flagPassword: string | undefined): Promise<string> {
   if (flagPassword === undefined) {
     return await readPassword({ prompt: `Password for ${username}: ` });

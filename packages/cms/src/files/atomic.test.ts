@@ -362,7 +362,6 @@ describe('refuseWritesUnder', () => {
 });
 
 describe('a durable write', () => {
-  /** What was flushed, in order: the file before it was in place, then its directory. */
   type Flush = { directory: boolean; targetInPlace: boolean };
 
   it('flushes the new file before the rename and the directory after it', async () => {

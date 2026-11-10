@@ -537,8 +537,6 @@ export async function deleteUser(input: {
 }): Promise<boolean> {
   return await removeUserRecord({
     ...input,
-    // The record goes last, so a step that fails leaves a user whose
-    // deletion can be tried again rather than files nobody owns.
     beforeRemoval: async (userId) => {
       input.endSessions?.(userId);
       await revokeTokensForUser(input.dataDir, userId, input.now);

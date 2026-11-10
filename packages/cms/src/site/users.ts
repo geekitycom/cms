@@ -625,7 +625,6 @@ export class ConflictingActorIdError extends Error {
   }
 }
 
-/** Thrown when an actor id is not an absolute http(s) URL. */
 export class InvalidActorIdError extends Error {
   override readonly name = 'InvalidActorIdError';
 
@@ -642,17 +641,14 @@ export class InvalidActorIdError extends Error {
  * something a form should be able to retype. A plugin's import command is
  * what calls this.
  *
- * The id is stored in the form a peer and the request matchers compare, and
- * has to be unique across the file, counting each other user's author URL,
- * which is the id they answer to when they have no stored one. The check is
- * inside the write for the reason {@link createUser}'s duplicate check is: it
- * is a rule about the file rather than about one user. Returns whether the id
+ * The id has to be unique across the file, and the check is inside the write
+ * for the reason {@link createUser}'s duplicate check is: it is a rule about
+ * the file rather than about one user. Returns whether the id
  * changed, so a second run with the same id reports nothing new.
  */
 export async function setUserActorId(input: {
   /** Which site's users file to write. */
   dataDir: string;
-  /** The site's base URL, which its users' author URLs are on. */
   baseUrl: string;
   /** Whose record, by login name. */
   username: string;
@@ -667,10 +663,7 @@ export async function setUserActorId(input: {
 
   const found = await updateUser(input.dataDir, mine.id, (user, everyone) => {
     const holder = everyone.find(
-      (other) =>
-        other.id !== user.id &&
-        (other.actorId === actorId ||
-          absoluteUrl(authorHref(other.username), input.baseUrl) === actorId),
+      (other) => other.id !== user.id && answersTo(other, actorId, input.baseUrl),
     );
     if (holder !== undefined) {
       throw new ConflictingActorIdError(holder.username, `The actor id ${actorId}`);
@@ -681,6 +674,10 @@ export async function setUserActorId(input: {
   if (!found) throw new UnknownUserError(input.username);
 
   return changed;
+}
+
+function answersTo(user: StoredUser, actorId: string, baseUrl: string): boolean {
+  return user.actorId === actorId || absoluteUrl(authorHref(user.username), baseUrl) === actorId;
 }
 
 /** Thrown when a command names a user this site does not have. */
@@ -728,10 +725,6 @@ export async function removeUserRecord(input: {
   userId: number;
   /** The user asking for the removal, when it is a person. */
   signedInAs?: number | null | undefined;
-  /**
-   * Runs once the removal is allowed and before the record goes, with the
-   * file still locked. When it throws, the user stays, so a retry finds them.
-   */
   beforeRemoval?: ((userId: number) => void | Promise<void>) | undefined;
 }): Promise<boolean> {
   let deleted = false;
@@ -756,10 +749,6 @@ export async function removeUserRecord(input: {
 /**
  * The user, when the password is theirs; `undefined` when it is not, or when
  * there is no such user. The two failures are deliberately indistinguishable.
- *
- * A right password on a hash made at other costs than today's is hashed again
- * at today's, so that every account comes to take as long to check as a
- * username nobody has.
  */
 export async function verifyUserPassword(
   dataDir: string,

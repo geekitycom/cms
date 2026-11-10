@@ -54,8 +54,7 @@ export interface WriteFileAtomicallyOptions {
   mode?: number | undefined;
   /**
    * Flush the file before the rename and its directory after, so a power cut
-   * cannot leave it empty or missing. That costs milliseconds per write, so it
-   * is for files nothing else can rebuild: accounts, keys and tokens.
+   * cannot leave it empty or missing.
    */
   durable?: boolean | undefined;
 }
@@ -315,7 +314,6 @@ export function temporaryName(file: string): string {
   return `${file}.${process.pid.toString(36)}-${sequence.toString(36)}.tmp`;
 }
 
-// Windows cannot open a directory to flush it; NTFS orders the rename itself.
 const DIRECTORIES_FLUSH = process.platform !== 'win32';
 
 async function syncDirectory(directory: string): Promise<void> {
