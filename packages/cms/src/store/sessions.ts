@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
@@ -11,7 +11,10 @@ import type { Row } from './rows.ts';
  * has not logged in yet.
  */
 export interface Session {
-  /** 256 random bits, hex encoded. This is the value in the cookie. */
+  /**
+   * 256 random bits, hex encoded. This is the value in the cookie; the
+   * database keeps only its SHA-256.
+   */
   readonly id: string;
   /** The user, or `null` while the session is anonymous. */
   readonly userId: number | null;
@@ -124,14 +127,14 @@ export function openSessionStore(
    * every admin page until the row is cleaned up by hand.
    */
   function readFlash(sessionId: string): FlashMessage[] {
-    return parseList(getRow(statements.readFlash, (row) => row['flash'], sessionId)).filter(
-      isFlashMessage,
-    );
+    return parseList(
+      getRow(statements.readFlash, (row) => row['flash'], hashSessionId(sessionId)),
+    ).filter(isFlashMessage);
   }
 
   function readCleared(sessionId: string): string[] {
     return parseList(
-      getRow(statements.readCleared, (row) => row['cleared_autosaves'], sessionId),
+      getRow(statements.readCleared, (row) => row['cleared_autosaves'], hashSessionId(sessionId)),
     ).filter((key): key is string => typeof key === 'string');
   }
 
@@ -147,7 +150,7 @@ export function openSessionStore(
         expiresAt: new Date(now.getTime() + input.lifetimeSeconds * 1000).toISOString(),
       };
       statements.insertSession.run(
-        session.id,
+        hashSessionId(session.id),
         session.userId,
         session.userUid ?? null,
         session.csrfToken,
@@ -158,25 +161,27 @@ export function openSessionStore(
     },
 
     getSession(id, now = clock()) {
-      const session = getRow(statements.sessionById, toSession, id);
-      if (session === undefined) return undefined;
+      const key = hashSessionId(id);
+      const row = getRow(statements.sessionById, toSession, key);
+      if (row === undefined) return undefined;
 
       // ISO 8601 in UTC sorts the way time runs, so string order is time order.
-      if (session.expiresAt <= now.toISOString()) {
-        statements.deleteSession.run(id);
+      if (row.expiresAt <= now.toISOString()) {
+        statements.deleteSession.run(key);
         return undefined;
       }
-      return session;
+      return { ...row, id };
     },
 
     deleteSession(id) {
-      return statements.deleteSession.run(id).changes > 0;
+      return statements.deleteSession.run(hashSessionId(id)).changes > 0;
     },
 
     deleteSessionsForUser(userId, options = {}) {
       // `IS NOT` rather than `<>`, so a missing `except` compares against NULL
       // and spares nothing instead of matching nothing.
-      return Number(statements.deleteSessionsForUser.run(userId, options.except ?? null).changes);
+      const except = options.except === undefined ? null : hashSessionId(options.except);
+      return Number(statements.deleteSessionsForUser.run(userId, except).changes);
     },
 
     pruneSessions(now = clock()) {
@@ -185,23 +190,23 @@ export function openSessionStore(
 
     pushFlash(sessionId, entry) {
       const queued = [...readFlash(sessionId), entry];
-      statements.writeFlash.run(JSON.stringify(queued), sessionId);
+      statements.writeFlash.run(JSON.stringify(queued), hashSessionId(sessionId));
     },
 
     takeFlash(sessionId) {
       const queued = readFlash(sessionId);
-      if (!isReadOnly()) statements.writeFlash.run(null, sessionId);
+      if (!isReadOnly()) statements.writeFlash.run(null, hashSessionId(sessionId));
       return queued;
     },
 
     pushClearedAutosave(sessionId, key) {
       const queued = [...readCleared(sessionId), key];
-      statements.writeCleared.run(JSON.stringify(queued), sessionId);
+      statements.writeCleared.run(JSON.stringify(queued), hashSessionId(sessionId));
     },
 
     takeClearedAutosaves(sessionId) {
       const queued = readCleared(sessionId);
-      if (!isReadOnly()) statements.writeCleared.run(null, sessionId);
+      if (!isReadOnly()) statements.writeCleared.run(null, hashSessionId(sessionId));
       return queued;
     },
   };
@@ -238,6 +243,15 @@ function toSession(row: Row): Session {
     createdAt: String(row['created_at']),
     expiresAt: String(row['expires_at']),
   };
+}
+
+/**
+ * A session id as the database keeps it: its SHA-256, hex encoded, so a copy
+ * of `geekity.db` holds no working logins. Plain SHA-256 is enough for 256
+ * random bits, for the reason reset tokens use it.
+ */
+function hashSessionId(id: string): string {
+  return createHash('sha256').update(id, 'utf8').digest('hex');
 }
 
 /**

@@ -35,6 +35,15 @@ const HTTPS = { baseUrl: 'https://geekity.example' };
 const HOST_COOKIE = '__Host-geekity_session';
 const PLAIN_COOKIE = 'geekity_session';
 
+function sessionRows(cms: Cms): Record<string, unknown>[] {
+  const db = new DatabaseSync(path.join(cms.config.dataDir, 'geekity.db'));
+  try {
+    return db.prepare('SELECT * FROM sessions').all() as Record<string, unknown>[];
+  } finally {
+    db.close();
+  }
+}
+
 describe('the session cookie under https', () => {
   it('is a __Host- cookie: Secure, Path=/ and no Domain', async () => {
     const cms = await box.site(HTTPS);
@@ -327,15 +336,6 @@ describe('an upload that declares no length', () => {
 describe('the anonymous session behind the sign-in forms', () => {
   const HOUR = 60 * 60 * 1000;
 
-  function sessionRows(cms: Cms): Record<string, unknown>[] {
-    const db = new DatabaseSync(path.join(cms.config.dataDir, 'geekity.db'));
-    try {
-      return db.prepare('SELECT * FROM sessions').all() as Record<string, unknown>[];
-    } finally {
-      db.close();
-    }
-  }
-
   async function siteAt(start: string): Promise<{ cms: Cms; advance: (ms: number) => void }> {
     let now = new Date(start);
     const cms = await box.site({ now: () => now });
@@ -435,5 +435,19 @@ describe('the anonymous session behind the sign-in forms', () => {
     const form = await agent.get(`/admin/reset?token=${token}`);
     assert.equal(form.status, 200);
     assert.match(await form.text(), /form expired/i);
+  });
+});
+
+describe('a session id at rest', () => {
+  it('is not the value of the cookie, and the cookie still signs in', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const cookie = agent.session();
+    assert.ok(cookie !== undefined);
+
+    const ids = sessionRows(cms).map((row) => row['id']);
+    assert.ok(ids.length > 0, 'there is a session row');
+    assert.ok(!ids.includes(cookie), 'the sessions table holds the cookie value');
+    assert.equal((await agent.get('/admin')).status, 200, 'the cookie finds its session');
   });
 });

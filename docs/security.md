@@ -85,8 +85,14 @@ redirected to the login form before its body is read.
 
 ## Session hardening
 
-Three measures protect a signed-in session in addition to the cookie flags and
+Four measures protect a signed-in session in addition to the cookie flags and
 the CSRF token.
+
+**The database keeps only a hash of each session id.** The cookie holds 256
+random bits. The `sessions` table keys each row by the SHA-256 of that value,
+and the server hashes the cookie to find the row. A copy of `data/geekity.db`
+does not contain working logins. The upgrade that brought this in ends every
+existing session, so everybody signs in once more.
 
 **The cookie is `__Host-geekity_session` under https.** A browser accepts a
 cookie with the `__Host-` prefix only when it is `Secure`, has `Path=/` and
