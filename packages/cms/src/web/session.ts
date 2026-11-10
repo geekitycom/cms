@@ -189,9 +189,12 @@ export const CROSS_SITE_REFUSAL = 'That request came from another site, so it wa
  * Whether a submitted token is this session's, compared in constant time.
  *
  * Both are hex of a fixed length, so a length mismatch is already a mismatch
- * and short-circuiting on it leaks nothing.
+ * and short-circuiting on it leaks nothing. The lengths compared are in bytes,
+ * the unit `timingSafeEqual` needs equal.
  */
 export function csrfTokenMatches(expected: string, submitted: unknown): boolean {
-  if (typeof submitted !== 'string' || submitted.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(submitted, 'utf8'), Buffer.from(expected, 'utf8'));
+  if (typeof submitted !== 'string') return false;
+  const left = Buffer.from(submitted, 'utf8');
+  const right = Buffer.from(expected, 'utf8');
+  return left.length === right.length && timingSafeEqual(left, right);
 }

@@ -8,6 +8,7 @@ import { CONTACT_POST_PATH } from '../contact/form.ts';
 import { MODERATE_PATH, UNSUBSCRIBE_PATH } from '../notifications/links.ts';
 import { createUser, usersFile } from '../site/users.ts';
 import { WEBMENTION_PATH } from '../webmention/endpoint.ts';
+import { csrfTokenMatches } from '../web/session.ts';
 import {
   browser,
   csrfField,
@@ -435,6 +436,42 @@ describe('the anonymous session behind the sign-in forms', () => {
     const form = await agent.get(`/admin/reset?token=${token}`);
     assert.equal(form.status, 200);
     assert.match(await form.text(), /form expired/i);
+  });
+});
+
+describe('a CSRF token with characters outside ASCII', () => {
+  const TOKEN = 'é' + 'a'.repeat(63);
+
+  it('does not match a token of the same length in characters', () => {
+    assert.equal(csrfTokenMatches('a'.repeat(64), TOKEN), false);
+  });
+
+  it('is refused on the sign-in form with a 403', async () => {
+    const cms = await box.site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    const agent = browser(cms);
+    assert.ok(csrfField(await (await agent.get('/admin/login')).text()) !== undefined);
+
+    const response = await agent.post('/admin/login', {
+      csrf_token: TOKEN,
+      username: FIRST_ADMIN.username,
+      password: 'x',
+    });
+    assert.equal(response.status, 403);
+  });
+
+  it('sends a sign-in form with no session back to the form', async () => {
+    const cms = await box.site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+
+    const response = await browser(cms).post('/admin/login', {
+      csrf_token: TOKEN,
+      username: FIRST_ADMIN.username,
+      password: 'x',
+      return_to: '/admin/é',
+    });
+    assert.equal(response.status, 303);
+    assert.match(response.headers.get('location') ?? '', /^\/admin\/login/);
   });
 });
 

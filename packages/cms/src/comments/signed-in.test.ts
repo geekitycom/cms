@@ -268,6 +268,15 @@ describe('the token on the signed-in form', () => {
     assert.deepEqual(replyPosts(cms), [], 'nothing was written');
   });
 
+  it('refuses a token of the right length in characters but not in bytes', async () => {
+    const { cms, agent } = await signedInSite();
+
+    const refused = await agent.post(COMMENT_POST_PATH, submission('é' + 'a'.repeat(63)));
+
+    assert.equal(refused.status, 403);
+    assert.deepEqual(replyPosts(cms), [], 'nothing was written');
+  });
+
   it('refuses one carrying no token at all', async () => {
     const { cms, agent } = await signedInSite();
     const fields = submission('');
