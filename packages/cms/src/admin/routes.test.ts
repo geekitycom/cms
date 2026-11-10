@@ -589,6 +589,30 @@ describe('security headers', () => {
     }
   });
 
+  it('keeps admin screens out of every cache and leaves the static files cacheable', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+    const anonymous = browser(cms);
+
+    for (const [label, response] of [
+      ['/admin/login', await anonymous.get('/admin/login')],
+      ['/admin/forgot', await anonymous.get('/admin/forgot')],
+      ['/admin/users', await agent.get('/admin/users')],
+      ['/admin/nowhere-at-all', await agent.get('/admin/nowhere-at-all')],
+    ] as const) {
+      assert.equal(response.headers.get('cache-control'), 'no-store', label);
+    }
+
+    const asset = await agent.get('/admin/_static/admin.css');
+    assert.equal(asset.status, 200);
+    assert.match(asset.headers.get('cache-control') ?? '', /^public, max-age=\d+/);
+    const unchanged = await cms.app.request('/admin/_static/admin.css', {
+      headers: { 'if-none-match': asset.headers.get('etag') ?? '' },
+    });
+    assert.equal(unchanged.status, 304);
+    assert.match(unchanged.headers.get('cache-control') ?? '', /^public, max-age=\d+/);
+  });
+
   it('names the editor bundle, the preview frame and the uploads in the policy', async () => {
     const cms = await site();
     const agent = await signedIn(cms);

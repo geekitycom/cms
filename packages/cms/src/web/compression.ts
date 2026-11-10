@@ -115,9 +115,9 @@ export function compression(): MiddlewareHandler {
  * CSRF token, a session's own data. Compressing such a page lets an attacker
  * who can inject text and watch its size recover the secret a byte at a time
  * (BREACH), so it goes out plain. Every page drawn for somebody signed in says
- * `private` or `no-store`; the admin's screens, the setup and login forms
- * among them, say neither, so the path covers those. The admin's static files
- * hold no secret and are compressed like any other.
+ * `private` or `no-store`, and so does every admin screen unless its handler
+ * chose otherwise; the path covers that case. The admin's static files hold no
+ * secret and are compressed like any other.
  */
 function holdsSecrets(requestPath: string, response: Response): boolean {
   if (/\b(private|no-store)\b/i.test(response.headers.get('cache-control') ?? '')) return true;

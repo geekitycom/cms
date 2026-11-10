@@ -4,6 +4,7 @@ import type { MiddlewareHandler } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../web/env.ts';
+import { ADMIN_ASSET_PREFIX } from '../site/admin-paths.ts';
 import { usesSecureCookies } from '../web/session.ts';
 
 /**
@@ -52,6 +53,11 @@ export const baselineSecurityHeaders: MiddlewareHandler<GeekityEnv> = async (c, 
  * A nonce is minted before the handler runs, because the templates put it on
  * the editor's script tag, and the policy naming it is written afterwards, so
  * a handler that replaced the response cannot lose the headers.
+ *
+ * Every screen is `no-store`: they carry CSRF tokens, reset tokens, email
+ * addresses and freshly generated passwords, none of which belongs in a disk
+ * or back-forward cache. A handler that set its own `Cache-Control` keeps it,
+ * and the versioned static files keep their long lifetime.
  */
 export const adminSecurityHeaders: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   const nonce = c.var.cspNonce ?? createNonce();
@@ -66,6 +72,9 @@ export const adminSecurityHeaders: MiddlewareHandler<GeekityEnv> = async (c, nex
   // Not DENY: the editor puts its preview in a sandboxed iframe of its own, and
   // `frame-ancestors 'self'` below is the modern half of the same statement.
   headers.set('X-Frame-Options', 'SAMEORIGIN');
+  if (!headers.has('Cache-Control') && !c.req.path.startsWith(ADMIN_ASSET_PREFIX)) {
+    headers.set('Cache-Control', 'no-store');
+  }
 };
 
 /**

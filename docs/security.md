@@ -298,6 +298,11 @@ stricter values instead, whatever `securityHeaders` says:
 | `X-Frame-Options`         | `SAMEORIGIN`                                  |
 | `Content-Security-Policy` | `default-src 'self'` and the directives below |
 
+Every admin response except the files under `/admin/_static/` also gets
+`Cache-Control: no-store`, so a browser or proxy keeps no copy of a screen. A
+route that sets its own `Cache-Control` keeps it. The static files are cached
+for an hour.
+
 The policy is `'self'` for almost everything. The stylesheet and the editor
 bundle come from `/admin/_static/`. The editor's preview and upload calls are
 same-origin `fetch`. The preview frame renders the site's own theme and
