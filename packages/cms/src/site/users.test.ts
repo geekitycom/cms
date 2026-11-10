@@ -100,6 +100,28 @@ describe('the users file', () => {
   });
 });
 
+describe('a users file with repeated entries', () => {
+  it('refuses two entries that share an id, naming the id', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [
+      { username: 'ada', id: 7 },
+      { username: 'grace', id: 7 },
+    ]);
+
+    assert.throws(() => countUsers(dataDir), /id 7/);
+  });
+
+  it('refuses two entries that share a username, naming it', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [
+      { username: 'ada', id: 1 },
+      { username: 'ada', id: 2 },
+    ]);
+
+    assert.throws(() => countUsers(dataDir), /"ada"/);
+  });
+});
+
 describe('a users file the server cannot read', () => {
   it(
     'makes countUsers throw and createUser reject, and leaves the file as it was',

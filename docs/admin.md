@@ -752,7 +752,9 @@ Each Save returns to the same screen, which shows the result.
 username, an argon2 hash and a created time. A user may also have an email
 address, notification preferences, writing goals, a public profile and the
 [stored actor id](federation.md#a-users-stored-actor-id) they were published
-under elsewhere.
+under elsewhere. Ids and usernames are unique. A file with two entries that
+share either one does not load: the server refuses it with the same error as a
+file that will not parse, and names the repeated value.
 
 The server writes the file the same way as every file this CMS owns:
 

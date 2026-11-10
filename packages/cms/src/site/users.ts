@@ -719,6 +719,7 @@ function parseUsersFile(source: string | undefined, file: string): UsersFileCont
   }
 
   const users = listed.map((entry, index) => userFrom(entry, index, file));
+  refuseRepeats(users, file);
   const stated = (parsed as Record<string, unknown>)['nextId'];
   const highest = users.reduce((top, user) => Math.max(top, user.id), 0);
 
@@ -732,6 +733,38 @@ function parseUsersFile(source: string | undefined, file: string): UsersFileCont
       highest + 1,
     ),
   };
+}
+
+/**
+ * Every lookup and write keys on the id or the username, so two entries that
+ * share one would take each other's password changes and deletes.
+ */
+function refuseRepeats(users: readonly StoredUser[], file: string): void {
+  const ids = new Map<number, number>();
+  const usernames = new Map<string, number>();
+  users.forEach((user, index) => {
+    const entry = index + 1;
+    const sameId = ids.get(user.id);
+    if (sameId !== undefined) {
+      throw unusableUsersFile(
+        file,
+        new Error(
+          `Entries ${String(sameId)} and ${String(entry)} of "users" share id ${String(user.id)}.`,
+        ),
+      );
+    }
+    const sameName = usernames.get(user.username);
+    if (sameName !== undefined) {
+      throw unusableUsersFile(
+        file,
+        new Error(
+          `Entries ${String(sameName)} and ${String(entry)} of "users" share the username "${user.username}".`,
+        ),
+      );
+    }
+    ids.set(user.id, entry);
+    usernames.set(user.username, entry);
+  });
 }
 
 /** One entry of the file as a user, or a refusal naming which entry is wrong. */
