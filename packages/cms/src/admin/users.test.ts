@@ -1723,6 +1723,32 @@ describe('a profile link is checked the way a menu line is (TASK-112)', () => {
     assert.equal(findUserById(cms.config.dataDir, ada)?.profile, undefined, 'nothing was written');
   });
 
+  for (const avatar of ['http://exa mple.com/me.png', '//[', 'javascript:alert(1)']) {
+    it(`refuses an avatar that is not a path or an http(s) URL (${avatar}), and stores nothing`, async () => {
+      const cms = await box.site();
+      const agent = await signedIn(cms);
+      const ada = idOf(cms.config.dataDir, 'ada');
+      const { token } = await editScreen(agent, ada);
+
+      const response = await agent.post('/admin/users/profile', {
+        csrf_token: token,
+        user_id: String(ada),
+        display_name: 'Ada Lovelace',
+        avatar,
+      });
+
+      assert.equal(response.status, 400);
+      const html = await response.text();
+      assert.match(html, /id="profile-avatar-error"/, 'the avatar box carries the message');
+      assert.match(html, /an absolute http:\/\/ or https:\/\/ URL/, 'it says what a URL is');
+      assert.equal(
+        findUserById(cms.config.dataDir, ada)?.profile,
+        undefined,
+        'nothing was written',
+      );
+    });
+  }
+
   it('takes the line the menu box takes, rel values and all (AC #1, TASK-114)', async () => {
     // TASK-112 made this line an error, on the reasoning that a profile link
     // carries rel="me" already. Every box that takes a link takes the same

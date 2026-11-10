@@ -58,7 +58,8 @@ export function avatarUrl(avatar: string, baseUrl: string): string | undefined {
   if (baseUrl === '') return undefined;
 
   try {
-    return absoluteUrl(value, baseUrl);
+    const resolved = absoluteUrl(value, baseUrl);
+    return URL.canParse(resolved) ? resolved : undefined;
   } catch {
     return undefined;
   }
@@ -191,7 +192,8 @@ export async function userActor(
   const { baseUrl } = options;
   const profile = profileContext(user);
   const id = actorId(context, user);
-  const icon = profile.avatar === undefined ? undefined : avatarUrl(profile.avatar, baseUrl);
+  const avatar = profile.avatar === undefined ? undefined : avatarUrl(profile.avatar, baseUrl);
+  const icon = avatar === undefined ? null : URL.parse(avatar);
 
   const keys = await context.getActorKeyPairs(user.username);
   // Fedify catches whatever the key pairs dispatcher throws and hands back an
@@ -217,7 +219,7 @@ export async function userActor(
     name: profile.name,
     summary: profile.bio === undefined ? null : bioHtml(profile.bio, { baseUrl }),
     url: new URL(absoluteUrl(authorHref(user.username), baseUrl)),
-    icon: icon === undefined ? null : new Image({ url: new URL(icon) }),
+    icon: icon === null ? null : new Image({ url: icon }),
     inbox: context.getInboxUri(user.username),
     outbox: context.getOutboxUri(user.username),
     followers: context.getFollowersUri(user.username),

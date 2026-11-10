@@ -507,10 +507,12 @@ export function cleanProfile(profile: UserProfile): UserProfile | undefined {
 
 /**
  * Whether a stored avatar is one the site will print: a site path or an
- * absolute http(s) URL, the same rule a profile link is held to.
+ * absolute http(s) URL, the same rule a profile link is held to. A path that
+ * starts `//` names a host, so it has to resolve as well; the actor's `icon`
+ * is built from it.
  */
 export function isAvatarUrl(avatar: string): boolean {
-  return isLinkUrl(avatar);
+  return isLinkUrl(avatar) && URL.canParse(avatar, 'https://site.invalid/');
 }
 
 /**

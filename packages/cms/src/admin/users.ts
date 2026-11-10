@@ -9,6 +9,7 @@ import {
   removeUserRecord,
   DuplicateUsernameError,
   findUserById,
+  isAvatarUrl,
   listUsers,
   setUserAdminTheme,
   setUserEmail,
@@ -287,13 +288,13 @@ async function saveProfile(c: Context<GeekityEnv>, render: AdminRender): Promise
   const { dataDir, body, target } = named;
   const typed = typedProfile(body);
 
-  const problem = profileLinkLineProblem(typed.links);
-  if (problem !== undefined) {
+  const problems = profileProblems(typed);
+  if (Object.keys(problems).length > 0) {
     c.status(400);
     return render(
       c,
       ADMIN_TEMPLATES.usersEdit,
-      userScreen(c, target, { profileProblems: { links: problem } }, typed),
+      userScreen(c, target, { profileProblems: problems }, typed),
     );
   }
 
@@ -642,6 +643,17 @@ function themeChoices(user: User): { value: string; label: string; chosen: boole
 
 export function parseProfileLinks(value: string): ProfileLink[] {
   return profileLinkLines(value).map(profileLinkFields);
+}
+
+function profileProblems(typed: { avatar: string; links: string }): Record<string, string> {
+  const avatar = typed.avatar.trim();
+  const links = profileLinkLineProblem(typed.links);
+  return {
+    ...(avatar === '' || isAvatarUrl(avatar)
+      ? {}
+      : { avatar: `An avatar is ${LINK_URL_RULE}. "${avatar}" is not one.` }),
+    ...(links === undefined ? {} : { links }),
+  };
 }
 
 export function profileLinkLineProblem(value: string): string | undefined {

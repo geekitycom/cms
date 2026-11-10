@@ -878,8 +878,8 @@ this site, and IndieAuth uses it to confirm the link is yours. Nothing else in
 Geekity CMS reads it. Typing `| me` therefore adds nothing, and
 `| me nofollow author` puts all three values on the rendered `rel`.
 
-When the panel is saved, the server refuses a line that is not a link and
-names the line to fix. The same rule applies to every profile read from
+When the panel is saved, the server refuses a line that is not a link, or an
+avatar that is not a path or an absolute `http(s)` URL, and names what to fix. The same rule applies to every profile read from
 `data/users.json`, however it was written: a link whose URL is not a path or
 an absolute `http(s)` URL is not rendered and does not appear in the box, and
 neither does an avatar that breaks the rule.
