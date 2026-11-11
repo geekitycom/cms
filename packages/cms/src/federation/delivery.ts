@@ -776,7 +776,6 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   }
 }
 
-/** What a peer's copy of an object says, leaving out when it says it was edited. */
 async function fingerprint(object: ActivityObject): Promise<string> {
   const json = JSON.stringify(await object.clone({ updated: null }).toJsonLd());
   return createHash('sha256').update(json).digest('hex');

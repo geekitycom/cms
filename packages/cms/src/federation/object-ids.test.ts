@@ -73,7 +73,6 @@ describe('claiming an object id', () => {
 });
 
 describe('another process writing the file at the same time', () => {
-  /** Hold the file's lock as another process would, and write the file under it. */
   async function whileAnotherProcessWrites(
     file: string,
     mine: () => Promise<void>,

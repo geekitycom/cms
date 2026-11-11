@@ -118,7 +118,6 @@ async function fileOf(cms: Cms, url: string): Promise<string> {
   );
 }
 
-/** An MCP token for bea, a user who is not the site's first account. */
 async function secondUserToken(cms: Cms): Promise<string> {
   const created = await createUser({
     dataDir: cms.config.dataDir,

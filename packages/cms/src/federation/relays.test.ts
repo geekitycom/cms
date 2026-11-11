@@ -215,10 +215,6 @@ function ofType(type: string): Sent[] {
   return sent.filter((one) => one.body['type'] === type);
 }
 
-/**
- * Deliver one activity to the site's inbox, signed as the relay would sign it,
- * or as one of the strangers.
- */
 async function deliver(
   cms: Cms,
   activity: { toJsonLd(): Promise<unknown> },

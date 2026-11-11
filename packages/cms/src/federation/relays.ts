@@ -20,7 +20,6 @@ import type { FederationContextData, SiteFederation } from './federation.ts';
 import { isDuplicateDelivery } from './outbox-observer.ts';
 import { sendWithinDeadline } from './send-deadline.ts';
 
-/** What every relay follow id's fragment starts with, after the subscriber's actor id. */
 const RELAY_FOLLOW_FRAGMENT = '#relay-follow/';
 
 /** Where a relay reports what it could not do. `console` will do. */

@@ -61,9 +61,6 @@ export async function citingActivity(
     published: toInstant(document.date) ?? null,
   };
   const of = encodeURIComponent(object.id.href);
-  // A repost is addressed as a post of the same visibility would be; a like is
-  // addressed to the one who wrote what it likes, and copied to the followers
-  // as every activity is.
   const authorIds = authorId === undefined ? [] : [authorId];
   const activity =
     postType === 'repost'

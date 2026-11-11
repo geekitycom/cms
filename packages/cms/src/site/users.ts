@@ -898,9 +898,6 @@ function parseUsersFile(source: string | undefined, file: string): UsersFileCont
   const stated = (parsed as Record<string, unknown>)['nextId'];
   const highest = users.reduce((top, user) => Math.max(top, user.id), 0);
 
-  // The stated `nextId` is the rule, but never one that would collide: a file
-  // edited by hand, or one written before this field existed, still hands out
-  // an id nobody has.
   const retired: unknown = (parsed as Record<string, unknown>)['retired'];
   if (
     retired !== undefined &&
@@ -908,6 +905,10 @@ function parseUsersFile(source: string | undefined, file: string): UsersFileCont
   ) {
     throw unusableUsersFile(file, new Error('Its "retired" is not a list of usernames.'));
   }
+
+  // The stated `nextId` is the rule, but never one that would collide: a file
+  // edited by hand, or one written before this field existed, still hands out
+  // an id nobody has.
   return {
     users,
     nextId: Math.max(

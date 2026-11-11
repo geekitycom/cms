@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -11,6 +11,7 @@ import {
 } from '../files/atomic.ts';
 import { ACTOR_KEYS, dataFolder, dataPath, fileToken } from '../files/data-files.ts';
 import { messageOf } from '../util/errors.ts';
+import { isRecord } from '../util/guards.ts';
 
 /**
  * The algorithms an actor holds a key pair for, in the order Fedify wants them:
@@ -38,9 +39,8 @@ export function heldPrivateKeys(dataDir: string): Set<string> {
   for (const name of readdirSync(dir)) {
     if (!name.endsWith('.jwk')) continue;
     try {
-      const d = (JSON.parse(readFileIfPresentSync(path.join(dir, name)) ?? '') as { d?: unknown })
-        .d;
-      if (typeof d === 'string') held.add(d);
+      const key: unknown = JSON.parse(readFileSync(path.join(dir, name), 'utf8'));
+      if (isRecord(key) && typeof key['d'] === 'string') held.add(key['d']);
     } catch {
       // A file that is not a key holds no key to keep a message for.
     }

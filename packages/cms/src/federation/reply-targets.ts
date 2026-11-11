@@ -58,7 +58,6 @@ export async function recordResolvedTarget(
   });
 }
 
-/** The file's targets, or `undefined`, with a warning, for a file that will not parse. */
 function readTargets(file: string): ReplyTargets | undefined {
   try {
     return parseReplyTargets(file);

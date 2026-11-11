@@ -128,8 +128,8 @@ const DUPLICATE_DELIVERY = 'https://w3id.org/fep/c180#duplicate-delivery';
 /**
  * Whether an inbox refused an activity because it already holds it, as
  * tags.pub does with a FEP-c180 problem: the delivery has reached it. FEP-c180
- * names the problem by its type and leaves the client error status to the
- * server.
+ * asks for 400 only as a SHOULD, so the problem's type decides and any client
+ * error status is taken.
  */
 export function isDuplicateDelivery(error: unknown): boolean {
   if (!(error instanceof SendActivityError)) return false;

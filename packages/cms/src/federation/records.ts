@@ -556,7 +556,6 @@ function parseFollowers(source: string, file: string, username: string): Followe
   });
 }
 
-/** Why a follower cannot be delivered to, when one of its ids is not a URL. */
 function unreadableId(
   follower: Pick<Follower, 'actorId' | 'inboxId' | 'sharedInboxId'>,
 ): string | undefined {
