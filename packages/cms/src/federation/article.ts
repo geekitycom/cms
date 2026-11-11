@@ -41,7 +41,8 @@ import { canonicalType, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import { readAltTexts } from '../content/alt-text.ts';
 import type { AltTextLibrary } from '../content/alt-text.ts';
 import { imagesIn, uploadPath } from '../content/image-tags.ts';
-import type { DocumentLookup } from '../content/store.ts';
+import type { DocumentLookup, IndexClock } from '../content/store.ts';
+import { isFederatedDocument } from '../content/served.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
@@ -65,7 +66,8 @@ import type { CitedObject } from './citations.ts';
 import type { FederationContextData } from './federation.ts';
 import { mentionedAccounts } from './handles.ts';
 import type { MentionedAccount } from './handles.ts';
-import { currentObjectId, isObjectIdOf, naturalObjectId, readObjectIds } from './object-ids.ts';
+import { isObjectIdOf, naturalObjectId, objectIdsOf, readObjectIds } from './object-ids.ts';
+import type { ObjectIds } from './object-ids.ts';
 import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } from './paths.ts';
 import { resolvedReplyTarget } from './reply-targets.ts';
 
@@ -189,6 +191,32 @@ export function postByObjectId(
     (permalink === undefined ? undefined : store.getByPermalink(permalink));
   if (document?.type !== 'post' || postObjectId(document, baseUrl) !== natural) return undefined;
   return isObjectIdOf(readObjectIds(contentDir), natural, objectId) ? document : undefined;
+}
+
+/**
+ * The ids a post was federated under that still name it, oldest first, so the
+ * last is the one it goes by now.
+ *
+ * A trashed post keeps its permalink until a live post takes it, and the live
+ * one is then announced under a fresh revision of the same natural id. That
+ * revision is the live post's alone: a `Delete` that withdrew the trashed one
+ * under it would delete the live post on every server holding it.
+ */
+export function ownObjectIds(
+  store: DocumentLookup & IndexClock,
+  document: Document,
+  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir'>,
+): ObjectIds {
+  const ids = objectIdsOf(readObjectIds(config.contentDir), postObjectId(document, config.baseUrl));
+  const [natural, ...reissued] = ids;
+  const current = reissued.at(-1);
+  if (current === undefined || isFederatedDocument(document, store.now())) return ids;
+  const holder = postByObjectId(store, current, config);
+  const heldByAnother =
+    holder !== undefined &&
+    holder.path !== document.path &&
+    isFederatedDocument(holder, store.now());
+  return heldByAnother ? [natural, ...reissued.slice(0, -1)] : ids;
 }
 
 /** The ActivityStreams object types a post can federate as, by name. */
@@ -741,8 +769,8 @@ function replyTargetId(context: Context<FederationContextData>, inReplyTo: strin
 }
 
 export function articleObjectId(context: Context<FederationContextData>, document: Document): URL {
-  const { baseUrl, contentDir } = context.data.config;
-  return new URL(currentObjectId(readObjectIds(contentDir), postObjectId(document, baseUrl)));
+  const ids = ownObjectIds(context.data.store, document, context.data.config);
+  return new URL(ids.at(-1) ?? ids[0]);
 }
 
 /**

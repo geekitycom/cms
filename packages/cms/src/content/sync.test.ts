@@ -12,7 +12,7 @@ import { debounceFor } from './watch-debounce.ts';
 import type { WatchDebounce } from './watch-debounce.ts';
 import { heldDebounce } from '../__testing__/debounce.ts';
 import { nextEvent } from '../__testing__/wait.ts';
-import { liveWatchers } from '../__testing__/watchers.ts';
+import { heldWatchEvents, liveWatchers } from '../__testing__/watchers.ts';
 import { updateFileAtomically, writeFileAtomically } from '../files/atomic.ts';
 
 const temporaryDirs: string[] = [];
@@ -869,6 +869,66 @@ describe('the watcher', () => {
     await eventually(content, () => index.listPosts().length === 0, 'the live row to go');
     assert.equal(index.counts().trashed, 1);
   });
+
+  for (const moved of ['posts/hello.md', 'posts/2026/hello.md']) {
+    it(`reports a post renamed to ${moved} as one update of the same document`, async () => {
+      const source = markdown({
+        title: 'Hello',
+        permalink: '/2026/09/hello/',
+        date: '2026-09-02T09:00:00Z',
+      });
+      const dir = await contentDir({ 'posts/2026-09-02-hello.md': source });
+      const { sync: content, store: index, changes } = await sync(dir, { watch: true });
+      await content.start();
+      changes.length = 0;
+
+      await mkdir(path.dirname(path.join(dir, moved)), { recursive: true });
+      await rename(path.join(dir, 'posts/2026-09-02-hello.md'), path.join(dir, moved));
+      await eventually(content, () => index.getByPath(moved), 'the moved file to be indexed');
+      await caughtUp(content, dir);
+
+      assert.deepEqual(
+        besidesSentinel(changes).map((change) => [change.type, change.path, change.previous?.path]),
+        [['updated', moved, 'posts/2026-09-02-hello.md']],
+      );
+    });
+
+    it(`reports a post renamed to ${moved} as one update when the new path is heard late`, async () => {
+      const source = markdown({
+        title: 'Hello',
+        permalink: '/2026/09/hello/',
+        date: '2026-09-02T09:00:00Z',
+      });
+      const dir = await contentDir({ 'posts/2026-09-02-hello.md': source });
+      const newSegments = moved.split('/').slice(1);
+      const late = heldWatchEvents((filename) =>
+        newSegments.includes(filename.split('/').at(-1) ?? ''),
+      );
+      try {
+        const { sync: content, store: index, changes } = await sync(dir, { watch: true });
+        await content.start();
+        changes.length = 0;
+
+        await mkdir(path.dirname(path.join(dir, moved)), { recursive: true });
+        await rename(path.join(dir, 'posts/2026-09-02-hello.md'), path.join(dir, moved));
+        await eventually(content, () => changes.length > 0, 'the old path to be read');
+        late.release();
+        await eventually(content, () => index.getByPath(moved), 'the moved file to be indexed');
+        await caughtUp(content, dir);
+
+        assert.deepEqual(
+          besidesSentinel(changes).map((change) => [
+            change.type,
+            change.path,
+            change.previous?.path,
+          ]),
+          [['updated', moved, 'posts/2026-09-02-hello.md']],
+        );
+      } finally {
+        late.restore();
+      }
+    });
+  }
 
   it('keeps watching after a file it cannot parse is saved', async () => {
     let warned: (message: string) => void = () => undefined;

@@ -6,7 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import type { DocumentContent } from './document.ts';
 import { parseDocument } from './parser.ts';
-import { contentFilePath, freeSlug, saveDocument } from './save.ts';
+import { addPublishedStamp, contentFilePath, freeSlug, saveDocument } from './save.ts';
 import { openContentStore } from './sqlite/open.ts';
 import type { ContentStore } from './store.ts';
 
@@ -203,6 +203,107 @@ describe('saveDocument, dates', () => {
       }),
       TypeError,
     );
+  });
+});
+
+describe('addPublishedStamp', () => {
+  const FILE = 'posts/2026-09-02-hello-world.md';
+  const PUBLISHED = '2026-09-02T10:00:00Z';
+
+  function hashOf(source: string): string {
+    return parseDocument(source, { path: FILE }).hash;
+  }
+
+  async function stamped(source: string): Promise<{ text: string; indexed: string | undefined }> {
+    const { contentDir, store } = await scratch();
+    await mkdir(path.join(contentDir, 'posts'), { recursive: true });
+    await writeFile(path.join(contentDir, FILE), source, 'utf8');
+    await addPublishedStamp({
+      contentDir,
+      store,
+      path: FILE,
+      published: PUBLISHED,
+      hash: hashOf(source),
+    });
+    return {
+      text: await readFile(path.join(contentDir, FILE), 'utf8'),
+      indexed: store.getByPath(FILE)?.activitypub?.published,
+    };
+  }
+
+  it('keeps a file’s Windows line endings', async () => {
+    const { text, indexed } = await stamped(
+      '---\r\ntitle: Hello\r\npermalink: /hello/\r\n---\r\n\r\nBody.\r\n',
+    );
+    assert.equal(
+      text,
+      "---\r\ntitle: Hello\r\npermalink: /hello/\r\nactivitypub:\r\n  published: '2026-09-02T10:00:00Z'\r\n---\r\n\r\nBody.\r\n",
+    );
+    assert.equal(indexed, '2026-09-02T10:00:00Z');
+  });
+
+  it('indents the stamp as the block it joins is indented', async () => {
+    const { text } = await stamped(
+      '---\ntitle: Hello\npermalink: /hello/\nactivitypub: # mine\n    # the type I want\n    type: Note\n---\n',
+    );
+    assert.equal(
+      text,
+      "---\ntitle: Hello\npermalink: /hello/\nactivitypub: # mine\n    published: '2026-09-02T10:00:00Z'\n    # the type I want\n    type: Note\n---\n",
+    );
+  });
+
+  it('refuses an activitypub block it cannot add a line to, and writes nothing', async () => {
+    const { contentDir, store } = await scratch();
+    await mkdir(path.join(contentDir, 'posts'), { recursive: true });
+    const source = '---\ntitle: Hello\npermalink: /hello/\nactivitypub: { type: Note }\n---\n';
+    await writeFile(path.join(contentDir, FILE), source, 'utf8');
+
+    await assert.rejects(
+      addPublishedStamp({
+        contentDir,
+        store,
+        path: FILE,
+        published: PUBLISHED,
+        hash: hashOf(source),
+      }),
+    );
+    assert.equal(await readFile(path.join(contentDir, FILE), 'utf8'), source);
+  });
+
+  it('writes nothing when the file no longer holds the version being stamped', async () => {
+    const { contentDir, store } = await scratch();
+    await mkdir(path.join(contentDir, 'posts'), { recursive: true });
+    const announced = '---\ntitle: Hello\npermalink: /hello/\n---\n\nBody.\n';
+    const edited = '---\ntitle: Hello\npermalink: /hello/\n---\n\nA later edit.\n';
+    await writeFile(path.join(contentDir, FILE), edited, 'utf8');
+
+    const result = await addPublishedStamp({
+      contentDir,
+      store,
+      path: FILE,
+      published: PUBLISHED,
+      hash: hashOf(announced),
+    });
+
+    assert.equal(result, undefined);
+    assert.equal(await readFile(path.join(contentDir, FILE), 'utf8'), edited);
+    assert.equal(store.getByPath(FILE), undefined, 'and the index is not touched');
+  });
+
+  it('writes nothing when the file is gone', async () => {
+    const { contentDir, store } = await scratch();
+    const source = '---\ntitle: Hello\npermalink: /hello/\n---\n';
+
+    const result = await addPublishedStamp({
+      contentDir,
+      store,
+      path: FILE,
+      published: PUBLISHED,
+      hash: hashOf(source),
+    });
+
+    assert.equal(result, undefined);
+    await assert.rejects(readFile(path.join(contentDir, FILE), 'utf8'));
   });
 });
 

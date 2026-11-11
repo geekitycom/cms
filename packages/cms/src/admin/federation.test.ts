@@ -120,6 +120,8 @@ async function federationForm(agent: Browser): Promise<{ html: string; token: st
   return { html, token };
 }
 
+const POST_FILE = 'posts/2026-03-04-hello-world.md';
+
 /** Publish a post through the editor, which is what sets a delivery going. */
 async function publishPost(agent: Browser, cms: Cms): Promise<void> {
   const token = csrfField(await (await agent.get('/admin/posts/new')).text());
@@ -581,10 +583,15 @@ describe('failed deliveries', () => {
   it('queues a retry of that post to that inbox, and the failure goes once it lands', async () => {
     const { cms, agent } = await failedPost();
     const { token } = await federationForm(agent);
+    assert.match(
+      failuresSection(await federationScreen(agent)),
+      new RegExp(`name="path" value="${POST_FILE}"`),
+      'the Retry form names the post by its file',
+    );
 
     const response = await agent.post('/admin/federation/retry', {
       csrf_token: token,
-      slug: 'hello-world',
+      path: POST_FILE,
       inbox: REMOTE_INBOX,
     });
 
@@ -592,7 +599,7 @@ describe('failed deliveries', () => {
     assert.equal(response.headers.get('location'), '/admin/federation#failures');
     const queued = await cms.jobs.latest(RETRY_DELIVERIES_JOB.name);
     assert.equal(queued?.state, 'queued');
-    assert.deepEqual(queued.payload, { slug: 'hello-world', inbox: REMOTE_INBOX });
+    assert.deepEqual(queued.payload, { path: POST_FILE, inbox: REMOTE_INBOX });
 
     await cms.jobs.run(queued.id);
     await cms.delivery.settled();
@@ -634,7 +641,7 @@ async function recordResend(cms: Cms, state: JobState): Promise<void> {
   await createFileRecords(path.join(cms.config.dataDir, 'jobs.json')).create({
     id: `resend-${state.state}`,
     name: RESEND_JOB.name,
-    payload: { slugs: 'all', webmentions: false },
+    payload: { paths: 'all', webmentions: false },
     queuedAt: '2026-10-14T09:00:00.000Z',
     ...state,
   });
@@ -650,21 +657,28 @@ describe('resending a post', () => {
     assert.equal(deliveries.length, 1, 'publishing delivered once');
     const announced = deliveries[0]?.body['id'];
 
-    const { token } = await federationForm(agent);
+    const { token, html: screen } = await federationForm(agent);
+    assert.match(
+      screen,
+      new RegExp(`name="path" value="${POST_FILE}"`),
+      'the Resend form names the post by its file',
+    );
     const response = await agent.post('/admin/federation/resend', {
       csrf_token: token,
-      slug: 'hello-world',
+      path: POST_FILE,
     });
 
     assert.equal(response.status, 303);
     assert.equal(response.headers.get('location'), '/admin/federation/resend');
     const queued = await cms.jobs.latest(RESEND_JOB.name);
     assert.equal(queued?.state, 'queued', 'the request did not wait for the resend');
-    assert.deepEqual(queued.payload, { slugs: ['hello-world'], webmentions: true });
+    assert.deepEqual(queued.payload, { paths: [POST_FILE], webmentions: true });
     assert.equal(deliveries.length, 1, 'nothing was sent inside the request');
 
     const html = await resendScreen(agent);
-    assert.ok(flashes(html).some((flash) => /Queued a resend of hello-world/.test(flash.message)));
+    assert.ok(
+      flashes(html).some((flash) => flash.message.startsWith(`Queued a resend of ${POST_FILE}.`)),
+    );
     assert.match(resendSection(html), />Queued</);
 
     const finished = await cms.jobs.run(queued.id);
@@ -677,7 +691,7 @@ describe('resending a post', () => {
 
     assert.match(
       resendSection(await resendScreen(agent)),
-      /hello-world<\/code>: Update reached 1 of 1 inbox/,
+      /hello-world\.md<\/code>: Update reached 1 of 1 inbox/,
     );
   });
 
@@ -698,7 +712,7 @@ describe('resending a post', () => {
     assert.equal(response.headers.get('location'), '/admin/federation/resend');
     const queued = await cms.jobs.latest(RESEND_JOB.name);
     assert.equal(queued?.state, 'queued');
-    assert.deepEqual(queued.payload, { slugs: 'all', webmentions: false });
+    assert.deepEqual(queued.payload, { paths: 'all', webmentions: false });
     assert.equal(deliveries.length, 1, 'nothing was sent inside the request');
 
     const again = await agent.post('/admin/federation/resend-all', { csrf_token: token });
@@ -719,7 +733,7 @@ describe('resending a post', () => {
     assert.equal(deliveries.length, 2);
     assert.match(
       resendSection(await resendScreen(agent)),
-      /Resent 1 post to 1 inbox: 1 reached\..*<details[^>]*>.*hello-world<\/code>: Update reached 1 of 1 inbox/,
+      /Resent 1 post to 1 inbox: 1 reached\..*<details[^>]*>.*hello-world\.md<\/code>: Update reached 1 of 1 inbox/,
     );
   });
 
@@ -750,7 +764,7 @@ describe('resending a post', () => {
       result: {
         posts: [
           {
-            slug: 'hello-world',
+            path: 'posts/2026-03-04-hello-world.md',
             resent: true,
             activity: {
               activityType: 'Update',
@@ -763,7 +777,7 @@ describe('resending a post', () => {
             webmentions: { pages: 2, told: 1, none: 1, failed: 0 },
           },
           {
-            slug: 'quiet',
+            path: 'posts/2026-03-04-quiet.md',
             resent: true,
             activity: {
               activityType: 'Update',
@@ -775,7 +789,7 @@ describe('resending a post', () => {
             },
             webmentions: null,
           },
-          { slug: 'nothing-of-the-sort', resent: false },
+          { path: 'posts/2026-03-04-nothing-of-the-sort.md', resent: false },
         ],
       },
     });
@@ -786,11 +800,11 @@ describe('resending a post', () => {
     assert.match(section, /Resent 2 posts to 3 inboxes: 2 reached, <span[^>]*>1 failed<\/span>\./);
     assert.match(
       section,
-      /hello-world<\/code>: Update reached 2 of 3 inboxes, <span[^>]*>1 failed<\/span>\./,
+      /hello-world\.md<\/code>: Update reached 2 of 3 inboxes, <span[^>]*>1 failed<\/span>\./,
     );
     assert.match(section, /Webmentions to 2 linked pages: 1 told, 1 take none, 0 failed/);
-    assert.match(section, /quiet<\/code>: dev mode held the Update, nothing was sent/);
-    assert.match(section, /Nothing to resend: <code[^>]*>nothing-of-the-sort<\/code>/);
+    assert.match(section, /quiet\.md<\/code>: dev mode held the Update, nothing was sent/);
+    assert.match(section, /Nothing to resend: <code[^>]*>[^<]*nothing-of-the-sort\.md<\/code>/);
     assert.match(section, /Resend every announced post<\/button>/);
   });
 

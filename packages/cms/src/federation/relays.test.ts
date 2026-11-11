@@ -574,7 +574,7 @@ describe('delivering to a relay', () => {
 
     // A resend of a post the relay already has is an `Update`: the activity is
     // rebuilt from the file rather than replayed (decision-9).
-    const report = await cms.delivery.resend('hello-world');
+    const report = await cms.delivery.resend('posts/2026-03-04-hello-world.md');
     await cms.delivery.settled();
 
     assert.equal(ofType('Update').length, 1);

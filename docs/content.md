@@ -299,7 +299,14 @@ time. It debounces changes by 100 ms, so a burst of writes causes one re-parse.
 - **A file that does not parse** is logged and skipped. Its old row stays.
   Neither the scan nor the watcher stops.
 - **Renames.** Trashing and restoring are renames. A rename briefly leaves two
-  rows with one permalink. The row whose file is gone is dropped.
+  rows with one permalink. The row whose file is gone is dropped. The watcher
+  reports a file that changes path but keeps its permalink as one `updated`
+  event for the new path, with the old document as `previous`, not as a
+  `deleted` and a `created`. A federated post therefore keeps its object id,
+  and followers get at most an `Update`. Before the watcher drops the row of
+  a file that is gone, it reads every document on disk that is not indexed
+  yet. A moved file therefore takes the row over, however late the watcher
+  reports its new path.
 
 Each change emits an event that a site can act on. See
 [Hooks](plugins.md#hooks).
@@ -377,7 +384,8 @@ does not change it.
 Files written by hand keep working. The CMS reads a `date` with an offset, or
 one that YAML parses as a timestamp, as the instant it names. It sorts and
 schedules the post by that instant. It rewrites the date as UTC the next time
-the CMS saves that file. A scan never rewrites it. A hand-written file with no
+the CMS saves that file. A scan never rewrites it, and neither does the
+federation's `activitypub.published` stamp, which adds one line to the file. A hand-written file with no
 `permalink` still resolves to the URL Eleventy gives it, which Eleventy builds
 from the date as the file writes it.
 

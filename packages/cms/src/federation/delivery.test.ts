@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { watch } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
@@ -24,6 +24,7 @@ import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { signedInAs } from './__testing__/session.ts';
 import { addFollower } from './records.ts';
+import { resendJob } from './resend-job.ts';
 import { retryDeliveriesJob } from './retry-job.ts';
 import { SITE } from '../site/namespace.ts';
 import { readDevModeRecord } from '../settings/dev-mode.ts';
@@ -469,6 +470,12 @@ async function submitEditor(
   });
 }
 
+function pathOf(cms: Cms, slug: string): string {
+  const document = cms.store.getBySlug(slug);
+  assert.ok(document, `no post has the slug ${slug}`);
+  return document.path;
+}
+
 /** Every delivery whose activity is of this type. */
 function delivered(type: string): Delivery[] {
   return deliveries.filter((delivery) => delivery.body['type'] === type);
@@ -545,6 +552,14 @@ ${body}
 `;
 }
 
+/** {@link publishedPost} carrying the stamp that says its followers were told. */
+function announcedPost(body: string): string {
+  return publishedPost(body).replace(
+    'tags:',
+    "activitypub:\n  published: '2026-03-04T10:00:00Z'\ntags:",
+  );
+}
+
 describe('publishing a post from the admin', () => {
   it('delivers a Create of the Article to the follower’s shared inbox', async () => {
     const { cms } = await site();
@@ -585,6 +600,137 @@ describe('publishing a post from the admin', () => {
     const indexed = cms.store.getBySlug('hello-world');
     assert.equal(indexed?.activitypub?.id, undefined);
     assert.equal(indexed?.activitypub?.published, '2026-03-04T10:00:00Z');
+  });
+});
+
+describe('a publish whose Create never went out', () => {
+  it('leaves the post unstamped when the Create threw, so a resend sends a Create', async () => {
+    const { cms, contentDir } = await site();
+    const objectIds = path.join(contentDir, '_data', 'federation', 'objectIds.json');
+    await mkdir(path.dirname(objectIds), { recursive: true });
+    await writeFile(objectIds, '<<<<<<< HEAD\n', 'utf8');
+    const agent = signedInAs(cms, ADA);
+
+    const response = await publishNewPost(agent);
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+    assert.deepEqual(deliveries, [], 'the damaged objectIds.json stopped the Create');
+    const source = await readFile(
+      path.join(contentDir, 'posts', '2026-03-04-hello-world.md'),
+      'utf8',
+    );
+    assert.doesNotMatch(source, /^activitypub:$/m, 'no stamp for a Create that never went out');
+
+    await rm(objectIds);
+    const report = await cms.delivery.resend(pathOf(cms, 'hello-world'));
+    assert.equal(report?.activityType, 'Create');
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(
+      cms.store.getBySlug('hello-world')?.activitypub?.published,
+      '2026-03-04T10:00:00Z',
+    );
+  });
+
+  it('resends a post first published while dev mode held its Create as a Create', async () => {
+    const { cms } = await site();
+    await cms.settings.set('dev_mode', new Map([['on', true]]), 'cli');
+    const agent = signedInAs(cms, ADA);
+
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    assert.deepEqual(deliveries, [], 'dev mode held the Create');
+    assert.equal(cms.store.getBySlug('hello-world')?.activitypub?.published, undefined);
+
+    await cms.settings.set('dev_mode', new Map([['on', false]]), 'cli');
+    const report = await cms.delivery.resend(pathOf(cms, 'hello-world'));
+    assert.equal(report?.activityType, 'Create');
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+  });
+});
+
+describe('a save while the post’s Create is still on its way', () => {
+  it('answers without waiting for an inbox that has not answered', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    let openInboxes = (): void => undefined;
+    inboxes = new Promise((resolve) => {
+      openInboxes = resolve;
+    });
+
+    const response = await publishNewPost(agent);
+    assert.equal(response.status, 303, await response.text());
+    assert.deepEqual(deliveries, [], 'the inbox has not answered yet');
+
+    openInboxes();
+    await cms.delivery.settled();
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+  });
+
+  it('sends an edit saved before the Create went out as an Update, and stamps the edit', async () => {
+    const { cms, contentDir } = await site();
+    const agent = signedInAs(cms, ADA);
+    let openInboxes = (): void => undefined;
+    inboxes = new Promise((resolve) => {
+      openInboxes = resolve;
+    });
+    await publishNewPost(agent);
+
+    const response = await submitEditor(agent, '/admin/posts/hello-world', {
+      body: 'The first post, revised.',
+    });
+    assert.equal(response.status, 303, await response.text());
+    openInboxes();
+    await cms.delivery.settled();
+
+    const source = await readFile(
+      path.join(contentDir, 'posts', '2026-03-04-hello-world.md'),
+      'utf8',
+    );
+    assert.match(source, /The first post, revised\./);
+    assert.match(source, /^ {2}published: '2026-03-04T10:00:00Z'$/m);
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(delivered('Update').length, 1, `saw ${JSON.stringify(deliveries)}`);
+  });
+
+  it('takes a second save from an editor loaded before the stamp, and keeps both', async () => {
+    const { cms, contentDir } = await site();
+    const agent = signedInAs(cms, ADA);
+    let openInboxes = (): void => undefined;
+    inboxes = new Promise((resolve) => {
+      openInboxes = resolve;
+    });
+    await publishNewPost(agent);
+    const html = await (await agent.get('/admin/posts/hello-world')).text();
+    openInboxes();
+    await cms.delivery.settled();
+    assert.equal(
+      cms.store.getBySlug('hello-world')?.activitypub?.published,
+      '2026-03-04T10:00:00Z',
+    );
+
+    const response = await agent.post('/admin/posts/hello-world', {
+      csrf_token: csrfField(html) ?? '',
+      hash: field(html, 'hash') ?? '',
+      title: field(html, 'title') ?? '',
+      slug: field(html, 'slug') ?? '',
+      permalink: field(html, 'permalink') ?? '',
+      date: field(html, 'date') ?? '',
+      tags: field(html, 'tags') ?? '',
+      description: '',
+      body: 'The first post, revised.',
+      action: 'update',
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    const source = await readFile(
+      path.join(contentDir, 'posts', '2026-03-04-hello-world.md'),
+      'utf8',
+    );
+    assert.match(source, /The first post, revised\./);
+    assert.match(source, /^ {2}published: '2026-03-04T10:00:00Z'$/m);
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(delivered('Update').length, 1, `saw ${JSON.stringify(deliveries)}`);
   });
 });
 
@@ -686,6 +832,25 @@ describe('a scheduled post', () => {
     await cms.delivery.settled();
 
     assert.equal(delivered('Create').length, 1, 'and only once');
+  });
+
+  it('federates one Create for a post published live with a date after the scheduler last ran', async () => {
+    let now = new Date('2026-09-03T12:00:00Z');
+    const { cms } = await site({ now: () => now });
+    const agent = signedInAs(cms, ADA);
+    await cms.scheduler.start();
+
+    now = new Date('2026-09-03T12:05:00Z');
+    const response = await publishNewPost(agent, { date: '2026-09-03T12:04:00.000Z' });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+    assert.equal(await cms.scheduler.run(), 0, 'the scheduler had nothing left to publish');
+    await cms.delivery.settled();
+
+    assert.deepEqual(
+      deliveries.map((delivery) => delivery.body['type']),
+      ['Create'],
+    );
   });
 
   it('withdraws a published post whose date is pushed into the future', async () => {
@@ -1149,7 +1314,7 @@ describe('likes, reposts and bookmarks (TASK-169 AC #3)', () => {
     const { cms } = await cite('like-of', STATUS_URL);
     deliveries.length = 0;
 
-    const report = await cms.delivery.resend('cited');
+    const report = await cms.delivery.resend(pathOf(cms, 'cited'));
 
     assert.equal(report?.activityType, 'Like');
     const id = `${BASE_URL}/2026/03/cited/#like/${encodeURIComponent(STATUS_ID)}`;
@@ -1307,7 +1472,7 @@ describe('a reply to a fediverse status (TASK-240)', () => {
     const { cms } = await reply(STATUS_URL);
     deliveries.length = 0;
 
-    await cms.delivery.resend('answer');
+    await cms.delivery.resend(pathOf(cms, 'answer'));
 
     const updates = delivered('Update');
     assert.deepEqual(
@@ -1512,6 +1677,77 @@ describe('a post that comes back after its Delete (TASK-417)', () => {
     assert.equal((creates[0] as Delivery).body['id'], `${PERMALINK_ID}?v=2#create`);
   });
 
+  /** Post A announced and trashed, then a live post B announced at A's permalink. */
+  async function trashedUnderLivePost(): Promise<{
+    cms: Cms;
+    contentDir: string;
+    trashed: string;
+  }> {
+    const { cms, contentDir } = await site();
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'trash', return: '' });
+    await cms.delivery.settled();
+    const trashed = pathOf(cms, 'hello-world');
+
+    // Dated before the trashed post, so a walk of the announced posts, newest
+    // first, meets the trashed one first.
+    const response = await publishNewPost(agent, {
+      title: 'Another',
+      slug: 'another',
+      permalink: '/2026/03/hello-world/',
+      date: '2026-03-01T10:00:00.000Z',
+      body: 'The live post.',
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+    assert.equal(objectOf(delivered('Create').at(-1))['id'], `${PERMALINK_ID}?v=2`);
+    deliveries.length = 0;
+    return { cms, contentDir, trashed };
+  }
+
+  it('resends a trashed post’s Delete under its own id, not the live post’s at its permalink', async () => {
+    const { cms, contentDir, trashed } = await trashedUnderLivePost();
+
+    await cms.delivery.resend(trashed);
+    await cms.delivery.settled();
+
+    assert.deepEqual(
+      delivered('Delete').map((delivery) => objectOf(delivery)['id']),
+      [PERMALINK_ID],
+    );
+    const record = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'federation', 'objectIds.json'), 'utf8'),
+    ) as { deleted: string[] };
+    assert.deepEqual(record.deleted, [PERMALINK_ID]);
+  });
+
+  it('retries a failed Create of the live post’s id as the live post, not the trashed one', async () => {
+    const { cms } = await trashedUnderLivePost();
+    cms.admin.recordDelivery({
+      activityId: `${PERMALINK_ID}?v=2#create`,
+      activityType: 'Create',
+      objectId: `${PERMALINK_ID}?v=2`,
+      slug: 'hello-world',
+      actorId: REMOTE_ACTOR,
+      inboxId: REMOTE_SHARED_INBOX,
+      status: 'failed',
+      error: 'HTTP 503',
+    });
+
+    await retryDeliveriesJob(cms, () => Promise.resolve()).run(
+      { path: null, inbox: REMOTE_SHARED_INBOX },
+      { signal: new AbortController().signal, attempt: 1, progress: () => Promise.resolve() },
+    );
+
+    assert.deepEqual(delivered('Delete'), [], 'nothing was withdrawn');
+    assert.deepEqual(
+      delivered('Create').map((delivery) => objectOf(delivery)['id']),
+      [`${PERMALINK_ID}?v=2`],
+    );
+  });
+
   it('announces a post published again from a draft under a fresh id each time (AC #1)', async () => {
     const { cms } = await site();
     const agent = signedInAs(cms, ADA);
@@ -1572,7 +1808,7 @@ describe('a post that comes back after its Delete (TASK-417)', () => {
     await submitEditor(agent, '/admin/posts/hello-world', { body: 'Edited.' });
     await cms.delivery.settled();
 
-    const response = await cms.delivery.resend('hello-world');
+    const response = await cms.delivery.resend(pathOf(cms, 'hello-world'));
     await cms.delivery.settled();
     assert.equal(response?.objectId, PERMALINK_ID);
     for (const delivery of deliveries) {
@@ -1612,7 +1848,7 @@ describe('a post that comes back after its Delete (TASK-417)', () => {
     );
     await cms.sync();
     deliveries.length = 0;
-    await cms.delivery.resend('hello-world');
+    await cms.delivery.resend(pathOf(cms, 'hello-world'));
     await cms.delivery.settled();
 
     const creates = delivered('Create');
@@ -1668,7 +1904,7 @@ describe('a Delete sent before objectIds.json kept a record of it (TASK-417)', (
     );
     await cms.sync();
     deliveries.length = 0;
-    await cms.delivery.resend('hello-world');
+    await cms.delivery.resend(pathOf(cms, 'hello-world'));
     await cms.delivery.settled();
 
     const creates = delivered('Create');
@@ -1687,13 +1923,13 @@ describe('editing a published post file on disk', () => {
     const { cms, contentDir } = await site({
       watch: true,
       account: true,
-      files: { [POST_FILE]: publishedPost('The version everybody already has.') },
+      files: { [POST_FILE]: announcedPost('The version everybody already has.') },
     });
     await cms.serve();
     await cms.delivery.settled();
     assert.deepEqual(deliveries, [], 'the boot scan announced nothing');
 
-    await writeDocument(contentDir, POST_FILE, publishedPost('A second thought, written later.'));
+    await writeDocument(contentDir, POST_FILE, announcedPost('A second thought, written later.'));
 
     const update = await waitForDelivery('Update');
     assert.equal(update.url, REMOTE_SHARED_INBOX);
@@ -1709,6 +1945,80 @@ describe('editing a published post file on disk', () => {
     await cms.delivery.settled();
     assert.equal(delivered('Update').length, 1, `saw ${JSON.stringify(deliveries)}`);
     assert.equal(delivered('Create').length, 0, 'an edit is not a new post');
+  });
+
+  it('delivers a Create when the post was served but never announced', async () => {
+    const { cms, contentDir } = await site({
+      watch: true,
+      account: true,
+      files: { [POST_FILE]: publishedPost('Written while the server was down.') },
+    });
+    await cms.serve();
+    await cms.delivery.settled();
+    assert.deepEqual(deliveries, [], 'the boot scan announced nothing');
+
+    await writeDocument(contentDir, POST_FILE, publishedPost('A second thought, written later.'));
+
+    const create = await waitForDelivery('Create');
+    const object = create.body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], `${BASE_URL}/2026/03/watched/`);
+    assert.match(String(object['content']), /A second thought, written later\./);
+
+    await cms.delivery.settled();
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(delivered('Update').length, 0, 'no follower holds a copy to update');
+    assert.match(
+      await readFile(path.join(contentDir, POST_FILE), 'utf8'),
+      /^ {2}published: /m,
+      'and the post is stamped as announced',
+    );
+  });
+});
+
+describe('a post file moved to another path on disk with its permalink unchanged', () => {
+  const OLD_FILE = 'posts/2026-03-04-watched.md';
+  const OBJECT_ID = `${BASE_URL}/2026/03/watched/`;
+
+  async function moveTo(newFile: string): Promise<void> {
+    const { cms, contentDir } = await site({
+      watch: true,
+      account: true,
+      files: {
+        [OLD_FILE]: announcedPost('Body.'),
+      },
+    });
+    await cms.serve();
+    await cms.delivery.settled();
+    assert.deepEqual(deliveries, [], 'the boot scan announced nothing');
+
+    await mkdir(path.dirname(path.join(contentDir, newFile)), { recursive: true });
+    await rename(path.join(contentDir, OLD_FILE), path.join(contentDir, newFile));
+    await nextEvent('the move to be indexed', (done) => {
+      const timer = setInterval(() => {
+        if (
+          cms.store.getByPath(newFile) !== undefined &&
+          cms.store.getByPath(OLD_FILE) === undefined
+        ) {
+          done(undefined);
+        }
+      }, 20);
+      return () => clearInterval(timer);
+    });
+    await cms.delivery.settled();
+
+    assert.deepEqual(delivered('Delete'), [], 'the post was not withdrawn');
+    assert.deepEqual(delivered('Create'), [], 'the post was not announced again');
+    for (const update of delivered('Update')) {
+      assert.equal((update.body['object'] as Record<string, unknown>)['id'], OBJECT_ID);
+    }
+  }
+
+  it('keeps its object id when renamed in the same folder', async () => {
+    await moveTo('posts/watched.md');
+  });
+
+  it('keeps its object id when moved into a new folder', async () => {
+    await moveTo('posts/2026/watched.md');
   });
 });
 
@@ -1733,7 +2043,7 @@ describe('a post file whose permalink is moved away and back on disk (TASK-417 A
     const { cms, contentDir } = await site({
       watch: true,
       account: true,
-      files: { [POST_FILE]: publishedPost('Where it started.') },
+      files: { [POST_FILE]: announcedPost('Where it started.') },
     });
     await cms.serve();
     await cms.delivery.settled();
@@ -1741,7 +2051,7 @@ describe('a post file whose permalink is moved away and back on disk (TASK-417 A
     await writeDocument(
       contentDir,
       POST_FILE,
-      publishedPost('Moved.').replace('/2026/03/watched/', '/2026/03/moved/'),
+      announcedPost('Moved.').replace('/2026/03/watched/', '/2026/03/moved/'),
     );
     await waitForCount('Create', 1);
     await cms.delivery.settled();
@@ -1750,7 +2060,7 @@ describe('a post file whose permalink is moved away and back on disk (TASK-417 A
       [FIRST],
     );
 
-    await writeDocument(contentDir, POST_FILE, publishedPost('Back where it started.'));
+    await writeDocument(contentDir, POST_FILE, announcedPost('Back where it started.'));
     const creates = await waitForCount('Create', 2);
     await cms.delivery.settled();
 
@@ -1899,7 +2209,7 @@ describe('a user whose record carries a stored actor id', () => {
   it('names the stored id as the actor of a Create, and signs with its key (AC #3)', async () => {
     const { cms } = await migrated();
 
-    const report = await cms.delivery.resend('watched');
+    const report = await cms.delivery.resend(pathOf(cms, 'watched'));
     await cms.delivery.settled();
 
     assert.equal(report?.activityType, 'Create');
@@ -1918,7 +2228,7 @@ describe('a user whose record carries a stored actor id', () => {
 
   it('names it on an Update and on a Delete as well (AC #3)', async () => {
     const { cms, contentDir } = await migrated();
-    await cms.delivery.resend('watched');
+    await cms.delivery.resend(pathOf(cms, 'watched'));
     await cms.delivery.settled();
     // The Create stamped the announcement into the file; the index re-reads it,
     // so the next resend knows the followers already hold this post.
@@ -1926,7 +2236,7 @@ describe('a user whose record carries a stored actor id', () => {
     deliveries.length = 0;
 
     // A post the followers already hold goes out again as an Update.
-    await cms.delivery.resend('watched');
+    await cms.delivery.resend(pathOf(cms, 'watched'));
     await cms.delivery.settled();
     assert.equal((delivered('Update')[0] as Delivery).body['actor'], STORED);
 
@@ -1934,7 +2244,7 @@ describe('a user whose record carries a stored actor id', () => {
     deliveries.length = 0;
     await writeDocument(contentDir, POST_FILE, draftedPost());
     await cms.sync();
-    await cms.delivery.resend('watched');
+    await cms.delivery.resend(pathOf(cms, 'watched'));
     await cms.delivery.settled();
 
     const withdrawal = delivered('Delete')[0] as Delivery;
@@ -1995,7 +2305,7 @@ describe('with the clock pinned through createCms', () => {
     await cms.sync();
     deliveries.length = 0;
 
-    const report = await cms.delivery.resend('hello-world');
+    const report = await cms.delivery.resend(pathOf(cms, 'hello-world'));
 
     const expected = `${PUBLISHED_OBJECT}#update/${encodeURIComponent(PINNED)}`;
     assert.equal(report?.activityId, expected);
@@ -2045,7 +2355,7 @@ describe('resending a post', () => {
     await cms.sync();
     deliveries.length = 0;
 
-    const report = await cms.delivery.resend('hello-world');
+    const report = await cms.delivery.resend(pathOf(cms, 'hello-world'));
     assert.ok(report !== undefined, 'the post was found and sent');
     assert.equal(report.activityType, 'Update');
     assert.equal(report.objectId, PUBLISHED_OBJECT);
@@ -2071,9 +2381,9 @@ describe('resending a post', () => {
     // Nothing about the post moves between them, so an id derived from its
     // content — which is what a save uses — would be the same id twice, and a
     // peer is entitled to ignore an activity id it has already seen.
-    const first = await cms.delivery.resend('hello-world');
+    const first = await cms.delivery.resend(pathOf(cms, 'hello-world'));
     now = new Date('2026-03-05T10:00:01.000Z');
-    const second = await cms.delivery.resend('hello-world');
+    const second = await cms.delivery.resend(pathOf(cms, 'hello-world'));
 
     assert.ok(first !== undefined && second !== undefined);
     assert.equal(first.objectId, second.objectId, 'both were about the same post');
@@ -2090,7 +2400,7 @@ describe('resending a post', () => {
     });
     assert.deepEqual(deliveries, [], 'the scan announced nothing');
 
-    const report = await cms.delivery.resend('watched');
+    const report = await cms.delivery.resend(pathOf(cms, 'watched'));
     assert.equal(report?.activityType, 'Create');
 
     const creates = delivered('Create');
@@ -2115,7 +2425,7 @@ describe('resending a post', () => {
     const withdrawn = String((delivered('Delete')[0] as Delivery).body['id']);
     deliveries.length = 0;
 
-    const report = await cms.delivery.resend('hello-world');
+    const report = await cms.delivery.resend(pathOf(cms, 'hello-world'));
     assert.equal(report?.activityType, 'Delete');
 
     const deletes = delivered('Delete');
@@ -2138,7 +2448,7 @@ describe('resending a post', () => {
     await cms.delivery.settled();
     deliveries.length = 0;
 
-    const report = await cms.delivery.resend('hello-world');
+    const report = await cms.delivery.resend(pathOf(cms, 'hello-world'));
 
     assert.equal(report?.activityType, 'Delete');
     const object = (delivered('Delete')[0] as Delivery).body['object'] as Record<string, unknown>;
@@ -2151,7 +2461,7 @@ describe('resending a post', () => {
     await publishNewPost(agent);
     await cms.delivery.settled();
 
-    const report = await cms.delivery.resend('hello-world');
+    const report = await cms.delivery.resend(pathOf(cms, 'hello-world'));
     assert.ok(report !== undefined);
 
     assert.deepEqual(
@@ -2163,10 +2473,10 @@ describe('resending a post', () => {
     assert.equal(last?.slug, 'hello-world');
   });
 
-  it('answers undefined for a slug no post answers to', async () => {
+  it('answers undefined for a path no post is at', async () => {
     const { cms } = await site();
 
-    assert.equal(await cms.delivery.resend('nothing-of-the-sort'), undefined);
+    assert.equal(await cms.delivery.resend('posts/2026-03-04-nothing-of-the-sort.md'), undefined);
     assert.deepEqual(deliveries, [], 'and nothing was sent');
   });
 
@@ -2175,8 +2485,165 @@ describe('resending a post', () => {
       files: { 'posts/2026-03-04-secret.md': draftPost() },
     });
 
-    assert.equal(await cms.delivery.resend('secret'), undefined);
+    assert.equal(await cms.delivery.resend(pathOf(cms, 'secret')), undefined);
     assert.deepEqual(deliveries, [], 'there is no copy anywhere to withdraw');
+  });
+
+  describe('of a post that changes before its Create is stamped', () => {
+    const FILE = 'posts/2026-03-04-watched.md';
+
+    /** Publish another post and wait until its Create is in flight, blocking the queue. */
+    async function holdTheQueue(agent: Browser): Promise<() => void> {
+      let release = (): void => undefined;
+      inboxes = new Promise((resolve) => {
+        release = resolve;
+      });
+      postsBegun = 0;
+      await publishNewPost(agent);
+      await nextEvent('the blocking POST', (done) => {
+        const check = () => {
+          if (postsBegun > 0) done(undefined);
+        };
+        check();
+        arrivals.add(check);
+        return () => arrivals.delete(check);
+      });
+      return release;
+    }
+
+    it('does not mark an edit made on disk since the index read the post as announced', async () => {
+      const { cms, contentDir } = await site({
+        account: true,
+        files: { [FILE]: publishedPost('Published, but never announced.') },
+      });
+      const absolute = path.join(contentDir, ...FILE.split('/'));
+      await writeFile(absolute, publishedPost('A newer edit on disk.'), 'utf8');
+
+      const report = await cms.delivery.resend(FILE);
+      assert.equal(report?.activityType, 'Create');
+
+      const source = await readFile(absolute, 'utf8');
+      assert.match(source, /A newer edit on disk\./, source);
+      assert.doesNotMatch(source, /published:/, 'no follower has been sent this version');
+    });
+
+    it('sends nothing for a post trashed while the resend waited, and does not bring it back', async () => {
+      const { cms, contentDir } = await site({
+        files: { [FILE]: publishedPost('Published, but never announced.') },
+      });
+      const agent = signedInAs(cms, ADA);
+      const absolute = path.join(contentDir, ...FILE.split('/'));
+      const release = await holdTheQueue(agent);
+
+      const resending = cms.delivery.resend(FILE);
+      const trashed = await submitEditor(agent, '/admin/posts/watched', {
+        action: 'trash',
+        return: '',
+      });
+      assert.equal(trashed.status, 303, await trashed.text());
+      release();
+
+      assert.equal(await resending, undefined);
+      await cms.delivery.settled();
+      await assert.rejects(readFile(absolute, 'utf8'), 'the old path stays empty');
+      assert.ok(
+        delivered('Create').every(
+          (create) =>
+            (create.body['object'] as Record<string, unknown>)['id'] !==
+            `${BASE_URL}/2026/03/watched/`,
+        ),
+        `saw ${JSON.stringify(deliveries)}`,
+      );
+    });
+
+    it('sends and keeps an admin edit saved while the resend waited', async () => {
+      const { cms, contentDir } = await site({
+        files: { [FILE]: publishedPost('Published, but never announced.') },
+      });
+      const agent = signedInAs(cms, ADA);
+      const release = await holdTheQueue(agent);
+
+      const resending = cms.delivery.resend(FILE);
+      const edited = await submitEditor(agent, '/admin/posts/watched', {
+        body: 'Edited while the resend waited.',
+      });
+      assert.equal(edited.status, 303, await edited.text());
+      release();
+
+      const report = await resending;
+      assert.equal(report?.activityType, 'Create');
+      await cms.delivery.settled();
+
+      const create = delivered('Create').find(
+        (delivery) => delivery.body['id'] === report.activityId,
+      );
+      assert.match(contentOf(create), /Edited while the resend waited\./);
+      const source = await readFile(path.join(contentDir, ...FILE.split('/')), 'utf8');
+      assert.match(source, /Edited while the resend waited\./, source);
+      assert.match(source, /^ {2}published: /m, 'and the version sent is stamped');
+    });
+  });
+});
+
+describe('the first stamp of a hand-written post', () => {
+  const POST_FILE = 'posts/2026-03-04-watched.md';
+
+  it('adds the stamp and leaves every other byte of the file as it was', async () => {
+    const original = `---
+# Written by hand; keep this note.
+title: "On watching files"
+date: 2026-03-04T10:00:00.000Z
+author: ${ADA}
+permalink: /2026/03/watched/
+activitypub:
+  note: kept # a key the CMS does not model
+  id: ${BASE_URL}/2026/03/watched/
+---
+
+First.
+`;
+    const { cms, contentDir } = await site({ account: true, files: { [POST_FILE]: original } });
+
+    const report = await cms.delivery.resend(pathOf(cms, 'watched'));
+    assert.equal(report?.activityType, 'Create');
+
+    const after = await readFile(path.join(contentDir, POST_FILE), 'utf8');
+    assert.equal(
+      after,
+      original.replace('activitypub:\n', "activitypub:\n  published: '2026-03-04T10:00:00Z'\n"),
+    );
+  });
+
+  it('keeps the instant of a date written with no offset when the site and server zones differ', async (t) => {
+    const zone = process.env['TZ'];
+    process.env['TZ'] = 'UTC';
+    t.after(() => {
+      if (zone === undefined) delete process.env['TZ'];
+      else process.env['TZ'] = zone;
+    });
+    const source = publishedPost('First.').replace(
+      'date: 2026-03-04T10:00:00.000Z',
+      'date: 2026-03-04 10:00',
+    );
+    const { cms, contentDir } = await site({ account: true, files: { [POST_FILE]: source } });
+    await cms.settings.set('site', new Map([['timezone', 'Pacific/Auckland']]), 'admin');
+    const served = cms.store.getByPath(POST_FILE)?.date;
+
+    await cms.delivery.resend(pathOf(cms, 'watched'));
+
+    const create = delivered('Create')[0] as Delivery | undefined;
+    const published = (create?.body['object'] as Record<string, unknown> | undefined)?.[
+      'published'
+    ];
+    assert.equal(published, '2026-03-04T10:00:00Z', 'the Create names the instant the site served');
+    assert.equal(cms.store.getByPath(POST_FILE)?.date, served, 'the index keeps the date');
+    const after = await readFile(path.join(contentDir, POST_FILE), 'utf8');
+    assert.match(after, /^date: 2026-03-04 10:00$/m, 'the file keeps the date as written');
+    assert.match(
+      after,
+      /^ {2}published: '2026-03-04T10:00:00Z'$/m,
+      'stamped with the same instant',
+    );
   });
 });
 
@@ -2186,7 +2653,7 @@ describe('retrying a failed delivery', () => {
   async function retry(cms: Cms): Promise<void> {
     const job = retryDeliveriesJob(cms, () => Promise.resolve());
     await job.run(
-      { slug: 'hello-world', inbox: null },
+      { path: 'posts/2026-03-04-hello-world.md', inbox: null },
       { signal: new AbortController().signal, attempt: 1, progress: () => Promise.resolve() },
     );
   }
@@ -2244,6 +2711,79 @@ describe('retrying a failed delivery', () => {
     assert.deepEqual(delivered('Update'), []);
     assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
     assert.match(contentOf(delivered('Create')[0]), /Edited while it was down\./);
+  });
+});
+
+describe('two announced posts that share a slug', () => {
+  const OLDER = `${BASE_URL}/2025/03/hello/`;
+  const NEWER = `${BASE_URL}/2026/03/hello/`;
+  const JOB_CONTEXT = {
+    signal: new AbortController().signal,
+    attempt: 1,
+    progress: () => Promise.resolve(),
+  };
+
+  function announcedHello(year: string): string {
+    return `---
+title: Hello ${year}
+date: ${year}-03-04T10:00:00.000Z
+permalink: /${year}/03/hello/
+author: ${ADA}
+activitypub:
+  published: '${year}-03-04T10:00:00Z'
+---
+
+Hello from ${year}.
+`;
+  }
+
+  async function twoHellos(): Promise<Cms> {
+    const { cms } = await site({
+      account: true,
+      files: {
+        'posts/2025-03-04-hello.md': announcedHello('2025'),
+        'posts/2026-03-04-hello.md': announcedHello('2026'),
+      },
+    });
+    return cms;
+  }
+
+  function objectIds(): unknown[] {
+    return deliveries.map(({ body }) => (body['object'] as Record<string, unknown>)['id']);
+  }
+
+  it('resends each of them once when every post is resent', async () => {
+    const cms = await twoHellos();
+    const job = resendJob({
+      store: cms.store,
+      delivery: cms.delivery,
+      webmentions: { send: () => Promise.resolve(undefined) },
+    });
+
+    await job.run({ paths: 'all', webmentions: false }, JOB_CONTEXT);
+
+    assert.deepEqual(objectIds().toSorted(), [OLDER, NEWER]);
+  });
+
+  it('retries a failed delivery of the older one by sending the older one', async () => {
+    const cms = await twoHellos();
+    cms.admin.recordDelivery({
+      activityId: `${OLDER}#update`,
+      activityType: 'Update',
+      objectId: OLDER,
+      slug: 'hello',
+      actorId: REMOTE_ACTOR,
+      inboxId: REMOTE_SHARED_INBOX,
+      status: 'failed',
+      error: 'HTTP 503',
+    });
+
+    await retryDeliveriesJob(cms, () => Promise.resolve()).run(
+      { path: null, inbox: REMOTE_SHARED_INBOX },
+      JOB_CONTEXT,
+    );
+
+    assert.deepEqual(objectIds(), [OLDER]);
   });
 });
 
@@ -2330,7 +2870,7 @@ describe('two users', () => {
       publishedPost('Ada wrote this one.'),
     );
     await cms.sync();
-    const report = await cms.delivery.resend('watched');
+    const report = await cms.delivery.resend(pathOf(cms, 'watched'));
 
     assert.equal(report?.deliveries.length, 1, 'one recipient, not two');
     assert.equal(report?.deliveries[0]?.actorId, REMOTE_ACTOR, 'Ada’s follower');
@@ -2769,7 +3309,7 @@ describe('a published post on a site with no accounts (TASK-312)', () => {
   it('is not stamped by a resend, which says why it cannot send', async () => {
     const { cms, contentDir } = await noAccounts();
 
-    await assert.rejects(cms.delivery.resend('watched'), /the site has no accounts/);
+    await assert.rejects(cms.delivery.resend(pathOf(cms, 'watched')), /the site has no accounts/);
 
     const file = await readFile(path.join(contentDir, POST_FILE), 'utf8');
     assert.doesNotMatch(file, /activitypub/);

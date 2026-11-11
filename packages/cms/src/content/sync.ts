@@ -1,6 +1,9 @@
+import path from 'node:path';
+
 import { messageOf } from '../util/errors.ts';
+import { exists } from '../util/files.ts';
 import { createSerialQueue } from '../util/queue.ts';
-import { isDocumentPath } from './content-tree.ts';
+import { isDocumentPath, walk } from './content-tree.ts';
 import { createContentWatcher } from './content-watcher.ts';
 import type { Document } from './document.ts';
 import { changedIndex, createReconciler } from './reconcile.ts';
@@ -212,21 +215,45 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     return noPathDebouncing && onlyThisRunQueued;
   }
 
+  // A rename reaches the watcher as two paths, which can be reported far
+  // apart. Before the row of a gone file is dropped, every document on disk
+  // the index has not seen yet is read, so a moved file takes the row over by
+  // its permalink and the post is not deleted and created again.
+  const goneInBurst = new Set<string>();
+
   async function reconcileWatched(relativePath: string): Promise<void> {
     const paths = isDocumentPath(relativePath)
       ? [relativePath]
       : await documentsUnder(tree, relativePath);
     for (const documentPath of paths) {
-      try {
-        if (changedIndex(await reconciler.reconcile(documentPath, 'watch'))) {
-          settled.markUnsettled();
-        }
-      } catch (error) {
-        logger.warn(`Could not sync ${documentPath}: ${messageOf(error)}`);
-      }
+      if (await indexedFileIsGone(documentPath)) goneInBurst.add(documentPath);
+      else await reconcileOne(documentPath);
     }
-    if (settled.isUnsettled() && burstIsOver()) {
-      await settled.settle();
+    if (!burstIsOver()) return;
+    if (goneInBurst.size > 0) {
+      for (const documentPath of await walk(contentDir, logger)) {
+        if (store.getByPath(documentPath) === undefined) await reconcileOne(documentPath);
+      }
+      for (const documentPath of goneInBurst) await reconcileOne(documentPath);
+      goneInBurst.clear();
+    }
+    if (settled.isUnsettled()) await settled.settle();
+  }
+
+  async function indexedFileIsGone(documentPath: string): Promise<boolean> {
+    return (
+      store.getByPath(documentPath) !== undefined &&
+      !(await exists(path.join(contentDir, documentPath)).catch(() => true))
+    );
+  }
+
+  async function reconcileOne(documentPath: string): Promise<void> {
+    try {
+      if (changedIndex(await reconciler.reconcile(documentPath, 'watch'))) {
+        settled.markUnsettled();
+      }
+    } catch (error) {
+      logger.warn(`Could not sync ${documentPath}: ${messageOf(error)}`);
     }
   }
 

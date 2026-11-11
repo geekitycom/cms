@@ -1,4 +1,5 @@
 import { loadResolvedConfig } from '../config-loader.ts';
+import type { CatalogReader, DocumentLookup } from '../content/store.ts';
 import type { ParsedArgs } from './args.ts';
 import { runJobHere } from './run-job.ts';
 
@@ -8,7 +9,7 @@ export async function resendCommand({ args, configPath, flags }: ParsedArgs): Pr
   const all = flags['all'] === true;
   if (all === args.length > 0) {
     throw new Error(
-      'geekity resend needs either --all or the slugs of the posts to resend, and not both.',
+      'geekity resend needs either --all or the slugs or paths of the posts to resend, and not both.',
     );
   }
 
@@ -21,7 +22,7 @@ export async function resendCommand({ args, configPath, flags }: ParsedArgs): Pr
   const report = await runJobHere(
     config,
     RESEND_JOB,
-    { slugs: all ? 'all' : args, webmentions: false },
+    (cms) => ({ paths: all ? ('all' as const) : postPaths(cms.store, args), webmentions: false }),
     'resend',
     (cms) => cms.sync(),
   );
@@ -31,18 +32,41 @@ export async function resendCommand({ args, configPath, flags }: ParsedArgs): Pr
   for (const post of report.posts) {
     const activity = post.resent ? post.activity : null;
     if (activity === null) {
-      process.stderr.write(`${post.slug}: nothing to resend, no announced post has that slug.\n`);
+      process.stderr.write(`${post.path}: nothing to resend, no announced post is there.\n`);
       failed += 1;
     } else if (activity.heldByDevMode) {
       process.stdout.write(
-        `${post.slug}: ${activity.activityType} held by dev mode, nothing sent\n`,
+        `${post.path}: ${activity.activityType} held by dev mode, nothing sent\n`,
       );
     } else {
       process.stdout.write(
-        `${post.slug}: ${activity.activityType} to ${String(activity.reached)} of ` +
+        `${post.path}: ${activity.activityType} to ${String(activity.reached)} of ` +
           `${String(activity.inboxes)} inboxes\n`,
       );
     }
   }
   return failed === 0 ? 0 : 1;
+}
+
+/**
+ * Each name as the content path of the post it means. A slug is a shorthand
+ * that only works while one post holds it: the default permalinks repeat a
+ * slug across months, and guessing would resend the wrong post.
+ */
+function postPaths(store: DocumentLookup & CatalogReader, names: readonly string[]): string[] {
+  const posts = [
+    ...store.listAll({ type: 'post' }),
+    ...store.listAll({ type: 'post', trashed: true }),
+  ];
+  return names.map((name) => {
+    if (store.getByPath(name) !== undefined) return name;
+    const named = posts.filter((post) => post.slug === name);
+    if (named.length > 1) {
+      throw new Error(
+        `The slug ${name} names ${String(named.length)} posts: ` +
+          `${named.map((post) => post.path).join(', ')}. Name the one to resend by its path.`,
+      );
+    }
+    return named[0]?.path ?? name;
+  });
 }

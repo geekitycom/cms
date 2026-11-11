@@ -13,7 +13,7 @@ import { avatarUrl } from '../federation/actor.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 import { RESEND_JOB } from '../federation/resend-job.ts';
 import type { ResendActivity, ResendPost } from '../federation/resend-job.ts';
-import { RETRY_DELIVERIES_JOB } from '../federation/retry-job.ts';
+import { federatedPostOf, RETRY_DELIVERIES_JOB } from '../federation/retry-job.ts';
 import { finishedResult } from '../jobs/types.ts';
 import {
   selectedTargets,
@@ -84,7 +84,7 @@ const RESEND_BUSY = 'A resend is already queued or running. Nothing new was queu
 export const RELAY_RETRY_PATH = `${FEDERATION_PATH}/relays/retry`;
 
 /** The fields the screen's forms submit. */
-export const FEDERATION_FIELDS = { slug: 'slug', relay: 'relay', inbox: 'inbox' } as const;
+export const FEDERATION_FIELDS = { path: 'path', relay: 'relay', inbox: 'inbox' } as const;
 
 /** What each relay state reads as on the screen. */
 export const RELAY_STATE_LABELS: Readonly<Record<RelayState, string>> = {
@@ -140,6 +140,11 @@ export function mountFederationScreen(
     const post = localPosts(c.var.store, baseUrl, objectIds, cited, (url) =>
       c.var.conversation.documentOf(url),
     );
+    const federatedPost = federatedPostOf({
+      store: c.var.store,
+      admin,
+      config: c.var.config,
+    });
     const users = listUsers(c.var.config.dataDir);
     const targets = syndicationTargetsReader(c.var.config.contentDir);
     const copies = syndicationCopies(c.var.config.contentDir);
@@ -154,9 +159,11 @@ export function mountFederationScreen(
       retryUrl: RETRY_PATH,
       retry: jobStatusView(latestRetry),
       retryResult: finishedResult(RETRY_DELIVERIES_JOB, latestRetry),
-      failures: admin
-        .listStandingFailuresSince(failuresSince)
-        .map((failure) => ({ ...failure, post: post(failure.objectId) })),
+      failures: admin.listStandingFailuresSince(failuresSince).map((failure) => ({
+        ...failure,
+        post: post(failure.objectId),
+        path: federatedPost(failure.objectId)?.path ?? null,
+      })),
       fields: FEDERATION_FIELDS,
       actors: users.map((user) =>
         actorSummary(user, {
@@ -243,19 +250,19 @@ export function mountFederationScreen(
 
   app.post(RETRY_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const slug = body[FEDERATION_FIELDS.slug];
+    const path = body[FEDERATION_FIELDS.path];
     const inbox = body[FEDERATION_FIELDS.inbox];
-    if (typeof slug !== 'string' || slug === '' || typeof inbox !== 'string' || inbox === '') {
+    if (typeof path !== 'string' || path === '' || typeof inbox !== 'string' || inbox === '') {
       flash(c, 'error', 'That form named no post and inbox to retry, so nothing was sent.');
       return c.redirect(FAILURES_PANEL, 303);
     }
     return queueJobFromForm(
       c,
       RETRY_DELIVERIES_JOB,
-      { slug, inbox },
+      { path, inbox },
       {
         panel: FAILURES_PANEL,
-        queued: `Queued a retry of ${slug} to ${inbox}. Its progress is below.`,
+        queued: `Queued a retry of ${path} to ${inbox}. Its progress is below.`,
         busy: 'A retry is already queued or running. Nothing new was queued.',
       },
     );
@@ -269,18 +276,18 @@ export function mountFederationScreen(
    */
   app.post(RESEND_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const slug = body[FEDERATION_FIELDS.slug];
-    if (typeof slug !== 'string' || slug === '') {
+    const path = body[FEDERATION_FIELDS.path];
+    if (typeof path !== 'string' || path === '') {
       flash(c, 'error', 'There is no post to send under that name, so nothing was sent.');
       return c.redirect(FEDERATION_PATH, 303);
     }
     return queueJobFromForm(
       c,
       RESEND_JOB,
-      { slugs: [slug], webmentions: true },
+      { paths: [path], webmentions: true },
       {
         panel: RESEND_PANEL,
-        queued: `Queued a resend of ${slug}. It runs in the background; its progress is below.`,
+        queued: `Queued a resend of ${path}. It runs in the background; its progress is below.`,
         busy: RESEND_BUSY,
       },
     );
@@ -290,7 +297,7 @@ export function mountFederationScreen(
     queueJobFromForm(
       c,
       RESEND_JOB,
-      { slugs: 'all', webmentions: false },
+      { paths: 'all', webmentions: false },
       {
         panel: RESEND_PANEL,
         queued:
@@ -320,7 +327,7 @@ function resendResult(posts: readonly ResendPost[]): ResendResult {
   }
   return {
     sent,
-    nothing: posts.flatMap((post) => (post.resent ? [] : [post.slug])),
+    nothing: posts.flatMap((post) => (post.resent ? [] : [post.path])),
     totals,
   };
 }
@@ -336,8 +343,8 @@ export interface DeliveryRow {
    * than an attribution.
    */
   readonly author: string | null;
-  /** What the Resend button submits. */
-  readonly slug: string;
+  /** What the Resend button submits: the content path, which names one post where a slug may not. */
+  readonly path: string;
   /** Whether the post is in the trash, which is why its last activity was a `Delete`. */
   readonly trashed: boolean;
   /**
@@ -429,7 +436,7 @@ export function deliveryRows(
         inThread: false,
       },
       author: context.author(document),
-      slug: document.slug,
+      path: document.path,
       trashed: isTrashedPath(document.path),
       lastActivity:
         last === undefined

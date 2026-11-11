@@ -15,11 +15,10 @@ import type { Document } from '../content/document.ts';
 import { postObjectId } from '../content/guids.ts';
 import { isMigrated } from '../content/migrated.ts';
 import { replyTarget } from '../content/post-type.ts';
-import { saveDocument } from '../content/save.ts';
-import type { CatalogReader, DocumentLookup, IndexWriter } from '../content/store.ts';
+import { addPublishedStamp, withDocumentWrites } from '../content/save.ts';
+import type { IndexWriter } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { visibilityOf } from '../content/visibility.ts';
-import { documentContent } from '../content/writer.ts';
 import { SITE } from '../site/namespace.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
@@ -119,9 +118,9 @@ export interface CreateDeliveryServiceOptions {
  */
 export interface DeliveryService {
   /**
-   * Consider one index change, and deliver whatever it implies. Resolves once
-   * the change has been recorded in the file — not once the activity has been
-   * delivered, which is what {@link DeliveryService.settled} is for.
+   * Consider one index change, and queue whatever it implies. Resolves once
+   * the activity is queued, not once it has been delivered or the post has
+   * been stamped, which is what {@link DeliveryService.settled} is for.
    */
   handle(change: DocumentChange): Promise<void>;
   /**
@@ -138,8 +137,9 @@ export interface DeliveryService {
    * Send one post as it now reads to every follower and every accepted relay
    * the site has.
    *
-   * Not "send that activity again": the activity is built from the file at the
-   * moment this is called, so a follower whose server was down
+   * Not "send that activity again": the activity is built from the post as it
+   * stands when the resend's turn in the delivery queue comes, so a follower
+   * whose server was down
    * ends up holding the post as it stands rather than the revision that failed
    * to reach it. Which activity that is follows the same rule a save does — a
    * published post no follower has been told about is a `Create` and is
@@ -147,7 +147,7 @@ export interface DeliveryService {
    * one is a `Delete` of a `Tombstone` — so a resend and an ordinary publish
    * produce the same shapes.
    *
-   * `undefined` when there is nothing to send: no post answers to that slug,
+   * `undefined` when there is nothing to send: no post is at that content path,
    * or the post is one nobody outside the site has ever been told about and is
    * not published now, so there is neither a copy to withdraw nor anything to
    * announce.
@@ -155,7 +155,7 @@ export interface DeliveryService {
    * Recipients in `to` that missed the announcement are sent it again rather
    * than an `Update`, which a peer drops for a post it never stored.
    */
-  resend(slug: string, to?: ResendRecipients): Promise<DeliveryReport | undefined>;
+  resend(path: string, to?: ResendRecipients): Promise<DeliveryReport | undefined>;
   /**
    * Bring the followers' copies of the posts that cite a page up to date with
    * its newly stored context: an `Update` for each served, announced post
@@ -212,34 +212,50 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   const sentThisProcess = new Map<string, string>();
 
   /**
-   * Write {@link stampFor}'s `activitypub.published` into the post's file, and
-   * answer with the document as it now reads.
+   * Add {@link stampFor}'s `activitypub.published` to the post's file.
+   *
+   * The stamp lands after the save that set it off has answered, so it goes
+   * into the post as the index holds it now, which keeps an edit saved
+   * meanwhile: that edit's own change is queued behind this one and finds the
+   * stamp. A file that no longer reads as the indexed version is left alone,
+   * because no change for what it holds has been queued yet, and the one that
+   * will be announces it itself. So is a post no longer at that path.
    *
    * No id is minted — the post's id is its permalink, so there is nothing to
    * freeze — and an `activitypub.id` the file already carries is left exactly
    * where it is, because it is the name the post's followers already hold.
    *
-   * It is written through the same {@link saveDocument} the admin writes
-   * through, which corrects the index in the same breath — so the watcher's
-   * re-read of the file finds a hash that already matches and this write
-   * federates nothing of its own.
+   * The write corrects the index in the same breath, so the watcher's re-read
+   * of the file finds a hash that already matches and this write federates
+   * nothing of its own.
    */
-  async function stamp(document: Document): Promise<Document> {
-    const published = stampFor(document, store.now());
-    if (published === undefined) return document;
+  async function stamp(path: string): Promise<void> {
+    await withDocumentWrites(config.contentDir, async () => {
+      const document = store.getByPath(path);
+      if (document === undefined) return;
+      const published = stampFor(document, store.now());
+      if (published === undefined) return;
 
-    // The zone only matters for a date somebody wrote by hand with no offset;
-    // `saveDocument` is what turns every date in the file into an instant.
-    return await saveDocument({
-      contentDir: config.contentDir,
-      store,
-      timezone: await settings.get(SITE.timezone),
-      path: document.path,
-      content: {
-        ...documentContent(document),
-        activitypub: { ...document.activitypub, published },
-      },
+      await addPublishedStamp({
+        contentDir: config.contentDir,
+        store,
+        path,
+        published,
+        hash: document.hash,
+      });
     });
+  }
+
+  /**
+   * The version the followers were told about, when an announce queued ahead
+   * of this change stamped the post after the change was seen. The edit is
+   * then an `Update` of what they hold, not a second `Create`.
+   */
+  function announcedSince(previous: Document | undefined, after: Document): Document | undefined {
+    if (previous === undefined || wasAnnounced(previous)) return undefined;
+    if (!isFederatedDocument(previous, store.now())) return undefined;
+    const current = store.getByPath(after.path);
+    return current !== undefined && wasAnnounced(current) ? previous : undefined;
   }
 
   function requireSender(context: Context<FederationContextData>, document: Document): User {
@@ -301,30 +317,41 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     };
   }
 
-  /** Tell the peers a post is out: its `Create`, or its `Like` or `Announce`. */
+  /**
+   * Tell the peers a post is out: its `Create`, or its `Like` or `Announce`.
+   *
+   * The post is stamped only once its delivery rows are written and the
+   * activity is in Fedify's hands. A fan-out that throws or that dev mode
+   * holds leaves no stamp, so the next save or resend announces it again
+   * rather than sending an `Update` of something no follower holds.
+   */
   async function announce(
     context: Context<FederationContextData>,
     document: Document,
     shape: Shape,
     to?: ReadonlySet<string>,
   ): Promise<DeliveryReport> {
+    let report: DeliveryReport;
     if (shape.kind === 'object') {
       const id = await claimObjectId(config.contentDir, postObjectId(document, config.baseUrl));
-      return await sendAndRecordObject(
+      report = await sendAndRecordObject(
         context,
         postCreateActivity(context, document, shape.replyTo),
         document,
         { ...shape, id },
         to,
       );
+    } else {
+      report = await send(
+        context,
+        shape.citing.activity,
+        document,
+        citedAuthor(shape.citing.author),
+        to,
+      );
     }
-    return await send(
-      context,
-      shape.citing.activity,
-      document,
-      citedAuthor(shape.citing.author),
-      to,
-    );
+    if (!report.held) await stamp(document.path);
+    return report;
   }
 
   /** Take a post back: a `Delete` of its object, or an `Undo` of its `Like` or `Announce`. */
@@ -519,20 +546,20 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         return;
       }
 
-      const { before } = delivery;
-      const stamped = await stamp(delivery.after);
-      const sameId = before !== undefined && sameObject(context, before, stamped);
+      const { after } = delivery;
+      const sameId = delivery.before !== undefined && sameObject(context, delivery.before, after);
       queue(async () => {
-        const is = await shapeOf(context, stamped);
-        if (before === undefined) return await announce(context, stamped, is);
+        const before = delivery.before ?? announcedSince(change.previous, after);
+        const is = await shapeOf(context, after);
+        if (before === undefined) return await announce(context, after, is);
         const was = await shapeOf(context, before);
         const step = revisionStep(was, is);
         if (step.kind === 'none') return undefined;
-        if (step.kind === 'revise') return await revise(context, stamped, step.shape);
+        if (step.kind === 'revise') return await revise(context, after, step.shape);
         await withdraw(context, before, was);
-        return await announce(context, stamped, is);
+        return await announce(context, after, is);
       });
-      queuePinChange(context, sameId ? before : undefined, stamped);
+      queuePinChange(context, sameId ? delivery.before : undefined, after);
     },
 
     async updateActor(user) {
@@ -579,17 +606,17 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         });
     },
 
-    async resend(slug, to) {
-      const document = postBySlug(store, slug);
-      if (document === undefined) return undefined;
-
-      // Read before the queue rather than inside it, so a post with nothing to
-      // send answers `undefined` rather than joining a queue to find that out.
-      const published = isFederatedDocument(document, store.now());
-      const announced = wasAnnounced(document);
-      if (!announced && (!published || isMigrated(document))) return undefined;
-
+    async resend(path, to) {
+      // Read inside the queue, so a post edited, moved or trashed while the
+      // resend waited is sent as it now stands.
       return await deliveryQueue.run(async () => {
+        const document = store.getByPath(path);
+        if (document?.type !== 'post') return undefined;
+
+        const published = isFederatedDocument(document, store.now());
+        const announced = wasAnnounced(document);
+        if (!announced && (!published || isMigrated(document))) return undefined;
+
         const context = await deliveryContext();
 
         if (!published) {
@@ -600,8 +627,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         }
 
         requireSender(context, document);
-        const stamped = await stamp(document);
-        const shape = await shapeOf(context, stamped);
+        const shape = await shapeOf(context, document);
         // A like or a repost is sent again as it is: its id is one a peer
         // that already holds it recognises, and one that missed it does not.
         if (
@@ -610,14 +636,14 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
           shape.kind === 'citing' ||
           wasDeleted(shape.id)
         ) {
-          return await announce(context, stamped, shape, to?.actors);
+          return await announce(context, document, shape, to?.actors);
         }
 
         // The moment rather than the content hash, which is what a save uses:
         // the point of a resend is that the followers hear about a revision
         // they have already been sent and ignored, or never received at all,
         // and an activity id a peer has seen is one it is entitled to drop.
-        return await revise(context, stamped, shape, store.now().toISOString(), to?.actors);
+        return await revise(context, document, shape, store.now().toISOString(), to?.actors);
       });
     },
 
@@ -707,24 +733,6 @@ export function deliveryTargets(
     ...followerTargets(admin.listFollowers(username)),
     ...relayTargets(relays ? acceptedRelays(admin) : []),
   ];
-}
-
-/**
- * The post a slug names, the trash included, or `undefined`.
- *
- * The index's slug lookup answers across both kinds and both states and takes
- * the newest, which is the post nine times out of ten. The federated list is
- * the fallback for the tenth — a page, or a live post of the same name,
- * standing in front of a trashed one — and it is the right fallback because a
- * post that was never announced is not one a resend has anything to say about.
- */
-export function postBySlug(
-  store: DocumentLookup & CatalogReader,
-  slug: string,
-): Document | undefined {
-  const direct = store.getBySlug(slug);
-  if (direct?.type === 'post') return direct;
-  return store.listFederated().find((document) => document.slug === slug);
 }
 
 /** An activity's short type name — `Create`, `Update`, `Delete` — from its type URI. */

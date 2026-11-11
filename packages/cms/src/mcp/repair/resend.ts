@@ -33,7 +33,7 @@ export const resendPost = defineTool({
     const { slug } = document;
     const outcome = queuedJob(
       await site.jobs.enqueueUnlessActive(RESEND_JOB, {
-        slugs: [slug],
+        paths: [document.path],
         webmentions: args.webmentions ?? true,
       }),
     );

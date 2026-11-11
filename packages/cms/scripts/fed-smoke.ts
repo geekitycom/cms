@@ -416,7 +416,7 @@ async function main(): Promise<void> {
     // followers already hold goes out as an `Update` under an id none of them
     // has seen (decision-9).
     log(`resending hot-off-the-press to ${String(cms.admin.countFollowers())} follower(s)`);
-    const resent = await cms.delivery.resend('hot-off-the-press');
+    const resent = await cms.delivery.resend(`posts/${PENDING_POST}`);
     assert.ok(resent !== undefined, 'the post was found and sent again');
     assert.equal(resent.activityType, 'Update', 'a post the followers hold is resent as an Update');
     assert.equal(resent.objectId, publishedObject, 'about the object they were given');

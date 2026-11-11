@@ -32,7 +32,7 @@ export const retryDeliveries = defineTool({
         items: {
           type: 'object',
           properties: {
-            slug: { type: 'string' },
+            path: { type: 'string', description: 'The post’s content path.' },
             recipients: {
               type: 'array',
               items: {
@@ -51,7 +51,7 @@ export const retryDeliveries = defineTool({
               },
             },
           },
-          required: ['slug', 'recipients'],
+          required: ['path', 'recipients'],
         },
       },
       queued: QUEUED,
@@ -64,9 +64,9 @@ export const retryDeliveries = defineTool({
     if (args.post !== undefined) {
       const document = findPost(site, args.post);
       if (isRefused(document)) return document;
-      filter = { slug: document.slug, inbox: args.inbox ?? null };
+      filter = { path: document.path, inbox: args.inbox ?? null };
     } else if (args.inbox !== undefined) {
-      filter = { slug: null, inbox: args.inbox };
+      filter = { path: null, inbox: args.inbox };
     } else {
       return { ok: false, message: 'Name a post, an inbox, or both.' };
     }

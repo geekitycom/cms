@@ -108,7 +108,7 @@ describe('the backlinks of a post (TASK-322)', () => {
 
   it('sends no webmention, and writes no comment, for a link to the site’s own pages', async () => {
     const cms = await site();
-    const report = await cms.webmentions.send('citing');
+    const report = await cms.webmentions.send('posts/citing.md');
     assert.deepEqual(report?.sent, [], 'a webmention was sent to the site itself');
     await cms.webmentions.settled();
 

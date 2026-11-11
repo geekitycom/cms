@@ -689,12 +689,12 @@ later.
   left out, and set again each setting the import named.
 - **Announce the posts that came due during the move.** A post whose date fell
   between the export and the first start of the new site is published, but it
-  is not announced to followers. Run `geekity resend <slug>` for each one after
-  DNS points at the new host. It sends a `Create` for a published post that
-  was never announced. On Docker, run
-  `docker compose exec geekity geekity resend <slug>`. `geekity resend --all`
-  does not reach these posts, because it resends only posts that were
-  announced.
+  is not announced to followers. Run `geekity resend <slug-or-path>` for each
+  one after DNS points at the new host. It sends a `Create` for a published
+  post that was never announced. On Docker, run
+  `docker compose exec geekity geekity resend <slug-or-path>`.
+  `geekity resend --all` does not reach these posts, because it resends only
+  posts that were announced.
 - **Delete what you no longer need.** Once the new site works, delete the old
   host's `content/` and `data/`, every copy of the archive, and the
   `.geekity-before-import-*` folders that `--replace` leaves inside `content/`

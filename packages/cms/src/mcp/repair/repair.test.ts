@@ -74,6 +74,8 @@ beforeEach(() => {
   bobInbox = BOB_SHARED_INBOX;
 });
 
+const HELLO_FILE = 'posts/2026-03-01-hello.md';
+
 async function repairSite(): Promise<{ cms: Cms; token: string }> {
   const cms = await fixtureSite(box, { federation: { queue: null, allowPrivateAddress: true } });
   return { cms, token: await inspectToken(cms, ['repair']) };
@@ -136,7 +138,7 @@ describe('resend_post', () => {
     assert.equal(job['state'], 'queued');
     const status = await cms.jobs.status(job['id'] as string);
     assert.equal(status?.name, RESEND_JOB.name);
-    assert.deepEqual(status.payload, { slugs: ['hello'], webmentions: true });
+    assert.deepEqual(status.payload, { paths: [HELLO_FILE], webmentions: true });
     assert.deepEqual(posted, [], 'nothing is sent inside the request');
   });
 
@@ -144,7 +146,7 @@ describe('resend_post', () => {
     const { cms, token } = await repairSite();
     const answer = await call(cms, token, 'resend_post', { post: 'hello', webmentions: false });
     const status = await cms.jobs.status((answer.structured['job'] as Row)['id'] as string);
-    assert.deepEqual(status?.payload, { slugs: ['hello'], webmentions: false });
+    assert.deepEqual(status?.payload, { paths: [HELLO_FILE], webmentions: false });
   });
 
   it('queues nothing new while a resend waits, and names the one that does', async () => {
@@ -176,7 +178,7 @@ describe('retry_deliveries', () => {
     assert.equal(answer.structured['queued'], true);
     assert.deepEqual(answer.structured['retries'], [
       {
-        slug: 'hello',
+        path: HELLO_FILE,
         recipients: [
           {
             actorId: BOB,
@@ -201,8 +203,8 @@ describe('retry_deliveries', () => {
     });
 
     assert.deepEqual(
-      (failing.structured['retries'] as Row[]).map((retry) => retry['slug']),
-      ['hello'],
+      (failing.structured['retries'] as Row[]).map((retry) => retry['path']),
+      [HELLO_FILE],
     );
     assert.deepEqual(fine.structured['retries'], []);
     assert.equal(fine.structured['queued'], false);

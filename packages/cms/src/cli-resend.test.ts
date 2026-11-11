@@ -13,9 +13,11 @@ import { recordJob } from './__testing__/jobs.ts';
 
 after(cleanupTemporaryDirs);
 
+const HELLO = 'posts/2026-09-02-hello.md';
+
 /** A post announced before quote policies existed, and one never announced. */
 const FILES = {
-  'posts/2026-09-02-hello.md': [
+  [HELLO]: [
     '---',
     'title: Hello',
     "date: '2026-09-02T09:00:00Z'",
@@ -130,12 +132,37 @@ describe('geekity resend (TASK-125 AC #6)', () => {
       const run = await runCli(['resend', 'hello'], directory);
 
       assert.equal(run.code, 0, run.stderr);
-      assert.equal(run.stdout, 'hello: Update to 1 of 1 inboxes\n');
+      assert.equal(run.stdout, `${HELLO}: Update to 1 of 1 inboxes\n`);
       const job = await createFileRecords(path.join(directory, 'data', 'jobs.json')).latest(
         RESEND_JOB.name,
       );
       assert.equal(job?.state, 'finished', 'the resend ran as a job');
-      assert.deepEqual(job.payload, { slugs: ['hello'], webmentions: false });
+      assert.deepEqual(job.payload, { paths: [HELLO], webmentions: false });
+    } finally {
+      follower.close();
+    }
+  });
+
+  it('takes a post’s path, and refuses a slug that two posts share, sending nothing', async () => {
+    const follower = await inbox();
+    try {
+      const directory = await site(follower.url);
+      const older = 'posts/2025-09-02-hello.md';
+      await fs.writeFile(
+        path.join(directory, 'content', older),
+        FILES[HELLO].replaceAll('2026', '2025'),
+      );
+
+      const refused = await runCli(['resend', 'hello'], directory);
+      assert.equal(refused.code, 1);
+      assert.match(refused.stderr, new RegExp(`${older}, ${HELLO}|${HELLO}, ${older}`));
+      assert.equal(follower.received.length, 0, 'nothing was sent for a slug it could not place');
+
+      const run = await runCli(['resend', older], directory);
+      assert.equal(run.code, 0, run.stderr);
+      assert.equal(run.stdout, `${older}: Update to 1 of 1 inboxes\n`);
+      const object = follower.received[0]?.['object'] as Record<string, unknown>;
+      assert.equal(object['id'], 'https://blog.example/2025/09/hello/');
     } finally {
       follower.close();
     }
@@ -149,8 +176,8 @@ describe('geekity resend (TASK-125 AC #6)', () => {
       const run = await runCli(['resend', 'missing', 'hello'], directory);
 
       assert.equal(run.code, 1);
-      assert.equal(run.stderr, 'missing: nothing to resend, no announced post has that slug.\n');
-      assert.equal(run.stdout, 'hello: Update to 1 of 1 inboxes\n');
+      assert.equal(run.stderr, 'missing: nothing to resend, no announced post is there.\n');
+      assert.equal(run.stdout, `${HELLO}: Update to 1 of 1 inboxes\n`);
       assert.equal(follower.received.length, 1);
     } finally {
       follower.close();
@@ -165,7 +192,7 @@ describe('geekity resend (TASK-125 AC #6)', () => {
       const run = await runCli(['resend', '--all'], directory);
 
       assert.equal(run.code, 0, run.stderr);
-      assert.equal(run.stdout, 'hello: Update held by dev mode, nothing sent\n');
+      assert.equal(run.stdout, `${HELLO}: Update held by dev mode, nothing sent\n`);
       assert.equal(follower.received.length, 0, 'nothing reached the follower');
     } finally {
       follower.close();

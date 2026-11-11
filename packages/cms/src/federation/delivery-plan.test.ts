@@ -234,11 +234,11 @@ describe('delivery targets', () => {
 
 describe('stamping', () => {
   it('stamps an unannounced post with its own date', () => {
-    assert.equal(stampFor(post(), NOW), '2026-10-01T09:00:00.000Z');
+    assert.equal(stampFor(post(), NOW), '2026-10-01T09:00:00Z');
   });
 
   it('stamps an undated post with the moment', () => {
-    assert.equal(stampFor(post({ date: undefined }), NOW), NOW.toISOString());
+    assert.equal(stampFor(post({ date: undefined }), NOW), '2026-10-11T12:00:00Z');
   });
 
   it('leaves a post that is already stamped alone', () => {

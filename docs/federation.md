@@ -222,6 +222,33 @@ The first activity about a post writes one key into its front matter:
 decides between `Create` and `Update`, and a resend reads it. Restoring a
 trashed post keeps it too.
 
+The value is the post's date as the instant the `Create` gave as `published`. The
+site adds the key as one new line and leaves every other byte of the file as it
+was: comments, key order, quoting, other `activitypub` keys, and a `date`
+written with no offset. A file whose `activitypub` key is not a block of
+indented keys, such as `activitypub: { type: Note }`, cannot take the line. The
+stamp then fails with an error that names the file, and the file stays
+unstamped.
+
+The site writes the key after it records the delivery rows and hands the
+activity to the delivery queue. If dev mode holds the activity, or the send
+fails before the activity is queued, the post stays unstamped. The next save or
+resend then sends a `Create` again, not an `Update` that a peer without the
+post would drop.
+
+A save does not wait for delivery, so the key can arrive after the editor has
+reloaded. The key goes into the post as it stands at that moment, so an edit
+saved in the meantime stays in the file and goes out as an `Update`. The
+editor's conflict check ignores a difference in `activitypub.published` alone,
+and the next save keeps the key.
+
+The site writes the key only when the file still holds the version the content
+index holds. If the post was trashed, moved or deleted, or the file was changed
+on disk and the index has not read it yet, the site writes nothing. The site
+then handles the newer file as a change of its own. A resend reads the post when
+its turn in the delivery queue comes, not when it is queued, so it sends an
+edit, a move or a trash made while it waited.
+
 If a post's file already names an `activitypub.id`, the post keeps that as its
 object id for the life of the post. A post migrated from WordPress keeps the
 `https://example.com/?p=813` that its followers, its replies, and its RSS
@@ -265,6 +292,12 @@ after the next `Delete`, and so on. A WordPress id such as `?p=813` gets
 until the next `Delete`, so every later `Update`, `Delete`, pin, and outbox
 entry names it. A resend of a post whose current id was deleted sends a
 `Create` under a new id, not an `Update`.
+
+A trashed post keeps its permalink until a live post takes it. The live post
+then has the same natural id, so it is announced under the next revision, and
+that revision belongs to the live post. A resend of the trashed post sends its
+`Delete` under the id before that revision, never under the live post's id. A
+retry of a failed delivery of the live post's id resends the live post.
 
 The permalink route ignores the query, so the new id dereferences to the post.
 An ActivityStreams request for the page URL answers with an object whose `id`
@@ -316,7 +349,7 @@ site records the outcome per recipient, so an admin can see which recipient did
 not get a post and send it again:
 
 ```ts
-const report = await cms.delivery.resend(slug);
+const report = await cms.delivery.resend('posts/2026-03-04-hello-world.md');
 report?.deliveries; // one row per follower and relay: inbox, status, error, time
 ```
 
@@ -330,8 +363,10 @@ the same table as a save:
 - A published post that followers hold is an `Update`, under a new id.
 - A draft or a trashed post is a `Delete` of a `Tombstone`.
 
-`resend` returns `undefined` when there is no post with that slug and nothing
-to withdraw.
+`resend` takes the post's content path, not its slug. Two posts can share a
+slug, for example a recurring title in different months. `resend` returns
+`undefined` when there is no post at that path, and when the post was never
+announced and there is nothing to withdraw.
 
 A retry sends what each recipient missed. The `retry_deliveries`
 [MCP tool](mcp.md) passes `resend` the recipients whose newest delivery failed
@@ -426,11 +461,13 @@ Editing the post sends one. To update every announced post at once, run
 
 ```sh
 $ geekity resend --all
-hello-world: Update to 3 of 3 inboxes
-another-post: Update to 3 of 3 inboxes
+posts/2026-03-04-hello-world.md: Update to 3 of 3 inboxes
+posts/2026-03-05-another-post.md: Update to 3 of 3 inboxes
 ```
 
-`geekity resend <slug>...` does the same for named posts. Both run the same
+`geekity resend <slug-or-path>...` does the same for named posts. The command
+refuses a slug that more than one post has and lists their paths, so you can
+name the post you mean. Both run the same
 `resend` [admin job](configuration.md#admin-jobs) as Federation > Resend.
 Each resend sends:
 
@@ -441,11 +478,11 @@ Each resend sends:
 `--all` reaches only posts that were announced. The command runs the job in its
 own process and waits for it. It delivers with no queue, so every activity is
 posted before it exits. In dev mode it prints
-`hello-world: Update held by dev mode, nothing sent` for each post. It names
-each slug with nothing to resend on standard error, and exits `1` if there was
-one or if the job failed. It works while the server runs, because both read the
-same files and database. The command does not send webmentions. The Resend
-button on a post's row does.
+`posts/2026-03-04-hello-world.md: Update held by dev mode, nothing sent` for
+each post. It names each post with nothing to resend on standard error, and
+exits `1` if there was one or if the job failed. It works while the server
+runs, because both read the same files and database. The command does not send
+webmentions. The Resend button on a post's row does.
 
 [FEP-044f]: https://codeberg.org/fediverse/fep/src/branch/main/fep/044f/fep-044f.md
 
@@ -745,7 +782,7 @@ sent out of the total, finished, failed with the error, or interrupted. A
 finished job says how many posts went to how many inboxes, and how many of
 those were reached, queued or failed. A disclosure under that line lists each
 post with the same counts, and its webmentions when it sent them. The page names
-the posts dev mode held and the slugs with nothing to resend. The status updates
+the posts dev mode held and the paths with nothing to resend. The status updates
 every few seconds without a page load until the job ends. Without JavaScript,
 select **Check again** to see how far it got. While a resend is queued or
 running, neither button queues a second one, and the page says so.

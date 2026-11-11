@@ -1,7 +1,11 @@
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { writeFileAtomically } from '../files/atomic.ts';
-import { exists } from '../util/files.ts';
+import { dump } from 'js-yaml';
+
+import { withFileLock, writeFileAtomically } from '../files/atomic.ts';
+import { exists, isNotFound } from '../util/files.ts';
+import { KNOWN_FRONT_MATTER_KEYS } from './document.ts';
 import type { Document, DocumentContent, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
 import { parseDocument, typeForPath } from './parser.ts';
@@ -103,6 +107,15 @@ export interface SaveDocumentOptions {
 }
 
 /**
+ * Run one read-then-write of the documents with no other between the read and
+ * the write. The editor's save, a move to or from the trash, a taxonomy rename
+ * and the federation's stamp write the same files from what they last read.
+ */
+export function withDocumentWrites<T>(contentDir: string, task: () => Promise<T>): Promise<T> {
+  return withFileLock(path.join(contentDir, '.document-writes'), task);
+}
+
+/**
  * The admin's write path: serialize, write the file atomically, then
  * update the index directly rather than waiting for the watcher.
  *
@@ -131,13 +144,102 @@ export async function saveDocument(options: SaveDocumentOptions): Promise<Docume
   return document;
 }
 
+/** What {@link addPublishedStamp} writes, and where. */
+export interface AddPublishedStampOptions {
+  contentDir: string;
+  store: IndexWriter;
+  /** The file's path relative to {@link AddPublishedStampOptions.contentDir}. */
+  path: string;
+  /** The `activitypub.published` to add, which the file does not carry yet. */
+  published: string;
+  /** The {@link Document.hash} of the version being stamped. */
+  hash: string;
+}
+
+/**
+ * Add `activitypub.published` to a post's file as one inserted line, then
+ * update the index from the bytes written.
+ *
+ * Unlike {@link saveDocument} it does not serialize the document again, so the
+ * comments, key order, quoting and keys the CMS does not model that a
+ * hand-written file carries stay as they were. So does a date written with no
+ * offset, which a rewrite would turn into an instant read in the site's zone
+ * while the index and the activity already sent read it in the server's.
+ *
+ * A file that is gone, or that no longer reads as the version with
+ * {@link AddPublishedStampOptions.hash}, is left alone and `undefined`
+ * answered: the stamp says the followers were told about what the file holds,
+ * and a newer version is the business of the change that wrote it.
+ */
+export async function addPublishedStamp(
+  options: AddPublishedStampOptions,
+): Promise<Document | undefined> {
+  const relative = options.path.replace(/\\/g, '/');
+  const file = path.join(options.contentDir, ...relative.split('/'));
+  const written = await readFile(file, 'utf8').catch((error: unknown) => {
+    if (isNotFound(error)) return undefined;
+    throw error;
+  });
+  if (written === undefined || parseDocument(written, { path: relative }).hash !== options.hash) {
+    return undefined;
+  }
+  const source = withPublishedLine(written, options.published, relative);
+
+  const document = parseDocument(source, {
+    path: relative,
+    handles: handleDirectory(options.contentDir),
+  });
+  if (document.activitypub?.published !== options.published) {
+    throw new TypeError(`${relative} has an activitypub block the stamp cannot be added to.`);
+  }
+
+  await writeFileAtomically(file, source);
+
+  options.store.upsert(document);
+  return document;
+}
+
+/**
+ * The file's text with a `published:` line as the first key of its
+ * `activitypub` block, or with a new block where {@link serializeDocument}
+ * puts one: after the keys the CMS models, before the ones it does not. A file
+ * the CMS wrote then reads exactly as its next save would write it.
+ */
+function withPublishedLine(source: string, published: string, path: string): string {
+  const eol = source.includes('\r\n') ? '\r\n' : '\n';
+  const lines = source.split(eol);
+  const end = lines.findIndex((line, index) => index > 0 && /^---\s*$/.test(line));
+  if (lines[0] !== '---' || end === -1) {
+    throw new TypeError(`${path} has no YAML front matter to stamp.`);
+  }
+
+  const stamp = `published: ${dump(published).trimEnd()}`;
+  const block = lines.findIndex(
+    (line, index) => index < end && /^activitypub:[ \t]*(#.*)?$/.test(line),
+  );
+  if (block === -1) {
+    const extra = lines.findIndex((line, index) => index < end && isUnmodelledKey(line));
+    lines.splice(extra === -1 ? end : extra, 0, 'activitypub:', `  ${stamp}`);
+  } else {
+    const first = lines.slice(block + 1, end).find((line) => !/^\s*(#.*)?$/.test(line));
+    const indent = /^[ \t]+/.exec(first ?? '')?.[0] ?? '  ';
+    lines.splice(block + 1, 0, `${indent}${stamp}`);
+  }
+  return lines.join(eol);
+}
+
+function isUnmodelledKey(line: string): boolean {
+  const key = /^([^\s#'"-][^:]*):(\s|$)/.exec(line)?.[1];
+  return key !== undefined && !(KNOWN_FRONT_MATTER_KEYS as readonly string[]).includes(key);
+}
+
 /**
  * The document with every date it carries turned into a UTC instant.
  *
  * A date the CMS writes ends in `Z`, whatever the file it came
- * from spelled. That is done here, once, rather than in each of the three
- * callers — the editor, a taxonomy rewrite and the federation's stamp — so
- * every write converts and none of them has to remember to. It is done before
+ * from spelled. That is done here, once, rather than in each
+ * caller — the editor and a taxonomy rewrite — so every save converts and
+ * neither has to remember to. It is done before
  * the serialize rather than inside it because {@link saveDocument} parses its
  * own output back and hashes it: normalising later would leave the index
  * holding a hash of bytes that were never written.
