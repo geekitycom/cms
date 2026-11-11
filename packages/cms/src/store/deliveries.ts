@@ -17,10 +17,10 @@ export const DELIVERY_STATUSES = ['sent', 'queued', 'retrying', 'failed', 'unkno
  * attempt failed, with that error, and which the queue will try again.
  * `failed` is a delivery Fedify gave up on, one that threw before it reached
  * the queue or in a queue that does not hand a message over again, or one to
- * an inbox nothing can be queued for, with the reason in the row. `unknown` is one left
- * `queued` or `retrying` with nothing for it in the queue any more: a version
- * that did not settle outcomes wrote it, or the queue lost it, so how it
- * ended was never seen.
+ * an inbox nothing can be queued for, with the reason in the row. `unknown`
+ * is one left `queued` or `retrying` with nothing for it in the queue any
+ * more: a version that did not settle outcomes wrote it, or the queue lost it,
+ * so how it ended was never seen.
  */
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 

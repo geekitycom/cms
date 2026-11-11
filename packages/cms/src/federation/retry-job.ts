@@ -119,7 +119,6 @@ export function failedRetries(services: RetryPlanServices, filter: RetryFilter):
   return [...retries].map(([path, recipients]) => ({ path, recipients }));
 }
 
-/** One recipient's newest delivery rows about one post, of each kind. */
 type RecipientHistory = {
   readonly path: string;
   create?: Delivery;
@@ -205,8 +204,7 @@ export function retryDeliveriesJob(
       for (const [done, retry] of retries.entries()) {
         context.signal.throwIfAborted();
         if (done > 0) await pace(context.signal);
-        for (const group of byWhatTheyMissed(retry.recipients)) {
-          const { missed } = group[0] as RetryRecipient;
+        for (const { missed, group } of byWhatTheyMissed(retry.recipients)) {
           const actors = new Set(group.map((recipient) => recipient.actorId));
           const reports: (DeliveryReport | undefined)[] = [];
           if (missed.post !== null) {
@@ -231,18 +229,19 @@ export function retryDeliveriesJob(
   };
 }
 
-/** Recipients that missed the same activities, those that missed the announcement first. */
-function byWhatTheyMissed(recipients: readonly RetryRecipient[]): RetryRecipient[][] {
-  const groups = new Map<string, RetryRecipient[]>();
+function byWhatTheyMissed(
+  recipients: readonly RetryRecipient[],
+): { readonly missed: Missed; readonly group: RetryRecipient[] }[] {
+  const groups = new Map<string, { readonly missed: Missed; readonly group: RetryRecipient[] }>();
   for (const recipient of recipients) {
     const key = JSON.stringify(recipient.missed);
     const held = groups.get(key);
-    if (held === undefined) groups.set(key, [recipient]);
-    else held.push(recipient);
+    if (held === undefined) groups.set(key, { missed: recipient.missed, group: [recipient] });
+    else held.group.push(recipient);
   }
-  const rank = (group: RetryRecipient[]): number =>
-    POST_ORDER.indexOf((group[0] as RetryRecipient).missed.post);
-  return [...groups.values()].toSorted((a, b) => rank(a) - rank(b));
+  return [...groups.values()].toSorted(
+    (a, b) => POST_ORDER.indexOf(a.missed.post) - POST_ORDER.indexOf(b.missed.post),
+  );
 }
 
 function parseRetryFilter(payload: Json): RetryFilter {

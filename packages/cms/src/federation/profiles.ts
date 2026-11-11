@@ -141,8 +141,9 @@ export function createActorProfileService(
     try {
       profile = await load(actorId, signal);
     } catch (thrown) {
-      if (!signal.aborted)
+      if (!signal.aborted) {
         logger.warn(`Could not read the actor ${actorId}: ${oneLineMessageOf(thrown)}`);
+      }
     }
     if (signal.aborted) return;
     if (profile === undefined) {

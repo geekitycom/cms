@@ -336,7 +336,6 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     admin.deleteRelay(relay.inboxId);
   }
 
-  /** Run one subscription change, logging a failure so the rest still run. */
   async function attempt(change: () => Promise<unknown>): Promise<void> {
     try {
       await change();

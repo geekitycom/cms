@@ -424,19 +424,17 @@ export function createServices({
   // database has never heard of is followed here, which is what makes a
   // rebuilt database catch up rather than silently stop federating to it.
   const relays = createRelayService({ ...federated, federation });
-  const syncRelays = (): void => {
+  const startRelaySync = (): void => {
     relays.sync().catch((thrown: unknown) => {
       console.warn(`The relays could not be read: ${messageOf(thrown)}`);
     });
   };
-  syncRelays();
-  // Not awaited: the sync waits its turn behind subscription changes already
-  // sending, and a save of the settings has no reason to wait on a relay.
-  settings.watch(SITE.relays, syncRelays);
-  // Going live is when an Undo dev mode held can finally be sent.
-  settings.watch(DEV_MODE.on, ({ next }) => {
-    if (!next) syncRelays();
-  });
+  const sendRelayUndosHeldByDevMode = ({ next }: { readonly next: boolean }): void => {
+    if (!next) startRelaySync();
+  };
+  startRelaySync();
+  settings.watch(SITE.relays, startRelaySync);
+  settings.watch(DEV_MODE.on, sendRelayUndosHeldByDevMode);
   settings.watch(SITE.wiki_base, rescanOnWikiBaseChange(content));
   settings.watch(SITE.gemini, async ({ next }) => {
     if (next) await warnAboutGeminiCertificate(resolved, settings);

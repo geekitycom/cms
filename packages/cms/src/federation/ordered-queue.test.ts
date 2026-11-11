@@ -35,16 +35,11 @@ async function dataDir(): Promise<string> {
 interface Worker {
   readonly queue: MessageQueue;
   readonly handled: string[];
-  /** Resolves once a refused message is back in the queue. */
   readonly putBack: Promise<void>;
   readonly stop: () => Promise<void>;
 }
 
-/**
- * A worker over the queue file that handles as Fedify's outbox does: a message
- * it refuses is put back under the same key, to be tried again after a delay.
- */
-function worker(dir: string, refuse: Refuse = () => undefined): Worker {
+function retryingWorker(dir: string, refuse: Refuse = () => undefined): Worker {
   const db = openQueueDatabase(dir);
   const queue = createOrderedSqliteQueue(
     new SqliteMessageQueue(db, { tableName: FEDERATION_QUEUE_TABLE }),
@@ -131,7 +126,7 @@ function refuseTimes(name: string, times: number, retryIn: number): Refuse {
 
 describe('createOrderedSqliteQueue', () => {
   it('handles a message put back for a retry before the ones enqueued behind it', async () => {
-    const { queue, handled, stop } = worker(await dataDir(), refuseTimes('create', 1, 200));
+    const { queue, handled, stop } = retryingWorker(await dataDir(), refuseTimes('create', 1, 200));
     await send(queue, 'create', 'post');
     await send(queue, 'update', 'post');
     await send(queue, 'delete', 'post');
@@ -142,7 +137,7 @@ describe('createOrderedSqliteQueue', () => {
   });
 
   it('keeps a message that fails more than once ahead each time', async () => {
-    const { queue, handled, stop } = worker(await dataDir(), refuseTimes('create', 3, 60));
+    const { queue, handled, stop } = retryingWorker(await dataDir(), refuseTimes('create', 3, 60));
     await send(queue, 'create', 'post');
     await send(queue, 'update', 'post');
 
@@ -152,7 +147,7 @@ describe('createOrderedSqliteQueue', () => {
   });
 
   it('places a message enqueued while a retry waits behind that retry', async () => {
-    const { queue, handled, putBack, stop } = worker(
+    const { queue, handled, putBack, stop } = retryingWorker(
       await dataDir(),
       refuseTimes('create', 1, 200),
     );
@@ -166,7 +161,10 @@ describe('createOrderedSqliteQueue', () => {
   });
 
   it('does not hold another key’s messages behind a waiting retry', async () => {
-    const { queue, handled, stop } = worker(await dataDir(), refuseTimes('create', 1, 60_000));
+    const { queue, handled, stop } = retryingWorker(
+      await dataDir(),
+      refuseTimes('create', 1, 60_000),
+    );
     await send(queue, 'create', 'post\nhttps://dead.example/inbox');
     await send(queue, 'update', 'post\nhttps://dead.example/inbox');
     await send(queue, 'create elsewhere', 'post\nhttps://live.example/inbox');
@@ -178,7 +176,7 @@ describe('createOrderedSqliteQueue', () => {
 
   it('leaves the order in the queue file for the worker that starts next', async () => {
     const dir = await dataDir();
-    const first = worker(dir, refuseTimes('create', 1, 60_000));
+    const first = retryingWorker(dir, refuseTimes('create', 1, 60_000));
     await send(first.queue, 'create', 'post');
     await send(first.queue, 'update', 'post');
     await first.putBack;

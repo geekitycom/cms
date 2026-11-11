@@ -389,7 +389,6 @@ describe('removing a relay', () => {
   });
 });
 
-/** Turn dev mode on or off the way `geekity dev-mode` does. */
 async function devMode(cms: Cms, on: boolean): Promise<void> {
   await cms.settings.set('dev_mode', new Map([['on', on]]), 'cli');
 }
@@ -451,8 +450,7 @@ describe('removing a relay while dev mode is on', () => {
   });
 });
 
-/** List the relay, let the Follow go out, and have the relay answer it. */
-async function answered(answer: 'accept' | 'reject'): Promise<Cms> {
+async function siteWithAnsweredRelay(answer: 'accept' | 'reject'): Promise<Cms> {
   const { cms } = await site({ relays: [RELAY_INBOX] });
   await cms.relays.settled();
   const followId = String(ofType('Follow')[0]?.body['id']);
@@ -461,7 +459,6 @@ async function answered(answer: 'accept' | 'reject'): Promise<Cms> {
   return cms;
 }
 
-/** Press Retry on the relay's row, and return the screen the redirect lands on. */
 async function pressRetry(cms: Cms): Promise<string> {
   const agent = signedInAs(cms, LOCAL_USER);
   const token = csrfField(await (await agent.get('/admin/federation')).text());
@@ -475,10 +472,6 @@ async function pressRetry(cms: Cms): Promise<string> {
   return await (await agent.get('/admin/federation')).text();
 }
 
-/**
- * Run `before` ahead of every POST to one inbox, until the returned function
- * puts `fetch` back.
- */
 function beforePostsTo(inbox: string, before: () => Promise<void>): () => void {
   const inner = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -491,7 +484,6 @@ function beforePostsTo(inbox: string, before: () => Promise<void>): () => void {
   };
 }
 
-/** Hold every POST to one inbox until the returned function is called. */
 function holdPostsTo(inbox: string): () => void {
   let open: () => void = () => undefined;
   const gate = new Promise<void>((resolve) => (open = resolve));
@@ -502,14 +494,13 @@ function holdPostsTo(inbox: string): () => void {
   };
 }
 
-/** Save the relay list the way any writer of the settings would. */
 async function listRelays(cms: Cms, relays: string[]): Promise<void> {
   await cms.settings.set('site', new Map([['relays', relays]]), 'admin');
 }
 
 describe('Retry on a relay that has answered', () => {
   it('leaves a rejected relay rejected, sends no Follow, and says why', async () => {
-    const cms = await answered('reject');
+    const cms = await siteWithAnsweredRelay('reject');
 
     const screen = await pressRetry(cms);
 
@@ -519,7 +510,7 @@ describe('Retry on a relay that has answered', () => {
   });
 
   it('leaves an accepted relay accepted, sends no Follow, and says why', async () => {
-    const cms = await answered('accept');
+    const cms = await siteWithAnsweredRelay('accept');
 
     const screen = await pressRetry(cms);
 
