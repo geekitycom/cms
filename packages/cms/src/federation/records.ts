@@ -562,7 +562,7 @@ function unreadableId(
   for (const field of ['actorId', 'inboxId', 'sharedInboxId'] as const) {
     const value = follower[field];
     if (value !== null && !URL.canParse(value)) {
-      return `the follower "${follower.actorId}" has a ${field} that is not a URL: ${value}`;
+      return `the follower "${follower.actorId}" has ${field} ${value}, which is not a URL`;
     }
   }
   return undefined;
