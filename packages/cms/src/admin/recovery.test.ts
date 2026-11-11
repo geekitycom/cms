@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { rmSync } from 'node:fs';
 import { after, describe, it } from 'node:test';
 
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -8,7 +9,7 @@ import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { verifyUserPassword } from '../site/users.ts';
+import { createUser, usersFile, verifyUserPassword } from '../site/users.ts';
 import { addUser } from './__testing__/users.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
@@ -267,6 +268,30 @@ describe('the reset link (AC #3)', () => {
       verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
       'nothing was changed',
     );
+  });
+
+  it('refuses a link asked for before the users file was started again', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+    await askForReset(cms, 'ada');
+    const token = new URL(linkIn(provider.sent[0])).searchParams.get('token') ?? '';
+
+    const dataDir = cms.config.dataDir;
+    rmSync(usersFile(dataDir));
+    await createUser({ dataDir, username: 'grace', password: 'a password of her own' });
+
+    const agent = browser(cms);
+    const csrf = csrfField(await (await agent.get(`${RESET_PATH}?token=${token}`)).text());
+    assert.ok(csrf !== undefined);
+    const response = await agent.post(RESET_PATH, {
+      csrf_token: csrf,
+      token,
+      password: 'a brand new password',
+      password_confirmation: 'a brand new password',
+    });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /no longer valid|expired/i);
+    assert.equal(verifyUserPassword(dataDir, 'grace', 'a brand new password'), undefined);
   });
 
   it('holds the new password to the rules the rest of the admin uses', async () => {

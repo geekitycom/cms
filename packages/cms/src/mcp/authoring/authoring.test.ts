@@ -321,7 +321,7 @@ describe('get_post_source', () => {
 
   it('refuses another user’s post', async () => {
     const { cms, token } = await authoringSite();
-    await createUser({
+    const created = await createUser({
       dataDir: cms.config.dataDir,
       username: 'bea',
       password: 'another horse battery',
@@ -335,7 +335,8 @@ describe('get_post_source', () => {
         clientId: 'https://claude.example/client.json',
         redirectUri: 'http://localhost:4567/callback',
         codeChallenge: { method: 'S256', value: 'unused' },
-        userId: 2,
+        userId: created.id,
+        userUid: created.uid,
         me: `${BASE}/`,
         scopes: [...EVERY],
         resource: `${BASE}/_geekity/mcp`,

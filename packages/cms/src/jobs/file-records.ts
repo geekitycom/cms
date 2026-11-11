@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 import { withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
-import { lockFileFor, withLockFile } from './lock-file.ts';
+import { lockFileFor, withLockFile } from '../files/lock-file.ts';
 import { JOB_STATES } from './types.ts';
 import type { JobRecords, JobStateName, JobStatus } from './types.ts';
 

@@ -3,12 +3,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { addUser } from '../admin/__testing__/users.ts';
 import { sessionCookieName } from './session.ts';
 import { createMailTemplates } from '../notifications/mail-templates.ts';
 import type { Cms } from '../index.ts';
 import { deleteUser } from '../admin/users.ts';
-import { listUsers } from '../site/users.ts';
+import { findUser } from '../site/users.ts';
 import { createThemeSource } from '../theme/themes.ts';
 import { systemClock } from '../util/clock.ts';
 import { shared } from './__testing__/shared.ts';
@@ -279,8 +280,10 @@ describe('devMode and signedIn on the context, for a theme to leave analytics ou
   it('treats a session whose user was deleted as a stranger (AC #2)', async () => {
     const { cms, dataDir } = await siteWithGuardedAnalytics();
     const agent = await signedIn(cms);
-    for (const user of listUsers(dataDir))
-      await deleteUser({ dataDir, userId: user.id, now: new Date() });
+    const ada = findUser(dataDir, FIRST_ADMIN.username);
+    assert.ok(ada !== undefined);
+    addUser({ dataDir, username: 'grace', password: 'a password of her own' });
+    await deleteUser({ dataDir, userId: ada.id, now: new Date() });
 
     const html = await (await agent.get('/about/')).text();
     assert.ok(headOf(html).includes(UMAMI));

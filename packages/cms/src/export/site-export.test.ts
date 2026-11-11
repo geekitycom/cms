@@ -72,6 +72,8 @@ async function site() {
   await put(contentDir, 'wiki/garden.md', '---\ntitle: Garden\n---\n\nNotes.\n');
   await put(contentDir, 'uploads/2026/10/cat.jpg', 'jpeg bytes');
   await put(contentDir, 'posts/hello.md.1a2b-3.tmp', 'half a write');
+  await put(contentDir, '_data/media.json.lock', '4321 stale');
+  await put(contentDir, '_data/media.json.lock.takeover', '4321 stale');
   await put(contentDir, '.geekity-watch-0f3e/probe', '');
   await put(contentDir, '.geekity-importing/posts/staged.md', 'staged');
   await put(contentDir, '.geekity-before-import-20261014T150000Z/posts/old.md', 'old');

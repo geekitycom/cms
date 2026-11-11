@@ -20,13 +20,22 @@ export {
   setUserProfile,
   setUserActorId,
   ConflictingActorIdError,
+  SetupClosedError,
   UnknownUserError,
+  UserRemovalRefusedError,
   USERS_FILE_MODE,
   usersFile,
   verifyUserPassword,
 } from '../site/users.ts';
 export { deleteUser } from './users.ts';
-export type { CreateUserInput, ProfileLink, StoredUser, User, UserProfile } from '../site/users.ts';
+export type {
+  CreateUserInput,
+  ProfileLink,
+  StoredUser,
+  User,
+  UserProfile,
+  UserRemovalRefusal,
+} from '../site/users.ts';
 export {
   credentialProblem,
   emailProblem,

@@ -591,6 +591,13 @@ export const MIGRATIONS: readonly Migration[] = [
     version: 27,
     sql: `ALTER TABLE sessions ADD COLUMN cleared_autosaves TEXT;`,
   },
+  {
+    version: 28,
+    sql: `
+      ALTER TABLE sessions ADD COLUMN user_uid TEXT;
+      ALTER TABLE password_resets ADD COLUMN user_uid TEXT;
+    `,
+  },
 ];
 
 export function openAdminDatabase(dataDir: string, now: Clock): DatabaseSync {

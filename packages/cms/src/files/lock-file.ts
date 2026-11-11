@@ -3,7 +3,7 @@ import { mkdir, open, readFile, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { isAlive } from './processes.ts';
+import { isAlive } from '../util/process-alive.ts';
 
 const STALE_LOCK_MS = 10_000;
 const LOCK_RETRY_MS = 5;

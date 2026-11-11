@@ -1273,6 +1273,36 @@ describe('deleting a user', () => {
     assert.equal(findUser(cms.config.dataDir, 'ada')?.id, ada.id, 'ada is still there');
     assert.match(await (await agent.get('/admin/users')).text(), /own account/);
   });
+
+  it('leaves one user when two admins delete each other at the same moment', async () => {
+    const cms = await box.site();
+    const ada = await signedIn(cms);
+    const graceUser = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    });
+    const grace = await signIn(cms, { username: 'grace', password: 'a password of her own' });
+    const adaId = idOf(cms.config.dataDir, 'ada');
+    const adaToken = (await usersScreen(ada)).token;
+    const graceToken = (await usersScreen(grace)).token;
+
+    const responses = await Promise.all([
+      ada.post('/admin/users/delete', { csrf_token: adaToken, user_id: String(graceUser.id) }),
+      grace.post('/admin/users/delete', { csrf_token: graceToken, user_id: String(adaId) }),
+    ]);
+
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      [303, 303],
+    );
+    assert.equal(countUsers(cms.config.dataDir), 1);
+    assert.notEqual(
+      (await cms.app.request('/admin')).headers.get('location'),
+      '/admin/setup',
+      'first-run setup stays closed',
+    );
+  });
 });
 
 describe('a profile link is checked the way a menu line is (TASK-112)', () => {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -7,6 +7,7 @@ import { after, describe, it } from 'node:test';
 
 import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
+import { actorKeyFile } from '../federation/keys.ts';
 import { hashPassword } from './passwords.ts';
 import {
   ConflictingActorIdError,
@@ -17,12 +18,17 @@ import {
   findUserById,
   findUserByIdentifier,
   listUsers,
+  removeUserRecord,
   setUserActorId,
+  setUserAdminTheme,
   setUserEmail,
   setUserPassword,
   setUserProfile,
+  SetupClosedError,
   UnknownUserError,
   updateUser,
+  UserRemovalRefusedError,
+  userIssuedTo,
   usersFile,
   verifyUserPassword,
 } from './users.ts';
@@ -100,6 +106,127 @@ describe('the users file', () => {
   });
 });
 
+describe('who a session, link or token was issued to', () => {
+  it('is a new user only for what was issued to that user, not to an earlier holder of the id', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    assert.ok(ada.uid !== undefined, 'a new user has a uid');
+    assert.equal(userIssuedTo(dataDir, { userId: ada.id, userUid: ada.uid })?.username, 'ada');
+
+    await rm(usersFile(dataDir));
+    const grace = await createUser({ dataDir, username: 'grace', password: 'battery staple' });
+
+    assert.equal(grace.id, ada.id);
+    assert.notEqual(grace.uid, ada.uid);
+    assert.equal(userIssuedTo(dataDir, { userId: ada.id, userUid: ada.uid }), undefined);
+    assert.equal(userIssuedTo(dataDir, { userId: ada.id }), undefined);
+    assert.equal(
+      userIssuedTo(dataDir, { userId: grace.id, userUid: grace.uid })?.username,
+      'grace',
+    );
+  });
+
+  it('is a user written before uids existed for what was issued with none', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada' }]);
+
+    assert.equal(userIssuedTo(dataDir, { userId: 1 })?.username, 'ada');
+    assert.equal(userIssuedTo(dataDir, { userId: 1, userUid: 'someone-else' }), undefined);
+  });
+
+  it('keeps the uid through a save of something else', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+
+    await setUserEmail({ dataDir, userId: ada.id, email: 'ada@example.com' });
+
+    assert.equal(findUserById(dataDir, ada.id)?.uid, ada.uid);
+  });
+
+  it('refuses a file whose uid is not a string', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada' }]);
+    const file = usersFile(dataDir);
+    const parsed = JSON.parse(await readFile(file, 'utf8')) as { users: Record<string, unknown>[] };
+    parsed.users[0] = { ...parsed.users[0], uid: 7 };
+    await writeFile(file, JSON.stringify(parsed));
+
+    assert.throws(() => countUsers(dataDir), /Entry 1 of "users" has a uid that is not a string/);
+  });
+});
+
+describe('a users file with repeated entries', () => {
+  it('refuses two entries that share an id, naming the id', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [
+      { username: 'ada', id: 7 },
+      { username: 'grace', id: 7 },
+    ]);
+
+    assert.throws(() => countUsers(dataDir), /id 7/);
+  });
+
+  it('refuses two entries that share a username, naming it', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [
+      { username: 'ada', id: 1 },
+      { username: 'ada', id: 2 },
+    ]);
+
+    assert.throws(() => countUsers(dataDir), /"ada"/);
+  });
+});
+
+describe('a save to a users file with fields this version does not read', () => {
+  it('keeps every other field, user and top-level key as the file had them', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada' }, { username: 'bob' }]);
+    const file = usersFile(dataDir);
+    const raw = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown> & {
+      users: Record<string, unknown>[];
+    };
+    raw.users[0]!['futureField'] = 'from a newer release';
+    raw.users[0]!['adminTheme'] = 'dark';
+    raw.users[1]!['actorId'] = 'blog.example.com/?author=2';
+    raw['topLevelFuture'] = { kept: true };
+    await writeFile(file, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+
+    assert.equal(await setUserAdminTheme({ dataDir, userId: 1, theme: undefined }), true);
+
+    const after = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown> & {
+      users: Record<string, unknown>[];
+    };
+    const { adminTheme: _theme, ...ada } = raw.users[0]!;
+    assert.deepEqual(after, { ...raw, users: [ada, raw.users[1]] });
+  });
+});
+
+describe('a users file the server cannot read', () => {
+  it(
+    'makes countUsers throw and createUser reject, and leaves the file as it was',
+    { skip: process.getuid?.() === 0 || process.platform === 'win32' },
+    async () => {
+      const dataDir = await temporaryDir();
+      writeUsers(dataDir, [{ username: 'ada' }, { username: 'grace' }]);
+      const file = usersFile(dataDir);
+      const before = await readFile(file, 'utf8');
+      await chmod(file, 0o000);
+
+      try {
+        assert.throws(() => countUsers(dataDir), { code: 'EACCES' });
+        await assert.rejects(
+          createUser({ dataDir, username: 'mallory', password: 'a new admin password' }),
+          { code: 'EACCES' },
+        );
+      } finally {
+        await chmod(file, 0o600);
+      }
+
+      assert.equal(await readFile(file, 'utf8'), before);
+    },
+  );
+});
+
 describe('a name that is taken', () => {
   it('is refused, exactly as the unique index refused it (AC #5)', async () => {
     const dataDir = await temporaryDir();
@@ -142,15 +269,65 @@ describe('a name that is taken', () => {
     );
   });
 
-  it('is a different name when the case is different, as it always was', async () => {
+  it('is refused when it differs from a taken name only by case', async () => {
     const dataDir = await temporaryDir();
-    await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    writeUsers(dataDir, [{ username: 'ada' }]);
+    assert.equal(
+      actorKeyFile(dataDir, 'Ada', 'Ed25519'),
+      actorKeyFile(dataDir, 'ada', 'Ed25519'),
+      'the two names share a key file',
+    );
 
-    const other = await createUser({ dataDir, username: 'Ada', password: 'a password of her own' });
+    await assert.rejects(
+      () => createUser({ dataDir, username: 'Ada', password: 'another password here' }),
+      (error: unknown) => error instanceof DuplicateUsernameError && error.username === 'ada',
+    );
+    assert.equal(countUsers(dataDir), 1, 'and nothing was written');
+  });
 
-    assert.equal(other.username, 'Ada');
-    assert.equal(countUsers(dataDir), 2);
-    assert.equal(verifyUserPassword(dataDir, 'ada', 'a password of her own'), undefined);
+  it('is refused when it differs from a taken name only by a dot for a dash', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'a-da' }]);
+    assert.equal(
+      actorKeyFile(dataDir, 'a.da', 'Ed25519'),
+      actorKeyFile(dataDir, 'a-da', 'Ed25519'),
+      'the two names share a key file',
+    );
+
+    await assert.rejects(
+      () => createUser({ dataDir, username: 'a.da', password: 'another password here' }),
+      DuplicateUsernameError,
+    );
+    assert.equal(countUsers(dataDir), 1, 'and nothing was written');
+  });
+
+  it('still loads a file that already holds names differing only by case', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [
+      { username: 'ada', id: 1 },
+      { username: 'Ada', id: 2 },
+    ]);
+
+    assert.deepEqual(
+      listUsers(dataDir)
+        .map((user) => user.username)
+        .sort(),
+      ['Ada', 'ada'],
+    );
+  });
+
+  it('adds only the first user when asked to add one only while there are none', async () => {
+    const dataDir = await temporaryDir();
+
+    const outcomes = await Promise.allSettled([
+      createUser({ dataDir, username: 'ada', password: 'one password', onlyIfNoUsers: true }),
+      createUser({ dataDir, username: 'grace', password: 'another one', onlyIfNoUsers: true }),
+    ]);
+
+    const refused = outcomes.filter((outcome) => outcome.status === 'rejected');
+    assert.equal(refused.length, 1);
+    assert.ok(refused[0]?.reason instanceof SetupClosedError);
+    assert.equal(countUsers(dataDir), 1);
   });
 });
 
@@ -505,10 +682,11 @@ describe('updating one user', () => {
 describe('deleting a user', () => {
   it('takes them out of the file and hands nobody else their id', async () => {
     const dataDir = await temporaryDir();
+    await createUser({ dataDir, username: 'grace', password: 'a password' });
     const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
 
     assert.equal(await deleteUser({ dataDir, userId: ada.id, now: new Date() }), true);
-    assert.equal(countUsers(dataDir), 0);
+    assert.equal(countUsers(dataDir), 1);
     assert.equal(findUser(dataDir, 'ada'), undefined);
     assert.equal(findUserById(dataDir, ada.id), undefined);
     assert.equal(
@@ -517,8 +695,52 @@ describe('deleting a user', () => {
       'and only goes once',
     );
 
-    const grace = await createUser({ dataDir, username: 'grace', password: 'a password' });
-    assert.notEqual(grace.id, ada.id, 'an id is never handed out twice');
+    const lin = await createUser({ dataDir, username: 'lin', password: 'a password' });
+    assert.notEqual(lin.id, ada.id, 'an id is never handed out twice');
+  });
+
+  it('refuses to leave the file with nobody in it', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+
+    await assert.rejects(
+      removeUserRecord({ dataDir, userId: ada.id }),
+      (error: unknown) => error instanceof UserRemovalRefusedError && error.reason === 'only-user',
+    );
+    assert.equal(countUsers(dataDir), 1);
+  });
+
+  it('refuses the record of the user asking', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada' }, { username: 'grace' }]);
+
+    await assert.rejects(
+      removeUserRecord({ dataDir, userId: 1, signedInAs: 1 }),
+      (error: unknown) =>
+        error instanceof UserRemovalRefusedError && error.reason === 'own-account',
+    );
+    assert.equal(countUsers(dataDir), 2);
+  });
+
+  it('checks against the file it writes, so two removals at once leave one user', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada' }, { username: 'grace' }]);
+
+    const results = await Promise.allSettled([
+      removeUserRecord({ dataDir, userId: 2, signedInAs: 1 }),
+      removeUserRecord({ dataDir, userId: 1, signedInAs: 2 }),
+    ]);
+
+    assert.equal(countUsers(dataDir), 1);
+    assert.deepEqual(
+      results.map((result) => result.status),
+      ['fulfilled', 'rejected'],
+    );
+    const refused = results[1];
+    assert.ok(
+      refused?.status === 'rejected' && refused.reason instanceof UserRemovalRefusedError,
+      'the second one is refused with a reason',
+    );
   });
 });
 

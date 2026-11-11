@@ -190,6 +190,7 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
       config.dataDir,
       {
         userId: user.id,
+        userUid: user.uid,
         me: meForSignIn(`${baseUrl}/`, user, {
           baseUrl,
           users: listUsers(config.dataDir),

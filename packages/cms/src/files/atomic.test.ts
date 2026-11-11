@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { execFile as execFileCallback } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+import { promisify } from 'node:util';
 
 import {
   readFileIfPresentSync,
@@ -15,6 +17,9 @@ import {
   writeFileAtomicallySync,
 } from './atomic.ts';
 
+const execFile = promisify(execFileCallback);
+const OTHER_PROCESS = path.join(import.meta.dirname, '__fixtures__', 'update-process.ts');
+
 const dirs: string[] = [];
 after(async () => {
   await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
@@ -25,6 +30,9 @@ async function temporaryDir(): Promise<string> {
   dirs.push(dir);
   return dir;
 }
+
+// Permission bits do not stop root, and Windows does not have them.
+const runsAsRootOrWindows = process.getuid?.() === 0 || process.platform === 'win32';
 
 describe('writeFileAtomically', () => {
   it('writes the file, creates the directory it is in, and leaves no temporary behind', async () => {
@@ -131,6 +139,77 @@ describe('updateFileAtomically', () => {
     );
 
     assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { count: 20 });
+  });
+
+  it('keeps every change two processes make to one file', async () => {
+    const dir = await temporaryDir();
+    const file = path.join(dir, 'users.json');
+    await writeFile(file, '{}');
+
+    await Promise.all(
+      ['a', 'b'].map((prefix) =>
+        execFile(process.execPath, [OTHER_PROCESS, file, prefix, '30'], { timeout: 30_000 }),
+      ),
+    );
+
+    const keys = Object.keys(JSON.parse(await readFile(file, 'utf8')) as object);
+    assert.equal(keys.length, 60, `only ${String(keys.length)} of 60 changes survived`);
+    assert.deepEqual(await readdir(dir), ['users.json']);
+  });
+  it(
+    'refuses to write over a file it cannot read, and leaves its bytes alone',
+    { skip: runsAsRootOrWindows },
+    async () => {
+      const dir = await temporaryDir();
+      const file = path.join(dir, 'state.json');
+      await writeFile(file, '{"kept":true}\n');
+      await chmod(file, 0o000);
+
+      let produced = false;
+      try {
+        await assert.rejects(
+          updateFileAtomically(file, () => {
+            produced = true;
+            return '{"replaced":true}\n';
+          }),
+          { code: 'EACCES' },
+        );
+      } finally {
+        await chmod(file, 0o600);
+      }
+
+      assert.equal(produced, false);
+      assert.equal(await readFile(file, 'utf8'), '{"kept":true}\n');
+    },
+  );
+});
+
+describe('readFileIfPresentSync', () => {
+  it('reads a missing file as undefined', async () => {
+    const dir = await temporaryDir();
+
+    assert.equal(readFileIfPresentSync(path.join(dir, 'missing.json')), undefined);
+  });
+
+  it('throws for a path it cannot read as a file', async () => {
+    const dir = await temporaryDir();
+    const file = path.join(dir, 'users.json');
+    await mkdir(file);
+
+    assert.throws(() => readFileIfPresentSync(file), { code: 'EISDIR' });
+  });
+
+  it('throws for a file it is not allowed to read', { skip: runsAsRootOrWindows }, async () => {
+    const dir = await temporaryDir();
+    const file = path.join(dir, 'users.json');
+    await writeFile(file, '{}');
+    await chmod(file, 0o000);
+
+    try {
+      assert.throws(() => readFileIfPresentSync(file), { code: 'EACCES' });
+    } finally {
+      await chmod(file, 0o600);
+    }
   });
 });
 

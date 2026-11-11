@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+
 import { adminTheme } from './admin-theme.ts';
 import type { AdminTheme } from './admin-theme.ts';
 import { dashboardLayout, isEmpty } from './dashboard-layout.ts';
@@ -15,7 +18,7 @@ import { systemClock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
 import { relText } from './navigation.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
-import { USERS, dataPath } from '../files/data-files.ts';
+import { USERS, dataPath, fileToken } from '../files/data-files.ts';
 
 /**
  * Who may sign in: `data/users.json`, and everything that reads or writes it.
@@ -46,6 +49,11 @@ export function usersFile(dataDir: string): string {
 export interface User {
   /** Its id, stable for the life of the user, and what a session names. */
   readonly id: number;
+  /**
+   * A random name for this one person, never handed to anybody else. Absent
+   * for a user written before uids existed; nothing fills it in.
+   */
+  readonly uid?: string | undefined;
   /** Login name, unique and compared case sensitively. */
   readonly username: string;
   /**
@@ -192,6 +200,8 @@ export interface CreateUserInput {
   email?: string | undefined;
   /** When the account is created. Defaults to the system clock. */
   now?: Date | undefined;
+  /** Add the user only while the file holds nobody, as first-run setup does. */
+  onlyIfNoUsers?: boolean | undefined;
 }
 
 /** Thrown when a username is already taken. Usernames are the login key. */
@@ -261,6 +271,22 @@ export function findUserById(dataDir: string, id: number): User | undefined {
   return found === undefined ? undefined : withoutHash(found);
 }
 
+/** Who a session, reset link or token was issued to. */
+export interface IssuedTo {
+  readonly userId: number;
+  readonly userUid?: string | undefined;
+}
+
+/**
+ * The user `issued` names, when the file still holds that same person under
+ * its id: the uids must match, and one issued with none matches only a user
+ * who has none.
+ */
+export function userIssuedTo(dataDir: string, issued: IssuedTo): User | undefined {
+  const user = findUserById(dataDir, issued.userId);
+  return user?.uid === issued.userUid ? user : undefined;
+}
+
 /**
  * The user a forgot-password form named, by either of the two things somebody
  * might type: their username or their email address.
@@ -286,14 +312,27 @@ export function findUserByIdentifier(dataDir: string, identifier: string): User 
   return found === undefined ? undefined : withoutHash(found);
 }
 
+/** Thrown when first-run setup is asked to add a user to a site that has one. */
+export class SetupClosedError extends Error {
+  override readonly name = 'SetupClosedError';
+
+  constructor() {
+    super('This site already has a user, so setup is closed.');
+  }
+}
+
 /**
  * Hash the password and add the user to the file.
  *
- * Throws {@link DuplicateUsernameError} when the name is taken. The check is
- * inside the write, not before it, which is what makes it the rule the
- * `UNIQUE` index used to be: two requests adding the same name at the same
- * moment queue behind one another on the file, so the second one reads the
- * first one's work and is refused.
+ * Throws {@link DuplicateUsernameError} when the name is taken, or differs
+ * from a taken one only by case or punctuation: such names share a key file
+ * under `data/keys`, and fediverse servers treat handles that differ only by
+ * case as one account. Throws
+ * {@link SetupClosedError} when `onlyIfNoUsers` is set and the file already
+ * holds somebody. Both checks are inside the write, not before it, which is
+ * what makes the first the rule the `UNIQUE` index used to be: two requests
+ * adding at the same moment queue behind one another on the file, so the
+ * second one reads the first one's work and is refused.
  */
 export async function createUser(input: CreateUserInput): Promise<User> {
   const hash = hashPassword(input.password);
@@ -301,11 +340,15 @@ export async function createUser(input: CreateUserInput): Promise<User> {
   let created: StoredUser | undefined;
 
   await write(input.dataDir, (contents) => {
-    if (contents.users.some((user) => user.username === input.username)) {
-      throw new DuplicateUsernameError(input.username);
+    if (input.onlyIfNoUsers === true && contents.users.length > 0) {
+      throw new SetupClosedError();
     }
+    const folded = fileToken(input.username);
+    const taken = contents.users.find((user) => fileToken(user.username) === folded);
+    if (taken !== undefined) throw new DuplicateUsernameError(taken.username);
     created = {
       id: contents.nextId,
+      uid: randomUUID(),
       username: input.username,
       // Absent rather than empty, so a user with no email has no key for one
       // and the file says only what somebody actually filled in.
@@ -321,7 +364,7 @@ export async function createUser(input: CreateUserInput): Promise<User> {
   return withoutHash(created);
 }
 
-export type UserChange = Partial<Omit<StoredUser, 'id' | 'username' | 'createdAt'>>;
+export type UserChange = Partial<Omit<StoredUser, 'id' | 'uid' | 'username' | 'createdAt'>>;
 
 export async function updateUser(
   dataDir: string,
@@ -601,14 +644,52 @@ export class UnknownUserError extends Error {
   }
 }
 
+/** Why a user could not be removed. */
+export type UserRemovalRefusal = 'only-user' | 'own-account';
+
+/** Thrown when removing a user would break a rule about who the site keeps. */
+export class UserRemovalRefusedError extends Error {
+  override readonly name = 'UserRemovalRefusedError';
+  /** Which rule the removal would have broken. */
+  readonly reason: UserRemovalRefusal;
+  /** Whose removal was refused. */
+  readonly username: string;
+
+  constructor(reason: UserRemovalRefusal, username: string) {
+    super(
+      reason === 'only-user'
+        ? `"${username}" is the only user and cannot be removed.`
+        : `"${username}" cannot remove their own account.`,
+    );
+    this.reason = reason;
+    this.username = username;
+  }
+}
+
+/**
+ * Take a user out of the file. Returns whether they were there.
+ *
+ * Throws {@link UserRemovalRefusedError} rather than leave the site with
+ * nobody or let `signedInAs` remove themselves.
+ */
 export async function removeUserRecord(input: {
   dataDir: string;
   userId: number;
+  /** The user asking for the removal, when it is a person. */
+  signedInAs?: number | null | undefined;
 }): Promise<boolean> {
   let deleted = false;
 
   await write(input.dataDir, (contents) => {
-    deleted = contents.users.some((user) => user.id === input.userId);
+    const target = contents.users.find((user) => user.id === input.userId);
+    deleted = target !== undefined;
+    if (target === undefined) return contents;
+    if (contents.users.length <= 1) {
+      throw new UserRemovalRefusedError('only-user', target.username);
+    }
+    if (target.id === input.signedInAs) {
+      throw new UserRemovalRefusedError('own-account', target.username);
+    }
     return { ...contents, users: contents.users.filter((user) => user.id !== input.userId) };
   });
 
@@ -639,6 +720,7 @@ export function verifyUserPassword(
 function withoutHash(user: StoredUser): User {
   return {
     id: user.id,
+    ...(user.uid === undefined ? {} : { uid: user.uid }),
     username: user.username,
     ...(user.email === undefined ? {} : { email: user.email }),
     ...(user.notifications === undefined ? {} : { notifications: user.notifications }),
@@ -719,6 +801,7 @@ function parseUsersFile(source: string | undefined, file: string): UsersFileCont
   }
 
   const users = listed.map((entry, index) => userFrom(entry, index, file));
+  refuseRepeats(users, file);
   const stated = (parsed as Record<string, unknown>)['nextId'];
   const highest = users.reduce((top, user) => Math.max(top, user.id), 0);
 
@@ -734,6 +817,34 @@ function parseUsersFile(source: string | undefined, file: string): UsersFileCont
   };
 }
 
+function refuseRepeats(users: readonly StoredUser[], file: string): void {
+  const ids = new Map<number, number>();
+  const usernames = new Map<string, number>();
+  users.forEach((user, index) => {
+    const entry = index + 1;
+    const sameId = ids.get(user.id);
+    if (sameId !== undefined) {
+      throw unusableUsersFile(
+        file,
+        new Error(
+          `Entries ${String(sameId)} and ${String(entry)} of "users" share id ${String(user.id)}.`,
+        ),
+      );
+    }
+    const sameName = usernames.get(user.username);
+    if (sameName !== undefined) {
+      throw unusableUsersFile(
+        file,
+        new Error(
+          `Entries ${String(sameName)} and ${String(entry)} of "users" share the username "${user.username}".`,
+        ),
+      );
+    }
+    ids.set(user.id, entry);
+    usernames.set(user.username, entry);
+  });
+}
+
 /** One entry of the file as a user, or a refusal naming which entry is wrong. */
 function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const where = `Entry ${String(index + 1)} of "users"`;
@@ -743,6 +854,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
 
   const record = entry as Record<string, unknown>;
   const id = record['id'];
+  const uid = record['uid'];
   const username = record['username'];
   const email = record['email'];
   const preferences = notificationsFrom(record['notifications']);
@@ -758,6 +870,9 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
     throw unusableUsersFile(file, new Error(`${where} has no id.`));
   }
+  if (uid !== undefined && (typeof uid !== 'string' || uid === '')) {
+    throw unusableUsersFile(file, new Error(`${where} has a uid that is not a string.`));
+  }
   if (typeof username !== 'string' || username === '') {
     throw unusableUsersFile(file, new Error(`${where} has no username.`));
   }
@@ -767,8 +882,9 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
 
   return {
     id,
+    ...(uid === undefined ? {} : { uid }),
     username,
-    // Unlike the three above, a bad email is dropped rather than refused: it
+    // Unlike the checks above, a bad email is dropped rather than refused: it
     // is not what anybody signs in with, and a site whose whole admin refused
     // to load over a mistyped address would be a worse failure than the one it
     // is guarding against.
@@ -917,7 +1033,48 @@ function write(
   const file = usersFile(dataDir);
   return updateFileAtomically(
     file,
-    (current) => usersJsonText(produce(parseUsersFile(current, file))),
+    (current) => {
+      const read = parseUsersFile(current, file);
+      const next = produce(read);
+      if (current === undefined) return usersJsonText(next);
+      return `${JSON.stringify(keepingUnreadFields(JSON.parse(current) as Record<string, unknown>, read, next), null, 2)}\n`;
+    },
     { mode: USERS_FILE_MODE },
   );
+}
+
+function keepingUnreadFields(
+  source: Record<string, unknown>,
+  read: UsersFileContents,
+  next: UsersFileContents,
+): Record<string, unknown> {
+  const entries = source['users'] as Record<string, unknown>[];
+  const stored = new Map(
+    read.users.map((user, index) => [user.id, { user, entry: entries[index] }]),
+  );
+
+  return {
+    ...source,
+    users: next.users.map((user) => {
+      const before = stored.get(user.id);
+      return before?.entry === undefined ? user : changedFields(before.entry, before.user, user);
+    }),
+    nextId: next.nextId,
+  };
+}
+
+function changedFields(
+  entry: Record<string, unknown>,
+  before: StoredUser,
+  after: StoredUser,
+): Record<string, unknown> {
+  const was = before as unknown as Record<string, unknown>;
+  const now = after as unknown as Record<string, unknown>;
+  const result = { ...entry };
+  for (const key of new Set([...Object.keys(was), ...Object.keys(now)])) {
+    if (isDeepStrictEqual(was[key], now[key])) continue;
+    if (now[key] === undefined) delete result[key];
+    else result[key] = now[key];
+  }
+  return result;
 }

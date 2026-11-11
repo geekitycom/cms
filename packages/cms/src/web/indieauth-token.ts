@@ -1,7 +1,7 @@
 import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from './env.ts';
-import { findUserById } from '../site/users.ts';
+import { userIssuedTo } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { logTokenRequest, noteActivity } from './indieauth-activity-log.ts';
 import { requireBearer } from './indieauth-bearer.ts';
@@ -40,7 +40,7 @@ export function mountTokenEndpoint(app: Hono<GeekityEnv>): void {
     if (form['grant_type'] === 'refresh_token') {
       const refreshed = await refreshTokens(c.var.config.dataDir, form, now);
       if (!refreshed.ok) return refuse(c, refreshed.error, refreshed.description);
-      const user = findUserById(c.var.config.dataDir, refreshed.issued.token.userId);
+      const user = userIssuedTo(c.var.config.dataDir, refreshed.issued.token);
       if (user === undefined) return refuse(c, 'invalid_grant', GONE);
       return answer(c, refreshed.issued, user);
     }
@@ -54,7 +54,7 @@ export function mountTokenEndpoint(app: Hono<GeekityEnv>): void {
     if (!sameResource(form, grant.resource)) {
       return refuse(c, 'invalid_target', 'resource must be the one the person approved.');
     }
-    const user = findUserById(c.var.config.dataDir, grant.userId);
+    const user = userIssuedTo(c.var.config.dataDir, grant);
     if (user === undefined) return refuse(c, 'invalid_grant', GONE);
     return answer(c, await issueTokens(c.var.config.dataDir, grant, now), user);
   });

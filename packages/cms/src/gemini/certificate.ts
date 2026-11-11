@@ -5,14 +5,14 @@ import {
   randomBytes,
   sign,
 } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
 
 import type { ResolvedConfig } from '../config.ts';
-import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.ts';
+import { writeFileAtomicallySync } from '../files/atomic.ts';
 import { GEMINI_CERTIFICATE, GEMINI_KEY, dataFolder, dataPath } from '../files/data-files.ts';
-import { lockFileFor, withLockFile } from '../jobs/lock-file.ts';
+import { lockFileFor, withLockFile } from '../files/lock-file.ts';
 import { messageOf } from '../util/errors.ts';
 
 export type GeminiCertificateConfig = Pick<ResolvedConfig, 'dataDir' | 'geminiCert' | 'geminiKey'>;
@@ -50,7 +50,7 @@ export async function readGeminiCertificate(
   const operator = operatorFiles(config);
   if (operator !== undefined) return await readOperator(operator, host);
   const files = generatedFiles(config.dataDir);
-  if (readFileIfPresentSync(files.cert) === undefined) {
+  if (!existsSync(files.cert)) {
     return {
       ok: false,
       problem: `There is no Gemini certificate yet. One is generated at ${files.cert} when the site starts with Gemini on.`,
@@ -67,7 +67,7 @@ export async function ensureGeminiCertificate(
   const operator = operatorFiles(config);
   if (operator !== undefined) return await readOperator(operator, host);
   return await underLock(config.dataDir, (files) => {
-    if (readFileIfPresentSync(files.cert) === undefined) writePair(config.dataDir, host, now);
+    if (!existsSync(files.cert)) writePair(config.dataDir, host, now);
     return readGenerated(files, host);
   });
 }
@@ -150,11 +150,15 @@ async function readOperator(files: NamedFiles, host: string): Promise<GeminiCert
 }
 
 function readGenerated(files: PairFiles, host: string): GeminiCertificateResult {
-  const cert = readFileIfPresentSync(files.cert);
-  const key = readFileIfPresentSync(files.key);
-  if (cert === undefined) return { ok: false, problem: `${files.cert} cannot be read.` };
-  if (key === undefined) return { ok: false, problem: `${files.key} cannot be read.` };
-  return parsePair(files, { cert, key }, 'generated', host);
+  const pem: Record<keyof PairFiles, string> = { cert: '', key: '' };
+  for (const part of ['cert', 'key'] as const) {
+    try {
+      pem[part] = readFileSync(files[part], 'utf8');
+    } catch (error) {
+      return { ok: false, problem: `${files[part]} cannot be read: ${messageOf(error)}` };
+    }
+  }
+  return parsePair(files, pem, 'generated', host);
 }
 
 function parsePair(

@@ -3,7 +3,7 @@ import type { Context } from 'hono';
 import { commenterOf } from '../comments/viewer.ts';
 import type { CommentViewer } from '../comments/form.ts';
 import type { SignedInAccount } from '../comments/viewer.ts';
-import { findUserById } from '../site/users.ts';
+import { userIssuedTo } from '../site/users.ts';
 import { sessionIdFrom } from './session.ts';
 import type { GeekityEnv } from './env.ts';
 
@@ -44,7 +44,10 @@ export function signedInAccount(c: Context<GeekityEnv>): SignedInAccount | undef
   const session = c.var.admin.getSession(id);
   if (session?.userId == null) return undefined;
 
-  const user = findUserById(c.var.config.dataDir, session.userId);
+  const user = userIssuedTo(c.var.config.dataDir, {
+    userId: session.userId,
+    userUid: session.userUid,
+  });
   if (user === undefined) return undefined;
 
   return { user, csrfToken: session.csrfToken };

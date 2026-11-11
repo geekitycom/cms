@@ -114,6 +114,19 @@ export function dataPath(dataDir: string, file: DataFileDeclaration, ...parts: s
   return path.join(dataDir, ...built);
 }
 
+/**
+ * The part of a file name one identifier or algorithm contributes.
+ *
+ * Lower case, because `RSASSA-PKCS1-v1_5` on a case-insensitive filesystem is
+ * the same file as `rsassa-pkcs1-v1_5` and only one of them should ever be
+ * written; and anything that is not a letter, a digit, a dash or an underscore
+ * becomes a dash, so nothing a name carries — a dot, a slash, a `..` — can
+ * reach out of its folder or split the file name into more parts than it has.
+ */
+export function fileToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+}
+
 /** The folder that holds what `folder` declares: `keys/` for `keys/*.jwk`, `images/` for `images/**`. */
 export function dataFolder(
   dataDir: string,
@@ -391,8 +404,22 @@ export const WATCH_PROBE = declareDataFile({
   lost: 'Nothing. The content watcher makes it and removes it to check that it works.',
 });
 
+export const CONTENT_DATA_LOCK_FILES = declareDataFile({
+  pattern: '_data/**/*.lock',
+  dataClass: SCRATCH,
+  lost: 'Nothing. An update to a _data file holds it while it runs, and a stale one is taken over.',
+});
+
+export const CONTENT_DATA_LOCK_TAKEOVER_FILES = declareDataFile({
+  pattern: '_data/**/*.lock.takeover',
+  dataClass: SCRATCH,
+  lost: 'Nothing. A waiter holds it while it removes a stale lock.',
+});
+
 export const CONTENT_SCRATCH_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
+  CONTENT_DATA_LOCK_FILES,
+  CONTENT_DATA_LOCK_TAKEOVER_FILES,
   IMPORT_MARKER,
   IMPORT_STAGING,
   IMPORT_ASIDE,

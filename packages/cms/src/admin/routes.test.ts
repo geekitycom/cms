@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { chmod } from 'node:fs/promises';
 import { after, describe, it } from 'node:test';
 
 import { Hono } from 'hono';
 
 import type { GeekityEnv } from '../web/env.ts';
-import { countUsers, listUsers } from '../site/users.ts';
+import { countUsers, listUsers, usersFile } from '../site/users.ts';
 import { adminSecurityHeaders } from './headers.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
 import {
@@ -51,6 +52,30 @@ describe('first run', () => {
     assert.ok(csrfField(html) !== undefined, 'the form carries a CSRF token');
     assert.ok(cookieValue(response, 'geekity_session') !== undefined, 'and a session to hold it');
   });
+});
+
+describe('a users file the server cannot read', () => {
+  it(
+    'does not send the admin to first-run setup',
+    { skip: process.getuid?.() === 0 || process.platform === 'win32' },
+    async () => {
+      const cms = await site();
+      addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+      const file = usersFile(cms.config.dataDir);
+      await chmod(file, 0o000);
+
+      try {
+        for (const url of ['/admin', '/admin/setup']) {
+          const response = await cms.app.request(url);
+          assert.notEqual(response.headers.get('location'), '/admin/setup', url);
+          assert.equal(response.status, 500, url);
+        }
+      } finally {
+        await chmod(file, 0o600);
+      }
+      assert.equal(countUsers(cms.config.dataDir), 1);
+    },
+  );
 });
 
 describe('setup', () => {
@@ -139,6 +164,37 @@ describe('setup', () => {
     assert.equal(response.status, 400);
     assert.match(await response.text(), /do not match/);
     assert.equal(countUsers(cms.config.dataDir), 0);
+  });
+
+  it('adds one admin when two setup forms are sent at once, and signs in only that one', async () => {
+    const cms = await site();
+    const operator = browser(cms);
+    const other = browser(cms);
+    const operatorToken = csrfField(await (await operator.get('/admin/setup')).text());
+    const otherToken = csrfField(await (await other.get('/admin/setup')).text());
+    assert.ok(operatorToken !== undefined && otherToken !== undefined);
+
+    const form = (token: string, username: string) => ({
+      csrf_token: token,
+      username,
+      password: 'correct horse battery',
+      password_confirmation: 'correct horse battery',
+    });
+    const [first, second] = await Promise.all([
+      operator.post('/admin/setup', form(operatorToken, 'ada')),
+      other.post('/admin/setup', form(otherToken, 'grace')),
+    ]);
+
+    const names = listUsers(cms.config.dataDir).map((user) => user.username);
+    assert.equal(names.length, 1, `users: ${JSON.stringify(names)}`);
+    const [winner, loser] = names[0] === 'ada' ? [operator, other] : [other, operator];
+    const refused = names[0] === 'ada' ? second : first;
+    assert.equal(refused.status, 303);
+    assert.equal(refused.headers.get('location'), '/admin/login');
+    assert.equal((await winner.get('/admin')).status, 200);
+    const stranger = await loser.get('/admin');
+    assert.equal(stranger.status, 302, 'the refused one is not signed in');
+    assert.equal(stranger.headers.get('location'), '/admin/login');
   });
 
   it('closes the setup form once a user exists', async () => {

@@ -752,7 +752,12 @@ Each Save returns to the same screen, which shows the result.
 username, an argon2 hash and a created time. A user may also have an email
 address, notification preferences, writing goals, a public profile and the
 [stored actor id](federation.md#a-users-stored-actor-id) they were published
-under elsewhere.
+under elsewhere. Ids and usernames are unique. A file with two entries that
+share either one does not load: the server refuses it with the same error as a
+file that will not parse, and names the repeated value. A new user also cannot
+take a name that matches an existing one when case is ignored and dots count as
+dashes, because such names share a key file in `data/keys`. A file that
+already holds two such names, such as `Ada` and `ada`, still loads.
 
 The server writes the file the same way as every file this CMS owns:
 
@@ -772,6 +777,17 @@ away. A session names a user by id. The server checks it against
 exists is not a login. Deleting `data/geekity.db` signs everyone out and loses
 nothing else. Restoring an old database cannot bring back a deleted account or
 a changed password.
+
+Each user created by this version also gets a random `uid` in
+`data/users.json`, which is never given to anybody else. Sessions, password
+reset links and app tokens record the `uid` of the user they were issued to,
+and the server accepts one only while the user with that id has the same
+`uid`. An id is reused when `data/users.json` is deleted and setup runs again,
+or when an older copy of the file is restored and a user is added. In both
+cases, a session, reset link or token issued to the earlier holder of the id
+does not work for the new user. A user written by an earlier version has no
+`uid`, and the server does not add one. Sessions, links and tokens issued to
+that user before the upgrade also have none, so they keep working.
 
 Passwords are hashed with argon2id through `node:crypto`, so there is no native
 module to build. Each hash stores its cost parameters. If the parameters are
@@ -793,6 +809,8 @@ Adding a user enforces the same rules as `/admin/setup` and
 `geekity user add`:
 
 - a username of 1 to 64 letters, digits, dots, dashes or underscores
+- a username that does not match an existing username when case is ignored and
+  dots count as dashes
 - a password of at least 8 characters
 
 If you tick **Generate one instead**, the server makes the password with
@@ -823,6 +841,9 @@ rows where neither applies:
   setup, and the next person to reach `/admin` becomes its admin.
 - **Your own account.** Deleting it would end the session doing the deleting,
   and there is no undo. Another admin can delete it for you.
+
+Both rules are checked against `data/users.json` as the deletion writes it, so
+two deletions sent at the same moment are judged one after the other.
 
 **A profile's links** go one per line, either `Label | URL` or a bare URL that
 is its own label. The URL is a path or an absolute `http(s)` URL with no
