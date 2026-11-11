@@ -17,7 +17,7 @@ import type { Document } from '../content/document.ts';
 import type { CatalogReader } from '../content/store.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
-import { messageOf } from '../util/errors.ts';
+import { messageOf, oneLineMessageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { heldComment, isWithheld } from '../comments/conversation.ts';
 import type { ConversationReader, ThreadReply } from '../comments/conversation.ts';
@@ -323,7 +323,9 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
       if (signal.aborted) return;
 
       if (found.kind === 'failed') {
-        logger.warn(`Could not read the replies to ${parent.id}: ${found.reason}`);
+        logger.warn(
+          `Could not read the replies to ${parent.id}: ${oneLineMessageOf(found.reason)}`,
+        );
         continue;
       }
       if (found.kind === 'gone') {
@@ -386,7 +388,7 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
   return {
     sweep() {
       return sweeps.run(sweepOnce).catch((thrown: unknown) => {
-        logger.warn(`The reply backfill failed: ${messageOf(thrown)}`);
+        logger.warn(`The reply backfill failed: ${oneLineMessageOf(thrown)}`);
       });
     },
 

@@ -124,6 +124,7 @@ let slowPage: Promise<void> = Promise.resolve();
 let inboxes: Promise<void> = Promise.resolve();
 let rejectingEveryPost = false;
 let refusalStatus = 503;
+let refusalBody = 'Try again later.';
 const refused: string[] = [];
 let postsBegun = 0;
 let statusUnavailable = false;
@@ -174,6 +175,7 @@ before(async () => {
 afterEach(async () => {
   rejectingEveryPost = false;
   refusalStatus = 503;
+  refusalBody = 'Try again later.';
   statusUnavailable = false;
   inboxes = Promise.resolve();
   for (const instance of started.splice(0)) await instance.close();
@@ -238,7 +240,7 @@ function routeRemoteHost(): () => void {
       if (rejectingEveryPost) {
         refused.push(request.url);
         for (const arrived of arrivals) arrived();
-        return new Response('Try again later.', { status: refusalStatus });
+        return new Response(refusalBody, { status: refusalStatus });
       }
       deliveries.push({
         url: request.url,
@@ -1173,6 +1175,31 @@ describe('how a queued delivery settles in the delivery log', () => {
     const settled = await settledAt(cms, REMOTE_SHARED_INBOX, (one) => one.status !== 'queued');
     assert.equal(settled.status, 'failed');
     assert.match(settled.error ?? '', /410/);
+  });
+});
+
+describe('the log line for a delivery the inbox refused', () => {
+  it('is one line with no control characters, whatever the refusal body holds', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    rejectingEveryPost = true;
+    refusalStatus = 500;
+    refusalBody = 'oops\nCould not deliver https://forged.example/ to nobody: fake\u001b[2J\u009b';
+    const { cms } = await site();
+    await publishNewPost(signedInAs(cms, ADA));
+    await cms.delivery.settled();
+
+    const lines = warn.mock.calls.map((call) => String(call.arguments[0]));
+    const refusals = lines.filter((line) => line.startsWith('Could not deliver'));
+    assert.equal(refusals.length, 1, `warned ${JSON.stringify(lines)}`);
+    const line = refusals[0] ?? '';
+    const controls = [...line].filter((character) => {
+      const code = character.charCodeAt(0);
+      return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+    });
+    assert.deepEqual(controls, [], `logged ${JSON.stringify(line)}`);
+    assert.doesNotMatch(line, /forged/);
+    assert.match(line, /500/);
+    assert.match(cms.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX)?.error ?? '', /forged/);
   });
 });
 

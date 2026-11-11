@@ -23,7 +23,7 @@ import { visibilityOf } from '../content/visibility.ts';
 import { SITE } from '../site/namespace.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
-import { messageOf } from '../util/errors.ts';
+import { messageOf, oneLineMessageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { authorNames } from '../content/authors.ts';
 import { ActorUpdate, actorId, senderKeyPairs, userActor } from './actor.ts';
@@ -504,7 +504,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         if (!isDuplicateDelivery(thrown)) {
           status = 'failed';
           error = messageOf(thrown);
-          logger.warn(`Could not deliver ${about.activityId} to ${target.inboxId}: ${error}`);
+          logger.warn(
+            `Could not deliver ${about.activityId} to ${target.inboxId}: ${oneLineMessageOf(thrown)}`,
+          );
         }
       }
 
@@ -614,7 +616,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         .catch((thrown: unknown) => {
           // A profile update is a side effect of saving the settings, and losing
           // it must not lose the save.
-          logger.warn(`The actor update could not be delivered: ${messageOf(thrown)}`);
+          logger.warn(`The actor update could not be delivered: ${oneLineMessageOf(thrown)}`);
           return undefined;
         });
     },
@@ -702,7 +704,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
    */
   function queue(task: () => Promise<unknown>): void {
     deliveryQueue.run(task).catch((thrown: unknown) => {
-      logger.warn(`A delivery failed: ${messageOf(thrown)}`);
+      logger.warn(`A delivery failed: ${oneLineMessageOf(thrown)}`);
     });
   }
 }

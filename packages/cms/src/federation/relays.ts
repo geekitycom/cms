@@ -13,7 +13,7 @@ import type { SettingsRegistry } from '../settings/types.ts';
 import { SITE } from '../site/namespace.ts';
 import { primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
-import { messageOf } from '../util/errors.ts';
+import { messageOf, oneLineMessageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { actorId, senderKeyPairs } from './actor.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
@@ -266,7 +266,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
       // The record stays pending with the reason on it: the relay may simply
       // have been down, and Retry is what the screen offers for that.
       const message = messageOf(thrown);
-      logger.warn(`Could not follow the relay at ${stored.inboxId}: ${message}`);
+      logger.warn(`Could not follow the relay at ${stored.inboxId}: ${oneLineMessageOf(thrown)}`);
       return admin.putRelay({ ...stored, reason: message });
     }
 
@@ -297,7 +297,9 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
         // relay that keeps sending is one whose activities land in the inbox
         // log, which is a nuisance rather than a leak, and re-adding it would
         // strand the record against a list that no longer names it.
-        logger.warn(`Could not tell the relay at ${relay.inboxId} to stop: ${messageOf(thrown)}`);
+        logger.warn(
+          `Could not tell the relay at ${relay.inboxId} to stop: ${oneLineMessageOf(thrown)}`,
+        );
       }
     }
 
@@ -361,7 +363,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
    */
   function queue(task: () => Promise<unknown>): void {
     subscriptions.run(task).catch((thrown: unknown) => {
-      logger.warn(`A relay subscription failed: ${messageOf(thrown)}`);
+      logger.warn(`A relay subscription failed: ${oneLineMessageOf(thrown)}`);
     });
   }
 }
