@@ -48,7 +48,7 @@
     "@fedify/vocab": "^2.4.5",
     "entities": "^9.0.0",
     "sax": "^1.6.1",
-    "turndown": "^7.2.4"
+    "turndown": "^7.2.5"
   },
   "peerDependencies": {
     "@geekity/cms": "workspace:^"
@@ -59,7 +59,7 @@
     "@geekity/plugin-llm": "workspace:*",
     "@geekity/plugin-post-summary": "workspace:*",
     "@geekity/plugin-tag-suggest": "workspace:*",
-    "@hono/node-server": "^2.1.5",
+    "@hono/node-server": "^2.1.6",
     "@types/node": "^26.6.6",
     "@types/sax": "^1.2.7",
     "esbuild": "^0.28.2",
