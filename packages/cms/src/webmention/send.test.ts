@@ -482,7 +482,7 @@ describe('sending them again', () => {
     const cms = await site({ files: { 'posts/hello-world.md': linkingPost() } });
     await cms.webmentions.settled();
 
-    const report = await cms.webmentions.send('hello-world');
+    const report = await cms.webmentions.send('posts/hello-world.md');
 
     assert.ok(report !== undefined, 'the post was found');
     assert.equal(report.source, `${BASE_URL}/2026/03/hello-world/`);
@@ -505,14 +505,14 @@ describe('sending them again', () => {
   it('answers with nothing for a post that does not exist', async () => {
     const cms = await site();
 
-    assert.equal(await cms.webmentions.send('nothing-here'), undefined);
+    assert.equal(await cms.webmentions.send('posts/nothing-here.md'), undefined);
   });
 
   it('moves the outcome for a target rather than adding a second one', async () => {
     const cms = await site({ files: { 'posts/hello-world.md': linkingPost() } });
 
-    await cms.webmentions.send('hello-world');
-    await cms.webmentions.send('hello-world');
+    await cms.webmentions.send('posts/hello-world.md');
+    await cms.webmentions.send('posts/hello-world.md');
 
     assert.equal(
       cms.admin.listSentWebmentions('hello-world').length,
@@ -620,7 +620,7 @@ describe('syndicating a post to the site’s targets', () => {
       },
     });
 
-    const report = await cms.webmentions.send('hello-world');
+    const report = await cms.webmentions.send('posts/hello-world.md');
 
     assert.ok(report?.sent.some((one) => one.target === NEWS && one.status === 'sent'));
     assert.deepEqual(await copiesOf(cms), {
@@ -758,7 +758,7 @@ describe('syndication on the federation screen (TASK-155 AC #9)', () => {
     assert.ok(token !== undefined);
     const resend = await agent.post('/admin/federation/resend', {
       csrf_token: token,
-      slug: 'hello-world',
+      path: cms.store.getBySlug('hello-world')?.path ?? '',
     });
     assert.equal(resend.status, 303);
     const queued = await cms.jobs.latest(RESEND_JOB.name);

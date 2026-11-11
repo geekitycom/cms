@@ -32,7 +32,7 @@
               <ul class="mt-2 list-disc pl-6">
                 {% for post in resendResult.sent %}
                   <li>
-                  <code class="break-all">{{ post.slug }}</code>:
+                  <code class="break-all">{{ post.path }}</code>:
                   {% if post.activity and post.activity.heldByDevMode %}
                     dev mode held the {{ post.activity.activityType }}, nothing was sent.
                   {% elif post.activity and post.activity.inboxes == 0 %}
@@ -51,7 +51,7 @@
               </details>
             {% endif %}
             {% if resendResult.nothing.length %}
-              <p>Nothing to resend: {% for slug in resendResult.nothing %}<code class="break-all">{{ slug }}</code>{% if not loop.last %}, {% endif %}{% endfor %}. No announced post has that slug.</p>
+              <p>Nothing to resend: {% for path in resendResult.nothing %}<code class="break-all">{{ path }}</code>{% if not loop.last %}, {% endif %}{% endfor %}. No announced post is at that path.</p>
             {% endif %}
           {% endif %}
         {% endcall %}

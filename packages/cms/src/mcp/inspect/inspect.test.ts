@@ -222,7 +222,7 @@ describe('the inspect tools', () => {
   });
 
   it('report queue depth, retrying deliveries and recent job outcomes in the federation status', async () => {
-    const id = await cms.jobs.enqueue(RESEND_JOB, { slugs: ['nope'], webmentions: false });
+    const id = await cms.jobs.enqueue(RESEND_JOB, { paths: ['posts/nope.md'], webmentions: false });
     await cms.jobs.run(id);
 
     const status = await call(cms, token, 'federation_status');

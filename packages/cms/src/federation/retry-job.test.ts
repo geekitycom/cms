@@ -31,11 +31,22 @@ function row(
   };
 }
 
+/** Where the post a row's slug names is filed. */
+function fileOf(slug: string): string {
+  return `posts/2026-03-01-${slug}.md`;
+}
+
 function services(rows: readonly Delivery[]): RetryJobServices & { resent: unknown[] } {
   const resent: unknown[] = [];
+  const posts = [...new Set(rows.flatMap((one) => (one.slug === null ? [] : [one.slug])))].map(
+    (slug) => ({ type: 'post', slug, path: fileOf(slug), permalink: `/${slug}/` }) as Document,
+  );
   return {
     resent,
-    store: {} as RetryJobServices['store'],
+    store: {
+      getByPath: (path: string) => posts.find((post) => post.path === path),
+      listFederated: () => posts,
+    } as unknown as RetryJobServices['store'],
     config: { contentDir: '/nowhere', baseUrl: 'https://blog.example' },
     admin: {
       searchDeliveries(search: DeliverySearch) {
@@ -50,12 +61,12 @@ function services(rows: readonly Delivery[]): RetryJobServices & { resent: unkno
       },
     },
     delivery: {
-      resend(slug, to) {
-        resent.push([slug, [...(to?.actors ?? [])]]);
+      resend(path, to) {
+        resent.push([path, [...(to?.actors ?? [])]]);
         return Promise.resolve({
-          activityId: `https://blog.example/${slug}#retry`,
+          activityId: `https://blog.example/${path}#retry`,
           activityType: to?.missedAnnouncement === true ? 'Create' : 'Update',
-          objectId: `https://blog.example/${slug}/`,
+          objectId: `https://blog.example/${path}/`,
           deliveries: [],
           held: false,
         } satisfies DeliveryReport);
@@ -81,9 +92,9 @@ describe('which deliveries a retry sends again', () => {
       row('three', 'dave', INBOX, 'sent', '2026-03-03T00:00:00Z'),
     ]);
 
-    assert.deepEqual(failedRetries(site, { slug: null, inbox: INBOX }), [
+    assert.deepEqual(failedRetries(site, { path: null, inbox: INBOX }), [
       {
-        slug: 'two',
+        path: fileOf('two'),
         recipients: [
           {
             actorId: 'https://social.example/users/carol',
@@ -108,7 +119,7 @@ describe('which deliveries a retry sends again', () => {
       row('one', 'frank', INBOX, 'failed', '2026-03-02T00:00:00Z'),
     ]);
 
-    const [retry] = failedRetries(site, { slug: null, inbox: INBOX });
+    const [retry] = failedRetries(site, { path: null, inbox: INBOX });
     assert.deepEqual(
       retry?.recipients.map((one) => [one.actorId.split('/').at(-1), one.missedAnnouncement]),
       [
@@ -128,7 +139,7 @@ describe('which deliveries a retry sends again', () => {
       row('one', 'erin', INBOX, 'queued', '2026-03-02T00:00:00Z'),
     ]);
 
-    const [retry] = failedRetries(site, { slug: null, inbox: INBOX });
+    const [retry] = failedRetries(site, { path: null, inbox: INBOX });
     assert.deepEqual(
       retry?.recipients.map((one) => [one.actorId.split('/').at(-1), one.missedAnnouncement]),
       [
@@ -142,16 +153,18 @@ describe('which deliveries a retry sends again', () => {
     const site = services([
       { ...row('one', 'carol', INBOX, 'failed', '2026-03-01T00:00:00Z'), slug: null },
     ]);
-    assert.deepEqual(failedRetries(site, { slug: null, inbox: INBOX }), []);
+    assert.deepEqual(failedRetries(site, { path: null, inbox: INBOX }), []);
   });
 
   it('finds nothing for a post the site does not have', () => {
     const site = services([row('one', 'carol', INBOX, 'failed', '2026-03-01T00:00:00Z')]);
-    const store = {
-      getBySlug: () => undefined,
-      listFederated: (): Document[] => [],
-    } as unknown as RetryJobServices['store'];
-    assert.deepEqual(failedRetries({ ...site, store }, { slug: 'one', inbox: null }), []);
+    assert.deepEqual(failedRetries(site, { path: fileOf('gone'), inbox: null }), []);
+  });
+
+  it('leaves out a delivery whose object is no announced post', () => {
+    const site = services([row('one', 'carol', INBOX, 'failed', '2026-03-01T00:00:00Z')]);
+    const store = { ...site.store, listFederated: (): Document[] => [] };
+    assert.deepEqual(failedRetries({ ...site, store }, { path: null, inbox: INBOX }), []);
   });
 });
 
@@ -167,9 +180,9 @@ describe('the retry job', () => {
       {
         ...site,
         delivery: {
-          async resend(slug, to) {
-            steps.push(`resend ${slug}`);
-            return await site.delivery.resend(slug, to);
+          async resend(path, to) {
+            steps.push(`resend ${path}`);
+            return await site.delivery.resend(path, to);
           },
         },
       },
@@ -179,18 +192,18 @@ describe('the retry job', () => {
       },
     );
 
-    const report = await job.run({ slug: null, inbox: INBOX }, context);
+    const report = await job.run({ path: null, inbox: INBOX }, context);
 
-    assert.deepEqual(steps, ['resend one', 'pause', 'resend two']);
+    assert.deepEqual(steps, [`resend ${fileOf('one')}`, 'pause', `resend ${fileOf('two')}`]);
     assert.deepEqual(site.resent, [
-      ['one', ['https://social.example/users/carol']],
-      ['two', ['https://social.example/users/carol', 'https://social.example/users/dave']],
+      [fileOf('one'), ['https://social.example/users/carol']],
+      [fileOf('two'), ['https://social.example/users/carol', 'https://social.example/users/dave']],
     ]);
     assert.deepEqual(
-      report.posts.map((post) => [post.slug, post.recipients, post.activity?.activityType]),
+      report.posts.map((post) => [post.path, post.recipients, post.activity?.activityType]),
       [
-        ['one', 1, 'Update'],
-        ['two', 2, 'Update'],
+        [fileOf('one'), 1, 'Update'],
+        [fileOf('two'), 2, 'Update'],
       ],
     );
   });
@@ -202,26 +215,29 @@ describe('the retry job', () => {
     ]);
 
     const report = await retryDeliveriesJob(site, () => Promise.resolve()).run(
-      { slug: null, inbox: INBOX },
+      { path: null, inbox: INBOX },
       context,
     );
 
     assert.deepEqual(site.resent, [
-      ['one', ['https://social.example/users/dave']],
-      ['one', ['https://social.example/users/carol']],
+      [fileOf('one'), ['https://social.example/users/dave']],
+      [fileOf('one'), ['https://social.example/users/carol']],
     ]);
     assert.deepEqual(
-      report.posts.map((post) => [post.slug, post.recipients, post.activity?.activityType]),
+      report.posts.map((post) => [post.path, post.recipients, post.activity?.activityType]),
       [
-        ['one', 1, 'Create'],
-        ['one', 1, 'Update'],
+        [fileOf('one'), 1, 'Create'],
+        [fileOf('one'), 1, 'Update'],
       ],
     );
   });
 
   it('refuses a payload that names neither a post nor an inbox', () => {
     const job = retryDeliveriesJob(services([]));
-    assert.throws(() => job.parse({ slug: null, inbox: null }));
-    assert.deepEqual(job.parse({ slug: 'one', inbox: null }), { slug: 'one', inbox: null });
+    assert.throws(() => job.parse({ path: null, inbox: null }));
+    assert.deepEqual(job.parse({ path: fileOf('one'), inbox: null }), {
+      path: fileOf('one'),
+      inbox: null,
+    });
   });
 });

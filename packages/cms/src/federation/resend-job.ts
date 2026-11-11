@@ -6,7 +6,8 @@ import type { WebmentionService } from '../webmention/service.ts';
 import type { DeliveryReport, DeliveryService } from './delivery.ts';
 
 export type ResendPayload = {
-  readonly slugs: readonly string[] | 'all';
+  /** Content paths, which name one post where a slug can name several. */
+  readonly paths: readonly string[] | 'all';
   readonly webmentions: boolean;
 };
 
@@ -26,11 +27,11 @@ export type ResendWebmentions = {
   readonly failed: number;
 };
 
-/** One slug in a resend: either nothing went out for it, or what did. */
+/** One post in a resend: either nothing went out for it, or what did. */
 export type ResendPost =
-  | { readonly slug: string; readonly resent: false }
+  | { readonly path: string; readonly resent: false }
   | {
-      readonly slug: string;
+      readonly path: string;
       readonly resent: true;
       readonly activity: ResendActivity | null;
       readonly webmentions: ResendWebmentions | null;
@@ -52,15 +53,15 @@ export function resendJob(services: ResendJobServices): JobDefinition<ResendPayl
     name: RESEND_JOB.name,
     parse: parseResendPayload,
     async run(payload, context) {
-      const slugs =
-        payload.slugs === 'all'
-          ? services.store.listFederated().map((document) => document.slug)
-          : payload.slugs;
+      const paths =
+        payload.paths === 'all'
+          ? services.store.listFederated().map((document) => document.path)
+          : payload.paths;
       const posts: ResendPost[] = [];
-      for (const slug of slugs) {
+      for (const path of paths) {
         context.signal.throwIfAborted();
-        const report = await services.delivery.resend(slug);
-        const links = payload.webmentions ? await services.webmentions.send(slug) : undefined;
+        const report = await services.delivery.resend(path);
+        const links = payload.webmentions ? await services.webmentions.send(path) : undefined;
         const activity = report === undefined ? null : resendActivity(report);
         const webmentions: ResendWebmentions | null =
           links === undefined || links.sent.length === 0
@@ -73,10 +74,10 @@ export function resendJob(services: ResendJobServices): JobDefinition<ResendPayl
               };
         posts.push(
           activity === null && webmentions === null
-            ? { slug, resent: false }
-            : { slug, resent: true, activity, webmentions },
+            ? { path, resent: false }
+            : { path, resent: true, activity, webmentions },
         );
-        await context.progress({ done: posts.length, total: slugs.length });
+        await context.progress({ done: posts.length, total: paths.length });
       }
       return { posts };
     },
@@ -100,11 +101,13 @@ function countOf(rows: readonly { readonly status: string }[], status: string): 
 
 function parseResendPayload(payload: Json): ResendPayload {
   if (isRecord(payload) && typeof payload['webmentions'] === 'boolean') {
-    const { slugs, webmentions } = payload;
-    if (slugs === 'all') return { slugs, webmentions };
-    if (Array.isArray(slugs) && slugs.every((slug) => typeof slug === 'string')) {
-      return { slugs: slugs as readonly string[], webmentions };
+    const { paths, webmentions } = payload;
+    if (paths === 'all') return { paths, webmentions };
+    if (Array.isArray(paths) && paths.every((path) => typeof path === 'string')) {
+      return { paths: paths as readonly string[], webmentions };
     }
   }
-  throw new Error('A resend job names its slugs, or "all", and whether to send webmentions.');
+  throw new Error(
+    'A resend job names its posts’ paths, or "all", and whether to send webmentions.',
+  );
 }

@@ -377,8 +377,8 @@ describe('resending a migrated post (TASK-296 AC #1, #2)', () => {
       files: { [ANNOUNCED_FILE]: migratedFederatedPost(), [QUIET_FILE]: migratedUnfederatedPost() },
     });
 
-    assert.equal(await cms.delivery.resend('an-old-essay'), undefined);
-    const report = await cms.delivery.resend('already-announced');
+    assert.equal(await cms.delivery.resend(QUIET_FILE), undefined);
+    const report = await cms.delivery.resend(ANNOUNCED_FILE);
 
     assert.equal(report?.activityType, 'Update');
     assert.deepEqual(activities(), [`Update ${ANNOUNCED_ID}`]);

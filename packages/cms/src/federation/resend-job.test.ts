@@ -60,18 +60,18 @@ function services(
     resent,
     mentioned,
     store: {
-      listFederated: () => Object.keys(reports).map((slug) => ({ slug }) as Document),
+      listFederated: () => Object.keys(reports).map((path) => ({ path }) as Document),
     },
     delivery: {
-      resend(slug) {
-        resent.push(slug);
-        return Promise.resolve(reports[slug]);
+      resend(path) {
+        resent.push(path);
+        return Promise.resolve(reports[path]);
       },
     },
     webmentions: {
-      send(slug) {
-        mentioned.push(slug);
-        return Promise.resolve(links[slug]);
+      send(path) {
+        mentioned.push(path);
+        return Promise.resolve(links[path]);
       },
     },
   };
@@ -99,19 +99,19 @@ function resultOf(status: JobStatus) {
 }
 
 describe('the resend job', () => {
-  it('reports per post the inboxes reached, and the slugs with nothing to resend (AC #3)', async () => {
+  it('reports per post the inboxes reached, and the posts with nothing to resend (AC #3)', async () => {
     const site = services({
       hello: report('hello', ['sent', 'sent', 'failed']),
       later: report('later', ['sent', 'queued']),
     });
 
     const result = resultOf(
-      await resendOnce(site, { slugs: ['hello', 'missing', 'later'], webmentions: false }),
+      await resendOnce(site, { paths: ['hello', 'missing', 'later'], webmentions: false }),
     );
 
     assert.deepEqual(result.posts, [
       {
-        slug: 'hello',
+        path: 'hello',
         resent: true,
         activity: {
           activityType: 'Update',
@@ -123,9 +123,9 @@ describe('the resend job', () => {
         },
         webmentions: null,
       },
-      { slug: 'missing', resent: false },
+      { path: 'missing', resent: false },
       {
-        slug: 'later',
+        path: 'later',
         resent: true,
         activity: {
           activityType: 'Update',
@@ -144,10 +144,10 @@ describe('the resend job', () => {
   it('resends every announced post as the job runs, not as it was queued (AC #2)', async () => {
     const site = services({ one: report('one', ['sent']), two: report('two', ['sent']) });
 
-    const result = resultOf(await resendOnce(site, { slugs: 'all', webmentions: false }));
+    const result = resultOf(await resendOnce(site, { paths: 'all', webmentions: false }));
 
     assert.deepEqual(
-      result.posts.map((post) => post.slug),
+      result.posts.map((post) => post.path),
       ['one', 'two'],
     );
     assert.deepEqual(site.resent, ['one', 'two']);
@@ -156,7 +156,7 @@ describe('the resend job', () => {
   it('says which posts dev mode held (AC #5)', async () => {
     const site = services({ hello: report('hello', [], true) });
 
-    const result = resultOf(await resendOnce(site, { slugs: ['hello'], webmentions: false }));
+    const result = resultOf(await resendOnce(site, { paths: ['hello'], webmentions: false }));
 
     const [post] = result.posts;
     assert.equal(post?.resent && post.activity?.heldByDevMode, true);
@@ -183,11 +183,11 @@ describe('the resend job', () => {
       },
     );
 
-    const result = resultOf(await resendOnce(site, { slugs: ['hello'], webmentions: true }));
+    const result = resultOf(await resendOnce(site, { paths: ['hello'], webmentions: true }));
 
     assert.deepEqual(result.posts, [
       {
-        slug: 'hello',
+        path: 'hello',
         resent: true,
         activity: null,
         webmentions: { pages: 2, told: 1, none: 1, failed: 0 },
@@ -195,11 +195,11 @@ describe('the resend job', () => {
     ]);
   });
 
-  it('refuses a payload that names neither slugs nor every post', () => {
+  it('refuses a payload that names neither paths nor every post', () => {
     const job = resendJob(services({}));
 
-    assert.throws(() => job.parse({ slugs: 'some', webmentions: false }));
-    assert.throws(() => job.parse({ slugs: [1], webmentions: false }));
+    assert.throws(() => job.parse({ paths: 'some', webmentions: false }));
+    assert.throws(() => job.parse({ paths: [1], webmentions: false }));
     assert.throws(() => job.parse(null));
   });
 
@@ -224,7 +224,7 @@ describe('the resend job', () => {
         return changed;
       },
     });
-    const id = await first.enqueue(RESEND_JOB, { slugs: 'all', webmentions: false });
+    const id = await first.enqueue(RESEND_JOB, { paths: 'all', webmentions: false });
 
     await first.start();
     await stopped;
@@ -241,7 +241,7 @@ describe('the resend job', () => {
 
     const result = resultOf(status);
     assert.deepEqual(
-      result.posts.map((post) => [post.slug, post.resent && post.activity?.reached]),
+      result.posts.map((post) => [post.path, post.resent && post.activity?.reached]),
       [
         ['a', 1],
         ['b', 1],
@@ -256,7 +256,7 @@ describe('the resend job', () => {
     await createFileRecords(file).create({
       id: 'cut-off',
       name: RESEND_JOB.name,
-      payload: { slugs: 'all', webmentions: false },
+      payload: { paths: 'all', webmentions: false },
       queuedAt: '2026-10-14T09:00:00.000Z',
       state: 'running',
       attempt: 1,
@@ -272,7 +272,7 @@ describe('the resend job', () => {
 
     assert.equal(status.attempt, 2);
     assert.deepEqual(
-      resultOf(status).posts.map((post) => post.slug),
+      resultOf(status).posts.map((post) => post.path),
       ['a', 'b'],
     );
   });

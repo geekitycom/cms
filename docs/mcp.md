@@ -289,7 +289,9 @@ job with `federation_status`.
 
 `resend_post` names a post by its slug, its permalink, or any object id it
 was federated under. It queues the same `resend` job, with the same payload,
-as the Resend button on a post's row on the federation screen. The job sends
+as the Resend button on a post's row on the federation screen. The job names
+the post by its content path, so it sends the post the tool found even when
+another post has the same slug. The job sends
 the post as it reads now: an `Update` when followers have it, a `Create` when
 it was never announced, and a `Delete` when it is a draft or in the trash.
 The job also sends the post's webmentions again unless `webmentions` is
@@ -301,7 +303,8 @@ delivery that is `queued` or `retrying` is still in the federation queue, so
 the tool skips it. The newest delivery to a recipient counts across every
 inbox the recipient was sent to. So, with `inbox`, a recipient that failed at
 that inbox and was later reached at a new inbox is not retried. The answer
-lists each post and its recipients with the recorded error. The tool then
+lists each post, by its content path, and its recipients with the recorded
+error. The tool then
 queues a `retry-deliveries` job. When the job runs, it reads the failures
 again and sends each post as it reads now, to those recipients only. A
 recipient whose newest `Create` for the post failed never stored the post, and

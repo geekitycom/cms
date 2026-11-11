@@ -140,9 +140,9 @@ export interface WebmentionService {
    * Not "send those again": the links are read out of the post at the moment
    * this is called, so a link added since the last publish goes
    * out and one taken out is told, which is what somebody pressing Resend is
-   * asking for. `undefined` when no post answers to that slug.
+   * asking for. `undefined` when nothing is at that content path.
    */
-  send(slug: string): Promise<WebmentionReport | undefined>;
+  send(path: string): Promise<WebmentionReport | undefined>;
   /**
    * Take one webmention the endpoint has accepted and check it, out of the
    * request that brought it.
@@ -449,9 +449,10 @@ export function createWebmentionService(
       });
     },
 
-    async send(slug) {
-      const document = postBySlug(store, slug);
+    async send(path) {
+      const document = store.getByPath(path);
       if (document === undefined) return undefined;
+      const { slug } = document;
 
       const source = absoluteUrl(document.permalink, config.baseUrl);
       const site = await settings.values(SITE);
@@ -637,18 +638,4 @@ export function followMovedWebmentions(
     const owner = permalink === undefined ? undefined : permalinkOwner(store, permalink);
     if (owner !== undefined) admin.moveSentWebmentions(recorded, owner.slug);
   }
-}
-
-/**
- * The post a slug names, the trash included, or `undefined`.
- *
- * The same lookup a resend of an ActivityPub delivery does, and for the same
- * reason: the newest document of that name is the post nine times out of ten,
- * and the federated list is the fallback for a trashed one standing behind a
- * live page.
- */
-function postBySlug(store: DocumentLookup & CatalogReader, slug: string): Document | undefined {
-  const direct = store.getBySlug(slug);
-  if (direct !== undefined) return direct;
-  return store.listFederated().find((document) => document.slug === slug);
 }

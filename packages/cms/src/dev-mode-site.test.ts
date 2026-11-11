@@ -180,7 +180,10 @@ describe('a site in dev mode', () => {
     await settle(cms);
 
     const resent = await cms.jobs.run(
-      await cms.jobs.enqueue(RESEND_JOB, { slugs: ['hello-world'], webmentions: true }),
+      await cms.jobs.enqueue(RESEND_JOB, {
+        paths: [cms.store.getBySlug('hello-world')?.path ?? ''],
+        webmentions: true,
+      }),
     );
     assert.equal(resent.state, 'finished');
     const [post] = finishedResult(RESEND_JOB, resent)?.posts ?? [];

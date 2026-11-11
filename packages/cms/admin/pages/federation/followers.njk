@@ -106,10 +106,10 @@
               <td class="break-all">{{ failure.inboxId }}</td>
               <td class="break-all text-sm">{{ failure.error or 'No reason given.' }}</td>
               <td>
-                {% if failure.slug and not (retry and retry.active) %}
+                {% if failure.path and not (retry and retry.active) %}
                   <form method="post" action="{{ retryUrl }}">
                     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-                    <input type="hidden" name="{{ fields.slug }}" value="{{ failure.slug }}" />
+                    <input type="hidden" name="{{ fields.path }}" value="{{ failure.path }}" />
                     <input type="hidden" name="{{ fields.inbox }}" value="{{ failure.inboxId }}" />
                     {{ button('Retry', type='submit', style='outline', size='xs') }}
                   </form>
@@ -136,7 +136,7 @@
               <ul class="list-disc pl-6">
                 {% for post in retryResult.posts %}
                   <li>
-                    <code class="break-all">{{ post.slug }}</code>:
+                    <code class="break-all">{{ post.path }}</code>:
                     {% if post.activity %}
                       {{ post.activity.activityType }} reached {{ post.activity.reached }} of {{ post.activity.inboxes }} {% if post.activity.inboxes == 1 %}inbox{% else %}inboxes{% endif %}{% if post.activity.queued %}, {{ post.activity.queued }} queued{% endif %}{% if post.activity.failed %}, {{ status('failed', post.activity.failed + ' failed') }}{% endif %}.
                     {% else %}
@@ -300,7 +300,7 @@
               <td>
                 <form method="post" action="{{ resendUrl }}">
                   <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-                  <input type="hidden" name="{{ fields.slug }}" value="{{ row.slug }}" />
+                  <input type="hidden" name="{{ fields.path }}" value="{{ row.path }}" />
                   {{ button('Resend', type='submit', style='ghost', size='xs') }}
                 </form>
               </td>

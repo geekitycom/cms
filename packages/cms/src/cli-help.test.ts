@@ -14,7 +14,7 @@ Usage:
   geekity init <directory>
   geekity sync [--config <file>]
   geekity rebuild [--config <file>]
-  geekity resend (--all | <slug>...) [--config <file>]
+  geekity resend (--all | <slug-or-path>...) [--config <file>]
   geekity maintenance (on [--until <time>] | off | status) [--config <file>]
   geekity dev-mode (on | off | status) [--config <file>]
   geekity gemini (cert | new-cert) [--config <file>]
@@ -246,7 +246,7 @@ describe('a command used wrongly', () => {
     [['dev-mode'], 'geekity dev-mode needs on, off or status.'],
     [
       ['resend'],
-      'geekity resend needs either --all or the slugs of the posts to resend, and not both.',
+      'geekity resend needs either --all or the slugs or paths of the posts to resend, and not both.',
     ],
     [
       ['plugin'],

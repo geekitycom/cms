@@ -16,7 +16,7 @@ import { postObjectId } from '../content/guids.ts';
 import { isMigrated } from '../content/migrated.ts';
 import { replyTarget } from '../content/post-type.ts';
 import { saveDocument } from '../content/save.ts';
-import type { CatalogReader, DocumentLookup, IndexWriter } from '../content/store.ts';
+import type { IndexWriter } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { documentContent } from '../content/writer.ts';
@@ -147,7 +147,7 @@ export interface DeliveryService {
    * one is a `Delete` of a `Tombstone` — so a resend and an ordinary publish
    * produce the same shapes.
    *
-   * `undefined` when there is nothing to send: no post answers to that slug,
+   * `undefined` when there is nothing to send: no post is at that content path,
    * or the post is one nobody outside the site has ever been told about and is
    * not published now, so there is neither a copy to withdraw nor anything to
    * announce.
@@ -155,7 +155,7 @@ export interface DeliveryService {
    * Recipients in `to` that missed the announcement are sent it again rather
    * than an `Update`, which a peer drops for a post it never stored.
    */
-  resend(slug: string, to?: ResendRecipients): Promise<DeliveryReport | undefined>;
+  resend(path: string, to?: ResendRecipients): Promise<DeliveryReport | undefined>;
   /**
    * Bring the followers' copies of the posts that cite a page up to date with
    * its newly stored context: an `Update` for each served, announced post
@@ -579,9 +579,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         });
     },
 
-    async resend(slug, to) {
-      const document = postBySlug(store, slug);
-      if (document === undefined) return undefined;
+    async resend(path, to) {
+      const document = store.getByPath(path);
+      if (document?.type !== 'post') return undefined;
 
       // Read before the queue rather than inside it, so a post with nothing to
       // send answers `undefined` rather than joining a queue to find that out.
@@ -707,24 +707,6 @@ export function deliveryTargets(
     ...followerTargets(admin.listFollowers(username)),
     ...relayTargets(relays ? acceptedRelays(admin) : []),
   ];
-}
-
-/**
- * The post a slug names, the trash included, or `undefined`.
- *
- * The index's slug lookup answers across both kinds and both states and takes
- * the newest, which is the post nine times out of ten. The federated list is
- * the fallback for the tenth — a page, or a live post of the same name,
- * standing in front of a trashed one — and it is the right fallback because a
- * post that was never announced is not one a resend has anything to say about.
- */
-export function postBySlug(
-  store: DocumentLookup & CatalogReader,
-  slug: string,
-): Document | undefined {
-  const direct = store.getBySlug(slug);
-  if (direct?.type === 'post') return direct;
-  return store.listFederated().find((document) => document.slug === slug);
 }
 
 /** An activity's short type name — `Create`, `Update`, `Delete` — from its type URI. */

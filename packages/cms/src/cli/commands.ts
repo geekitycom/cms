@@ -52,7 +52,7 @@ export const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
     run: rebuildCommand,
   },
   resend: {
-    synopsis: ['resend (--all | <slug>...) [--config <file>]'],
+    synopsis: ['resend (--all | <slug-or-path>...) [--config <file>]'],
     help: [
       [
         'resend',

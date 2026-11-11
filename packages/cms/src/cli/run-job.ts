@@ -7,7 +7,7 @@ import { isServing } from '../supervisor/control.ts';
 export async function runJobHere<P extends Json, R extends Json>(
   config: ResolvedConfig,
   job: JobName<P, R>,
-  payload: NoInfer<P>,
+  payload: NoInfer<P> | ((cms: Cms) => NoInfer<P>),
   what: string,
   prepare?: (cms: Cms) => Promise<unknown>,
 ): Promise<R | undefined> {
@@ -16,9 +16,13 @@ export async function runJobHere<P extends Json, R extends Json>(
   let status;
   try {
     await prepare?.(cms);
-    const enqueued = await cms.jobs.enqueueUnlessActive(job, payload, {
-      countQueued: await isServing(config.dataDir),
-    });
+    const enqueued = await cms.jobs.enqueueUnlessActive(
+      job,
+      typeof payload === 'function' ? payload(cms) : payload,
+      {
+        countQueued: await isServing(config.dataDir),
+      },
+    );
     if (!enqueued.queued) {
       process.stderr.write(
         `A ${job.name} job is already ${enqueued.active.state}, so this one did not start. ` +
