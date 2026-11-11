@@ -470,14 +470,13 @@ async function submitEditor(
   });
 }
 
-/** Every delivery whose activity is of this type. */
-/** Where the one post a test site holds under a slug is filed, the trash included. */
 function pathOf(cms: Cms, slug: string): string {
   const document = cms.store.getBySlug(slug);
   assert.ok(document, `no post has the slug ${slug}`);
   return document.path;
 }
 
+/** Every delivery whose activity is of this type. */
 function delivered(type: string): Delivery[] {
   return deliveries.filter((delivery) => delivery.body['type'] === type);
 }

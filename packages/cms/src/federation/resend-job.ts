@@ -27,7 +27,6 @@ export type ResendWebmentions = {
   readonly failed: number;
 };
 
-/** One post in a resend: either nothing went out for it, or what did. */
 export type ResendPost =
   | { readonly path: string; readonly resent: false }
   | {

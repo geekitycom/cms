@@ -31,7 +31,6 @@ function row(
   };
 }
 
-/** Where the post a row's slug names is filed. */
 function fileOf(slug: string): string {
   return `posts/2026-03-01-${slug}.md`;
 }

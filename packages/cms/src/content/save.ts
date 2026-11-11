@@ -239,8 +239,7 @@ function isUnmodelledKey(line: string): boolean {
  * A date the CMS writes ends in `Z`, whatever the file it came
  * from spelled. That is done here, once, rather than in each
  * caller — the editor and a taxonomy rewrite — so every save converts and
- * neither has to remember to. The federation's stamp does not come through
- * here: it adds its one key to the file as written. It is done before
+ * neither has to remember to. It is done before
  * the serialize rather than inside it because {@link saveDocument} parses its
  * own output back and hashes it: normalising later would leave the index
  * holding a hash of bytes that were never written.

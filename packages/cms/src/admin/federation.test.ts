@@ -120,7 +120,6 @@ async function federationForm(agent: Browser): Promise<{ html: string; token: st
   return { html, token };
 }
 
-/** Where the editor files the post {@link publishPost} writes. */
 const POST_FILE = 'posts/2026-03-04-hello-world.md';
 
 /** Publish a post through the editor, which is what sets a delivery going. */

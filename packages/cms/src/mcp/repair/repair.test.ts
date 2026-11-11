@@ -74,7 +74,6 @@ beforeEach(() => {
   bobInbox = BOB_SHARED_INBOX;
 });
 
-/** Where the fixture files the post named hello. */
 const HELLO_FILE = 'posts/2026-03-01-hello.md';
 
 async function repairSite(): Promise<{ cms: Cms; token: string }> {
