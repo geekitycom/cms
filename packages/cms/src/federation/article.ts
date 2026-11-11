@@ -69,7 +69,7 @@ import type { MentionedAccount } from './handles.ts';
 import { isObjectIdOf, naturalObjectId, objectIdsOf, readObjectIds } from './object-ids.ts';
 import type { ObjectIds } from './object-ids.ts';
 import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } from './paths.ts';
-import { resolvedReplyTarget } from './reply-targets.ts';
+import { resolvedTarget } from './reply-targets.ts';
 
 /**
  * The user a post is announced by: the one its `author` names, and the site's
@@ -763,7 +763,7 @@ function replyTargetId(context: Context<FederationContextData>, inReplyTo: strin
     (permalink === undefined ? undefined : store.getByPermalink(permalink)) ??
     postByObjectId(store, inReplyTo, config);
   if (target?.type === 'post') return articleObjectId(context, target);
-  const resolved = resolvedReplyTarget(config.contentDir, inReplyTo);
+  const resolved = resolvedTarget(config.contentDir, inReplyTo);
   if (resolved === null) return null;
   return new URL(resolved ?? inReplyTo);
 }

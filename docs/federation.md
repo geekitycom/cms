@@ -153,6 +153,15 @@ through the editor:
 | edited while published                                                       | `Update` of its object    |
 | drafted, trashed, or its file deleted                                        | `Delete` of a `Tombstone` |
 
+An `Update`, a `Delete`, or the `Undo` of a like or a repost goes to the post's
+current audience and also to every recipient the delivery log recorded for the
+post's object id. The current version's audience can be narrower than the set
+of servers that hold a copy. A relay receives no `Create` of an unlisted post,
+but it still holds the public version. An account whose mention was edited out
+still holds the version that mentioned it. Each of these earlier recipients is
+sent to the inbox the log recorded for it, and the outcome is recorded against
+its actor id as for any other recipient.
+
 Only posts federate. Pages and [wiki pages](content.md#wiki-pages) are never
 delivered and are not in the outbox.
 
@@ -177,7 +186,23 @@ profile's posts, so a reply to an ordinary web page has to go out as a post.
 The answer is kept in `content/_data/federation/replyTargets.json`, by the URL
 the reply cites, so the object a peer fetches and the outbox say what the
 delivery said. A reply that no delivery has looked up since the file was added
-is served with its target's URL as `inReplyTo`.
+is served with its target's URL as `inReplyTo`. The same file keeps the answer
+for the URL a like or a repost cites, which decides whether the post goes out
+as a `Like` or `Announce` or as a post of its own.
+
+Only a definite answer is kept: the object, or a 404, a 410, a document that
+is not ActivityPub, or an actor. A timeout, a network error, a 401, a 403, a
+429 or a 5xx is no answer. A delivery then uses the answer kept from before,
+without the author's inbox, and the earlier recipients in the delivery log
+still get it. With no answer kept, the delivery fails and its error is logged.
+Nothing is sent and the post is not stamped, so the next save of the post or a
+resend announces it.
+
+A reply, a like or a repost is addressed to the author of the object it cites,
+mentions them, and is delivered to their inbox. The author counts only when
+their actor is on the same origin as the object. When the object's
+`attributedTo` names an actor on another origin, the post goes out without an
+author, as it does when the object names none.
 
 The object is a `Note` or an `Article`, depending on the post's discovered
 type. A post with no title, or whose text opens with its title, is a `Note`.
@@ -278,8 +303,14 @@ deleted would reach no Mastodon server that saw the `Delete`.
 The site sends a `Delete` when a post becomes a draft, is trashed, or has its
 file deleted. It also sends one when an edit changes the post's object id, for
 example when a permalink is changed by hand in the file: the old id gets a
-`Delete` and the new id gets a `Create`. So a post can come back under a
-deleted id in two ways:
+`Delete` and the new id gets a `Create`. An edit that changes the post's
+author does the same. A peer files a post under the actor that created it and
+accepts an `Update` or `Delete` from that actor only, so the old author sends
+the `Delete` to their followers, and the new author sends a `Create` to theirs
+under a new id. A post whose `author` names a deleted user is sent by the
+site's first account from then on. The copies the deleted user sent stay on
+the servers that hold them, because no remaining actor can update or delete
+them. So a post can come back under a deleted id in two ways:
 
 - it is published again after a draft or the trash
 - an edit moves it back to a permalink it had before
@@ -570,7 +601,9 @@ same `Follow`.
 The site delivers only to an accepted relay. An accepted relay is one more
 inbox in the fan-out. It receives, as well as the author's followers:
 
-- every `Create`, `Update`, and `Delete` for a post, whoever wrote it
+- every `Create`, `Update`, and `Delete` for a public post, whoever wrote it
+- every `Update` and `Delete` for a post it was sent before, after the post is
+  unlisted
 - the actor `Update` that a profile change sends
 
 The delivery log records each relay outcome against the relay's actor id and

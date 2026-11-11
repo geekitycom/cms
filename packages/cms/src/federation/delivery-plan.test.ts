@@ -304,7 +304,12 @@ describe('what a change delivers', () => {
 });
 
 describe('what an edit sends', () => {
-  const object: Shape = { kind: 'object', id: 'https://site.example/hello/', replyTo: undefined };
+  const object: Shape = {
+    kind: 'object',
+    id: 'https://site.example/hello/',
+    actor: 'ada',
+    replyTo: undefined,
+  };
   const liking = { activity: new Like({}), author: undefined };
 
   it('revises the same object', () => {
@@ -315,6 +320,7 @@ describe('what an edit sends', () => {
     const citing: Shape = {
       kind: 'citing',
       id: 'https://site.example/hello/#like',
+      actor: 'ada',
       citing: liking,
     };
     assert.deepEqual(revisionStep(citing, citing), { kind: 'none' });
@@ -322,9 +328,18 @@ describe('what an edit sends', () => {
 
   it('replaces an object that changed its id or became a like', () => {
     const renamed: Shape = { ...object, id: 'https://site.example/hi/' };
-    const like: Shape = { kind: 'citing', id: 'https://site.example/hello/', citing: liking };
+    const like: Shape = {
+      kind: 'citing',
+      id: 'https://site.example/hello/',
+      actor: 'ada',
+      citing: liking,
+    };
     assert.deepEqual(revisionStep(object, renamed), { kind: 'replace' });
     assert.deepEqual(revisionStep(object, like), { kind: 'replace' });
+  });
+
+  it('replaces the same object sent as another author', () => {
+    assert.deepEqual(revisionStep(object, { ...object, actor: 'grace' }), { kind: 'replace' });
   });
 });
 

@@ -7,6 +7,9 @@ import { isRecord } from '../util/guards.ts';
 import { FEDERATION_DATA_DIRECTORY } from './records.ts';
 
 /**
+ * The object id each URL a post replies to, likes or reposts was last found
+ * to name, or `null` for a URL found to name none.
+ *
  * Mastodon keeps a status whose `inReplyTo` it cannot fetch as a reply to
  * nothing, and leaves it out of every home feed and the profile's posts. So a
  * reply to a page with no fediverse object behind it is sent with no
@@ -27,11 +30,11 @@ function replyTargetsFile(contentDir: string): string {
   return path.join(contentDir, ...REPLY_TARGETS_FILE.split('/'));
 }
 
-export function resolvedReplyTarget(contentDir: string, url: string): string | null | undefined {
+export function resolvedTarget(contentDir: string, url: string): string | null | undefined {
   return readCached(replyTargetsFile(contentDir))[url];
 }
 
-export async function recordReplyTarget(
+export async function recordResolvedTarget(
   contentDir: string,
   url: string,
   objectId: string | null,

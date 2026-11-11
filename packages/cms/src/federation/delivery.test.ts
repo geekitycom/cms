@@ -63,6 +63,9 @@ const BROKEN_ORIGIN = 'https://broken.example';
 const BROKEN_ACTOR = `${BROKEN_ORIGIN}/users/nobody`;
 const BROKEN_INBOX = `${BROKEN_ORIGIN}/users/nobody/inbox`;
 
+const STRANGER_ORIGIN = 'https://stranger.example';
+const MISATTRIBUTED_NOTE = `${STRANGER_ORIGIN}/notes/1`;
+
 /**
  * A fediverse author nobody here follows, and the status of theirs a post
  * likes or reposts (TASK-169). The status is served at its id and at the URL
@@ -85,6 +88,9 @@ const SLOW_PAGE = `${REMOTE_ORIGIN}/blog/slow-page/`;
 const ERIN_ACTOR = `${REMOTE_ORIGIN}/users/erin`;
 const ERIN_INBOX = `${REMOTE_ORIGIN}/users/erin/inbox`;
 const ERIN_PROFILE = `${REMOTE_ORIGIN}/@erin`;
+
+const RELAY_ACTOR = `${REMOTE_ORIGIN}/relay`;
+const RELAY_INBOX = `${REMOTE_ORIGIN}/relay/inbox`;
 
 /** One POST the site made while delivering. */
 interface Delivery {
@@ -111,6 +117,7 @@ let statusDocument: unknown;
 let sharedInboxAuthorDocument: unknown;
 let sharedInboxAuthorStatusDocument: unknown;
 let erinDocument: unknown;
+let misattributedNoteDocument: unknown;
 const webfingerLookups: string[] = [];
 let restoreFetch: () => void;
 let slowPage: Promise<void> = Promise.resolve();
@@ -119,6 +126,7 @@ let rejectingEveryPost = false;
 let refusalStatus = 503;
 const refused: string[] = [];
 let postsBegun = 0;
+let statusUnavailable = false;
 
 before(async () => {
   const keys = await testKeyPair(REMOTE_PAIR);
@@ -152,6 +160,12 @@ before(async () => {
     url: new URL(ERIN_PROFILE),
     inbox: new URL(ERIN_INBOX),
   }).toJsonLd();
+  misattributedNoteDocument = await new Note({
+    id: new URL(MISATTRIBUTED_NOTE),
+    url: new URL(MISATTRIBUTED_NOTE),
+    attribution: new URL(CAROL_ACTOR),
+    content: 'Something carol did not write.',
+  }).toJsonLd();
   restoreFetch = routeRemoteHost();
 });
 
@@ -160,6 +174,7 @@ before(async () => {
 afterEach(async () => {
   rejectingEveryPost = false;
   refusalStatus = 503;
+  statusUnavailable = false;
   inboxes = Promise.resolve();
   for (const instance of started.splice(0)) await instance.close();
 });
@@ -207,6 +222,12 @@ function routeRemoteHost(): () => void {
       return new Response('This instance is having a bad day.', { status: 500 });
     }
     if (url.origin === BASE_URL) ownFetches.push(url.href);
+    if (url.origin === STRANGER_ORIGIN) {
+      if (url.href !== MISATTRIBUTED_NOTE) return new Response('Not found.', { status: 404 });
+      return new Response(JSON.stringify(misattributedNoteDocument), {
+        headers: { 'content-type': 'application/activity+json' },
+      });
+    }
     if (url.origin !== REMOTE_ORIGIN) return await original(input, init);
 
     const request = new Request(input, init);
@@ -231,6 +252,12 @@ function routeRemoteHost(): () => void {
       return new Response(JSON.stringify(remoteActorDocument), {
         headers: { 'content-type': 'application/activity+json' },
       });
+    }
+    if (
+      statusUnavailable &&
+      [STATUS_ID, STATUS_URL].some((status) => new URL(status).pathname === url.pathname)
+    ) {
+      return new Response('Service unavailable.', { status: 503 });
     }
     const served = new Map([
       [new URL(CAROL_ACTOR).pathname, carolDocument],
@@ -370,7 +397,11 @@ async function site(
           ? { allowPrivateAddress: true }
           : { queue: null, allowPrivateAddress: true },
     hostLookup: (host) =>
-      Promise.resolve(host === new URL(REMOTE_ORIGIN).hostname ? ['203.0.113.7'] : []),
+      Promise.resolve(
+        [REMOTE_ORIGIN, STRANGER_ORIGIN].some((origin) => new URL(origin).hostname === host)
+          ? ['203.0.113.7']
+          : [],
+      ),
     ...(options.now === undefined ? {} : { now: options.now }),
   });
   started.push(cms);
@@ -496,6 +527,18 @@ function waitForDelivery(type: string): Promise<Delivery> {
   return nextEvent(`a delivery of a ${type}`, (done) => {
     const check = () => {
       const found = delivered(type)[0];
+      if (found !== undefined) done(found);
+    };
+    check();
+    arrivals.add(check);
+    return () => arrivals.delete(check);
+  });
+}
+
+function waitForAnyDelivery(): Promise<Delivery> {
+  return nextEvent('a delivery', (done) => {
+    const check = () => {
+      const found = deliveries[0];
       if (found !== undefined) done(found);
     };
     check();
@@ -1325,6 +1368,66 @@ describe('likes, reposts and bookmarks (TASK-169 AC #3)', () => {
     );
   });
 
+  it('sends nothing for a like whose status cannot be reached, and the Like on a resend once it can', async () => {
+    statusUnavailable = true;
+    const { cms } = await cite('like-of', STATUS_URL);
+
+    assert.deepEqual(deliveries, [], 'a Note would be the wrong activity');
+
+    statusUnavailable = false;
+    const report = await cms.delivery.resend(pathOf(cms, 'cited'));
+
+    assert.equal(report?.activityType, 'Like');
+    assert.deepEqual(
+      delivered('Like')
+        .map((one) => one.url)
+        .sort(),
+      [CAROL_INBOX, REMOTE_SHARED_INBOX].sort(),
+    );
+  });
+
+  for (const [property, action] of [
+    ['like-of', 'save-draft'],
+    ['repost-of', 'trash'],
+  ] as const) {
+    it(`takes a ${property} post back with an Undo on ${action} while its status cannot be reached`, async () => {
+      const { cms, agent } = await cite(property, STATUS_URL);
+      deliveries.length = 0;
+
+      statusUnavailable = true;
+      const response = await submitEditor(agent, '/admin/posts/cited', {
+        action,
+        return: '',
+        [property]: STATUS_URL,
+      });
+      assert.equal(response.status, 303, await response.text());
+      await cms.delivery.settled();
+
+      assert.deepEqual(delivered('Delete'), []);
+      const undos = delivered('Undo');
+      assert.deepEqual(
+        undos.map((one) => one.url).sort(),
+        [CAROL_INBOX, REMOTE_SHARED_INBOX].sort(),
+      );
+      const undone = (undos[0] as Delivery).body['object'] as Record<string, unknown>;
+      assert.equal(undone['object'], STATUS_ID);
+    });
+  }
+
+  it('sends nothing when a like is edited while its status cannot be reached', async () => {
+    const { cms, agent } = await cite('like-of', STATUS_URL);
+    deliveries.length = 0;
+
+    statusUnavailable = true;
+    await submitEditor(agent, '/admin/posts/cited', {
+      body: 'So very good.',
+      'like-of': STATUS_URL,
+    });
+    await cms.delivery.settled();
+
+    assert.deepEqual(deliveries, []);
+  });
+
   it('sends nothing more when a like is edited without changing what it likes', async () => {
     const { cms, agent } = await cite('like-of', STATUS_URL);
     deliveries.length = 0;
@@ -1509,6 +1612,42 @@ describe('a reply to a fediverse status (TASK-240)', () => {
     const { cms } = await reply(STATUS_URL);
 
     assert.equal((await served(cms))['inReplyTo'], STATUS_ID);
+  });
+
+  it('keeps the reply’s inReplyTo when its status cannot be reached during an edit', async () => {
+    const { cms, agent } = await reply(STATUS_URL);
+    deliveries.length = 0;
+
+    statusUnavailable = true;
+    const response = await submitEditor(agent, '/admin/posts/answer', {
+      body: 'I agree, mostly.',
+      'in-reply-to': STATUS_URL,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+    statusUnavailable = false;
+
+    const updates = delivered('Update');
+    assert.ok(updates.length > 0, JSON.stringify(deliveries.map((one) => one.body['type'])));
+    for (const update of updates) assert.equal(objectOf(update)['inReplyTo'], STATUS_ID);
+    assert.equal((await served(cms))['inReplyTo'], STATUS_ID);
+  });
+
+  it('neither mentions, copies nor delivers to an author on another host than the status', async () => {
+    await reply(MISATTRIBUTED_NOTE);
+
+    const creates = delivered('Create');
+    assert.deepEqual(
+      creates.map((one) => one.url),
+      [REMOTE_SHARED_INBOX],
+      'to the followers only',
+    );
+    const create = creates[0] as Delivery;
+    assert.equal(create.body['cc'], FOLLOWERS);
+    const note = objectOf(create);
+    assert.equal(note['inReplyTo'], MISATTRIBUTED_NOTE);
+    assert.equal(note['cc'], FOLLOWERS);
+    assert.deepEqual(mentions(note), []);
   });
 
   it('federates a reply to a page that is no fediverse object with no inReplyTo', async () => {
@@ -2845,10 +2984,13 @@ describe('renaming a post that has already been announced (TASK-127)', () => {
 });
 
 describe('two users', () => {
-  it('delivers a post only to its own author’s followers (AC #3)', async () => {
-    // decision-14: a post belongs to a person, and only that person's
-    // followers agreed to hear from them.
-    const { cms, contentDir } = await site({ account: true });
+  const FILE = 'posts/2026-03-04-watched.md';
+  const GRACE_URL = `${BASE_URL}/author/grace/`;
+  const POST_ID = `${BASE_URL}/2026/03/watched/`;
+
+  async function adaAndGrace(options: { watch?: boolean } = {}): Promise<Site> {
+    const built = await site({ account: true, ...options });
+    const { cms, contentDir } = built;
     writeUsers(cms.config.dataDir, [
       { username: ADA, id: 1 },
       { username: 'grace', id: 2 },
@@ -2863,12 +3005,39 @@ describe('two users', () => {
       iconUrl: null,
       url: null,
     });
+    return built;
+  }
 
-    await writeDocument(
-      contentDir,
-      'posts/2026-03-04-watched.md',
-      publishedPost('Ada wrote this one.'),
-    );
+  async function rewriteAndSettle(
+    cms: Cms,
+    contentDir: string,
+    edit: (source: string) => string,
+  ): Promise<void> {
+    const file = path.join(contentDir, ...FILE.split('/'));
+    deliveries.length = 0;
+    await writeFile(file, edit(await readFile(file, 'utf8')), 'utf8');
+    await waitForAnyDelivery();
+    await cms.delivery.settled();
+  }
+
+  function sent(): [type: unknown, actor: unknown, inbox: string, objectId: unknown][] {
+    return deliveries.map((one) => {
+      const object = one.body['object'];
+      return [
+        one.body['type'],
+        one.body['actor'],
+        one.url,
+        typeof object === 'string' ? object : (object as Record<string, unknown>)['id'],
+      ];
+    });
+  }
+
+  it('delivers a post only to its own author’s followers (AC #3)', async () => {
+    // decision-14: a post belongs to a person, and only that person's
+    // followers agreed to hear from them.
+    const { cms, contentDir } = await adaAndGrace();
+
+    await writeDocument(contentDir, FILE, publishedPost('Ada wrote this one.'));
     await cms.sync();
     const report = await cms.delivery.resend(pathOf(cms, 'watched'));
 
@@ -2879,6 +3048,53 @@ describe('two users', () => {
       [REMOTE_SHARED_INBOX],
       'Grace’s follower heard nothing about Ada’s post',
     );
+  });
+
+  it('withdraws a post from the old author’s followers as the old author when the author changes', async () => {
+    const { cms, contentDir } = await adaAndGrace({ watch: true });
+    await cms.serve();
+    await writeDocument(contentDir, FILE, publishedPost('Ada wrote this one.'));
+    await waitForAnyDelivery();
+    await cms.delivery.settled();
+    assert.deepEqual(sent(), [['Create', ACTOR_URL, REMOTE_SHARED_INBOX, POST_ID]]);
+
+    await rewriteAndSettle(cms, contentDir, (source) =>
+      source.replace(`author: ${ADA}`, 'author: grace'),
+    );
+    assert.deepEqual(sent(), [
+      ['Delete', ACTOR_URL, REMOTE_SHARED_INBOX, POST_ID],
+      ['Create', GRACE_URL, OTHER_INBOX, `${POST_ID}?v=2`],
+    ]);
+
+    await rewriteAndSettle(cms, contentDir, (source) =>
+      source.replace('Ada wrote this one.', 'Grace took it over.'),
+    );
+    assert.deepEqual(
+      sent(),
+      [['Update', GRACE_URL, OTHER_INBOX, `${POST_ID}?v=2`]],
+      'a later edit reaches only the new author’s followers',
+    );
+  });
+
+  it('pins a pinned post for the new author after it changes hands', async () => {
+    const { cms, contentDir } = await adaAndGrace({ watch: true });
+    await cms.serve();
+    await writeDocument(
+      contentDir,
+      FILE,
+      publishedPost('Ada pinned this one.').replace('tags:', 'pinned: true\ntags:'),
+    );
+    await waitForAnyDelivery();
+    await cms.delivery.settled();
+
+    await rewriteAndSettle(cms, contentDir, (source) =>
+      source.replace(`author: ${ADA}`, 'author: grace'),
+    );
+    assert.deepEqual(sent(), [
+      ['Delete', ACTOR_URL, REMOTE_SHARED_INBOX, POST_ID],
+      ['Create', GRACE_URL, OTHER_INBOX, `${POST_ID}?v=2`],
+      ['Add', GRACE_URL, OTHER_INBOX, `${POST_ID}?v=2`],
+    ]);
   });
 });
 
@@ -3394,6 +3610,95 @@ describe('a post that mentions a fediverse handle (TASK-194)', () => {
     assert.equal(response.status, 303, await response.text());
     await cms.delivery.settled();
     assert.deepEqual(webfingerLookups, ['acct:ghost@remote.example']);
+  });
+});
+
+describe('an Update or a Delete of a post whose audience has narrowed', () => {
+  function inboxesOf(type: string): string[] {
+    return delivered(type)
+      .map((one) => one.url)
+      .sort();
+  }
+
+  it('reaches an accepted relay that got the public Create once the post is unlisted, then drafted', async () => {
+    const { cms } = await site();
+    await cms.relays.settled();
+    cms.admin.putRelay({
+      inboxId: RELAY_INBOX,
+      actorId: RELAY_ACTOR,
+      state: 'accepted',
+      reason: null,
+      followId: `${ACTOR_URL}#relay-follow/1`,
+    });
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    assert.deepEqual(inboxesOf('Create'), [RELAY_INBOX, REMOTE_SHARED_INBOX].sort());
+
+    await submitEditor(agent, '/admin/posts/hello-world', { visibility: 'unlisted' });
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+    await cms.delivery.settled();
+
+    assert.deepEqual(
+      { update: inboxesOf('Update'), delete: inboxesOf('Delete') },
+      {
+        update: [RELAY_INBOX, REMOTE_SHARED_INBOX].sort(),
+        delete: [RELAY_INBOX, REMOTE_SHARED_INBOX].sort(),
+      },
+    );
+  });
+
+  it('reaches an account mentioned in an earlier version after the mention was edited out', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent, {
+      title: '',
+      slug: 'thanks',
+      body: 'Thanks @erin@remote.example.',
+    });
+    await cms.delivery.settled();
+    assert.deepEqual(inboxesOf('Create'), [ERIN_INBOX, REMOTE_SHARED_INBOX].sort());
+
+    await submitEditor(agent, '/admin/posts/thanks', { body: 'Thanks, everyone.' });
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/thanks', { action: 'save-draft' });
+    await cms.delivery.settled();
+
+    assert.deepEqual(
+      { update: inboxesOf('Update'), delete: inboxesOf('Delete') },
+      {
+        update: [ERIN_INBOX, REMOTE_SHARED_INBOX].sort(),
+        delete: [ERIN_INBOX, REMOTE_SHARED_INBOX].sort(),
+      },
+    );
+  });
+
+  it('records the earlier recipient in the delivery log like any other', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent, {
+      title: '',
+      slug: 'thanks',
+      body: 'Thanks @erin@remote.example.',
+    });
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/thanks', { body: 'Thanks, everyone.' });
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/thanks', { action: 'save-draft' });
+    await cms.delivery.settled();
+
+    const deleteId = String(delivered('Delete')[0]?.body['id']);
+    assert.deepEqual(
+      cms.admin
+        .listDeliveries(deleteId)
+        .map((row) => [row.actorId, row.inboxId, row.status])
+        .sort(),
+      [
+        [ERIN_ACTOR, ERIN_INBOX, 'sent'],
+        [REMOTE_ACTOR, REMOTE_SHARED_INBOX, 'sent'],
+      ].sort(),
+    );
   });
 });
 

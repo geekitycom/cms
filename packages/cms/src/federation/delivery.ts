@@ -5,6 +5,7 @@ import { Activity, getTypeId, PUBLIC_COLLECTION } from '@fedify/vocab';
 import type { Object as ActivityObject } from '@fedify/vocab';
 
 import type { AdminStore, Delivery, DeliveryStatus } from '../store/admin-store.ts';
+import { NO_LIMIT } from '../store/rows.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
@@ -42,6 +43,7 @@ import {
   citedAuthor,
   deliveryChange,
   deliveryRows,
+  earlierTargets,
   fanOutTargets,
   followerTargets,
   objectTargets,
@@ -281,18 +283,18 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     if (activityId === undefined) {
       throw new TypeError('An activity cannot be delivered without an id.');
     }
+    const activityType = typeNameOf(activity);
+    const objectId = articleObjectId(context, about).href;
+    const earlier = reachesEarlierRecipients(activityType)
+      ? admin.searchDeliveries({ objectIds: [objectId] }, { limit: NO_LIMIT }).items
+      : [];
     return await fanOut(
       context,
       requireSender(context, about),
       activity,
-      {
-        activityId,
-        activityType: typeNameOf(activity),
-        objectId: articleObjectId(context, about).href,
-        slug: about.slug,
-      },
+      { activityId, activityType, objectId, slug: about.slug },
       also,
-      { relays: visibilityOf(about) === 'public', to },
+      { relays: visibilityOf(about) === 'public', to, earlier },
     );
   }
 
@@ -306,13 +308,15 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     context: Context<FederationContextData>,
     document: Document,
   ): Promise<Shape> {
+    const actor = requireSender(context, document).username;
     const citing = await citingActivity(context, document);
     if (citing !== undefined) {
-      return { kind: 'citing', id: citing.activity.id?.href ?? '', citing };
+      return { kind: 'citing', id: citing.activity.id?.href ?? '', actor, citing };
     }
     return {
       kind: 'object',
       id: articleObjectId(context, document).href,
+      actor,
       replyTo: await repliedTo(context, document),
     };
   }
@@ -449,10 +453,19 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     activity: Activity,
     about: ActivityAbout,
     also: readonly DeliveryTarget[] = [],
-    { relays = true, to }: { relays?: boolean; to?: ReadonlySet<string> | undefined } = {},
+    {
+      relays = true,
+      to,
+      earlier = [],
+    }: {
+      relays?: boolean;
+      to?: ReadonlySet<string> | undefined;
+      earlier?: readonly Delivery[];
+    } = {},
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
-    const targets = fanOutTargets(deliveryTargets(admin, sender.username, { relays }), also).filter(
+    const current = fanOutTargets(deliveryTargets(admin, sender.username, { relays }), also);
+    const targets = fanOutTargets(current, earlierTargets(earlier, current)).filter(
       (target) => to === undefined || target.actorIds.some((actor) => to.has(actor)),
     );
     const held =
@@ -706,13 +719,19 @@ function cites(document: Document, target: string): boolean {
   );
 }
 
-/** Whether two versions of a post are one object to a peer: the same id. */
+function reachesEarlierRecipients(activityType: string): boolean {
+  return activityType === 'Update' || activityType === 'Delete' || activityType === 'Undo';
+}
+
 function sameObject(
   context: Context<FederationContextData>,
   before: Document,
   after: Document,
 ): boolean {
-  return articleObjectId(context, before).href === articleObjectId(context, after).href;
+  return (
+    articleObjectId(context, before).href === articleObjectId(context, after).href &&
+    documentAuthor(context, before)?.username === documentAuthor(context, after)?.username
+  );
 }
 
 /**

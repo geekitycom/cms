@@ -1,6 +1,12 @@
 import type { Actor, Recipient } from '@fedify/vocab';
 
-import type { DeliveryStatus, Follower, NewDelivery, Relay } from '../store/admin-store.ts';
+import type {
+  Delivery,
+  DeliveryStatus,
+  Follower,
+  NewDelivery,
+  Relay,
+} from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import { isMigrated } from '../content/migrated.ts';
 import { pinnedAt } from '../content/pinned.ts';
@@ -40,19 +46,23 @@ export interface ActivityAbout {
 /**
  * What a version of a post is to a peer, and the id that names
  * it: the post's object id, or its `Like` or `Announce`'s activity id, which
- * carries the id of what it cites.
+ * carries the id of what it cites. `actor` is the username it is sent as: a
+ * peer files a status under the actor that created it, and takes an `Update`
+ * or `Delete` of it from that actor alone.
  */
 export type Shape = ObjectShape | CitingShape;
 
 export interface ObjectShape {
   readonly kind: 'object';
   readonly id: string;
+  readonly actor: string;
   readonly replyTo: CitedObject | undefined;
 }
 
 export interface CitingShape {
   readonly kind: 'citing';
   readonly id: string;
+  readonly actor: string;
   readonly citing: Citing;
 }
 
@@ -98,7 +108,41 @@ export function fanOutTargets(
 ): DeliveryTarget[] {
   // One POST to an inbox the followers already share is enough.
   const reached = new Set(targets.map((target) => target.inboxId));
-  return [...targets, ...also.filter((target) => !reached.has(target.inboxId))];
+  const added = also.filter((target) => {
+    if (reached.has(target.inboxId)) return false;
+    reached.add(target.inboxId);
+    return true;
+  });
+  return [...targets, ...added];
+}
+
+/**
+ * Addressed to the inbox each actor was recorded at, not looked up afresh:
+ * that inbox holds the copy, and an unfollowed actor or a relay has no record
+ * left to look up.
+ */
+export function earlierTargets(
+  newestFirst: readonly Delivery[],
+  current: readonly DeliveryTarget[],
+): DeliveryTarget[] {
+  const reached = new Set(current.flatMap((target) => target.actorIds));
+  const byInbox = new Map<string, string[]>();
+  for (const { actorId, inboxId } of newestFirst) {
+    if (reached.has(actorId)) continue;
+    reached.add(actorId);
+    const actors = byInbox.get(inboxId);
+    if (actors === undefined) byInbox.set(inboxId, [actorId]);
+    else actors.push(actorId);
+  }
+  return [...byInbox].map(([inboxId, actorIds]) => ({
+    inboxId,
+    recipients: actorIds.map((actorId) => ({
+      id: new URL(actorId),
+      inboxId: new URL(inboxId),
+      endpoints: null,
+    })),
+    actorIds,
+  }));
 }
 
 /** The author of what a post likes, reposts or replies to, as one more inbox to tell. */
@@ -215,7 +259,9 @@ export function revisionStep(
   | { readonly kind: 'revise'; readonly shape: ObjectShape }
   | { readonly kind: 'none' }
   | { readonly kind: 'replace' } {
-  if (was.kind !== is.kind || was.id !== is.id) return { kind: 'replace' };
+  if (was.kind !== is.kind || was.id !== is.id || was.actor !== is.actor) {
+    return { kind: 'replace' };
+  }
   return is.kind === 'citing' ? { kind: 'none' } : { kind: 'revise', shape: is };
 }
 
