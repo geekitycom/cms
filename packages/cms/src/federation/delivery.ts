@@ -41,15 +41,14 @@ import { isFederatedDocument } from '../content/served.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { citingActivity, repliedTo, undoActivity } from './citations.ts';
 import {
+  audienceTargets,
   citedAuthor,
   deliveryChange,
   deliveryRows,
   earlierTargets,
   fanOutTargets,
-  followerTargets,
   objectTargets,
   pinChange,
-  relayTargets,
   revisionStep,
   stampFor,
   wasAnnounced,
@@ -782,10 +781,7 @@ export function deliveryTargets(
   username: string,
   { relays = true }: { relays?: boolean } = {},
 ): DeliveryTarget[] {
-  return [
-    ...followerTargets(admin.listFollowers(username)),
-    ...relayTargets(relays ? acceptedRelays(admin) : []),
-  ];
+  return audienceTargets(admin.listFollowers(username), relays ? acceptedRelays(admin) : []);
 }
 
 /** An activity's short type name — `Create`, `Update`, `Delete` — from its type URI. */

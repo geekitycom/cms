@@ -616,7 +616,10 @@ site can pick without asking.
 
 The relay answers `Accept` or `Reject`, possibly days later, because a
 subscription may need a human to approve it. The answer arrives in the site's
-inbox and updates the subscription. Removing the line sends an `Undo` of the
+inbox and updates the subscription. The site takes an answer only from the
+relay: the actor its earlier answer named, or, before it has answered, an actor
+on the host of the relay inbox. The answer must also name a relay `Follow` that
+the site sent. Removing the line sends an `Undo` of the
 same `Follow`. Subscription changes run one at a time, and each one reads the
 setting and the records when its turn comes. A relay that is added and then
 removed while earlier changes are still sending leaves no record.
@@ -631,7 +634,8 @@ that the setting still lists. An accepted relay keeps its subscription. A
 rejected relay is not asked again: remove it and add it back to ask again.
 
 The site delivers only to an accepted relay. An accepted relay is one more
-inbox in the fan-out. It receives, as well as the author's followers:
+inbox in the fan-out. A relay inbox that is also a follower's shared inbox gets
+one POST for both. It receives, as well as the author's followers:
 
 - every `Create`, `Update`, and `Delete` for a public post, whoever wrote it
 - every `Update` and `Delete` for a post it was sent before, after the post is
@@ -655,7 +659,8 @@ await cms.relays.retry(inboxId); // send the follow again, if still pending
 The records live in `ap_relays`, keyed by inbox. They are operational state,
 not a source. The setting is the source. If the setting names a relay that has
 no record, after a rebuilt database or a restored content directory, the site
-follows it again on the next boot.
+follows it again the next time the server starts. CLI commands such as
+`geekity resend` do not change relay subscriptions.
 
 [fepae0c]: https://w3id.org/fep/ae0c
 

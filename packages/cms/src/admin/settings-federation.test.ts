@@ -192,6 +192,20 @@ describe('the relays setting', () => {
     ]);
   });
 
+  it('keeps a query that ends in a slash, and the path before it', async () => {
+    const cms = await relaySite();
+    const agent = await signedIn(cms);
+
+    await saveSettings(agent, 'federation', {
+      relays: 'https://relay.example/inbox/?k=a/',
+    });
+
+    await cms.relays.settled();
+    assert.deepEqual((await siteSettingsIn(cms.config.contentDir)).relays, [
+      'https://relay.example/inbox/?k=a/',
+    ]);
+  });
+
   it('refuses a line that is not an absolute URL, and keeps the stored list', async () => {
     const cms = await relaySite();
     const agent = await signedIn(cms);

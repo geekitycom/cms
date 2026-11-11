@@ -159,18 +159,18 @@ have no command. Run `rm -r data/images`.
 
 Every table holds data that is either read back from the files or safe to lose.
 
-| Table                                               | Where it comes back from                                                |
-| --------------------------------------------------- | ----------------------------------------------------------------------- |
-| `documents`, `document_tags`, `document_categories` | The boot scan of `content/`.                                            |
-| `followers`, `ap_inbox`                             | `content/_data/federation/`, emptied and read back on every boot.       |
-| `comments`                                          | `content/_data/comments/`, emptied and read back on every boot.         |
-| `sessions`                                          | Nothing. Every signed-in user is signed out.                            |
-| `ap_deliveries`                                     | Nothing. The federation screen shows its posts with "Nothing recorded." |
-| `ap_relays`                                         | The relay list in `site.json`. Boot sends each relay a fresh `Follow`.  |
-| `password_resets`                                   | Nothing. Every password reset link stops working.                       |
-| `spent_tokens`                                      | Nothing. A one-click link that was already used works again.            |
-| `cms_state`                                         | Nothing. The scheduler's watermark and its first run.                   |
-| `migrations`, `admin_migrations`                    | The package. They record which schema versions have run.                |
+| Table                                               | Where it comes back from                                                                |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `documents`, `document_tags`, `document_categories` | The boot scan of `content/`.                                                            |
+| `followers`, `ap_inbox`                             | `content/_data/federation/`, emptied and read back on every boot.                       |
+| `comments`                                          | `content/_data/comments/`, emptied and read back on every boot.                         |
+| `sessions`                                          | Nothing. Every signed-in user is signed out.                                            |
+| `ap_deliveries`                                     | Nothing. The federation screen shows its posts with "Nothing recorded."                 |
+| `ap_relays`                                         | The relay list in `site.json`. The next server start sends each relay a fresh `Follow`. |
+| `password_resets`                                   | Nothing. Every password reset link stops working.                                       |
+| `spent_tokens`                                      | Nothing. A one-click link that was already used works again.                            |
+| `cms_state`                                         | Nothing. The scheduler's watermark and its first run.                                   |
+| `migrations`, `admin_migrations`                    | The package. They record which schema versions have run.                                |
 
 A rebuild loses four things:
 
@@ -181,10 +181,11 @@ A rebuild loses four things:
   already used. Every action they perform is idempotent, so at worst a
   moderation link works a second time. The server does store password reset
   links, and those stop working.
-- **Relay handshakes.** On boot, the server follows every relay in the settings
-  that the database has no record of. A rebuild therefore sends every listed
-  relay a new `Follow`, and loses the reason a relay gave for its last
-  rejection. A relay that refuses the site gets a new request on each rebuild.
+- **Relay handshakes.** When the server starts, it follows every relay in the
+  settings that the database has no record of. CLI commands do not. A rebuild
+  therefore sends every listed relay a new `Follow` at the next start, and loses
+  the reason a relay gave for its last rejection. A relay that refuses the site
+  gets a new request after each rebuild.
 - **A scheduled post that came due while the site was down.** The scheduler
   treats a missing watermark as "start from here". Without that rule, a rebuilt
   database would re-announce the whole archive to every follower. Such a post is

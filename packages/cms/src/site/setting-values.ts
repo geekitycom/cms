@@ -98,8 +98,9 @@ export function relayList(value: string): string[] {
  * A relay inbox URL, or `undefined` when it is not an absolute http(s) one.
  *
  * Unlike {@link normalizeBaseUrl} this keeps the whole URL bar a trailing
- * slash: a relay inbox is a path — `/user/_____relay_____/inbox` — rather than
- * an origin, and some relays hang one off a query string.
+ * slash on a path with nothing after it: a relay inbox is a path —
+ * `/user/_____relay_____/inbox` — rather than an origin, and some relays hang
+ * one off a query string, whose final slash is part of a value.
  */
 export function normalizeRelayInbox(value: string): string | undefined {
   const trimmed = value.trim();
@@ -113,8 +114,10 @@ export function normalizeRelayInbox(value: string): string | undefined {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
 
-  const href = parsed.href;
-  return href.endsWith('/') && parsed.pathname !== '/' ? href.slice(0, -1) : href;
+  if (parsed.search === '' && parsed.hash === '' && parsed.pathname !== '/') {
+    parsed.pathname = parsed.pathname.replace(/\/$/, '');
+  }
+  return parsed.href;
 }
 
 /** A security contact textarea as its URIs, in order, repeats dropped. */

@@ -102,6 +102,31 @@ export function relayTargets(relays: readonly Relay[]): DeliveryTarget[] {
   }));
 }
 
+/**
+ * The followers' targets and the relays', one per inbox: a relay listed at an
+ * instance's shared inbox takes one POST, and both outcomes are written.
+ */
+export function audienceTargets(
+  followers: readonly Follower[],
+  relays: readonly Relay[],
+): DeliveryTarget[] {
+  const byInbox = new Map<string, DeliveryTarget>();
+  for (const target of [...followerTargets(followers), ...relayTargets(relays)]) {
+    const reached = byInbox.get(target.inboxId);
+    byInbox.set(
+      target.inboxId,
+      reached === undefined
+        ? target
+        : {
+            inboxId: target.inboxId,
+            recipients: [...reached.recipients, ...target.recipients],
+            actorIds: [...reached.actorIds, ...target.actorIds],
+          },
+    );
+  }
+  return [...byInbox.values()];
+}
+
 export function fanOutTargets(
   targets: readonly DeliveryTarget[],
   also: readonly DeliveryTarget[],

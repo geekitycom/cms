@@ -116,9 +116,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
     // inside the request that carried it. Fedify is told that by leaving the
     // key off, which is why this is a spread rather than a value.
     ...(options.queue === null ? {} : { queue: options.queue }),
-    ...(options.allowPrivateAddress === undefined
-      ? {}
-      : { allowPrivateAddress: options.allowPrivateAddress }),
+    allowPrivateAddress: options.allowPrivateAddress ?? false,
     ...options.federationOptions,
   });
 

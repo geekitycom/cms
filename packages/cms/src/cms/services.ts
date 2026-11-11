@@ -420,8 +420,8 @@ export function createServices({
   });
 
   // Relay subscriptions (FEP-ae0c). The list is a setting and the handshake is
-  // a record, so booting reconciles the two: a relay the file names and the
-  // database has never heard of is followed here, which is what makes a
+  // a record, so serving reconciles the two: a relay the file names and the
+  // database has never heard of is followed then, which is what makes a
   // rebuilt database catch up rather than silently stop federating to it.
   const relays = createRelayService({ ...federated, federation });
   const startRelaySync = (): void => {
@@ -432,7 +432,6 @@ export function createServices({
   const sendRelayUndosHeldByDevMode = ({ next }: { readonly next: boolean }): void => {
     if (!next) startRelaySync();
   };
-  startRelaySync();
   settings.watch(SITE.relays, startRelaySync);
   settings.watch(DEV_MODE.on, sendRelayUndosHeldByDevMode);
   settings.watch(SITE.wiki_base, rescanOnWikiBaseChange(content));
@@ -519,6 +518,10 @@ export function createServices({
         });
       },
     },
+    // Only a CMS that serves subscribes, so a CLI command never sends a
+    // Follow or an Undo, and only once forgotten deliveries are marked, so
+    // the Follow's row is not taken for one of them.
+    { name: 'relays', start: startRelaySync, settled: () => relays.settled() },
     // The index is brought up to date before the first request, so a site
     // never serves a stale document, and the watcher takes over from there.
     {
@@ -549,7 +552,6 @@ export function createServices({
       settled: () => jobs.close(),
     },
     { name: 'federation delivery', settled: () => delivery.settled() },
-    { name: 'relays', settled: () => relays.settled() },
     {
       name: 'the federation queue',
       start: async () => {

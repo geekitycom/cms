@@ -98,6 +98,8 @@ async function devSite(): Promise<DevSite> {
     },
   );
   await cms.scheduler.start();
+  // What serving starts with: the relay list is reconciled into subscriptions.
+  await cms.relays.sync();
   return {
     cms,
     agent,
