@@ -516,7 +516,8 @@ posts/2026-03-04-hello-world.md: Update to 3 of 3 inboxes
 posts/2026-03-05-another-post.md: Update to 3 of 3 inboxes
 ```
 
-`geekity resend <slug-or-path>...` does the same for named posts. The command
+Each line counts inboxes, not followers, and followers behind one shared inbox
+count once. `geekity resend <slug-or-path>...` does the same for named posts. The command
 refuses a slug that more than one post has and lists their paths, so you can
 name the post you mean. Both run the same
 `resend` [admin job](configuration.md#admin-jobs) as Federation > Resend.
@@ -833,7 +834,8 @@ Resend page does what `geekity resend --all` does.
 The Resend page shows the latest resend job, whichever button queued it: queued, running with the posts
 sent out of the total, finished, failed with the error, or interrupted. A
 finished job says how many posts went to how many inboxes, and how many of
-those were reached, queued or failed. A disclosure under that line lists each
+those were reached, queued or failed. Followers behind one shared inbox get one
+delivery, so that inbox counts once. A disclosure under that line lists each
 post with the same counts, and its webmentions when it sent them. The page names
 the posts dev mode held and the paths with nothing to resend. The status updates
 every few seconds without a page load until the job ends. Without JavaScript,
