@@ -91,6 +91,7 @@ export const RELAY_STATE_LABELS: Readonly<Record<RelayState, string>> = {
   pending: 'Waiting',
   accepted: 'Accepted',
   rejected: 'Rejected',
+  leaving: 'Leaving',
 };
 
 /**
@@ -744,7 +745,7 @@ export interface RelayRow {
   readonly inboxId: string;
   /** Where the subscription stands. */
   readonly state: RelayState;
-  /** What that state reads as: "Waiting", "Accepted", "Rejected". */
+  /** What that state reads as: "Waiting", "Accepted", "Rejected", "Leaving". */
   readonly stateLabel: string;
   /** The relay's actor, once it has answered, for a human following the link. */
   readonly actorId: string | null;

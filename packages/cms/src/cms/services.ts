@@ -22,6 +22,7 @@ import type { ConversationSite } from '../comments/conversation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { citedPostReader } from '../federation/cited-post.ts';
 import { mintMissingIndexNowKey, SITE } from '../site/namespace.ts';
+import { DEV_MODE } from '../settings/dev-mode.ts';
 import { messageOf } from '../util/errors.ts';
 import { handleLearner } from '../federation/handles.ts';
 import type { HandleLearner } from '../federation/handles.ts';
@@ -432,6 +433,10 @@ export function createServices({
   // Not awaited: the sync waits its turn behind subscription changes already
   // sending, and a save of the settings has no reason to wait on a relay.
   settings.watch(SITE.relays, syncRelays);
+  // Going live is when an Undo dev mode held can finally be sent.
+  settings.watch(DEV_MODE.on, ({ next }) => {
+    if (!next) syncRelays();
+  });
   settings.watch(SITE.wiki_base, rescanOnWikiBaseChange(content));
   settings.watch(SITE.gemini, async ({ next }) => {
     if (next) await warnAboutGeminiCertificate(resolved, settings);

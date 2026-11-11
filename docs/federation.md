@@ -621,6 +621,11 @@ same `Follow`. Subscription changes run one at a time, and each one reads the
 setting and the records when its turn comes. A relay that is added and then
 removed while earlier changes are still sending leaves no record.
 
+In dev mode the site holds the `Undo`. The record stays, in the `leaving`
+state, with the reason on it, because the relay still holds the subscription.
+The first sync after dev mode is turned off sends the `Undo` and drops the
+record. A leaving relay that is listed again is followed again.
+
 Retry on the federation screen sends a new `Follow` only to a pending relay
 that the setting still lists. An accepted relay keeps its subscription. A
 rejected relay is not asked again: remove it and add it back to ask again.

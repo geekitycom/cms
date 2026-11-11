@@ -291,14 +291,18 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     return admin.putRelay({ ...current, reason });
   }
 
-  /** Undo one relay's follow and forget it. */
+  /**
+   * Undo one relay's follow and forget it, unless dev mode holds the `Undo`:
+   * then the record is kept as leaving, and the first sync once the site is
+   * live sends it.
+   */
   async function unfollow(relay: Relay): Promise<void> {
     const user = subscriber();
     if (relay.followId !== null && user !== undefined) {
       try {
         const context = await relayContext();
         const id = actorId(context, user);
-        await send(
+        const outcome = await send(
           context,
           user,
           relay,
@@ -310,6 +314,14 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
             object: new URL(relay.followId),
           }),
         );
+        if (outcome === 'held') {
+          admin.putRelay({
+            ...relay,
+            state: 'leaving',
+            reason: 'Undo not sent: the site is in dev mode. It goes out once the site is live.',
+          });
+          return;
+        }
       } catch (thrown) {
         // The subscription is gone from this side whatever the relay heard: a
         // relay that keeps sending is one whose activities land in the inbox
@@ -339,23 +351,31 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
         const listed = await settings.get(SITE.relays);
         const known = admin.listRelays();
 
-        const followed = listed.filter(
-          (inboxId) => !known.some((relay) => relay.inboxId === inboxId),
-        );
+        const recordOf = (inboxId: string): Relay | undefined =>
+          known.find((relay) => relay.inboxId === inboxId);
+
+        // A leaving relay listed again is followed again: its record no
+        // longer says how the relay last answered, so the site asks again.
+        const followed = listed.filter((inboxId) => {
+          const record = recordOf(inboxId);
+          return record === undefined || record.state === 'leaving';
+        });
         const leaving = known.filter((relay) => !listed.includes(relay.inboxId));
 
         for (const inboxId of followed) {
           const at = config.now().toISOString();
           await attempt(() =>
-            follow({
-              inboxId,
-              actorId: null,
-              state: 'pending',
-              reason: null,
-              followId: null,
-              createdAt: at,
-              updatedAt: at,
-            }),
+            follow(
+              recordOf(inboxId) ?? {
+                inboxId,
+                actorId: null,
+                state: 'pending',
+                reason: null,
+                followId: null,
+                createdAt: at,
+                updatedAt: at,
+              },
+            ),
           );
         }
         for (const relay of leaving) await attempt(() => unfollow(relay));

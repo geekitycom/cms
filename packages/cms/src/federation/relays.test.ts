@@ -389,6 +389,68 @@ describe('removing a relay', () => {
   });
 });
 
+/** Turn dev mode on or off the way `geekity dev-mode` does. */
+async function devMode(cms: Cms, on: boolean): Promise<void> {
+  await cms.settings.set('dev_mode', new Map([['on', on]]), 'cli');
+}
+
+describe('removing a relay while dev mode is on', () => {
+  it('keeps the record as leaving, with a reason, and offers no Retry', async () => {
+    const { cms } = await site({ relays: [RELAY_INBOX] });
+    await cms.relays.settled();
+    sent.length = 0;
+
+    await devMode(cms, true);
+    await listRelays(cms, []);
+    await cms.relays.settled();
+
+    assert.deepEqual(sent, [], 'dev mode held the Undo');
+    const kept = cms.admin.getRelay(RELAY_INBOX);
+    assert.equal(kept?.state, 'leaving');
+    assert.match(kept?.reason ?? '', /dev mode/);
+    const screen = await (await signedInAs(cms, LOCAL_USER).get('/admin/federation')).text();
+    assert.match(screen, /Leaving/);
+    assert.doesNotMatch(screen, /\/admin\/federation\/relays\/retry/);
+  });
+
+  it('sends the Undo once the site is live, then drops the record', async () => {
+    const { cms } = await site({ relays: [RELAY_INBOX] });
+    await cms.relays.settled();
+    const followId = String(ofType('Follow')[0]?.body['id']);
+    sent.length = 0;
+    await devMode(cms, true);
+    await listRelays(cms, []);
+    await cms.relays.settled();
+
+    await devMode(cms, false);
+    await cms.relays.settled();
+
+    assert.deepEqual(
+      ofType('Undo').map((one) => [one.url, one.body['object']]),
+      [[RELAY_INBOX, followId]],
+    );
+    assert.equal(cms.admin.getRelay(RELAY_INBOX), undefined);
+  });
+
+  it('follows the relay again, and owes it no Undo, when it is listed again', async () => {
+    const { cms } = await site({ relays: [RELAY_INBOX] });
+    await cms.relays.settled();
+    sent.length = 0;
+    await devMode(cms, true);
+    await listRelays(cms, []);
+    await cms.relays.settled();
+
+    await listRelays(cms, [RELAY_INBOX]);
+    await cms.relays.settled();
+    assert.equal(cms.admin.getRelay(RELAY_INBOX)?.state, 'pending');
+
+    await devMode(cms, false);
+    await cms.relays.settled();
+    assert.deepEqual(sent, [], 'nothing is undone, and a held Follow waits for Retry');
+    assert.equal(cms.admin.getRelay(RELAY_INBOX)?.state, 'pending');
+  });
+});
+
 /** List the relay, let the Follow go out, and have the relay answer it. */
 async function answered(answer: 'accept' | 'reject'): Promise<Cms> {
   const { cms } = await site({ relays: [RELAY_INBOX] });
