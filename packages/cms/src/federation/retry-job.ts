@@ -8,7 +8,7 @@ import type { JobDefinition, Json } from '../jobs/types.ts';
 import type { AdminStore, Delivery, DeliveryStatus } from '../store/admin-store.ts';
 import { NO_LIMIT } from '../store/rows.ts';
 import { isRecord } from '../util/guards.ts';
-import type { DeliveryService } from './delivery.ts';
+import type { DeliveryReport, DeliveryService } from './delivery.ts';
 import { ownObjectIds } from './article.ts';
 import { resendActivity } from './resend-job.ts';
 import type { ResendActivity } from './resend-job.ts';
@@ -18,11 +18,22 @@ export type RetryFilter =
   | { readonly path: string; readonly inbox: string | null }
   | { readonly path: null; readonly inbox: string };
 
+/**
+ * What a recipient is owed. `post` is `announcement` when its newest `Create`
+ * failed, so it may never have stored the post, and `revision` when only a
+ * later activity about the post failed. `pin` is whether its newest `Add` or
+ * `Remove` failed.
+ */
+export type Missed = {
+  readonly post: 'announcement' | 'revision' | null;
+  readonly pin: boolean;
+};
+
 export type RetryRecipient = {
   readonly actorId: string;
   readonly inboxId: string;
   readonly error: string | null;
-  readonly missedAnnouncement: boolean;
+  readonly missed: Missed;
 };
 
 export type Retry = { readonly path: string; readonly recipients: RetryRecipient[] };
@@ -37,6 +48,10 @@ export type RetryReport = {
 
 const RETRIED: ReadonlySet<DeliveryStatus> = new Set(['failed', 'unknown']);
 
+const PIN_ACTIVITIES: ReadonlySet<string> = new Set(['Add', 'Remove']);
+
+const POST_ORDER: readonly Missed['post'][] = ['announcement', 'revision', null];
+
 export const RETRY_DELIVERIES_JOB = jobName<RetryFilter, RetryReport>('retry-deliveries');
 
 /** A burst of deliveries to one server can trip its bot protection. */
@@ -49,7 +64,7 @@ export interface RetryPlanServices {
 }
 
 export interface RetryJobServices extends RetryPlanServices {
-  readonly delivery: Pick<DeliveryService, 'resend'>;
+  readonly delivery: Pick<DeliveryService, 'resend' | 'resendPin'>;
 }
 
 export function failedRetries(services: RetryPlanServices, filter: RetryFilter): Retry[] {
@@ -70,32 +85,54 @@ export function failedRetries(services: RetryPlanServices, filter: RetryFilter):
   const history =
     filter.inbox === null ? candidates : deliveriesToSameActors(admin, objectIds, candidates);
 
-  const newest = new Map<string, { path: string; row: Delivery }>();
-  const newestCreate = new Map<string, Delivery>();
+  const histories = new Map<string, RecipientHistory>();
   for (const row of history) {
     const path = postOf(row.objectId)?.path;
     if (path === undefined) continue;
     const key = JSON.stringify([path, row.actorId]);
-    if (!newest.has(key)) newest.set(key, { path, row });
-    if (row.activityType === 'Create' && !newestCreate.has(key)) newestCreate.set(key, row);
+    let held = histories.get(key);
+    if (held === undefined) {
+      held = { path, newest: row };
+      histories.set(key, held);
+    }
+    if (row.activityType === 'Create') held.create ??= row;
+    if (PIN_ACTIVITIES.has(row.activityType)) held.pin ??= row;
+    else held.post ??= row;
   }
 
   const retries = new Map<string, RetryRecipient[]>();
-  for (const [key, { path, row }] of newest) {
-    if (!RETRIED.has(row.status)) continue;
-    const create = newestCreate.get(key);
-    if (filter.inbox !== null && row.inboxId !== filter.inbox) continue;
+  for (const { path, newest, ...rest } of histories.values()) {
+    if (!RETRIED.has(newest.status)) continue;
+    if (filter.inbox !== null && newest.inboxId !== filter.inbox) continue;
     const recipient = {
-      actorId: row.actorId,
-      inboxId: row.inboxId,
-      error: row.error,
-      missedAnnouncement: create !== undefined && RETRIED.has(create.status),
+      actorId: newest.actorId,
+      inboxId: newest.inboxId,
+      error: newest.error,
+      missed: missedFrom(rest),
     };
     const held = retries.get(path);
     if (held === undefined) retries.set(path, [recipient]);
     else held.push(recipient);
   }
   return [...retries].map(([path, recipients]) => ({ path, recipients }));
+}
+
+/** One recipient's newest delivery rows about one post, newest overall and of each kind. */
+type RecipientHistory = {
+  readonly path: string;
+  readonly newest: Delivery;
+  create?: Delivery;
+  post?: Delivery;
+  pin?: Delivery;
+};
+
+function missedFrom({ create, post, pin }: Omit<RecipientHistory, 'path' | 'newest'>): Missed {
+  const failed = (row: Delivery | undefined): boolean =>
+    row !== undefined && RETRIED.has(row.status);
+  return {
+    post: failed(create) ? 'announcement' : failed(post) ? 'revision' : null,
+    pin: failed(pin),
+  };
 }
 
 /**
@@ -148,24 +185,44 @@ export function retryDeliveriesJob(
       for (const [done, retry] of retries.entries()) {
         context.signal.throwIfAborted();
         if (done > 0) await pace(context.signal);
-        for (const missedAnnouncement of [true, false]) {
-          const group = retry.recipients.filter(
-            (recipient) => recipient.missedAnnouncement === missedAnnouncement,
-          );
-          if (group.length === 0) continue;
+        for (const group of byWhatTheyMissed(retry.recipients)) {
+          const { missed } = group[0] as RetryRecipient;
           const actors = new Set(group.map((recipient) => recipient.actorId));
-          const report = await services.delivery.resend(retry.path, { actors, missedAnnouncement });
-          posts.push({
-            path: retry.path,
-            recipients: group.length,
-            activity: report === undefined ? null : resendActivity(report),
-          });
+          const reports: (DeliveryReport | undefined)[] = [];
+          if (missed.post !== null) {
+            const missedAnnouncement = missed.post === 'announcement';
+            reports.push(
+              await services.delivery.resend(retry.path, { actors, missedAnnouncement }),
+            );
+          }
+          if (missed.pin) reports.push(await services.delivery.resendPin(retry.path, actors));
+          for (const report of reports) {
+            posts.push({
+              path: retry.path,
+              recipients: group.length,
+              activity: report === undefined ? null : resendActivity(report),
+            });
+          }
         }
         await context.progress({ done: done + 1, total: retries.length });
       }
       return { posts };
     },
   };
+}
+
+/** Recipients that missed the same activities, those that missed the announcement first. */
+function byWhatTheyMissed(recipients: readonly RetryRecipient[]): RetryRecipient[][] {
+  const groups = new Map<string, RetryRecipient[]>();
+  for (const recipient of recipients) {
+    const key = JSON.stringify(recipient.missed);
+    const held = groups.get(key);
+    if (held === undefined) groups.set(key, [recipient]);
+    else held.push(recipient);
+  }
+  const rank = (group: RetryRecipient[]): number =>
+    POST_ORDER.indexOf((group[0] as RetryRecipient).missed.post);
+  return [...groups.values()].toSorted((a, b) => rank(a) - rank(b));
 }
 
 function parseRetryFilter(payload: Json): RetryFilter {

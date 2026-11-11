@@ -70,6 +70,16 @@ function services(rows: readonly Delivery[]): RetryJobServices & { resent: unkno
           held: false,
         } satisfies DeliveryReport);
       },
+      resendPin(path, actors) {
+        resent.push([path, [...actors], 'pin']);
+        return Promise.resolve({
+          activityId: `https://blog.example/${path}#pin`,
+          activityType: 'Add',
+          objectId: `https://blog.example/${path}/`,
+          deliveries: [],
+          held: false,
+        } satisfies DeliveryReport);
+      },
     },
   };
 }
@@ -99,7 +109,7 @@ describe('which deliveries a retry sends again', () => {
             actorId: 'https://social.example/users/carol',
             inboxId: INBOX,
             error: 'HTTP 403',
-            missedAnnouncement: false,
+            missed: { post: 'revision', pin: false },
           },
         ],
       },
@@ -120,12 +130,12 @@ describe('which deliveries a retry sends again', () => {
 
     const [retry] = failedRetries(site, { path: null, inbox: INBOX });
     assert.deepEqual(
-      retry?.recipients.map((one) => [one.actorId.split('/').at(-1), one.missedAnnouncement]),
+      retry?.recipients.map((one) => [one.actorId.split('/').at(-1), one.missed.post]),
       [
-        ['carol', true],
-        ['dave', false],
-        ['erin', false],
-        ['frank', false],
+        ['carol', 'announcement'],
+        ['dave', 'revision'],
+        ['erin', 'revision'],
+        ['frank', 'revision'],
       ],
     );
   });
@@ -140,10 +150,31 @@ describe('which deliveries a retry sends again', () => {
 
     const [retry] = failedRetries(site, { path: null, inbox: INBOX });
     assert.deepEqual(
-      retry?.recipients.map((one) => [one.actorId.split('/').at(-1), one.missedAnnouncement]),
+      retry?.recipients.map((one) => [one.actorId.split('/').at(-1), one.missed.post]),
       [
-        ['dave', false],
-        ['carol', true],
+        ['dave', 'revision'],
+        ['carol', 'announcement'],
+      ],
+    );
+  });
+
+  it('owes a recipient whose newest pin change failed the pin change, and the post only when that failed too', () => {
+    const site = services([
+      row('one', 'carol', INBOX, 'failed', '2026-03-02T00:00:00Z', 'Add'),
+      row('one', 'carol', INBOX, 'sent', '2026-03-01T00:00:00Z'),
+      row('one', 'dave', INBOX, 'failed', '2026-03-02T00:00:00Z', 'Remove'),
+      row('one', 'dave', INBOX, 'failed', '2026-03-01T00:00:00Z'),
+      row('one', 'erin', INBOX, 'failed', '2026-03-02T00:00:00Z'),
+      row('one', 'erin', INBOX, 'sent', '2026-03-01T00:00:00Z', 'Add'),
+    ]);
+
+    const [retry] = failedRetries(site, { path: null, inbox: INBOX });
+    assert.deepEqual(
+      retry?.recipients.map((one) => [one.actorId.split('/').at(-1), one.missed]),
+      [
+        ['carol', { post: null, pin: true }],
+        ['dave', { post: 'revision', pin: true }],
+        ['erin', { post: 'revision', pin: false }],
       ],
     );
   });
@@ -179,6 +210,7 @@ describe('the retry job', () => {
       {
         ...site,
         delivery: {
+          ...site.delivery,
           async resend(path, to) {
             steps.push(`resend ${path}`);
             return await site.delivery.resend(path, to);
@@ -228,6 +260,30 @@ describe('the retry job', () => {
         [fileOf('one'), 1, 'Create'],
         [fileOf('one'), 1, 'Update'],
       ],
+    );
+  });
+
+  it('sends the pin change after the post activity a recipient also missed, and alone when that is all it missed', async () => {
+    const site = services([
+      row('one', 'carol', INBOX, 'failed', '2026-03-02T00:00:00Z', 'Add'),
+      row('one', 'carol', INBOX, 'sent', '2026-03-01T00:00:00Z'),
+      row('one', 'dave', INBOX, 'failed', '2026-03-02T00:00:00Z', 'Add'),
+      row('one', 'dave', INBOX, 'failed', '2026-03-01T00:00:00Z'),
+    ]);
+
+    const report = await retryDeliveriesJob(site, () => Promise.resolve()).run(
+      { path: null, inbox: INBOX },
+      context,
+    );
+
+    assert.deepEqual(site.resent, [
+      [fileOf('one'), ['https://social.example/users/dave']],
+      [fileOf('one'), ['https://social.example/users/dave'], 'pin'],
+      [fileOf('one'), ['https://social.example/users/carol'], 'pin'],
+    ]);
+    assert.deepEqual(
+      report.posts.map((post) => post.activity?.activityType),
+      ['Update', 'Add', 'Add'],
     );
   });
 

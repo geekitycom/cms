@@ -41,13 +41,26 @@ export const retryDeliveries = defineTool({
                   actorId: { type: 'string' },
                   inboxId: { type: 'string', description: 'The inbox the failed delivery used.' },
                   error: nullable({ type: 'string' }),
-                  missedAnnouncement: {
-                    type: 'boolean',
-                    description:
-                      'True when the newest Create this recipient was sent failed, so the retry sends the Create rather than an Update.',
+                  missed: {
+                    type: 'object',
+                    description: 'What the retry sends this recipient.',
+                    properties: {
+                      post: nullable({
+                        type: 'string',
+                        enum: ['announcement', 'revision'],
+                        description:
+                          'announcement when the newest Create this recipient was sent failed, so the retry sends the Create; revision when a later activity about the post failed, so it sends the post as it now stands; null when the post itself is not owed.',
+                      }),
+                      pin: {
+                        type: 'boolean',
+                        description:
+                          'True when the newest Add or Remove failed, so the retry sends the Add or Remove for whether the post is pinned now.',
+                      },
+                    },
+                    required: ['post', 'pin'],
                   },
                 },
-                required: ['actorId', 'inboxId', 'error', 'missedAnnouncement'],
+                required: ['actorId', 'inboxId', 'error', 'missed'],
               },
             },
           },

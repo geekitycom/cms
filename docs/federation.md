@@ -414,13 +414,16 @@ announced and there is nothing to withdraw.
 
 A retry sends what each recipient missed. The `retry_deliveries`
 [MCP tool](mcp.md) passes `resend` the recipients whose newest delivery failed
-or has an unknown outcome, in two groups. A recipient whose newest `Create` for
-the post failed, or has an unknown outcome, may never have
+or has an unknown outcome, grouped by what they missed. A recipient whose
+newest `Create` for the post failed, or has an unknown outcome, may never have
 stored the post, and Mastodon drops an `Update` of a status it does not hold,
-so that group is sent the `Create` again, built from the post as it reads now,
-under the `Create` id the other followers already have. The other group is sent
-an `Update`. A resend with no recipients, as the Resend button and
-`geekity resend` send, follows the table above for every follower.
+so it is sent the `Create` again, built from the post as it reads now, under
+the `Create` id the other followers already have. A recipient for which a later
+activity about the post failed is sent an `Update`. A recipient whose newest `Add` or `Remove` for the post failed is
+sent the `Add` or the `Remove` for whether the post is pinned now, after the
+`Create` or `Update` when it is owed one of those too. A resend with no
+recipients, as the Resend button and `geekity resend` send, follows the table
+above for every follower.
 
 The site stores nothing else. For each activity it sends, SQLite keeps one
 outcome row per recipient: the activity's id, type, object id and slug, the
@@ -863,7 +866,8 @@ panel.
 It is the job the MCP `retry_deliveries` tool queues. The job sends the post,
 as its file reads then, to the recipients at that inbox whose newest delivery
 failed. A recipient that never received the `Create` gets the `Create`; the
-others get an `Update`. The panel shows the latest retry job as the Resend
+others get an `Update`. A recipient whose pin or unpin failed then gets the
+`Add` or the `Remove` again. The panel shows the latest retry job as the Resend
 page shows the latest resend.
 
 A Relays panel sits between the followers and the inbox log. It has one row per

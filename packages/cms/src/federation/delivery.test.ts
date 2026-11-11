@@ -2971,6 +2971,47 @@ describe('retrying a failed delivery', () => {
     assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
     assert.match(contentOf(delivered('Create')[0]), /Edited while it was down\./);
   });
+
+  it('sends a recipient whose pin failed the Update it also missed, then the Add', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    rejectingEveryPost = true;
+    await submitEditor(agent, '/admin/posts/hello-world', { pinned: '1' });
+    await cms.delivery.settled();
+    assert.equal(cms.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX)?.activityType, 'Add');
+    rejectingEveryPost = false;
+    deliveries.length = 0;
+
+    await retry(cms);
+
+    assert.deepEqual(
+      deliveries.map((delivery) => delivery.body['type']),
+      ['Update', 'Add'],
+    );
+    assert.equal(cms.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX)?.status, 'sent');
+  });
+
+  it('sends a recipient whose unpin failed the Update it also missed, then the Remove', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent, { pinned: '1' });
+    await cms.delivery.settled();
+    rejectingEveryPost = true;
+    await submitEditor(agent, '/admin/posts/hello-world', {});
+    await cms.delivery.settled();
+    assert.equal(cms.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX)?.activityType, 'Remove');
+    rejectingEveryPost = false;
+    deliveries.length = 0;
+
+    await retry(cms);
+
+    assert.deepEqual(
+      deliveries.map((delivery) => delivery.body['type']),
+      ['Update', 'Remove'],
+    );
+  });
 });
 
 describe('two announced posts that share a slug', () => {

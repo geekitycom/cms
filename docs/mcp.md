@@ -310,9 +310,12 @@ again and sends each post as it reads now, to those recipients only. A
 recipient whose newest `Create` for the post failed never stored the post, and
 a server such as Mastodon drops an `Update` of a status it does not hold. So
 that recipient is sent the `Create` again, and the answer marks it with
-`missedAnnouncement`. The other recipients are sent an `Update`, as a resend
-would. Each recipient gets the post at the inbox its follower record names at
-that time.
+`missed.post` set to `announcement`. A recipient for which only a later
+activity about the post failed is sent the post as a resend would, usually an
+`Update`, and is marked `revision`. A recipient whose newest `Add` or `Remove`
+failed is marked `missed.pin`, and after any `Create` or `Update` it is owed
+it is sent the `Add` or the `Remove` for whether the post is pinned now. Each
+recipient gets the post at the inbox its follower record names at that time.
 The job waits 2 seconds between posts, so that many posts to one server do
 not trigger the server's bot protection. Activities that are not about a
 post, such as a profile `Update`, are not retried.

@@ -160,6 +160,12 @@ export interface DeliveryService {
    */
   resend(path: string, to?: ResendRecipients): Promise<DeliveryReport | undefined>;
   /**
+   * Send `actors` the pin change for one post as it now stands: the `Add` to
+   * its author's featured collection when it is pinned, the `Remove` when it
+   * is not. `undefined` when no published post is at that content path.
+   */
+  resendPin(path: string, actors: ReadonlySet<string>): Promise<DeliveryReport | undefined>;
+  /**
    * Bring the followers' copies of the posts that cite a page up to date with
    * its newly stored context: an `Update` for each served, announced post
    * whose object now reads differently from the one they were last sent.
@@ -545,12 +551,15 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     before: Document | undefined,
     after: Document,
   ): void {
-    const author = documentAuthor(context, after);
-    const names = author === undefined ? [] : authorNames(listUsers(config.dataDir), author);
-    const featured = store.listPinnedByAuthor(names).some((post) => post.path === after.path);
-    const pin = pinChange(featured, before, after, store.now());
+    const pin = pinChange(isFeatured(context, after), before, after, store.now());
     if (pin === undefined) return;
     queue(() => send(context, postPinActivity(context, after, pin.action, pin.revision), after));
+  }
+
+  function isFeatured(context: Context<FederationContextData>, document: Document): boolean {
+    const author = documentAuthor(context, document);
+    const names = author === undefined ? [] : authorNames(listUsers(config.dataDir), author);
+    return store.listPinnedByAuthor(names).some((post) => post.path === document.path);
   }
 
   return {
@@ -667,6 +676,21 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         // they have already been sent and ignored, or never received at all,
         // and an activity id a peer has seen is one it is entitled to drop.
         return await revise(context, document, shape, store.now().toISOString(), to?.actors);
+      });
+    },
+
+    async resendPin(path, actors) {
+      return await deliveryQueue.run(async () => {
+        const document = store.getByPath(path);
+        if (document?.type !== 'post' || !isFederatedDocument(document, store.now())) {
+          return undefined;
+        }
+        const context = await deliveryContext();
+        const change = isFeatured(context, document) ? 'pin' : 'unpin';
+        // A fresh id, because a peer may drop an activity id it has seen.
+        const revision = store.now().toISOString();
+        const activity = postPinActivity(context, document, change, revision);
+        return await send(context, activity, document, [], actors);
       });
     },
 

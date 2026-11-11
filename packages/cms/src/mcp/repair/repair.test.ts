@@ -184,7 +184,7 @@ describe('retry_deliveries', () => {
             actorId: BOB,
             inboxId: BOB_SHARED_INBOX,
             error: 'HTTP 403 Forbidden',
-            missedAnnouncement: true,
+            missed: { post: 'announcement', pin: false },
           },
         ],
       },
