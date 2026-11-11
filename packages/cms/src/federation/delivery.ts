@@ -15,11 +15,10 @@ import type { Document } from '../content/document.ts';
 import { postObjectId } from '../content/guids.ts';
 import { isMigrated } from '../content/migrated.ts';
 import { replyTarget } from '../content/post-type.ts';
-import { saveDocument, withDocumentWrites } from '../content/save.ts';
+import { addPublishedStamp, withDocumentWrites } from '../content/save.ts';
 import type { IndexWriter } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { visibilityOf } from '../content/visibility.ts';
-import { documentContent } from '../content/writer.ts';
 import { SITE } from '../site/namespace.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
@@ -212,42 +211,29 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   const sentThisProcess = new Map<string, string>();
 
   /**
-   * Write {@link stampFor}'s `activitypub.published` into the post's file.
+   * Add {@link stampFor}'s `activitypub.published` to the post's file.
    *
    * The stamp lands after the save that set it off has answered, so it goes
-   * into the post as the index holds it now, which keeps an edit saved
-   * meanwhile. A post no longer at that path is left alone; the change that
-   * moved it is queued behind this one.
+   * into the post as it is now, which keeps an edit saved meanwhile. A post no
+   * longer at that path is left alone; the change that moved it is queued
+   * behind this one.
    *
    * No id is minted — the post's id is its permalink, so there is nothing to
    * freeze — and an `activitypub.id` the file already carries is left exactly
    * where it is, because it is the name the post's followers already hold.
    *
-   * It is written through the same {@link saveDocument} the admin writes
-   * through, which corrects the index in the same breath — so the watcher's
-   * re-read of the file finds a hash that already matches and this write
-   * federates nothing of its own.
+   * The write corrects the index in the same breath, so the watcher's re-read
+   * of the file finds a hash that already matches and this write federates
+   * nothing of its own.
    */
   async function stamp(path: string): Promise<void> {
-    // The zone only matters for a date somebody wrote by hand with no offset;
-    // `saveDocument` is what turns every date in the file into an instant.
-    const timezone = await settings.get(SITE.timezone);
     await withDocumentWrites(config.contentDir, async () => {
       const document = store.getByPath(path);
       if (document === undefined) return;
       const published = stampFor(document, store.now());
       if (published === undefined) return;
 
-      await saveDocument({
-        contentDir: config.contentDir,
-        store,
-        timezone,
-        path,
-        content: {
-          ...documentContent(document),
-          activitypub: { ...document.activitypub, published },
-        },
-      });
+      await addPublishedStamp({ contentDir: config.contentDir, store, path, published });
     });
   }
 

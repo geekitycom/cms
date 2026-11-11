@@ -222,6 +222,14 @@ The first activity about a post writes one key into its front matter:
 decides between `Create` and `Update`, and a resend reads it. Restoring a
 trashed post keeps it too.
 
+The value is the post's date as the instant the `Create` gave as `published`. The
+site adds the key as one new line and leaves every other byte of the file as it
+was: comments, key order, quoting, other `activitypub` keys, and a `date`
+written with no offset. A file whose `activitypub` key is not a block of
+indented keys, such as `activitypub: { type: Note }`, cannot take the line. The
+stamp then fails with an error that names the file, and the file stays
+unstamped.
+
 The site writes the key after it records the delivery rows and hands the
 activity to the delivery queue. If dev mode holds the activity, or the send
 fails before the activity is queued, the post stays unstamped. The next save or

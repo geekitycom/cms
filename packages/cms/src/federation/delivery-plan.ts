@@ -6,6 +6,7 @@ import { isMigrated } from '../content/migrated.ts';
 import { pinnedAt } from '../content/pinned.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../content/served.ts';
+import { DEFAULT_TIMEZONE, toUtcInstant } from '../content/time.ts';
 import type { Citing, CitedObject } from './citations.ts';
 import { followerRecipient } from './followers.ts';
 import type { MentionedAccount } from './handles.ts';
@@ -158,9 +159,11 @@ export function deliveryRows(
 }
 
 export function stampFor(document: Document, now: Date): string | undefined {
-  const existing = document.activitypub?.published;
-  const published = existing ?? document.date ?? now.toISOString();
-  return existing === published ? undefined : published;
+  if (document.activitypub?.published !== undefined) return undefined;
+  // Read as the Create's `published` reads the date, so the stamp names the
+  // instant the followers were told.
+  const announced = new Date(document.date ?? now);
+  return toUtcInstant(Number.isNaN(announced.getTime()) ? now : announced, DEFAULT_TIMEZONE);
 }
 
 export function wasAnnounced(document: Document): boolean {

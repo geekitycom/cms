@@ -2491,6 +2491,68 @@ describe('resending a post', () => {
   });
 });
 
+describe('the first stamp of a hand-written post', () => {
+  const POST_FILE = 'posts/2026-03-04-watched.md';
+
+  it('adds the stamp and leaves every other byte of the file as it was', async () => {
+    const original = `---
+# Written by hand; keep this note.
+title: "On watching files"
+date: 2026-03-04T10:00:00.000Z
+author: ${ADA}
+permalink: /2026/03/watched/
+activitypub:
+  note: kept # a key the CMS does not model
+  id: ${BASE_URL}/2026/03/watched/
+---
+
+First.
+`;
+    const { cms, contentDir } = await site({ account: true, files: { [POST_FILE]: original } });
+
+    const report = await cms.delivery.resend(pathOf(cms, 'watched'));
+    assert.equal(report?.activityType, 'Create');
+
+    const after = await readFile(path.join(contentDir, POST_FILE), 'utf8');
+    assert.equal(
+      after,
+      original.replace('activitypub:\n', "activitypub:\n  published: '2026-03-04T10:00:00Z'\n"),
+    );
+  });
+
+  it('keeps the instant of a date written with no offset when the site and server zones differ', async (t) => {
+    const zone = process.env['TZ'];
+    process.env['TZ'] = 'UTC';
+    t.after(() => {
+      if (zone === undefined) delete process.env['TZ'];
+      else process.env['TZ'] = zone;
+    });
+    const source = publishedPost('First.').replace(
+      'date: 2026-03-04T10:00:00.000Z',
+      'date: 2026-03-04 10:00',
+    );
+    const { cms, contentDir } = await site({ account: true, files: { [POST_FILE]: source } });
+    await cms.settings.set('site', new Map([['timezone', 'Pacific/Auckland']]), 'admin');
+    const served = cms.store.getByPath(POST_FILE)?.date;
+
+    await cms.delivery.resend(pathOf(cms, 'watched'));
+
+    const create = delivered('Create')[0] as Delivery | undefined;
+    const published = (create?.body['object'] as Record<string, unknown> | undefined)?.[
+      'published'
+    ];
+    assert.equal(published, '2026-03-04T10:00:00Z', 'the Create names the instant the site served');
+    assert.equal(cms.store.getByPath(POST_FILE)?.date, served, 'the index keeps the date');
+    const after = await readFile(path.join(contentDir, POST_FILE), 'utf8');
+    assert.match(after, /^date: 2026-03-04 10:00$/m, 'the file keeps the date as written');
+    assert.match(
+      after,
+      /^ {2}published: '2026-03-04T10:00:00Z'$/m,
+      'stamped with the same instant',
+    );
+  });
+});
+
 describe('retrying a failed delivery', () => {
   const RETRIED = `${BASE_URL}/2026/03/hello-world/`;
 
