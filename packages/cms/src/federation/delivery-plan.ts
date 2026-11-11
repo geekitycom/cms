@@ -190,7 +190,10 @@ export function deliveryChange(
   if (after === undefined) {
     return before === undefined ? undefined : { kind: 'withdraw', before, subject };
   }
-  return { kind: 'publish', before, after, subject };
+  // A post the scan indexed was served without being announced, so its first
+  // edit is the first time any follower hears of it.
+  const told = before !== undefined && (wasAnnounced(before) || isMigrated(subject));
+  return { kind: 'publish', before: told ? before : undefined, after, subject };
 }
 
 function editsACopyFollowersHold(subject: Document, before: Document | undefined): boolean {

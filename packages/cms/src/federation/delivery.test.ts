@@ -553,6 +553,14 @@ ${body}
 `;
 }
 
+/** {@link publishedPost} carrying the stamp that says its followers were told. */
+function announcedPost(body: string): string {
+  return publishedPost(body).replace(
+    'tags:',
+    "activitypub:\n  published: '2026-03-04T10:00:00Z'\ntags:",
+  );
+}
+
 describe('publishing a post from the admin', () => {
   it('delivers a Create of the Article to the follower’s shared inbox', async () => {
     const { cms } = await site();
@@ -1785,13 +1793,13 @@ describe('editing a published post file on disk', () => {
     const { cms, contentDir } = await site({
       watch: true,
       account: true,
-      files: { [POST_FILE]: publishedPost('The version everybody already has.') },
+      files: { [POST_FILE]: announcedPost('The version everybody already has.') },
     });
     await cms.serve();
     await cms.delivery.settled();
     assert.deepEqual(deliveries, [], 'the boot scan announced nothing');
 
-    await writeDocument(contentDir, POST_FILE, publishedPost('A second thought, written later.'));
+    await writeDocument(contentDir, POST_FILE, announcedPost('A second thought, written later.'));
 
     const update = await waitForDelivery('Update');
     assert.equal(update.url, REMOTE_SHARED_INBOX);
@@ -1808,6 +1816,33 @@ describe('editing a published post file on disk', () => {
     assert.equal(delivered('Update').length, 1, `saw ${JSON.stringify(deliveries)}`);
     assert.equal(delivered('Create').length, 0, 'an edit is not a new post');
   });
+
+  it('delivers a Create when the post was served but never announced', async () => {
+    const { cms, contentDir } = await site({
+      watch: true,
+      account: true,
+      files: { [POST_FILE]: publishedPost('Written while the server was down.') },
+    });
+    await cms.serve();
+    await cms.delivery.settled();
+    assert.deepEqual(deliveries, [], 'the boot scan announced nothing');
+
+    await writeDocument(contentDir, POST_FILE, publishedPost('A second thought, written later.'));
+
+    const create = await waitForDelivery('Create');
+    const object = create.body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], `${BASE_URL}/2026/03/watched/`);
+    assert.match(String(object['content']), /A second thought, written later\./);
+
+    await cms.delivery.settled();
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(delivered('Update').length, 0, 'no follower holds a copy to update');
+    assert.match(
+      await readFile(path.join(contentDir, POST_FILE), 'utf8'),
+      /^ {2}published: /m,
+      'and the post is stamped as announced',
+    );
+  });
 });
 
 describe('a post file moved to another path on disk with its permalink unchanged', () => {
@@ -1819,10 +1854,7 @@ describe('a post file moved to another path on disk with its permalink unchanged
       watch: true,
       account: true,
       files: {
-        [OLD_FILE]: publishedPost('Body.').replace(
-          'tags:',
-          "activitypub:\n  published: '2026-03-04T10:00:00Z'\ntags:",
-        ),
+        [OLD_FILE]: announcedPost('Body.'),
       },
     });
     await cms.serve();
@@ -1881,7 +1913,7 @@ describe('a post file whose permalink is moved away and back on disk (TASK-417 A
     const { cms, contentDir } = await site({
       watch: true,
       account: true,
-      files: { [POST_FILE]: publishedPost('Where it started.') },
+      files: { [POST_FILE]: announcedPost('Where it started.') },
     });
     await cms.serve();
     await cms.delivery.settled();
@@ -1889,7 +1921,7 @@ describe('a post file whose permalink is moved away and back on disk (TASK-417 A
     await writeDocument(
       contentDir,
       POST_FILE,
-      publishedPost('Moved.').replace('/2026/03/watched/', '/2026/03/moved/'),
+      announcedPost('Moved.').replace('/2026/03/watched/', '/2026/03/moved/'),
     );
     await waitForCount('Create', 1);
     await cms.delivery.settled();
@@ -1898,7 +1930,7 @@ describe('a post file whose permalink is moved away and back on disk (TASK-417 A
       [FIRST],
     );
 
-    await writeDocument(contentDir, POST_FILE, publishedPost('Back where it started.'));
+    await writeDocument(contentDir, POST_FILE, announcedPost('Back where it started.'));
     const creates = await waitForCount('Create', 2);
     await cms.delivery.settled();
 
