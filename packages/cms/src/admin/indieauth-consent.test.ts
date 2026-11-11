@@ -374,7 +374,7 @@ describe('approving and denying', () => {
     });
     for (const [scope, label] of [
       ['inspect', /Read your site’s federation and delivery records/],
-      ['repair', /Resend posts and retry federation deliveries/],
+      ['repair', /Resend any of the site’s posts and retry its federation deliveries/],
       ['publish', /Publish drafts and change published posts/],
     ] as const) {
       assert.match(

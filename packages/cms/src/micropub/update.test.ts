@@ -502,12 +502,37 @@ describe('which post a URL names (AC #4)', () => {
       {
         'posts/2026-09-01-graces.md':
           "---\ntitle: Grace's\ndate: '2026-09-01T09:00:00Z'\npermalink: /2026/09/graces/\nauthor: grace\n---\n\nHers.\n",
+        'posts/2026-09-02-gones.md':
+          "---\ntitle: Gone's\ndate: '2026-09-02T09:00:00Z'\npermalink: /2026/09/gones/\nauthor: Somebody Gone\n---\n\nTheirs.\n",
         'pages/about.md': '---\ntitle: About\npermalink: /about/\n---\n\nA page.\n',
       },
       [{ username: FIRST_ADMIN.username }, { username: 'grace' }],
     );
     return { ...made, grace: `${BASE}/2026/09/graces/`, page: `${BASE}/about/` };
   }
+
+  it('treats a post whose author names nobody as the first account’s, which it is announced as', async () => {
+    const { cms, token } = await siteWithOthers();
+    const gone = `${BASE}/2026/09/gones/`;
+    const file = path.join(cms.config.contentDir, 'posts', '2026-09-02-gones.md');
+    const before = await readFile(file, 'utf8');
+    const graceToken = await tokenFor(cms, 'grace', ALL);
+
+    const refused = await postJson(cms, graceToken, {
+      action: 'update',
+      url: gone,
+      replace: { content: ['Not hers.'] },
+    });
+    assert.equal(refused.status, 403);
+    assert.equal(await readFile(file, 'utf8'), before);
+
+    const owner = await postJson(cms, token, {
+      action: 'update',
+      url: gone,
+      replace: { content: ['The first account’s.'] },
+    });
+    assert.equal(owner.status, 204);
+  });
 
   const requests: readonly [string, (url: string) => [string, unknown]][] = [
     ['q=source', (url) => ['GET', `q=source&url=${encodeURIComponent(url)}`]],

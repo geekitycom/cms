@@ -1088,6 +1088,24 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
     assert.equal(create.url, REMOTE_SHARED_INBOX);
   });
 
+  it('drops a queued delivery signed with a key file that was replaced before the next start', async () => {
+    const queued = await site({ queued: true });
+    const agent = signedInAs(queued.cms, ADA);
+    await publishNewPost(agent);
+    await queued.cms.delivery.settled();
+    await queued.cms.close();
+    assert.equal(queuedMessages(queued.dataDir).length, 1);
+    seedActorKeys(queued.dataDir, ADA, 1);
+
+    const next = nextCms(queued);
+    await next.serve();
+
+    assert.equal(queuedMessages(queued.dataDir).length, 0);
+    const row = next.admin.lastDeliveryToObject(`${BASE_URL}/2026/03/hello-world/`);
+    assert.equal(row?.status, 'unknown', 'the dropped message was never handed to the worker');
+    assert.deepEqual(deliveries, []);
+  });
+
   it('sends a retry Fedify scheduled for later after the CMS is stopped and started again (AC #1)', async () => {
     refused.length = 0;
     rejectingEveryPost = true;
@@ -3220,6 +3238,7 @@ Hello from ${year}.
     const cms = await twoHellos();
     const job = resendJob({
       store: cms.store,
+      content: { reread: () => Promise.resolve() },
       delivery: cms.delivery,
       webmentions: { send: () => Promise.resolve(undefined) },
     });
@@ -3373,6 +3392,20 @@ describe('two users', () => {
       [REMOTE_SHARED_INBOX],
       'Grace’s follower heard nothing about Ada’s post',
     );
+  });
+
+  it('tells a deleted user’s followers that their account is gone, as that account', async () => {
+    const { cms } = await adaAndGrace();
+    const agent = signedInAs(cms, ADA);
+    const token = csrfField(await (await agent.get('/admin/users/2')).text());
+    assert.ok(token !== undefined);
+    deliveries.length = 0;
+
+    const response = await agent.post('/admin/users/delete', { csrf_token: token, user_id: '2' });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    assert.deepEqual(sent(), [['Delete', GRACE_URL, OTHER_INBOX, GRACE_URL]]);
   });
 
   it('withdraws a post from the old author’s followers as the old author when the author changes', async () => {

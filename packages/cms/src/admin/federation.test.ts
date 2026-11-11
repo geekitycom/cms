@@ -611,6 +611,28 @@ describe('failed deliveries', () => {
     assert.match(section, /Finished/, 'the retry run is shown');
   });
 
+  it('names a relay subscription that failed, and says where to retry it and the profile', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    cms.admin.recordDelivery({
+      activityId: 'https://blog.example/author/ada/#relay-follow/1',
+      activityType: 'Follow',
+      objectId: 'https://relay.example/actor',
+      slug: null,
+      actorId: 'https://relay.example/actor',
+      inboxId: 'https://relay.example/inbox',
+      status: 'failed',
+      error: '502 Bad Gateway',
+    });
+
+    const section = failuresSection(await federationScreen(agent));
+
+    assert.match(section, /A relay subscription/);
+    assert.doesNotMatch(section, /<button type="submit"[^>]*>Retry<\/button>/);
+    assert.match(section, /Relays panel/);
+    assert.match(section, /the profile: its next change goes to every follower/);
+  });
+
   it('says so when nothing has failed', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);

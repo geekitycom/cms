@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -8,8 +8,10 @@ import { SqliteMessageQueue } from '@fedify/sqlite';
 
 import {
   FEDERATION_QUEUE_TABLE,
+  dropMessagesSignedByRetiredKeys,
   listWaitingDeliveries,
   openQueueDatabase,
+  queueFile,
 } from './queue-database.ts';
 
 const temporaryDirs: string[] = [];
@@ -61,5 +63,68 @@ describe('the deliveries waiting in the queue', () => {
       [`${ACTIVITY_ID}-2`, 'https://three.example/inbox'],
       [`${ACTIVITY_ID}-2`, 'https://two.example/inbox'],
     ]);
+  });
+});
+
+describe('the signing keys a queued message carries', () => {
+  const MARKER = 'private-key-material-0123456789';
+
+  it('leaves no copy of a taken message in the queue file', async () => {
+    const dir = await dataDir();
+    const db = openQueueDatabase(dir);
+    const queue = new SqliteMessageQueue(db, { tableName: FEDERATION_QUEUE_TABLE });
+    await queue.enqueue({ type: 'outbox', keys: [{ keyId: 'k', privateKey: { d: MARKER } }] });
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+
+    db.exec(`DELETE FROM ${FEDERATION_QUEUE_TABLE}`);
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    queue[Symbol.dispose]();
+
+    const bytes = await readFile(queueFile(dir));
+    assert.equal(bytes.includes(MARKER), false);
+  });
+
+  it('keeps the write-ahead log and shared-memory files to the owner', async () => {
+    const dir = await dataDir();
+    await mkdir(dir, { recursive: true });
+    for (const suffix of ['-wal', '-shm']) {
+      await writeFile(`${queueFile(dir)}${suffix}`, '', { mode: 0o644 });
+    }
+
+    openQueueDatabase(dir).close();
+
+    for (const suffix of ['-wal', '-shm']) {
+      const mode = (await stat(`${queueFile(dir)}${suffix}`).catch(() => undefined))?.mode;
+      if (mode !== undefined) assert.equal(mode & 0o777, 0o600, `${suffix} is 0600`);
+    }
+  });
+
+  it('drops a message signed by a key the site no longer holds, and keeps the rest', async () => {
+    const dir = await dataDir();
+    const queue = new SqliteMessageQueue(openQueueDatabase(dir), {
+      tableName: FEDERATION_QUEUE_TABLE,
+    });
+    const signed = (d: string, inbox: string) => ({
+      type: 'outbox',
+      activityId: ACTIVITY_ID,
+      inbox,
+      keys: [{ keyId: 'https://blog.example/author/ada#main-key', privateKey: { d } }],
+    });
+    await queue.enqueue(signed('current', 'https://kept.example/inbox'));
+    await queue.enqueue(signed('replaced', 'https://dropped.example/inbox'));
+    await queue.enqueue({
+      type: 'fanout',
+      activityId: `${ACTIVITY_ID}-2`,
+      keys: [{ keyId: 'https://blog.example/author/gone#main-key', privateKey: { d: 'gone' } }],
+      inboxes: { 'https://dropped-too.example/inbox': { actorIds: [], sharedInbox: false } },
+    });
+    queue[Symbol.dispose]();
+
+    dropMessagesSignedByRetiredKeys(dir, new Set(['current']));
+
+    assert.deepEqual(
+      listWaitingDeliveries(dir).map((delivery) => delivery.inbox),
+      ['https://kept.example/inbox'],
+    );
   });
 });

@@ -14,15 +14,55 @@ export function queueFile(dataDir: string): string {
 
 /**
  * Open the queue file, creating it mode `0600`: a waiting delivery carries the
- * private key it is signed with. SQLite gives the `-wal` and `-shm` files the
- * mode of the database.
+ * private key it is signed with. SQLite creates the `-wal` and `-shm` files
+ * with the database's mode but leaves the mode of ones that already exist, so
+ * those are narrowed too. `secure_delete` zeroes a taken message's bytes
+ * rather than leaving them in a free page.
  */
 export function openQueueDatabase(dataDir: string): DatabaseSync {
   mkdirSync(dataDir, { recursive: true });
   const file = queueFile(dataDir);
   closeSync(openSync(file, 'a', 0o600));
-  chmodSync(file, 0o600);
-  return new DatabaseSync(file, { timeout: BUSY_TIMEOUT_MS });
+  for (const owned of [file, `${file}-wal`, `${file}-shm`]) {
+    if (existsSync(owned)) chmodSync(owned, 0o600);
+  }
+  const db = new DatabaseSync(file, { timeout: BUSY_TIMEOUT_MS });
+  db.exec('PRAGMA secure_delete=ON');
+  return db;
+}
+
+/**
+ * Remove each waiting message signed with a private key that is not in
+ * `held`, the `d` of every key file the site has now. A key file replaced or
+ * removed by hand is a key the site has stopped trusting, and Fedify would go
+ * on signing with the copy in the message through days of retries.
+ */
+export function dropMessagesSignedByRetiredKeys(dataDir: string, held: ReadonlySet<string>): void {
+  if (!existsSync(queueFile(dataDir))) return;
+  const db = openQueueDatabase(dataDir);
+  try {
+    const table = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(FEDERATION_QUEUE_TABLE);
+    if (table === undefined) return;
+    const rows = db
+      .prepare(
+        `SELECT id, json_extract(message, '$.keys') AS keys FROM ${FEDERATION_QUEUE_TABLE}
+          WHERE json_extract(message, '$.keys') IS NOT NULL`,
+      )
+      .all();
+    const remove = db.prepare(`DELETE FROM ${FEDERATION_QUEUE_TABLE} WHERE id = ?`);
+    for (const row of rows) {
+      const keys = JSON.parse(String(row['keys'])) as { privateKey?: { d?: unknown } }[];
+      const retired = keys.some((key) => {
+        const d = key.privateKey?.d;
+        return typeof d !== 'string' || !held.has(d);
+      });
+      if (retired) remove.run(row['id'] as string);
+    }
+  } finally {
+    db.close();
+  }
 }
 
 /**

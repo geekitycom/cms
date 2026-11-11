@@ -40,6 +40,24 @@ export function userForAuthor<U extends AuthorUser>(
 }
 
 /**
+ * The user a post belongs to: the one its `author` names, and the site's first
+ * account for one that names nobody. Who may edit a post and which actor
+ * announces it are the same question, so both ask this.
+ */
+export function postOwner<U extends AuthorUser>(
+  users: readonly U[],
+  author: string | undefined,
+): U | undefined {
+  return (
+    userForAuthor(users, author) ??
+    users.reduce<U | undefined>(
+      (first, user) => (first === undefined || user.id < first.id ? user : first),
+      undefined,
+    )
+  );
+}
+
+/**
  * Every stored `author` string that reads as this user, for the query behind
  * their archive.
  *

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import type { Context } from '@fedify/fedify';
-import { Activity, getTypeId, PUBLIC_COLLECTION } from '@fedify/vocab';
+import { Activity, Delete, getTypeId, PUBLIC_COLLECTION } from '@fedify/vocab';
 import type { Object as ActivityObject } from '@fedify/vocab';
 
 import type { AdminStore, Delivery, DeliveryStatus } from '../store/admin-store.ts';
@@ -55,7 +55,7 @@ import {
 } from './delivery-plan.ts';
 import type { ActivityAbout, DeliveryTarget, ObjectShape, Shape } from './delivery-plan.ts';
 import { mentionedAccounts } from './handles.ts';
-import { updateActivityId } from './paths.ts';
+import { deleteActivityId, updateActivityId } from './paths.ts';
 import { claimObjectId, readObjectIds, recordDeleted } from './object-ids.ts';
 import { isDuplicateDelivery } from './outbox-observer.ts';
 import { acceptedRelays } from './relays.ts';
@@ -136,6 +136,13 @@ export interface DeliveryService {
    * cached profile anywhere to refresh.
    */
   updateActor(user: User): Promise<DeliveryReport | undefined>;
+  /**
+   * Tell a deleted user's followers and the site's relays that the account is
+   * gone: a `Delete` of the actor, signed with its key, which their servers
+   * take as a reason to drop the account and the copies of its posts. Called
+   * just before the user is removed. `undefined` when there is nobody to tell.
+   */
+  deleteActor(user: User): Promise<DeliveryReport | undefined>;
   /**
    * Send one post as it now reads to every follower and every accepted relay
    * the site has.
@@ -636,6 +643,34 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
           // A profile update is a side effect of saving the settings, and losing
           // it must not lose the save.
           logger.warn(`The actor update could not be delivered: ${oneLineMessageOf(thrown)}`);
+          return undefined;
+        });
+    },
+
+    async deleteActor(user) {
+      return await deliveryQueue
+        .run(async () => {
+          if (deliveryTargets(admin, user.username).length === 0) return undefined;
+          const context = await deliveryContext();
+          const id = actorId(context, user);
+          const activityId = deleteActivityId(id, store.now().toISOString());
+          const activity = new Delete({
+            id: activityId,
+            actor: id,
+            object: id,
+            to: PUBLIC_COLLECTION,
+            cc: context.getFollowersUri(user.username),
+          });
+
+          return await fanOut(context, user, activity, {
+            activityId: activityId.href,
+            activityType: 'Delete',
+            objectId: id.href,
+            slug: null,
+          });
+        })
+        .catch((thrown: unknown) => {
+          logger.warn(`The account deletion could not be delivered: ${oneLineMessageOf(thrown)}`);
           return undefined;
         });
     },

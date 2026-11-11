@@ -30,7 +30,7 @@ export async function runJobHere<P extends Json, R extends Json>(
       );
       return undefined;
     }
-    status = await cms.jobs.run(enqueued.id);
+    status = await cms.jobs.run(enqueued.id, { resumable: false });
   } finally {
     await cms.close();
   }

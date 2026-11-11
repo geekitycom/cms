@@ -8,13 +8,14 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
-import { createFederation, generateCryptoKeyPair, MemoryKvStore } from '@fedify/fedify';
+import { createFederation, exportJwk, generateCryptoKeyPair, MemoryKvStore } from '@fedify/fedify';
 import { SqliteMessageQueue } from '@fedify/sqlite';
 import { Create, Note } from '@fedify/vocab';
 
 import { cleanupTemporaryDirs, CLI, temporaryDir } from './__testing__/cli.ts';
 import { queuedMessages } from './__testing__/federation-queue.ts';
 import { nextEvent } from './__testing__/wait.ts';
+import { writeActorKeyFile } from './federation/keys.ts';
 import { FEDERATION_QUEUE_TABLE, queueFile } from './store/queue-database.ts';
 import { askToReload, isServing } from './supervisor/control.ts';
 
@@ -94,6 +95,12 @@ async function queueDeliveries(dataDir: string, inbox: string): Promise<string[]
   });
   const context = federation.createContext(new URL(ORIGIN), undefined);
   const { privateKey } = await generateCryptoKeyPair('RSASSA-PKCS1-v1_5');
+  writeActorKeyFile(
+    dataDir,
+    'ada',
+    'RSASSA-PKCS1-v1_5',
+    JSON.stringify(await exportJwk(privateKey)),
+  );
   const actor = new URL(`${ORIGIN}/author/ada/`);
   const ids: string[] = [];
   for (let n = 1; n <= MESSAGES; n += 1) {

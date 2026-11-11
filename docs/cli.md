@@ -72,12 +72,19 @@ federation screen show the job's progress.
 
 The command runs its own job in these cases:
 
-- The process that was running the job has stopped. A server runs that job
-  again when it next looks for jobs that a stopped process left. Both jobs are
-  safe to run twice.
+- The process that was running the job has stopped. If the admin started that
+  job, a server runs it again when it next looks for jobs that a stopped
+  process left. If a command started it, the job ends `interrupted` and nothing
+  runs it again, so a `geekity resend` stopped with Ctrl-C does not start over
+  on the server.
 - A job is queued, but no server answers. A command that stopped before it
   started its job can leave a queued job. The next server to start runs that
   job.
+
+A server can see only the processes on its own host. Run these commands in
+the server's container, with `docker compose exec`. A command in a one-off
+container from `docker compose run` looks stopped to the server, which ends
+its job `interrupted`. The command then stops after the post or file it is on.
 
 ## How `geekity serve` runs
 

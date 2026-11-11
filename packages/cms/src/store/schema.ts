@@ -609,6 +609,11 @@ export const MIGRATIONS: readonly Migration[] = [
     version: 30,
     sql: `CREATE INDEX ap_deliveries_actor_id ON ap_deliveries (actor_id, object_id, attempted_at);`,
   },
+  {
+    // The retry tools and the delivery search ask for every row at one inbox.
+    version: 31,
+    sql: `CREATE INDEX ap_deliveries_inbox_id ON ap_deliveries (inbox_id, attempted_at);`,
+  },
 ];
 
 export function openAdminDatabase(dataDir: string, now: Clock): DatabaseSync {

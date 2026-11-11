@@ -118,6 +118,30 @@ async function fileOf(cms: Cms, url: string): Promise<string> {
   );
 }
 
+/** An MCP token for bea, a user who is not the site's first account. */
+async function secondUserToken(cms: Cms): Promise<string> {
+  const created = await createUser({
+    dataDir: cms.config.dataDir,
+    username: 'bea',
+    password: 'another horse battery',
+  });
+  const issued = await issueTokens(
+    cms.config.dataDir,
+    {
+      clientId: 'https://claude.example/client.json',
+      redirectUri: 'http://localhost:4567/callback',
+      codeChallenge: { method: 'S256', value: 'unused' },
+      userId: created.id,
+      userUid: created.uid,
+      me: `${BASE}/`,
+      scopes: [...EVERY],
+      resource: `${BASE}/_geekity/mcp`,
+    },
+    NOW,
+  );
+  return issued.accessToken;
+}
+
 async function drafted(cms: Cms, token: string, args: Row): Promise<string> {
   const answer = await call(cms, token, 'create_draft', args);
   assert.equal(answer.isError, false, answer.text);
@@ -321,30 +345,12 @@ describe('get_post_source', () => {
 
   it('refuses another user’s post', async () => {
     const { cms, token } = await authoringSite();
-    const created = await createUser({
-      dataDir: cms.config.dataDir,
-      username: 'bea',
-      password: 'another horse battery',
-    });
+    const bea = await secondUserToken(cms);
     const url = await drafted(cms, token, {
       properties: { content: ['Mine.'], 'mp-slug': ['mine'] },
     });
-    const bea = await issueTokens(
-      cms.config.dataDir,
-      {
-        clientId: 'https://claude.example/client.json',
-        redirectUri: 'http://localhost:4567/callback',
-        codeChallenge: { method: 'S256', value: 'unused' },
-        userId: created.id,
-        userUid: created.uid,
-        me: `${BASE}/`,
-        scopes: [...EVERY],
-        resource: `${BASE}/_geekity/mcp`,
-      },
-      NOW,
-    );
 
-    const answer = await call(cms, bea.accessToken, 'get_post_source', { post: url });
+    const answer = await call(cms, bea, 'get_post_source', { post: url });
 
     assert.equal(answer.isError, true);
     assert.match(answer.text, /not your post/);
@@ -352,6 +358,29 @@ describe('get_post_source', () => {
 });
 
 describe('update_post', () => {
+  it('refuses a post whose author names nobody to anyone but the first account', async () => {
+    const { cms, token } = await authoringSite();
+    const bea = await secondUserToken(cms);
+    const url = await drafted(cms, token, {
+      properties: { content: ['Orphaned.'], 'mp-slug': ['orphaned'] },
+    });
+    const file = path.join(cms.config.contentDir, ...documentAt(cms, url).path.split('/'));
+    const text = await readFile(file, 'utf8');
+    await writeFile(file, text.replace(/^author: .*$/m, 'author: Somebody Gone'), 'utf8');
+    await cms.sync();
+    const hash = documentAt(cms, url).hash;
+
+    const answer = await call(cms, bea, 'update_post', {
+      post: url,
+      hash,
+      replace: { content: ['Not hers.'] },
+    });
+
+    assert.equal(answer.isError, true);
+    assert.match(answer.text, /not your post/);
+    assert.equal(documentAt(cms, url).body.trim(), 'Orphaned.');
+  });
+
   it('changes only the properties it names', async () => {
     const { cms, token } = await authoringSite();
     const url = await drafted(cms, token, {

@@ -2,6 +2,7 @@ import { statSync } from 'node:fs';
 import path from 'node:path';
 
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
+import { lockFileFor, withLockFile } from '../files/lock-file.ts';
 import { messageOf } from '../util/errors.ts';
 import { isRecord } from '../util/guards.ts';
 import { FEDERATION_DATA_DIRECTORY } from './records.ts';
@@ -40,18 +41,31 @@ export async function recordResolvedTarget(
   objectId: string | null,
 ): Promise<void> {
   const file = replyTargetsFile(contentDir);
-  await withFileLock(file, () => {
-    let targets: ReplyTargets;
-    try {
-      targets = parseReplyTargets(file);
-    } catch (error) {
-      console.warn(`${messageOf(error)} Writing nothing to it until it is fixed.`);
-      return;
-    }
-    if (targets[url] === objectId) return;
-    writeFileAtomicallySync(file, `${JSON.stringify({ ...targets, [url]: objectId }, null, 2)}\n`);
-    cache.delete(file);
+  await withFileLock(file, async () => {
+    const before = readTargets(file);
+    if (before === undefined || before[url] === objectId) return;
+    // Decided again under the lock file a CLI process beside the server takes too.
+    await withLockFile(lockFileFor(file), () => {
+      const targets = readTargets(file);
+      if (targets === undefined || targets[url] === objectId) return Promise.resolve();
+      writeFileAtomicallySync(
+        file,
+        `${JSON.stringify({ ...targets, [url]: objectId }, null, 2)}\n`,
+      );
+      cache.delete(file);
+      return Promise.resolve();
+    });
   });
+}
+
+/** The file's targets, or `undefined`, with a warning, for a file that will not parse. */
+function readTargets(file: string): ReplyTargets | undefined {
+  try {
+    return parseReplyTargets(file);
+  } catch (error) {
+    console.warn(`${messageOf(error)} Writing nothing to it until it is fixed.`);
+    return undefined;
+  }
 }
 
 function readCached(file: string): ReplyTargets {

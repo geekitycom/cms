@@ -7,6 +7,7 @@ import { after, describe, it } from 'node:test';
 
 import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
+import { seedActorKeys } from '../federation/__testing__/keys.ts';
 import { actorKeyFile } from '../federation/keys.ts';
 import { hashPassword, passwordHashIsCurrent } from './passwords.ts';
 import {
@@ -301,6 +302,38 @@ describe('a name that is taken', () => {
       DuplicateUsernameError,
     );
     assert.equal(countUsers(dataDir), 1, 'and nothing was written');
+  });
+
+  it('is refused when a deleted user’s fediverse account still holds it', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [
+      { username: 'ada', id: 1 },
+      { username: 'grace', id: 2 },
+    ]);
+    seedActorKeys(dataDir, 'grace');
+    await deleteUser({ dataDir, userId: 2, now: new Date() });
+
+    for (const username of ['grace', 'Grace']) {
+      await assert.rejects(
+        () => createUser({ dataDir, username, password: 'a new person entirely' }),
+        (error: unknown) =>
+          error instanceof DuplicateUsernameError && /deleted/.test(error.message),
+      );
+    }
+    assert.equal(countUsers(dataDir), 1, 'and nothing was written');
+
+    await createUser({ dataDir, username: 'hopper', password: 'a name nobody held' });
+  });
+
+  it('is free again when the deleted user never had a fediverse account', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [
+      { username: 'ada', id: 1 },
+      { username: 'grace', id: 2 },
+    ]);
+    await deleteUser({ dataDir, userId: 2, now: new Date() });
+
+    await createUser({ dataDir, username: 'grace', password: 'the same person again' });
   });
 
   it('still loads a file that already holds names differing only by case', async () => {

@@ -39,7 +39,7 @@ export const SCOPE_LABELS: Readonly<Record<Scope, string>> = {
   media: 'Upload media to your site',
   publish: 'Publish drafts and change published posts',
   inspect: 'Read your site’s federation and delivery records, inbox and followers included',
-  repair: 'Resend posts and retry federation deliveries',
+  repair: 'Resend any of the site’s posts and retry its federation deliveries',
 };
 
 /**

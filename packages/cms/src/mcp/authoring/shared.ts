@@ -1,4 +1,4 @@
-import { userForAuthor } from '../../content/authors.ts';
+import { postOwner } from '../../content/authors.ts';
 import type { Document } from '../../content/document.ts';
 import { keptProperties } from '../../content/kept-properties.ts';
 import { postLocations } from '../../content/locations.ts';
@@ -13,8 +13,7 @@ import type { Refused, ToolSite } from '../tools.ts';
 export function ownPost(site: ToolSite, user: User, reference: string): Document | Refused {
   const document = findPost(site, reference);
   if (isRefused(document)) return document;
-  const author = userForAuthor(listUsers(site.config.dataDir), document.author);
-  if (author !== undefined && author.id !== user.id) {
+  if (postOwner(listUsers(site.config.dataDir), document.author)?.id !== user.id) {
     return refused(`${reference} is not your post.`);
   }
   return document;

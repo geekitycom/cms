@@ -6,7 +6,7 @@ import { postEngagement } from '../admin/engagement.ts';
 import { postsByPath, postsPublishedSince } from '../admin/posts-by-path.ts';
 import { readObjectIds } from '../federation/object-ids.ts';
 import type { ConversationWrite } from '../store/admin-store.ts';
-import { releaseOrderingLocks } from '../store/queue-database.ts';
+import { dropMessagesSignedByRetiredKeys, releaseOrderingLocks } from '../store/queue-database.ts';
 import { createAvatarService } from '../avatars/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
 import { createFontStore, createPageFonts, fontFetchJob, queueFontFetch } from '../fonts/index.ts';
@@ -25,6 +25,7 @@ import { mintMissingIndexNowKey, SITE } from '../site/namespace.ts';
 import { DEV_MODE } from '../settings/dev-mode.ts';
 import { messageOf } from '../util/errors.ts';
 import { handleLearner } from '../federation/handles.ts';
+import { heldPrivateKeys } from '../federation/keys.ts';
 import type { HandleLearner } from '../federation/handles.ts';
 import {
   createActorProfileService,
@@ -444,7 +445,7 @@ export function createServices({
     records: resolved.jobs.records ?? createFileRecords(dataPath(resolved.dataDir, JOBS)),
     jobs: [
       stripMetadataJob(resolved.contentDir),
-      resendJob({ store, delivery, webmentions }),
+      resendJob({ store, content, delivery, webmentions }),
       retryDeliveriesJob({ store, admin, config: resolved, delivery }),
       siteExportJob({ config: resolved, settings, plugins }, resolved.now),
       fontFetchJob(fonts),
@@ -510,7 +511,10 @@ export function createServices({
     {
       name: 'what the last worker left in the queue',
       start: () => {
-        if (resolved.federation.queue === undefined) releaseOrderingLocks(resolved.dataDir);
+        if (resolved.federation.queue === undefined) {
+          releaseOrderingLocks(resolved.dataDir);
+          dropMessagesSignedByRetiredKeys(resolved.dataDir, heldPrivateKeys(resolved.dataDir));
+        }
         markForgottenDeliveries(admin, {
           dataDir: resolved.dataDir,
           queue: resolved.federation.queue,

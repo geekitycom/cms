@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { lockFileFor, withLockFile } from '../files/lock-file.ts';
+
 import { claimObjectId, readObjectIds, recordDeleted } from './object-ids.ts';
+import { recordResolvedTarget, resolvedTarget } from './reply-targets.ts';
 
 const POST = 'https://blog.example/2026/09/hello/';
 
@@ -66,5 +69,50 @@ describe('claiming an object id', () => {
     await writeFile(file, JSON.stringify({ deleted: [POST], reissued: {} }));
 
     assert.deepEqual(readObjectIds(dir).deleted, [POST]);
+  });
+});
+
+describe('another process writing the file at the same time', () => {
+  /** Hold the file's lock as another process would, and write the file under it. */
+  async function whileAnotherProcessWrites(
+    file: string,
+    mine: () => Promise<void>,
+    change: (record: Record<string, unknown>) => Record<string, unknown>,
+  ): Promise<void> {
+    let writing: Promise<void> | undefined;
+    await withLockFile(lockFileFor(file), async () => {
+      const record = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+      writing = mine();
+      await writeFile(`${file}.theirs`, `${JSON.stringify(change(record), null, 2)}\n`);
+      await rename(`${file}.theirs`, file);
+    });
+    await writing;
+  }
+
+  it('keeps the deletion that process recorded, and its own', async () => {
+    const { contentDir: dir, file } = await contentDir('{"deleted": [], "reissued": {}}\n');
+    const theirs = `${POST}theirs/`;
+    await whileAnotherProcessWrites(
+      file,
+      () => recordDeleted(dir, POST),
+      (record) => ({ ...record, deleted: [theirs] }),
+    );
+
+    assert.deepEqual([...readObjectIds(dir).deleted].sort(), [POST, theirs].sort());
+  });
+
+  it('keeps the reply target that process recorded, and its own', async () => {
+    const { contentDir: dir } = await contentDir();
+    const file = path.join(dir, '_data', 'federation', 'replyTargets.json');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, '{}\n');
+    await whileAnotherProcessWrites(
+      file,
+      () => recordResolvedTarget(dir, 'https://elsewhere.example/a', null),
+      (record) => ({ ...record, 'https://elsewhere.example/b': null }),
+    );
+
+    assert.equal(resolvedTarget(dir, 'https://elsewhere.example/a'), null);
+    assert.equal(resolvedTarget(dir, 'https://elsewhere.example/b'), null);
   });
 });

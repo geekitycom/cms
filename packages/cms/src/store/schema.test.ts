@@ -96,3 +96,24 @@ describe('the admin schema', () => {
     });
   });
 });
+
+describe('the delivery log', () => {
+  it('finds the deliveries to one inbox through an index rather than a scan', async () => {
+    const dataDir = await temporaryDir();
+    openAdminStore({ dataDir }).close();
+    const db = new DatabaseSync(databaseFile(dataDir), { readOnly: true });
+    try {
+      const plan = db
+        .prepare(
+          `EXPLAIN QUERY PLAN SELECT * FROM ap_deliveries WHERE inbox_id = 'https://a.example/inbox'
+           ORDER BY attempted_at DESC, rowid DESC`,
+        )
+        .all()
+        .map((row) => String(row['detail']))
+        .join('\n');
+      assert.match(plan, /USING INDEX ap_deliveries_inbox_id/);
+    } finally {
+      db.close();
+    }
+  });
+});

@@ -176,6 +176,46 @@ describe('start-up recovery', () => {
   });
 });
 
+describe('a job a command runs itself', () => {
+  it('is not run again by another queue once the command is cut off, and ends interrupted', async () => {
+    const file = await recordsFile();
+    let runs = 0;
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let claimed = (): void => undefined;
+    const started = new Promise<void>((resolve) => {
+      claimed = resolve;
+    });
+    const held: JobDefinition<null, null> = {
+      name: 'held',
+      parse: () => null,
+      async run(_payload, context) {
+        runs += 1;
+        claimed();
+        await gate;
+        await context.progress({ done: 1 });
+        return null;
+      },
+    };
+    const command = queueOn(file, [held]);
+    const id = await command.enqueue(held, null);
+    const running = command.run(id, { resumable: false });
+    await started;
+
+    const server = queueOn(file, [held]);
+    await server.start();
+    await server.settled();
+    release();
+    const status = await running;
+    await server.close();
+
+    assert.equal(status.state, 'interrupted');
+    assert.equal(runs, 1, 'the server did not start it over');
+  });
+});
+
 describe('a job list', () => {
   it('reads every job in the states asked for, a cut-off one as queued again once started', async () => {
     const file = await recordsFile();

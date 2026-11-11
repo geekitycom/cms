@@ -37,7 +37,7 @@ import type { User } from '../site/users.ts';
 import { isRecord } from '../util/guards.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
-import { userForAuthor } from '../content/authors.ts';
+import { postOwner } from '../content/authors.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
 import { createForm, fromForm, fromJson } from '../content/micropub-create.ts';
 import type { CreatedForm, CreateRequest, Property } from '../content/micropub-create.ts';
@@ -179,9 +179,7 @@ function invalid(description: string): Refusal {
 
 /**
  * The post `url` names, when it is one of this site's posts, trashed ones
- * included so they can be undeleted, and `user` may change it. A post its
- * front matter attributes to another user is theirs; one attributed to nobody
- * the site knows is anybody's, as it is in the editor.
+ * included so they can be undeleted, and `user` owns it.
  */
 function postAt(
   url: string | undefined,
@@ -199,8 +197,7 @@ function postAt(
     ? site.store.getByPermalink(`/${address.pathname.slice(new URL(root).pathname.length)}`)
     : undefined;
   if (document?.type !== 'post') return invalid(`${url} is not a post on this site.`);
-  const author = userForAuthor(site.users, document.author);
-  if (author !== undefined && author.id !== site.user.id) {
+  if (postOwner(site.users, document.author)?.id !== site.user.id) {
     return new Refusal(403, 'forbidden', `${url} is not your post.`);
   }
   return document;

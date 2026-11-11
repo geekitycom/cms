@@ -864,6 +864,17 @@ Deleting a user deletes their sessions. The server refuses any session that
 survives the deletion, for example in a database restored from a backup,
 because `data/users.json` no longer holds the user it names.
 
+Deleting a user also retires their fediverse account. The server sends a
+`Delete` of the user's actor, signed with their key, to their followers and to
+the accepted relays. Mastodon then removes the account and its copies of the
+user's posts. The key files in `data/keys` and the follower records in
+`content/_data/federation/<username>/` stay on disk. The name is then retired:
+`data/users.json` lists it under `retired`, and the server refuses a new user
+with that name, or one that differs from it only by case or punctuation. A new
+person under the old name would sign with the old key and reach the old
+followers. A user who never had a key pair, because nothing ever asked for
+their actor, is not retired, so you can delete and add them again.
+
 The server refuses two deletions, and the table shows a Delete button only on
 rows where neither applies:
 

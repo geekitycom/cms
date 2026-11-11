@@ -112,6 +112,12 @@ own fallback, an actor document with no `publicKey`, is worse, because peers
 cache it. Restore the file from a backup, or delete it to request a new key on
 purpose.
 
+Each queued delivery carries a copy of the private keys it is signed with. When
+the server starts, it removes every waiting message signed with a key that no
+file in `dataDir/keys` holds now. To retire a compromised key, replace or
+delete its file and restart the server: deliveries and retries signed with the
+old key are not sent. Their rows read `unknown`.
+
 ## The message queue
 
 Fedify queues every outgoing delivery, every inbox activity and every retry it
@@ -148,10 +154,13 @@ does not touch it.
   the delivery's `queued` or `retrying` row, as a held delivery has no row. A
   `data/` copied from a live site can hold deliveries that are still waiting.
 
-The file is mode `0600`. A waiting delivery holds the activity, the inbox it
-goes to and the private key it is signed with. An inbox activity waiting to be
-handled holds what the peer sent. You can delete the file while the site is
-stopped. The waiting deliveries and retries are lost, and nothing else.
+The file is mode `0600`, and so are its `-wal` and `-shm` files. A waiting
+delivery holds the activity, the inbox it goes to and the private key it is
+signed with. The server opens the file with `secure_delete`, so a message it
+has taken is overwritten rather than left in a free page. An inbox activity
+waiting to be handled holds what the peer sent. You can delete the file while
+the site is stopped. The waiting deliveries and retries are lost, and nothing
+else.
 
 A queue passed as `federation.queue` replaces this one, and is never paused,
 durable or not. A server that stops sends everything it queued for now before
@@ -329,9 +338,10 @@ author does the same. A peer files a post under the actor that created it and
 accepts an `Update` or `Delete` from that actor only, so the old author sends
 the `Delete` to their followers, and the new author sends a `Create` to theirs
 under a new id. A post whose `author` names a deleted user is sent by the
-site's first account from then on. The copies the deleted user sent stay on
-the servers that hold them, because no remaining actor can update or delete
-them. So a post can come back under a deleted id in two ways:
+site's first account from then on. When the user is deleted, the site sends a
+`Delete` of their actor, and a server that accepts it removes the copies the
+user sent. No remaining actor can update or delete a copy on a server that did
+not. So a post can come back under a deleted id in two ways:
 
 - it is published again after a draft or the trash
 - an edit moves it back to a permalink it had before
@@ -406,8 +416,10 @@ report?.deliveries; // one row per follower and relay: inbox, status, error, tim
 ```
 
 `resend` sends the post as it reads now. It does not repeat an earlier
-activity. It builds the activity from the file at the moment you call it, so a
-follower whose server was down receives the current post. The activity follows
+activity. It builds the activity from the file when the post's turn in the
+job comes, so a follower whose server was down receives the current post. A
+`geekity resend --all` that runs for minutes reads each file again just before
+it sends that post. The activity follows
 the same table as a save:
 
 - A published post that no follower has received is a `Create`, and the site
@@ -500,10 +512,11 @@ from.
 
 Mastodon 4.5 lets people quote a post only when the post says who may quote
 it. It shows a quote only after the quoted author's server approves it
-([FEP-044f]). Every post this site federates is public. Every `Note` and
-`Article` carries `interactionPolicy.canQuote` with `automaticApproval` set to
-the public collection. Anyone may quote the post, and no manual approval is
-needed. Pages, drafts, and scheduled and trashed posts do not federate, so
+([FEP-044f]). A post this site federates is public or
+[unlisted](content.md#unlisted-posts), and either can be read by anyone with
+its URL. Every `Note` and `Article`, unlisted ones too, carries
+`interactionPolicy.canQuote` with `automaticApproval` set to the public
+collection. Anyone may quote the post, and no manual approval is needed. Pages, drafts, and scheduled and trashed posts do not federate, so
 they cannot be quoted.
 
 A quoting server sends a `QuoteRequest` to the post's author. The inbox
@@ -908,6 +921,13 @@ of an activity failed. A recipient whose newest `Create` failed gets the
 since. The others get an `Update`. A recipient whose pin or unpin failed then gets the
 `Add` or the `Remove` again. The panel shows the latest retry job as the Resend
 page shows the latest resend.
+
+The panel also lists failed deliveries that are not about a post: a relay's
+`Follow` or `Undo`, shown as a relay subscription, and an actor `Update` or
+`Delete`, shown as the profile. These rows have no Retry button, and each one
+stays for 7 days unless a later delivery to that recipient replaces it. To retry a
+relay subscription, use Retry on the Relays panel. The profile goes out again
+to every follower the next time it changes.
 
 A Relays panel sits between the followers and the inbox log. It has one row per
 subscription, with:

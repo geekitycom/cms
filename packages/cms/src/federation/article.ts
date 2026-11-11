@@ -50,12 +50,12 @@ import { htmlToText } from '../content/search.ts';
 import { respellTags } from '../content/tags.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { permalinkBasesFromSettings } from '../site/settings.ts';
-import { listUsers, primaryUser } from '../site/users.ts';
+import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { escapeAttribute, escapeText } from '../util/html.ts';
 import { absoluteHtmlUrls } from '../util/absolute-urls.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { userForAuthor } from '../content/authors.ts';
+import { postOwner } from '../content/authors.ts';
 import { permalinkOfObjectId } from '../content/permalinks.ts';
 import { postObjectId } from '../content/guids.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
@@ -72,8 +72,8 @@ import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } f
 import { resolvedTarget } from './reply-targets.ts';
 
 /**
- * The user a post is announced by: the one its `author` names, and the site's
- * first account for one that names nobody.
+ * The user a post is announced by: its {@link postOwner}, the same user who may
+ * edit it over Micropub and MCP.
  *
  * A post is attributed to a person rather than to the site, and
  * `userForAuthor` is the one rule that decides which — a username exactly, a
@@ -90,8 +90,7 @@ export function documentAuthor(
   context: Context<FederationContextData>,
   document: Document,
 ): User | undefined {
-  const { dataDir } = context.data.config;
-  return userForAuthor(listUsers(dataDir), document.author) ?? primaryUser(dataDir);
+  return postOwner(listUsers(context.data.config.dataDir), document.author);
 }
 
 /**

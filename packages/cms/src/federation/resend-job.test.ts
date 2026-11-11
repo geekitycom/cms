@@ -62,6 +62,7 @@ function services(
     store: {
       listFederated: () => Object.keys(reports).map((path) => ({ path }) as Document),
     },
+    content: { reread: () => Promise.resolve() },
     delivery: {
       resend(path) {
         resent.push(path);

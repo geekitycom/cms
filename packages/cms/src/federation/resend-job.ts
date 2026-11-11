@@ -1,4 +1,5 @@
 import type { CatalogReader } from '../content/store.ts';
+import type { ContentSync } from '../content/sync.ts';
 import { jobName } from '../jobs/types.ts';
 import type { JobDefinition, Json } from '../jobs/types.ts';
 import { isRecord } from '../util/guards.ts';
@@ -42,6 +43,7 @@ export const RESEND_JOB = jobName<ResendPayload, ResendReport>('resend');
 
 export interface ResendJobServices {
   readonly store: Pick<CatalogReader, 'listFederated'>;
+  readonly content: Pick<ContentSync, 'reread'>;
   readonly delivery: Pick<DeliveryService, 'resend'>;
   readonly webmentions: Pick<WebmentionService, 'send'>;
 }
@@ -59,6 +61,7 @@ export function resendJob(services: ResendJobServices): JobDefinition<ResendPayl
       const posts: ResendPost[] = [];
       for (const path of paths) {
         context.signal.throwIfAborted();
+        await services.content.reread(path);
         const report = await services.delivery.resend(path);
         const links = payload.webmentions ? await services.webmentions.send(path) : undefined;
         const activity = report === undefined ? null : resendActivity(report);

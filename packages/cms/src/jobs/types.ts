@@ -27,6 +27,8 @@ export type JobState =
       readonly claimer?: Claimer;
       readonly startedAt: string;
       readonly progress?: Progress;
+      /** Set when the job ends with its claimer: another queue does not take it back. */
+      readonly resumable?: false;
     }
   | {
       readonly state: 'finished';
@@ -136,9 +138,11 @@ export interface JobQueue {
    * Run one queued job in this process and resolve with its final status,
    * with no transport and no start-up recovery: what a CLI command does
    * beside a server that may be running. A job another process claimed first
-   * is waited for instead.
+   * is waited for instead. With `resumable: false`, a queue that finds this
+   * process gone marks the job interrupted rather than running it again: a
+   * person who stopped a command meant it to stop.
    */
-  run(id: string): Promise<JobStatus>;
+  run(id: string, options?: { readonly resumable?: boolean }): Promise<JobStatus>;
   /** Recover the jobs no worker owns and start taking messages. */
   start(): Promise<void>;
   /** Stop taking messages and abort the running job's signal. */

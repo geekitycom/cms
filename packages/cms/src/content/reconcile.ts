@@ -12,6 +12,7 @@ import {
 } from './original.ts';
 import { ignoredWikiKeys, parseDocument } from './parser.ts';
 import { replyTarget } from './post-type.ts';
+import { withDocumentWrites } from './save.ts';
 import { DuplicatePermalinkError } from './store.ts';
 import type { DocumentLookup, IndexWriter } from './store.ts';
 import type { ChangeOrigin, DocumentChange, SyncLogger } from './sync.ts';
@@ -72,8 +73,13 @@ export function createReconciler(options: CreateReconcilerOptions): Reconciler {
   }
 
   async function reconcile(relativePath: string, origin: ChangeOrigin): Promise<ReconcileOutcome> {
-    const previous = store.getByPath(relativePath);
-    const source = await readSource(path.join(contentDir, relativePath));
+    // The file and its row are read as one step against the admin's save and
+    // the federation's stamp, which write the file and then the row: read on
+    // either side of one, the stamp would look like an edit.
+    const { source, previous } = await withDocumentWrites(contentDir, async () => {
+      const read = await readSource(path.join(contentDir, relativePath));
+      return { source: read, previous: store.getByPath(relativePath) };
+    });
     if (source === undefined) return await remove(relativePath, previous, origin);
 
     let document: Document;

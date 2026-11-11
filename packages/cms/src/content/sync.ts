@@ -160,6 +160,13 @@ export interface ContentSync {
   /** Walk the content directory once, reconciling every file and dropping rows whose file is gone. */
   sync(): Promise<SyncResult>;
   /**
+   * Read one document's file again, as a scan would, when no watcher keeps the
+   * index up to date: a long command that synced once would otherwise act on
+   * what the file said when it began. With a watcher it does nothing, so an
+   * edit is still reported as one.
+   */
+  reread(relativePath: string): Promise<void>;
+  /**
    * Run the boot scan and, unless watching is off, start the watcher.
    * Resolves with what the scan did.
    */
@@ -268,6 +275,11 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
 
     sync() {
       return queue.run(scanAndSettle);
+    },
+
+    async reread(relativePath) {
+      if (options.watch !== false) return;
+      await queue.run(() => reconciler.reconcile(relativePath, 'scan'));
     },
 
     // The watch goes first and the scan after it hears changes, so a file

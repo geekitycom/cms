@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, afterEach, describe, it } from 'node:test';
 
+import { parseDocument } from './parser.ts';
 import { openContentStore } from './sqlite/open.ts';
 import type { ContentStore } from './store.ts';
 import { createContentSync } from './sync.ts';
@@ -1356,5 +1358,40 @@ describe('documents with wiki links', () => {
 
     changed.length = 0;
     assert.equal((await content.sync()).updated, 0, 'and once is enough');
+  });
+});
+
+describe('a document write that lands while a file is being reconciled', () => {
+  it('is not reported as an edit when it lands between reading the index and the file', async () => {
+    const FILE = 'posts/2026-03-04-stamped.md';
+    const before = markdown({ title: 'Stamped', permalink: '/stamped/', date: '2026-03-04' });
+    const stamped = before.replace(
+      'permalink: /stamped/',
+      "permalink: /stamped/\nactivitypub:\n  published: '2026-03-04T10:00:00Z'",
+    );
+    const dir = await contentDir({ [FILE]: before });
+    const real = await store();
+    let stampNext = false;
+    const index = {
+      ...real,
+      getByPath(relativePath: string) {
+        const row = real.getByPath(relativePath);
+        if (stampNext && relativePath === FILE) {
+          stampNext = false;
+          writeFileSync(path.join(dir, FILE), stamped, 'utf8');
+          real.upsert(parseDocument(stamped, { path: FILE }));
+        }
+        return row;
+      },
+    } as ContentStore;
+    const { sync: content, changes } = await sync(dir, { store: index });
+    await content.sync();
+    changes.length = 0;
+
+    stampNext = true;
+    await content.reread(FILE);
+
+    assert.deepEqual(changes, []);
+    assert.equal(real.getByPath(FILE)?.activitypub?.published, '2026-03-04T10:00:00Z');
   });
 });
