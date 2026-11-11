@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { watch } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
@@ -1807,6 +1807,56 @@ describe('editing a published post file on disk', () => {
     await cms.delivery.settled();
     assert.equal(delivered('Update').length, 1, `saw ${JSON.stringify(deliveries)}`);
     assert.equal(delivered('Create').length, 0, 'an edit is not a new post');
+  });
+});
+
+describe('a post file moved to another path on disk with its permalink unchanged', () => {
+  const OLD_FILE = 'posts/2026-03-04-watched.md';
+  const OBJECT_ID = `${BASE_URL}/2026/03/watched/`;
+
+  async function moveTo(newFile: string): Promise<void> {
+    const { cms, contentDir } = await site({
+      watch: true,
+      account: true,
+      files: {
+        [OLD_FILE]: publishedPost('Body.').replace(
+          'tags:',
+          "activitypub:\n  published: '2026-03-04T10:00:00Z'\ntags:",
+        ),
+      },
+    });
+    await cms.serve();
+    await cms.delivery.settled();
+    assert.deepEqual(deliveries, [], 'the boot scan announced nothing');
+
+    await mkdir(path.dirname(path.join(contentDir, newFile)), { recursive: true });
+    await rename(path.join(contentDir, OLD_FILE), path.join(contentDir, newFile));
+    await nextEvent('the move to be indexed', (done) => {
+      const timer = setInterval(() => {
+        if (
+          cms.store.getByPath(newFile) !== undefined &&
+          cms.store.getByPath(OLD_FILE) === undefined
+        ) {
+          done(undefined);
+        }
+      }, 20);
+      return () => clearInterval(timer);
+    });
+    await cms.delivery.settled();
+
+    assert.deepEqual(delivered('Delete'), [], 'the post was not withdrawn');
+    assert.deepEqual(delivered('Create'), [], 'the post was not announced again');
+    for (const update of delivered('Update')) {
+      assert.equal((update.body['object'] as Record<string, unknown>)['id'], OBJECT_ID);
+    }
+  }
+
+  it('keeps its object id when renamed in the same folder', async () => {
+    await moveTo('posts/watched.md');
+  });
+
+  it('keeps its object id when moved into a new folder', async () => {
+    await moveTo('posts/2026/watched.md');
   });
 });
 

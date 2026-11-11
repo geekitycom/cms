@@ -299,7 +299,13 @@ time. It debounces changes by 100 ms, so a burst of writes causes one re-parse.
 - **A file that does not parse** is logged and skipped. Its old row stays.
   Neither the scan nor the watcher stops.
 - **Renames.** Trashing and restoring are renames. A rename briefly leaves two
-  rows with one permalink. The row whose file is gone is dropped.
+  rows with one permalink. The row whose file is gone is dropped. The watcher
+  reports a file that changes path but keeps its permalink as one `updated`
+  event for the new path, with the old document as `previous`, not as a
+  `deleted` and a `created`. A federated post therefore keeps its object id,
+  and followers get at most an `Update`. While other changes are still
+  arriving, the watcher waits to drop the row of a file that is gone. This
+  lets the new file take the row over, whichever path the watcher reads first.
 
 Each change emits an event that a site can act on. See
 [Hooks](plugins.md#hooks).

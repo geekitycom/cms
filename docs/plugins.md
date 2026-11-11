@@ -929,7 +929,9 @@ Each event carries the whole document before and after the change, as
 `previous` and `next`. Either may be `undefined`. A subscriber can compare
 them. Each event also carries the content-relative `path` and `origin`. A
 `schedule` change carries no `previous`. No earlier event announced the post,
-so every subscriber sees its arrival as a creation. `on()` returns the function
+so every subscriber sees its arrival as a creation. A file moved to a new path
+with the same permalink is one `updated` for the new `path`, and its
+`previous` names the old path. `on()` returns the function
 that unsubscribes. `once()` and `off()` also exist.
 
 A document's `type` is `post`, `page` or `wiki`. Wiki pages publish and change

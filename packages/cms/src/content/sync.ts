@@ -1,4 +1,7 @@
+import path from 'node:path';
+
 import { messageOf } from '../util/errors.ts';
+import { exists } from '../util/files.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { isDocumentPath } from './content-tree.ts';
 import { createContentWatcher } from './content-watcher.ts';
@@ -212,21 +215,42 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     return noPathDebouncing && onlyThisRunQueued;
   }
 
+  // A rename reaches the watcher as two paths, and the old one can settle
+  // first. Its row waits for the burst to end, so the new file can take it
+  // over as a move instead of the post being deleted and created again.
+  const goneInBurst = new Set<string>();
+
   async function reconcileWatched(relativePath: string): Promise<void> {
     const paths = isDocumentPath(relativePath)
       ? [relativePath]
       : await documentsUnder(tree, relativePath);
     for (const documentPath of paths) {
-      try {
-        if (changedIndex(await reconciler.reconcile(documentPath, 'watch'))) {
-          settled.markUnsettled();
-        }
-      } catch (error) {
-        logger.warn(`Could not sync ${documentPath}: ${messageOf(error)}`);
+      if (!burstIsOver() && (await indexedFileIsGone(documentPath))) {
+        goneInBurst.add(documentPath);
+      } else {
+        await reconcileOne(documentPath);
       }
     }
-    if (settled.isUnsettled() && burstIsOver()) {
-      await settled.settle();
+    if (!burstIsOver()) return;
+    for (const documentPath of goneInBurst) await reconcileOne(documentPath);
+    goneInBurst.clear();
+    if (settled.isUnsettled()) await settled.settle();
+  }
+
+  async function indexedFileIsGone(documentPath: string): Promise<boolean> {
+    return (
+      store.getByPath(documentPath) !== undefined &&
+      !(await exists(path.join(contentDir, documentPath)).catch(() => true))
+    );
+  }
+
+  async function reconcileOne(documentPath: string): Promise<void> {
+    try {
+      if (changedIndex(await reconciler.reconcile(documentPath, 'watch'))) {
+        settled.markUnsettled();
+      }
+    } catch (error) {
+      logger.warn(`Could not sync ${documentPath}: ${messageOf(error)}`);
     }
   }
 

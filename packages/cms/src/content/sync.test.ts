@@ -870,6 +870,30 @@ describe('the watcher', () => {
     assert.equal(index.counts().trashed, 1);
   });
 
+  for (const moved of ['posts/hello.md', 'posts/2026/hello.md']) {
+    it(`reports a post renamed to ${moved} as one update of the same document`, async () => {
+      const source = markdown({
+        title: 'Hello',
+        permalink: '/2026/09/hello/',
+        date: '2026-09-02T09:00:00Z',
+      });
+      const dir = await contentDir({ 'posts/2026-09-02-hello.md': source });
+      const { sync: content, store: index, changes } = await sync(dir, { watch: true });
+      await content.start();
+      changes.length = 0;
+
+      await mkdir(path.dirname(path.join(dir, moved)), { recursive: true });
+      await rename(path.join(dir, 'posts/2026-09-02-hello.md'), path.join(dir, moved));
+      await eventually(content, () => index.getByPath(moved), 'the moved file to be indexed');
+      await caughtUp(content, dir);
+
+      assert.deepEqual(
+        besidesSentinel(changes).map((change) => [change.type, change.path, change.previous?.path]),
+        [['updated', moved, 'posts/2026-09-02-hello.md']],
+      );
+    });
+  }
+
   it('keeps watching after a file it cannot parse is saved', async () => {
     let warned: (message: string) => void = () => undefined;
     const dir = await contentDir({

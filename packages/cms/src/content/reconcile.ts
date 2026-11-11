@@ -38,14 +38,17 @@ export function createReconciler(options: CreateReconcilerOptions): Reconciler {
   const { store, contentDir, logger, emit, wikiBase } = options;
   const handles = handleDirectory(contentDir);
 
-  async function indexOverStaleRow(document: Document, origin: ChangeOrigin): Promise<void> {
+  async function indexOverStaleRow(document: Document): Promise<Document | undefined> {
     try {
       store.upsert(document);
+      return undefined;
     } catch (error) {
       const stalePath = await conflictingPathWhoseFileIsGone(error);
       if (stalePath === undefined) throw error;
-      await dropStaleRow(stalePath, origin);
+      const stale = store.getByPath(stalePath);
+      store.remove(stalePath);
       store.upsert(document);
+      return stale;
     }
   }
 
@@ -55,14 +58,6 @@ export function createReconciler(options: CreateReconcilerOptions): Reconciler {
     if (conflicting === undefined) return undefined;
     if (await exists(path.join(contentDir, conflicting))) return undefined;
     return conflicting;
-  }
-
-  async function dropStaleRow(stalePath: string, origin: ChangeOrigin): Promise<void> {
-    const stale = store.getByPath(stalePath);
-    store.remove(stalePath);
-    if (stale !== undefined) {
-      await emit({ type: 'deleted', path: stalePath, previous: stale, next: undefined, origin });
-    }
   }
 
   async function remove(
@@ -96,15 +91,19 @@ export function createReconciler(options: CreateReconcilerOptions): Reconciler {
     warnAboutIgnoredFields(relativePath, document, logger);
     if (document.type === 'wiki') warnAboutIgnoredWikiKeys(relativePath, source, logger);
 
+    let movedFrom: Document | undefined;
     try {
-      await indexOverStaleRow(document, origin);
+      movedFrom = await indexOverStaleRow(document);
     } catch (error) {
       logger.warn(`Could not index ${relativePath}: ${messageOf(error)}`);
       return 'skipped';
     }
 
-    const type = previous === undefined ? 'created' : 'updated';
-    await emit({ type, path: relativePath, previous, next: document, origin });
+    // A row displaced from a file that is gone is the same document under a
+    // new path, so subscribers see it change rather than vanish and reappear.
+    const was = previous ?? movedFrom;
+    const type = was === undefined ? 'created' : 'updated';
+    await emit({ type, path: relativePath, previous: was, next: document, origin });
     return type;
   }
 
