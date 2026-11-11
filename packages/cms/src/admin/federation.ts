@@ -237,6 +237,19 @@ export function mountFederationScreen(
 
     if (relay === undefined) {
       flash(c, 'error', 'The site does not subscribe to that relay, so there is nothing to retry.');
+    } else if (relay.state === 'accepted') {
+      flash(
+        c,
+        'error',
+        `${relay.inboxId} has already accepted the subscription, so the follow was not sent again.`,
+      );
+    } else if (relay.state === 'rejected') {
+      flash(
+        c,
+        'error',
+        `${relay.inboxId} refused the subscription, so the follow was not sent again. ` +
+          'To ask again, remove the relay and add it back.',
+      );
     } else {
       flash(
         c,

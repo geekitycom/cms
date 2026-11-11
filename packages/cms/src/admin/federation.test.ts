@@ -1007,13 +1007,11 @@ describe('the relays panel', () => {
   it('offers Retry for a pending relay, which sends the follow again (AC #5)', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);
-    cms.admin.putRelay({
-      inboxId: RELAY_INBOX,
-      actorId: null,
-      state: 'pending',
-      reason: null,
-      followId: `${ACTOR_URL}#relay-follow/1`,
-    });
+    await cms.settings.set('site', new Map([['relays', [RELAY_INBOX]]]), 'admin');
+    await cms.relays.settled();
+    const firstFollow = cms.admin.getRelay(RELAY_INBOX)?.followId;
+    assert.ok(firstFollow, 'listing the relay followed it');
+    deliveries.length = 0;
 
     const { html, token } = await federationForm(agent);
     assert.match(html, /Waiting/);
@@ -1036,7 +1034,7 @@ describe('the relays panel', () => {
     );
     assert.notEqual(
       cms.admin.getRelay(RELAY_INBOX)?.followId,
-      `${ACTOR_URL}#relay-follow/1`,
+      firstFollow,
       'and the retry is a follow of its own',
     );
   });

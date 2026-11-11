@@ -617,7 +617,13 @@ site can pick without asking.
 The relay answers `Accept` or `Reject`, possibly days later, because a
 subscription may need a human to approve it. The answer arrives in the site's
 inbox and updates the subscription. Removing the line sends an `Undo` of the
-same `Follow`.
+same `Follow`. Subscription changes run one at a time, and each one reads the
+setting and the records when its turn comes. A relay that is added and then
+removed while earlier changes are still sending leaves no record.
+
+Retry on the federation screen sends a new `Follow` only to a pending relay
+that the setting still lists. An accepted relay keeps its subscription. A
+rejected relay is not asked again: remove it and add it back to ask again.
 
 The site delivers only to an accepted relay. An accepted relay is one more
 inbox in the fan-out. It receives, as well as the author's followers:
@@ -638,7 +644,7 @@ the actor id.
 ```ts
 cms.admin.listRelays(); // inbox, actor, state, reason, follow id, times
 await cms.relays.sync(); // reconcile the records with the setting
-await cms.relays.retry(inboxId); // send the follow again
+await cms.relays.retry(inboxId); // send the follow again, if still pending
 ```
 
 The records live in `ap_relays`, keyed by inbox. They are operational state,
