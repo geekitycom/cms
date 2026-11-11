@@ -1223,6 +1223,28 @@ describe('the delivery outcome cache', () => {
     it('go once a later delivery about the same post reaches that actor', async () => {
       const admin = await store();
       admin.recordDelivery(
+        outcome({
+          activityId: `${OBJECT_ID}#update/2026-03-04T10:00:00.000Z`,
+          activityType: 'Update',
+          status: 'failed',
+          error: '502',
+          attemptedAt: '2026-03-04T10:00:00.000Z',
+        }),
+      );
+      admin.recordDelivery(
+        outcome({
+          activityId: `${OBJECT_ID}#update/2026-03-05T10:00:00.000Z`,
+          activityType: 'Update',
+          attemptedAt: '2026-03-05T10:00:00.000Z',
+        }),
+      );
+
+      assert.deepEqual(admin.listStandingFailuresSince(SINCE), []);
+    });
+
+    it('keep a failed Create standing when only a later Update reached that actor', async () => {
+      const admin = await store();
+      admin.recordDelivery(
         outcome({ status: 'failed', error: '502', attemptedAt: '2026-03-04T10:00:00.000Z' }),
       );
       admin.recordDelivery(
@@ -1230,6 +1252,33 @@ describe('the delivery outcome cache', () => {
           activityId: `${OBJECT_ID}#update/2026-03-05T10:00:00.000Z`,
           activityType: 'Update',
           attemptedAt: '2026-03-05T10:00:00.000Z',
+        }),
+      );
+
+      assert.deepEqual(
+        admin.listStandingFailuresSince(SINCE).map((failure) => failure.activityType),
+        ['Create'],
+      );
+    });
+
+    it('drop a failed Create once the post is deleted and announced again under a new id', async () => {
+      const admin = await store();
+      admin.recordDelivery(
+        outcome({ status: 'failed', error: '502', attemptedAt: '2026-03-04T10:00:00.000Z' }),
+      );
+      admin.recordDelivery(
+        outcome({
+          activityId: `${OBJECT_ID}#delete`,
+          activityType: 'Delete',
+          attemptedAt: '2026-03-05T10:00:00.000Z',
+        }),
+      );
+      const reissued = `${OBJECT_ID}?v=2`;
+      admin.recordDelivery(
+        outcome({
+          activityId: `${reissued}#create`,
+          objectId: reissued,
+          attemptedAt: '2026-03-06T10:00:00.000Z',
         }),
       );
 

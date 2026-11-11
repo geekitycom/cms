@@ -140,6 +140,29 @@ describe('which deliveries a retry sends again', () => {
     );
   });
 
+  it('still owes the announcement to a recipient whose Create failed when a later Update reached them', () => {
+    const site = services([
+      row('one', 'carol', INBOX, 'sent', '2026-03-02T00:00:00Z'),
+      row('one', 'carol', INBOX, 'failed', '2026-03-01T00:00:00Z', 'Create'),
+      row('one', 'dave', INBOX, 'sent', '2026-03-02T00:00:00Z', 'Delete'),
+      row('one', 'dave', INBOX, 'failed', '2026-03-01T00:00:00Z', 'Create'),
+    ]);
+
+    assert.deepEqual(failedRetries(site, { path: null, inbox: INBOX }), [
+      {
+        path: fileOf('one'),
+        recipients: [
+          {
+            actorId: 'https://social.example/users/carol',
+            inboxId: INBOX,
+            error: 'HTTP 403',
+            missed: { post: 'announcement', pin: false },
+          },
+        ],
+      },
+    ]);
+  });
+
   it('retries a recipient whose newest outcome was never seen, and sends the Create when that was the Create', () => {
     const site = services([
       row('one', 'carol', INBOX, 'unknown', '2026-03-01T00:00:00Z', 'Create'),

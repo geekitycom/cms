@@ -92,7 +92,7 @@ export function failedRetries(services: RetryPlanServices, filter: RetryFilter):
     const key = JSON.stringify([path, row.actorId]);
     let held = histories.get(key);
     if (held === undefined) {
-      held = { path, newest: row };
+      held = { path };
       histories.set(key, held);
     }
     if (row.activityType === 'Create') held.create ??= row;
@@ -101,14 +101,16 @@ export function failedRetries(services: RetryPlanServices, filter: RetryFilter):
   }
 
   const retries = new Map<string, RetryRecipient[]>();
-  for (const { path, newest, ...rest } of histories.values()) {
-    if (!RETRIED.has(newest.status)) continue;
-    if (filter.inbox !== null && newest.inboxId !== filter.inbox) continue;
+  for (const { path, ...rows } of histories.values()) {
+    const missed = missedFrom(rows);
+    const failure = newestFailure(rows, missed);
+    if (failure === undefined) continue;
+    if (filter.inbox !== null && failure.inboxId !== filter.inbox) continue;
     const recipient = {
-      actorId: newest.actorId,
-      inboxId: newest.inboxId,
-      error: newest.error,
-      missed: missedFrom(rest),
+      actorId: failure.actorId,
+      inboxId: failure.inboxId,
+      error: failure.error,
+      missed,
     };
     const held = retries.get(path);
     if (held === undefined) retries.set(path, [recipient]);
@@ -117,22 +119,40 @@ export function failedRetries(services: RetryPlanServices, filter: RetryFilter):
   return [...retries].map(([path, recipients]) => ({ path, recipients }));
 }
 
-/** One recipient's newest delivery rows about one post, newest overall and of each kind. */
+/** One recipient's newest delivery rows about one post, of each kind. */
 type RecipientHistory = {
   readonly path: string;
-  readonly newest: Delivery;
   create?: Delivery;
   post?: Delivery;
   pin?: Delivery;
 };
 
-function missedFrom({ create, post, pin }: Omit<RecipientHistory, 'path' | 'newest'>): Missed {
-  const failed = (row: Delivery | undefined): boolean =>
-    row !== undefined && RETRIED.has(row.status);
+type RecipientRows = Omit<RecipientHistory, 'path'>;
+
+function failed(row: Delivery | undefined): row is Delivery {
+  return row !== undefined && RETRIED.has(row.status);
+}
+
+/**
+ * A failed `Create` is owed even after a later `Update` went through, because
+ * a peer drops an `Update` of a status it never stored; only a later `Delete`
+ * settles it.
+ */
+function missedFrom({ create, post, pin }: RecipientRows): Missed {
+  const withdrawn = post?.activityType === 'Delete' && !failed(post);
   return {
-    post: failed(create) ? 'announcement' : failed(post) ? 'revision' : null,
+    post: failed(create) && !withdrawn ? 'announcement' : failed(post) ? 'revision' : null,
     pin: failed(pin),
   };
+}
+
+function newestFailure({ create, post, pin }: RecipientRows, missed: Missed): Delivery | undefined {
+  const owed = [
+    missed.post === 'announcement' ? create : undefined,
+    missed.post === null ? undefined : post,
+    missed.pin ? pin : undefined,
+  ].filter(failed);
+  return owed.toSorted((a, b) => b.attemptedAt.localeCompare(a.attemptedAt))[0];
 }
 
 /**

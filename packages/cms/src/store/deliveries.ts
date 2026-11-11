@@ -240,6 +240,8 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
           WHERE later.actor_id = failure.actor_id
             AND later.object_id = failure.object_id
             AND (later.attempted_at, later.rowid) > (failure.attempted_at, failure.rowid)
+            -- A peer drops an Update of a status it never stored.
+            AND (failure.activity_type <> 'Create' OR later.activity_type IN ('Create', 'Delete'))
         )
       ORDER BY attempted_at DESC, rowid DESC
     `),

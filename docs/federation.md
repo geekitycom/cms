@@ -856,17 +856,19 @@ The Failed deliveries panel lists each delivery from the last 7 days that
 failed and is still the newest delivery of its object to that recipient. Each
 row shows the post, the activity, when it was sent, the inbox and the error. A
 failure leaves the list when the same object id is delivered to the same
-recipient again, whatever activity it carries, or when it is 7 days old. A
-delivery about another post that shares the slug does not count. If that later
-delivery fails too, it takes the earlier one's place. The
+recipient again, or when it is 7 days old. A failed `Create` leaves only for a
+later `Create` or `Delete`, because a peer drops an `Update` of a post it never
+stored. A delivery about another post that shares the slug does not count. If
+that later delivery fails too, it takes the earlier one's place. The
 dashboard's Needs attention card counts the same failures and links to this
 panel.
 
 **Retry** on a row queues the `retry-deliveries` job for that post and inbox.
 It is the job the MCP `retry_deliveries` tool queues. The job sends the post,
 as its file reads then, to the recipients at that inbox whose newest delivery
-failed. A recipient that never received the `Create` gets the `Create`; the
-others get an `Update`. A recipient whose pin or unpin failed then gets the
+of an activity failed. A recipient whose newest `Create` failed gets the
+`Create`, even when a later `Update` reached it, unless a `Delete` went out
+since. The others get an `Update`. A recipient whose pin or unpin failed then gets the
 `Add` or the `Remove` again. The panel shows the latest retry job as the Resend
 page shows the latest resend.
 
