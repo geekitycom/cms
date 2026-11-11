@@ -5,89 +5,85 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { SqliteMessageQueue } from '@fedify/sqlite';
-import { Temporal } from '@js-temporal/polyfill';
 
-import { createCms } from '../index.ts';
-import type { Cms } from '../index.ts';
-import type { NewDelivery } from '../store/deliveries.ts';
+import { openAdminStore } from '../store/admin-store.ts';
+import type { AdminStore } from '../store/admin-store.ts';
 import { FEDERATION_QUEUE_TABLE, openQueueDatabase } from '../store/queue-database.ts';
+import { markForgottenDeliveries } from './forgotten-deliveries.ts';
 
 const temporaryDirs: string[] = [];
-const started: Cms[] = [];
-
+const openStores: AdminStore[] = [];
 after(async () => {
-  for (const cms of started) await cms.close();
+  for (const opened of openStores) opened.close();
   await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 const NOW = new Date('2026-06-01T00:00:00.000Z');
-const OBJECT_ID = 'https://forgotten.example/2026/03/hello/';
-const ACTIVITY_ID = `${OBJECT_ID}#update/1`;
-const FORGOTTEN_INBOX = 'https://forgotten.example/inbox';
-const WAITING_INBOX = 'https://waiting.example/inbox';
+const CREATE = 'https://blog.example/2026/03/hello/#create';
+const UPDATE = 'https://blog.example/2026/03/hello/#update';
 
-function queued(inboxId: string): NewDelivery {
-  return {
-    activityId: ACTIVITY_ID,
-    activityType: 'Update',
-    objectId: OBJECT_ID,
-    slug: 'hello',
-    actorId: inboxId.replace('/inbox', '/users/ada'),
-    inboxId,
-    status: 'queued',
-    error: null,
-    attemptedAt: '2026-03-01T00:00:00.000Z',
-  };
-}
-
-async function site(queue?: null): Promise<{ cms: Cms; dataDir: string }> {
-  const contentDir = await mkdtemp(path.join(tmpdir(), 'geekity-forgotten-content-'));
-  const dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-forgotten-data-'));
-  temporaryDirs.push(contentDir, dataDir);
-  const cms = createCms({
-    contentDir,
-    dataDir,
-    port: 0,
-    now: () => NOW,
-    baseUrl: 'https://forgotten.example',
-    ...(queue === null ? { federation: { queue: null } } : {}),
-  });
-  started.push(cms);
-  return { cms, dataDir };
-}
-
-function statuses(cms: Cms): string[][] {
-  return cms.admin.listDeliveries(ACTIVITY_ID).map((row) => [row.inboxId, row.status]);
-}
-
-describe('deliveries the queue no longer holds', () => {
-  it('read as unknown once the site starts, while one the queue still holds stays queued', async () => {
-    const { cms, dataDir } = await site();
-    cms.admin.recordDelivery(queued(FORGOTTEN_INBOX));
-    cms.admin.recordDelivery(queued(WAITING_INBOX));
+describe('deliveries the queue forgot', () => {
+  it('are marked unknown unless a waiting outbox message or fanout carries their activity and inbox together', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-forgotten-'));
+    temporaryDirs.push(dataDir);
     const queue = new SqliteMessageQueue(openQueueDatabase(dataDir), {
       tableName: FEDERATION_QUEUE_TABLE,
     });
-    await queue.enqueue(
-      { type: 'outbox', activityId: ACTIVITY_ID, inbox: WAITING_INBOX, attempt: 1 },
-      { delay: Temporal.Duration.from({ hours: 1 }) as never },
-    );
+    await queue.enqueue({
+      type: 'outbox',
+      activityId: CREATE,
+      activityType: 'https://www.w3.org/ns/activitystreams#Create',
+      inbox: 'https://outbox.example/inbox',
+      attempt: 1,
+    });
+    await queue.enqueue({
+      type: 'fanout',
+      activityId: UPDATE,
+      activityType: 'https://www.w3.org/ns/activitystreams#Update',
+      inboxes: {
+        'https://fanout-a.example/inbox': { actorIds: [], sharedInbox: true },
+        'https://fanout-b.example/inbox': { actorIds: [], sharedInbox: false },
+      },
+    });
     queue[Symbol.dispose]();
+    const admin = openAdminStore({ dataDir });
+    openStores.push(admin);
+    const rows: [activityId: string, inbox: string][] = [
+      [CREATE, 'https://outbox.example/inbox'],
+      [CREATE, 'https://fanout-a.example/inbox'],
+      [CREATE, 'https://elsewhere.example/inbox'],
+      [UPDATE, 'https://fanout-a.example/inbox'],
+      [UPDATE, 'https://fanout-b.example/inbox'],
+      [UPDATE, 'https://outbox.example/inbox'],
+    ];
+    for (const [activityId, inbox] of rows) {
+      admin.recordDelivery({
+        activityId,
+        activityType: activityId === CREATE ? 'Create' : 'Update',
+        objectId: 'https://blog.example/2026/03/hello/',
+        slug: 'hello',
+        actorId: inbox.replace('/inbox', '/users/ada'),
+        inboxId: inbox,
+        status: 'retrying',
+        error: 'Their instance answered 503.',
+        attemptedAt: '2026-03-01T00:00:00.000Z',
+      });
+    }
 
-    await cms.serve();
+    markForgottenDeliveries(admin, { dataDir, queue: undefined, now: () => NOW });
 
-    assert.deepEqual(statuses(cms), [
-      [FORGOTTEN_INBOX, 'unknown'],
-      [WAITING_INBOX, 'queued'],
-    ]);
-  });
-
-  it('all read as unknown on a site that sends without a queue', async () => {
-    const { cms } = await site(null);
-    cms.admin.recordDelivery(queued(FORGOTTEN_INBOX));
-
-    await cms.serve();
-
-    assert.deepEqual(statuses(cms), [[FORGOTTEN_INBOX, 'unknown']]);
+    assert.deepEqual(
+      [CREATE, UPDATE].flatMap((activityId) =>
+        admin.listDeliveries(activityId).map((row) => [row.activityId, row.inboxId, row.status]),
+      ),
+      [
+        [CREATE, 'https://elsewhere.example/inbox', 'unknown'],
+        [CREATE, 'https://fanout-a.example/inbox', 'unknown'],
+        [CREATE, 'https://outbox.example/inbox', 'retrying'],
+        [UPDATE, 'https://fanout-a.example/inbox', 'retrying'],
+        [UPDATE, 'https://fanout-b.example/inbox', 'retrying'],
+        [UPDATE, 'https://outbox.example/inbox', 'unknown'],
+      ],
+    );
   });
 });

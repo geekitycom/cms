@@ -1340,6 +1340,45 @@ describe('the delivery outcome cache', () => {
         ['failed', 'sent'],
       );
     });
+
+    it('are found among 10,000 retrying rows and 10,000 waiting messages in under a second', async () => {
+      const admin = await store();
+      const db = new DatabaseSync(admin.file);
+      const insert = db.prepare(`
+        INSERT INTO ap_deliveries (
+          activity_id, activity_type, object_id, slug, actor_id, inbox_id, status, error, attempted_at
+        ) VALUES (?, 'Create', ?, ?, ?, ?, 'retrying', '500', '2026-03-04T00:00:00.000Z')
+      `);
+      const waiting: { activityId: string; inbox: string }[] = [];
+      db.exec('BEGIN');
+      for (let host = 0; host < 10_000; host += 1) {
+        const objectId = `https://blog.example/2026/03/post-${host % 20}/`;
+        const inbox = `https://host-${host}.example/inbox`;
+        insert.run(
+          `${objectId}#create`,
+          objectId,
+          `post-${host % 20}`,
+          `https://host-${host}.example/users/u`,
+          inbox,
+        );
+        waiting.push({ activityId: `${objectId}#create`, inbox });
+      }
+      db.exec('COMMIT');
+
+      const started = performance.now();
+      admin.markUnsettledDeliveriesUnknown({ before: BEFORE, waiting });
+      const elapsed = performance.now() - started;
+
+      const statuses = db
+        .prepare('SELECT status, COUNT(*) AS count FROM ap_deliveries GROUP BY status')
+        .all();
+      db.close();
+      assert.deepEqual(
+        statuses.map((row) => [row['status'], row['count']]),
+        [['retrying', 10_000]],
+      );
+      assert.ok(elapsed < 1000, `marking them took ${Math.round(elapsed)} ms`);
+    });
   });
 });
 

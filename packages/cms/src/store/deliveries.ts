@@ -190,10 +190,11 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
       UPDATE ap_deliveries SET status = 'unknown'
       WHERE status IN ('queued', 'retrying')
         AND attempted_at < :before
-        AND NOT EXISTS (
-          SELECT 1 FROM json_each(:waiting) AS waiting
-          WHERE json_extract(waiting.value, '$.activityId') = ap_deliveries.activity_id
-            AND json_extract(waiting.value, '$.inbox') = ap_deliveries.inbox_id
+        -- Uncorrelated, so SQLite reads the waiting list into a lookup once
+        -- instead of scanning it again for every row.
+        AND (activity_id, inbox_id) NOT IN (
+          SELECT json_extract(value, '$.activityId'), json_extract(value, '$.inbox')
+          FROM json_each(:waiting)
         )
     `),
     listDeliveries: db.prepare(`
