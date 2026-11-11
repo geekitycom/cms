@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.52.0](https://github.com/geekitycom/cms/compare/v0.51.0...v0.52.0) (2026-11-11)
+
+
+### Features
+
+* **cms:** add geekity user password and make account writes durable ([7b7add0](https://github.com/geekitycom/cms/commit/7b7add01206adafa5be361f3e11e27f052bbb09d))
+
+
+### Bug Fixes
+
+* **cms:** add the first admin only while the users file is empty ([790f1dd](https://github.com/geekitycom/cms/commit/790f1dde980dcf0fe3012f8ac683ee3c50bf83e1))
+* **cms:** ask for the current password to change an email address and notify the old one ([fb4fbd8](https://github.com/geekitycom/cms/commit/fb4fbd8090cbcd46545fc78bc731518244a36ec9))
+* **cms:** ask for the current password when adding a user ([f0b0e49](https://github.com/geekitycom/cms/commit/f0b0e49773ea2d7779c10db5ef7717e3e31eb25c))
+* **cms:** bind sessions, reset links and tokens to a per-user uid ([1c11b37](https://github.com/geekitycom/cms/commit/1c11b376838cd757dbf1ca1250816e805c1f3cec))
+* **cms:** bound the length and number of keys the sign-in throttle keeps ([5a97324](https://github.com/geekitycom/cms/commit/5a97324155ecf5841452427a4c9c5663a37afeaa))
+* **cms:** cap the session lifetime and keep session expiry within year 9999 ([db9174a](https://github.com/geekitycom/cms/commit/db9174abb69caee4498ef9f591334f55d8b77ca0))
+* **cms:** check admin return addresses with one helper that redirects to the parsed path ([154cd05](https://github.com/geekitycom/cms/commit/154cd05ec608dc43673a0a2193735b5ccdec2b6e))
+* **cms:** check avatars on save and leave a bad one out of the actor ([0a3df74](https://github.com/geekitycom/cms/commit/0a3df745cca89d4fce565ef39fa09fdc376e0fe3))
+* **cms:** check user deletion rules against the users file as it is written ([5585c29](https://github.com/geekitycom/cms/commit/5585c290ff4139bd85b1db96f3ef4fb88a885c8f))
+* **cms:** clear only the cache at logout and warn about a localhost base url ([73965c0](https://github.com/geekitycom/cms/commit/73965c0c4e65a8066ae5e3df1dc2702a22b676f6))
+* **cms:** compare csrf tokens by byte length ([2cad4b2](https://github.com/geekitycom/cms/commit/2cad4b2aea8d10480e6e29cdc2741e70797c62f4))
+* **cms:** count wrong current passwords on the sign-in throttle ([fcc1361](https://github.com/geekitycom/cms/commit/fcc1361d7cb419f91d0e015f47f5bb735c4ea211))
+* **cms:** disconnect connected apps when a password is reset or changed ([c92051f](https://github.com/geekitycom/cms/commit/c92051f24a2e940a440f1e931927a51cf2511e36))
+* **cms:** end outstanding reset links on a new request or a password or email change ([98d63d1](https://github.com/geekitycom/cms/commit/98d63d1e42f1443a2329b0b660e557fcea99579f))
+* **cms:** end sessions and reset links issued before a password change ([d074e5c](https://github.com/geekitycom/cms/commit/d074e5ca8f8a5000f34af723909b205e128fc8c1))
+* **cms:** give anonymous sessions a short lifetime and sweep expired ones ([25bb75a](https://github.com/geekitycom/cms/commit/25bb75a270c955be4aca11b056846f365a29d93a))
+* **cms:** harden password hashing and the sign-in address key ([0ddf5df](https://github.com/geekitycom/cms/commit/0ddf5df8d1bfe067b8ed829996f7456b9f995b82))
+* **cms:** hold profile links and avatars to the link rule wherever a profile is read or written ([b9afab5](https://github.com/geekitycom/cms/commit/b9afab5d6ab2171a7ee6fca8c616eebcb74a527a))
+* **cms:** keep stored users file fields a save does not change ([a51d66a](https://github.com/geekitycom/cms/commit/a51d66a5cd5a8a50527bb82ea14d2ff53eaeb059))
+* **cms:** limit the size of admin request bodies before the form is parsed ([3193ea8](https://github.com/geekitycom/cms/commit/3193ea858cc9a57802aba0277aba5b651a06b78a))
+* **cms:** lock sign-in attempts by name and address and clear counts after a reset ([24e4353](https://github.com/geekitycom/cms/commit/24e4353edb2cab40c783fb4d83f14f35824974e9))
+* **cms:** make admin path decisions on the decoded routing path ([681d755](https://github.com/geekitycom/cms/commit/681d7552a020380337eb8d6ddc2df9e0e4a5271e))
+* **cms:** mark admin responses cache-control no-store ([f2fd66e](https://github.com/geekitycom/cms/commit/f2fd66e62be5459b53abd2ddaca252a521afa6c2))
+* **cms:** read kept data files strictly so only a missing file reads as empty ([4b18a7e](https://github.com/geekitycom/cms/commit/4b18a7e135c6d569212ccc5db98e76265bba350f))
+* **cms:** refuse a new username that matches an existing one apart from case or dots ([b7d2982](https://github.com/geekitycom/cms/commit/b7d298284e7d00d0afb3223432e5eb17d8536fa8))
+* **cms:** refuse a profile or email save from a form older than the stored value ([350f415](https://github.com/geekitycom/cms/commit/350f415feba7df6ef33849aa6420750ab6287f48))
+* **cms:** refuse a users file whose entries repeat an id or username ([f1a20d1](https://github.com/geekitycom/cms/commit/f1a20d111502f2e7a0967e16c9983e6119b0ef03))
+* **cms:** serialise file updates across processes with a lock file beside the file ([dc57625](https://github.com/geekitycom/cms/commit/dc57625cc12918828bd6d57f9c18c95f24319529))
+* **cms:** show a generated password in the add-user response instead of a session flash ([c656db6](https://github.com/geekitycom/cms/commit/c656db615d16e26986b34cd4f6c96128dbc5ffe6))
+* **cms:** spend a password reset link once, before the new password is written ([2dd2ba7](https://github.com/geekitycom/cms/commit/2dd2ba797a5379226d11ce0cdbb6ec4595a61d08))
+* **cms:** store a hash of the session id ([f55a2ec](https://github.com/geekitycom/cms/commit/f55a2ec67e283b2c6b0b3acf9501f0e446af7bfd))
+* **cms:** tidy profile links, the admin bar, stored actor ids and profile updates ([2322355](https://github.com/geekitycom/cms/commit/2322355d463c4b6a7f941f1eab2b8bd10efe883e))
+
 ## [0.51.0](https://github.com/geekitycom/cms/compare/v0.50.1...v0.51.0) (2026-11-01)
 
 
