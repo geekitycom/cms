@@ -392,9 +392,12 @@ Three checks must pass before anything is written:
 A file that is too big gets a 413, and a file of the wrong type gets a 415,
 both as JSON. See
 [`uploadMaxBytes`, `uploadMediaMaxBytes` and `uploadTypes`](configuration.md#uploads-and-images).
-A check on `Content-Length` runs before the server reads the body. It accepts
-anything under the larger of the two limits. The server then holds the file to
-its own kind's limit.
+Before the guard parses the form, the server counts the body's bytes as they
+arrive and stops at the larger of the two limits plus 8 KiB for the multipart
+envelope. It does not rely on `Content-Length`, so a body sent without one is
+held to the same limit. The server then holds the file to its own kind's
+limit. [Request size](security.md#request-size) lists the limits on the other
+admin forms.
 
 The same rules run behind [the media library](media.md#the-media-library). The
 library uses a form, not `fetch`, so a body over the limit posted from a
@@ -806,10 +809,14 @@ When `baseUrl` is an `https` URL, the cookie is `Secure` and named
 `sessionLifetime`. The server deletes an expired session, not only ignores it.
 
 Every mutating admin form carries a per-session CSRF token. The server refuses
-a `POST` without a valid token with 403. This includes the login and setup
-forms. They get the token from a short anonymous session that the server
-creates when it first renders the form. Logging in discards that session and
-starts a new one, so a planted session id cannot become a logged-in one.
+a `POST` without a valid token with 403. This includes the login, setup and
+password recovery forms. They get the token from an anonymous session that the
+server creates when it first renders the form. An anonymous session lasts one
+hour, or `sessionLifetime` if that is shorter, and creating one deletes every
+expired session. If a form is sent after its anonymous session has expired, the
+server shows the form again with a message to try again. Logging in discards
+the anonymous session and starts a new one, so a planted session id cannot
+become a logged-in one.
 
 Adding a user enforces the same rules as `/admin/setup` and
 `geekity user add`:

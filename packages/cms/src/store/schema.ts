@@ -598,6 +598,10 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE password_resets ADD COLUMN user_uid TEXT;
     `,
   },
+  {
+    version: 29,
+    sql: `DELETE FROM sessions;`,
+  },
 ];
 
 export function openAdminDatabase(dataDir: string, now: Clock): DatabaseSync {

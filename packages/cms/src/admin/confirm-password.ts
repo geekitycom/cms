@@ -3,8 +3,8 @@ import type { Context } from 'hono';
 import type { ResolvedConfig } from '../config.ts';
 import { findUserById, verifyUserPassword } from '../site/users.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { clientAddress, describeWait, loginKeys } from '../web/throttle.ts';
-import type { LoginThrottle } from '../web/throttle.ts';
+import { clientAddress, describeWait } from '../web/throttle.ts';
+import type { SignInThrottle } from '../web/throttle.ts';
 
 export type Confirmation =
   | { readonly kind: 'confirmed'; readonly username: string }
@@ -16,7 +16,7 @@ export type Refusal = Exclude<Confirmation, { kind: 'confirmed' }>;
 export type ConfirmPassword = (c: Context<GeekityEnv>, password: string) => Confirmation;
 
 export function createConfirmPassword(
-  throttle: (config: ResolvedConfig) => LoginThrottle,
+  throttle: (config: ResolvedConfig) => SignInThrottle,
 ): ConfirmPassword {
   return (c, password) => {
     const { config } = c.var;
@@ -24,7 +24,11 @@ export function createConfirmPassword(
     const user = userId == null ? undefined : findUserById(config.dataDir, userId);
     if (user === undefined) return { kind: 'wrong' };
 
-    const keys = loginKeys(user.username, clientAddress(c, config));
+    const keys = {
+      identifier: user.username,
+      address: clientAddress(c, config),
+      confirming: true,
+    };
     const throttled = throttle(config);
     const wait = throttled.retryAfter(keys);
     if (wait !== undefined) return { kind: 'locked', wait };

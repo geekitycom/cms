@@ -9,13 +9,16 @@ import type { GeekityEnv } from './env.ts';
  * How far the wait is allowed to double.
  *
  * The lockout doubles for every failure past the threshold, so the wait after
- * `n` extra failures is `lockoutSeconds * 2^n`. Left alone that reaches years,
- * which is a denial of service against the site's own owner rather than
- * against an attacker: anybody who can guess a username could lock it shut for
- * good. The multiplier stops here — with the default fifteen minutes, four
- * hours.
+ * `n` extra failures is `lockoutSeconds * 2^n`. The multiplier stops here —
+ * with the default fifteen minutes, four hours.
  */
 export const LOCKOUT_GROWTH_LIMIT = 16;
+
+export const THROTTLE_CAPACITY = 4096;
+
+export const USERNAME_ATTEMPT_FACTOR = 10;
+
+const KEY_PART_LENGTH = 320;
 
 /** What {@link createLoginThrottle} needs to know. */
 export interface LoginThrottleOptions {
@@ -24,6 +27,7 @@ export interface LoginThrottleOptions {
   /** How long the first lockout lasts, in seconds. */
   lockoutSeconds: number;
   now: Clock;
+  lockout?: 'escalating' | 'fixed';
 }
 
 /**
@@ -31,7 +35,7 @@ export interface LoginThrottleOptions {
  *
  * Deliberately in memory: a restart clears it. The thing it defends against is
  * a run of guesses over minutes, which no restart interrupts, and keeping it
- * out of SQLite means a failed login writes nothing an attacker can grow.
+ * out of SQLite means a failed login writes nothing to disk.
  */
 export interface LoginThrottle {
   /**
@@ -44,6 +48,7 @@ export interface LoginThrottle {
   fail(keys: readonly string[]): void;
   /** Forget every failure against these keys, which is what a success does. */
   succeed(keys: readonly string[]): void;
+  forgetPrefix(prefix: string): void;
   /** How many keys are remembered. For the test that pins the sweeping. */
   size(): number;
 }
@@ -72,6 +77,7 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
   const clock = options.now;
   const attempts = Math.max(1, Math.trunc(options.attempts));
   const window = Math.max(1, options.lockoutSeconds) * 1000;
+  const escalating = (options.lockout ?? 'escalating') === 'escalating';
   const entries = new Map<string, Attempts>();
 
   /** The row for a key, or `undefined` when it has none or its row is stale. */
@@ -85,7 +91,6 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
     return entry;
   }
 
-  /** Drop every stale row. Cheap: the map only holds keys that failed recently. */
   function sweep(at: number): void {
     for (const [key, entry] of entries) {
       if (at >= entry.expiresAt) entries.delete(key);
@@ -116,27 +121,52 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
           // Still under the threshold: the row only has to outlive the window,
           // so a slow trickle of typos never adds up to a lockout.
           entry.expiresAt = at + window;
-        } else {
+        } else if (escalating) {
           // The wait doubles for each failure past the threshold, and the row
           // outlives the lockout by one window so the next failure is counted
           // as the escalation it is rather than as a fresh start.
           const wait = window * Math.min(2 ** (entry.failures - attempts), LOCKOUT_GROWTH_LIMIT);
           entry.lockedUntil = at + wait;
           entry.expiresAt = entry.lockedUntil + window;
+        } else {
+          entry.lockedUntil = at + window;
+          entry.expiresAt = entry.lockedUntil;
         }
 
+        // Re-inserted so the map's order is the order keys last failed in,
+        // which is what the eviction below reads.
+        entries.delete(key);
         entries.set(key, entry);
       }
+
+      evictBeyondCapacity(entries, at);
     },
 
     succeed(keys) {
       for (const key of keys) entries.delete(key);
     },
 
+    forgetPrefix(prefix) {
+      for (const key of entries.keys()) {
+        if (key.startsWith(prefix)) entries.delete(key);
+      }
+    },
+
     size() {
       return entries.size;
     },
   };
+}
+
+function evictBeyondCapacity(entries: Map<string, Attempts>, at: number): void {
+  for (const [key, entry] of entries) {
+    if (entries.size <= THROTTLE_CAPACITY) return;
+    if (entry.lockedUntil <= at) entries.delete(key);
+  }
+  for (const key of entries.keys()) {
+    if (entries.size <= THROTTLE_CAPACITY) return;
+    entries.delete(key);
+  }
 }
 
 export interface RequestLimitOptions {
@@ -196,19 +226,79 @@ export function clientAddress(
   }
 }
 
-/**
- * The keys one sign-in attempt is counted against: the username it named and
- * the address it came from.
- *
- * The username is folded to lower case so `Ada` and `ada` are one key, and it
- * is used whether or not any such user exists — a username nobody has locks
- * out exactly as a real one does, so the lockout cannot be used to find out
- * which usernames the site has.
- */
-export function loginKeys(username: string, address: string | undefined): string[] {
-  const keys = [`user:${username.toLowerCase()}`];
-  if (address !== undefined) keys.push(`addr:${address}`);
-  return keys;
+export interface SignInAttempt {
+  readonly identifier: string;
+  readonly address: string | undefined;
+  readonly confirming?: boolean;
+}
+
+export interface SignInThrottle {
+  retryAfter(attempt: SignInAttempt): number | undefined;
+  fail(attempt: SignInAttempt): void;
+  succeed(attempt: SignInAttempt): void;
+  forget(identifier: string): void;
+}
+
+export function createSignInThrottle(options: LoginThrottleOptions): SignInThrottle {
+  const strict = createLoginThrottle(options);
+  const wide = createLoginThrottle({
+    ...options,
+    attempts: Math.max(1, Math.trunc(options.attempts)) * USERNAME_ATTEMPT_FACTOR,
+    lockout: 'fixed',
+  });
+
+  function wait(attempt: SignInAttempt): number | undefined {
+    const keys = signInKeys(attempt);
+    const waits = [strict.retryAfter(keys.strict), wide.retryAfter(keys.wide)];
+    const longest = Math.max(0, ...waits.map((each) => each ?? 0));
+    return longest > 0 ? longest : undefined;
+  }
+
+  return {
+    retryAfter: wait,
+    fail(attempt) {
+      const keys = signInKeys(attempt);
+      strict.fail(keys.strict);
+      wide.fail(keys.wide);
+    },
+    succeed(attempt) {
+      const keys = signInKeys(attempt);
+      strict.succeed(keys.strict);
+      wide.succeed(keys.wide);
+    },
+    forget(identifier) {
+      const name = keyPart(identifier);
+      strict.forgetPrefix(pairKey(name, ''));
+      strict.succeed([confirmingKey(name)]);
+      wide.succeed([identifierKey(name)]);
+    },
+  };
+}
+
+export function signInKeys(attempt: SignInAttempt): { strict: string[]; wide: string[] } {
+  const name = keyPart(attempt.identifier);
+  const address =
+    attempt.address === undefined ? undefined : attempt.address.slice(0, KEY_PART_LENGTH);
+  const strict = [pairKey(name, address ?? '')];
+  if (address !== undefined) strict.push(`addr:${address}`);
+  if (attempt.confirming === true) strict.push(confirmingKey(name));
+  return { strict, wide: [identifierKey(name)] };
+}
+
+function keyPart(identifier: string): string {
+  return identifier.slice(0, KEY_PART_LENGTH).toLowerCase();
+}
+
+function pairKey(name: string, address: string): string {
+  return `pair:${name}\u0000${address}`;
+}
+
+function confirmingKey(name: string): string {
+  return `session:${name}`;
+}
+
+function identifierKey(name: string): string {
+  return `user:${name}`;
 }
 
 /**

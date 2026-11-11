@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createLoginThrottle, LOCKOUT_GROWTH_LIMIT } from './throttle.ts';
+import {
+  createLoginThrottle,
+  createSignInThrottle,
+  LOCKOUT_GROWTH_LIMIT,
+  signInKeys,
+  THROTTLE_CAPACITY,
+  USERNAME_ATTEMPT_FACTOR,
+} from './throttle.ts';
 
 /** A clock a test can move, in the shape the config's `now` has. */
 function fakeClock(start = Date.UTC(2026, 8, 4, 12, 0, 0)): {
@@ -135,5 +142,150 @@ describe('the login throttle', () => {
     throttle.fail(['addr:203.0.113.1']);
 
     assert.equal(throttle.size(), 1, 'every expired entry was swept');
+  });
+
+  it('stays under a fixed size however many distinct keys fail', () => {
+    const clock = fakeClock();
+    const throttle = createLoginThrottle({ attempts: 5, lockoutSeconds: 900, now: clock.now });
+
+    for (let i = 0; i < 10_000; i += 1) throttle.fail([`user:user-${i}`]);
+
+    assert.ok(throttle.size() < 10_000, `the map holds ${throttle.size()} keys`);
+  });
+
+  it('keeps the keys that failed most recently when it is full', () => {
+    const clock = fakeClock();
+    const throttle = throttleOn(clock);
+
+    for (let i = 0; i < 3; i += 1) throttle.fail(['user:ada']);
+    for (let i = 0; i < 10_000; i += 1) {
+      throttle.fail([`user:other-${i}`]);
+      if (i % 1000 === 0) throttle.fail(['user:ada']);
+    }
+
+    assert.notEqual(throttle.retryAfter(['user:ada']), undefined, 'ada is still locked');
+  });
+
+  it('forgets unlocked keys before a locked one when it is full', () => {
+    const clock = fakeClock();
+    const throttle = throttleOn(clock);
+
+    for (let i = 0; i < 3; i += 1) throttle.fail(['addr:198.51.100.1']);
+    for (let i = 0; i < THROTTLE_CAPACITY * 2; i += 1) throttle.fail([`pair:name-${i}`]);
+
+    assert.equal(throttle.retryAfter(['addr:198.51.100.1']), 60, 'the address is still locked');
+  });
+});
+
+describe('the sign-in throttle', () => {
+  const owner = { identifier: 'ada', address: '203.0.113.9' };
+  const stranger = { identifier: 'ada', address: '198.51.100.1' };
+
+  function signInOn(clock: { now: () => Date }) {
+    return createSignInThrottle({ attempts: 3, lockoutSeconds: 60, now: clock.now });
+  }
+
+  it('locks a username at one address without locking it at another', () => {
+    const clock = fakeClock();
+    const throttle = signInOn(clock);
+
+    for (let i = 0; i < 3; i += 1) throttle.fail(stranger);
+
+    assert.equal(throttle.retryAfter(stranger), 60);
+    assert.equal(throttle.retryAfter(owner), undefined);
+  });
+
+  it('locks an address for every username it tries', () => {
+    const clock = fakeClock();
+    const throttle = signInOn(clock);
+
+    for (let i = 0; i < 3; i += 1)
+      throttle.fail({ identifier: `name-${i}`, address: stranger.address });
+
+    assert.equal(throttle.retryAfter({ identifier: 'ada', address: stranger.address }), 60);
+  });
+
+  it('cannot be held for a day by one failure each time the lock lapses', () => {
+    const clock = fakeClock();
+    const throttle = signInOn(clock);
+
+    let refused = 0;
+    let tries = 0;
+    for (let step = 1; step <= (24 * 60 * 60) / 30; step += 1) {
+      clock.advance(30);
+      if (throttle.retryAfter(stranger) === undefined) throttle.fail(stranger);
+      if (step % 20 === 0) {
+        tries += 1;
+        if (throttle.retryAfter(owner) !== undefined) refused += 1;
+      }
+    }
+
+    assert.equal(refused, 0, `the owner was refused ${refused} of ${tries} tries`);
+  });
+
+  it('locks a username guessed from many addresses at a higher limit', () => {
+    const clock = fakeClock();
+    const throttle = signInOn(clock);
+    const limit = 3 * USERNAME_ATTEMPT_FACTOR;
+
+    for (let i = 0; i < limit - 1; i += 1)
+      throttle.fail({ identifier: 'ada', address: `10.0.0.${i}` });
+    assert.equal(throttle.retryAfter(owner), undefined, 'under the limit');
+
+    throttle.fail({ identifier: 'ada', address: '10.0.1.1' });
+    assert.equal(throttle.retryAfter(owner), 60);
+  });
+
+  it('starts the username count over once its lockout ends', () => {
+    const clock = fakeClock();
+    const throttle = signInOn(clock);
+    const limit = 3 * USERNAME_ATTEMPT_FACTOR;
+
+    for (let i = 0; i < limit; i += 1) throttle.fail({ identifier: 'ada', address: `10.0.0.${i}` });
+    clock.advance(60);
+    throttle.fail({ identifier: 'ada', address: '10.0.1.1' });
+
+    assert.equal(throttle.retryAfter(owner), undefined);
+  });
+
+  it('locks the signed-in user strictly from any address', () => {
+    const clock = fakeClock();
+    const throttle = signInOn(clock);
+
+    for (let i = 0; i < 3; i += 1) {
+      throttle.fail({ identifier: 'ada', address: `10.0.0.${i}`, confirming: true });
+    }
+
+    assert.equal(throttle.retryAfter({ ...owner, confirming: true }), 60);
+    assert.equal(throttle.retryAfter(owner), undefined, 'signing in is a separate count');
+  });
+
+  it('forgets every count against a name', () => {
+    const clock = fakeClock();
+    const throttle = signInOn(clock);
+
+    for (let i = 0; i < 3 * USERNAME_ATTEMPT_FACTOR; i += 1) {
+      throttle.fail({ identifier: 'Ada', address: i < 3 ? undefined : `10.0.0.${i}` });
+    }
+    throttle.forget('ada');
+
+    assert.equal(throttle.retryAfter({ identifier: 'ada', address: undefined }), undefined);
+    assert.equal(throttle.retryAfter(owner), undefined);
+  });
+});
+
+describe('the keys a sign-in is counted against', () => {
+  it('stay short however long the name and address are', () => {
+    const keys = signInKeys({ identifier: 'a'.repeat(100_000), address: 'b'.repeat(100_000) });
+
+    const longest = Math.max(...[...keys.strict, ...keys.wide].map((key) => key.length));
+    assert.ok(longest <= 700, `longest key is ${longest} characters`);
+  });
+
+  it('fold case so one name is one key', () => {
+    assert.deepEqual(
+      signInKeys({ identifier: 'Ada', address: '203.0.113.1' }),
+      signInKeys({ identifier: 'ada', address: '203.0.113.1' }),
+    );
   });
 });

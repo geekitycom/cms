@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { chmod } from 'node:fs/promises';
-import { after, describe, it } from 'node:test';
+import { after, describe, it, mock } from 'node:test';
 
 import { Hono } from 'hono';
 
@@ -277,6 +277,43 @@ describe('login', () => {
     assert.equal(dashboard.status, 200);
     assert.match(await dashboard.text(), /ada/);
   });
+
+  it('carries no return address that does not start with a single slash', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    const returnTo = '//admin.invalid/admin/users';
+
+    const agent = browser(cms);
+    const html = await (
+      await agent.get(`/admin/login?return_to=${encodeURIComponent(returnTo)}`)
+    ).text();
+    assert.doesNotMatch(html, /name="return_to"/);
+
+    const response = await agent.post('/admin/login', {
+      csrf_token: csrfField(html) ?? '',
+      username: FIRST_ADMIN.username,
+      password: FIRST_ADMIN.password,
+      return_to: returnTo,
+    });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin');
+  });
+
+  it('returns to the address as it parses, not as it was sent', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+
+    const agent = browser(cms);
+    const token = csrfField(await (await agent.get('/admin/login')).text());
+    const response = await agent.post('/admin/login', {
+      csrf_token: token ?? '',
+      username: FIRST_ADMIN.username,
+      password: FIRST_ADMIN.password,
+      return_to: '/admin/./users/../posts?status=draft#top',
+    });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/posts?status=draft#top');
+  });
 });
 
 describe('the guard', () => {
@@ -312,12 +349,158 @@ describe('the guard', () => {
     assert.equal(response.status, 403);
   });
 
+  it('redirects a signed-in visit to a percent-encoded setup path to the dashboard', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+
+    const response = await agent.get('/admin/%73etup');
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get('location'), '/admin');
+  });
+
+  it('creates no user from a signed-in post to a percent-encoded setup path', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+    const token = csrfField(await (await agent.get('/admin')).text());
+    assert.ok(token !== undefined);
+
+    await agent.post('/admin/%73etup', {
+      csrf_token: token,
+      username: 'grace',
+      password: 'correct horse battery',
+      password_confirmation: 'correct horse battery',
+    });
+    assert.deepEqual(
+      listUsers(cms.config.dataDir).map((user) => user.username),
+      [FIRST_ADMIN.username],
+    );
+  });
+
+  it('lets a visitor with no login reach the anonymous screens however their path is spelled', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+
+    for (const url of ['/admin/%6Cogin', '/admin/%66orgot']) {
+      const response = await cms.app.request(url);
+      assert.equal(response.status, 200, url);
+    }
+  });
+
+  it('carries a percent-encoded consent path through the login form', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+
+    const response = await cms.app.request('/admin/indieauth/%63onsent?client_id=x');
+    assert.equal(response.status, 302);
+    assert.equal(
+      response.headers.get('location'),
+      `/admin/login?return_to=${encodeURIComponent('/admin/indieauth/consent?client_id=x')}`,
+    );
+  });
+
+  it('holds an upload to a percent-encoded upload path to the upload limit', async () => {
+    const cms = await site({ uploadMediaMaxBytes: 16 * 1024 * 1024 });
+    const agent = await signedIn(cms);
+    const token = csrfField(await (await agent.get('/admin')).text());
+    assert.ok(token !== undefined);
+
+    const bytes = new Uint8Array(9 * 1024 * 1024);
+    bytes.set(new TextEncoder().encode('ID3'));
+    const response = await agent.upload('/admin/%75ploads', token, {
+      name: 'long.mp3',
+      type: 'audio/mpeg',
+      bytes,
+    });
+    assert.equal(response.status, 201);
+  });
+
   it('leaves the public site alone', async () => {
     const cms = await site();
     const response = await cms.app.request('/');
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.getSetCookie().length, 0, 'a public page carries no session');
+  });
+});
+
+describe('the size of an admin form', () => {
+  function streamed(text: string): ReadableStream<Uint8Array> {
+    const bytes = new TextEncoder().encode(text);
+    let offset = 0;
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (offset >= bytes.length) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(bytes.subarray(offset, offset + 16 * 1024));
+        offset += 16 * 1024;
+      },
+    });
+  }
+
+  it('refuses a sign-in form over the anonymous limit before the guard or the handler reads it', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    const agent = browser(cms);
+    const token = csrfField(await (await agent.get('/admin/login')).text());
+    assert.ok(token !== undefined);
+
+    const warn = mock.method(console, 'warn', () => {});
+    try {
+      const response = await agent.post('/admin/login', {
+        csrf_token: token,
+        username: 'ada',
+        password: 'x',
+        padding: 'p'.repeat(10 * 1024 * 1024),
+      });
+      assert.equal(response.status, 413);
+      assert.equal(warn.mock.callCount(), 0, 'the sign-in handler did not run');
+    } finally {
+      warn.mock.restore();
+    }
+  });
+
+  it('counts the bytes of a sign-in form that declares no length', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    const agent = browser(cms);
+    const token = csrfField(await (await agent.get('/admin/login')).text());
+    assert.ok(token !== undefined);
+    const cookie = `geekity_session=${agent.session() ?? ''}`;
+    const form = new URLSearchParams({ csrf_token: token, username: 'ada', password: 'x' });
+
+    const small = await cms.app.request('/admin/login', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      body: streamed(form.toString()),
+      duplex: 'half',
+    } as RequestInit);
+    assert.equal(small.status, 401, 'a small streamed form reaches the handler');
+
+    form.set('padding', 'p'.repeat(1024 * 1024));
+    const large = await cms.app.request('/admin/login', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      body: streamed(form.toString()),
+      duplex: 'half',
+    } as RequestInit);
+    assert.equal(large.status, 413);
+  });
+
+  it('takes a signed-in editor save far larger than the anonymous limit', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+    const token = csrfField(await (await agent.get('/admin/posts/new?kind=note')).text());
+    assert.ok(token !== undefined);
+
+    const response = await agent.post('/admin/posts/new', {
+      csrf_token: token,
+      title: 'A long one',
+      body: 'word '.repeat(200_000),
+      action: 'save-draft',
+    });
+    assert.equal(response.status, 303);
   });
 });
 
@@ -403,6 +586,30 @@ describe('security headers', () => {
       assert.equal(response.headers.get('x-frame-options'), 'SAMEORIGIN');
       assert.match(response.headers.get('content-security-policy') ?? '', /default-src 'self'/);
     }
+  });
+
+  it('keeps admin screens out of every cache and leaves the static files cacheable', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+    const anonymous = browser(cms);
+
+    for (const [label, response] of [
+      ['/admin/login', await anonymous.get('/admin/login')],
+      ['/admin/forgot', await anonymous.get('/admin/forgot')],
+      ['/admin/users', await agent.get('/admin/users')],
+      ['/admin/nowhere-at-all', await agent.get('/admin/nowhere-at-all')],
+    ] as const) {
+      assert.equal(response.headers.get('cache-control'), 'no-store', label);
+    }
+
+    const asset = await agent.get('/admin/_static/admin.css');
+    assert.equal(asset.status, 200);
+    assert.match(asset.headers.get('cache-control') ?? '', /^public, max-age=\d+/);
+    const unchanged = await cms.app.request('/admin/_static/admin.css', {
+      headers: { 'if-none-match': asset.headers.get('etag') ?? '' },
+    });
+    assert.equal(unchanged.status, 304);
+    assert.match(unchanged.headers.get('cache-control') ?? '', /^public, max-age=\d+/);
   });
 
   it('names the editor bundle, the preview frame and the uploads in the policy', async () => {
@@ -536,6 +743,29 @@ describe('the login throttle', () => {
     return agent.post('/admin/login', { csrf_token: token, username, password });
   }
 
+  it('keeps the log line and the form short when the username is very long', async () => {
+    const cms = await site();
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    const longName = 'a'.repeat(50_000);
+
+    const lines: string[] = [];
+    const warn = mock.method(console, 'warn', (line: unknown) => {
+      lines.push(String(line));
+    });
+    let response: Response;
+    try {
+      response = await attempt(browser(cms), longName, 'not the password');
+    } finally {
+      warn.mock.restore();
+    }
+
+    assert.equal(response.status, 401);
+    assert.ok(lines.length > 0, 'the failure was logged');
+    const longest = Math.max(...lines.map((line) => line.length));
+    assert.ok(longest <= 1000, `the log line is ${longest} characters`);
+    assert.ok(!(await response.text()).includes('a'.repeat(1000)), 'the name was not echoed');
+  });
+
   it('refuses even the right password once a username has failed too often', async () => {
     const clock = movableClock();
     const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });
@@ -616,6 +846,29 @@ describe('the login throttle', () => {
       303,
       'the two earlier failures were forgotten',
     );
+  });
+
+  it('lets the right password in from another address while one is locked out', async () => {
+    const cms = await site({ trustProxy: true, loginAttempts: 3, loginLockout: 120 });
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+    async function from(agent: Browser, address: string, password: string): Promise<Response> {
+      const token = csrfField(await (await agent.get('/admin/login')).text());
+      assert.ok(token !== undefined);
+      return agent.post(
+        '/admin/login',
+        { csrf_token: token, username: 'ada', password },
+        { 'x-forwarded-for': address },
+      );
+    }
+
+    const stranger = browser(cms);
+    for (let i = 0; i < 3; i += 1) {
+      assert.equal((await from(stranger, '198.51.100.1', 'guess')).status, 401);
+    }
+    assert.equal((await from(stranger, '198.51.100.1', FIRST_ADMIN.password)).status, 429);
+
+    const owner = await from(browser(cms), '203.0.113.9', FIRST_ADMIN.password);
+    assert.equal(owner.status, 303);
   });
 
   it('holds the lockout longer each time it is tripped again', async () => {

@@ -275,6 +275,21 @@ describe('POST /admin/autosave/discard', () => {
     assert.equal(response.headers.get('location'), '/admin');
   });
 
+  it('goes back to the admin when the return path holds a line break', async () => {
+    const { cms, ada } = await site();
+    const fields = await editorFields(ada, '/admin/posts/hello', { autosave: POST_FILE });
+    await postFormData(cms, ada, '/admin/autosave', fields);
+
+    const response = await ada.post('/admin/autosave/discard', {
+      csrf_token: fields['csrf_token'] ?? '',
+      autosave: POST_FILE,
+      return: '/admin/posts\r\nX-Extra: 1',
+    });
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin');
+  });
+
   it('goes back with an error for a key that does not parse', async () => {
     const { ada } = await site();
     const token = csrfField(await (await ada.get('/admin/posts/hello')).text()) ?? '';

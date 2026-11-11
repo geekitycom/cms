@@ -34,3 +34,20 @@ export function newWikiPagePath(slug: string, title: string): string {
 }
 
 export const PREVIEW_PATH = `${ADMIN_PREFIX}/preview`;
+
+/**
+ * A return address that stays in the admin, or `undefined`.
+ *
+ * Only a path under `/admin` that starts with a single slash, in printable
+ * ASCII with no backslash, which a browser could read as a different host.
+ */
+export function returnPath(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !/^\/(?!\/)[!-[\]-~]*$/.test(value)) return undefined;
+  const url = URL.parse(value, PLACEHOLDER_ORIGIN);
+  if (url === null || url.origin !== PLACEHOLDER_ORIGIN) return undefined;
+  const { pathname, search, hash } = url;
+  if (pathname !== ADMIN_PREFIX && !pathname.startsWith(`${ADMIN_PREFIX}/`)) return undefined;
+  return `${pathname}${search}${hash}`;
+}
+
+const PLACEHOLDER_ORIGIN = 'http://admin.invalid';

@@ -21,8 +21,14 @@ import { adminColorScheme } from '../site/admin-theme.ts';
 import { mountAppearanceScreen } from './appearance.ts';
 import { mountLookScreen } from './look.ts';
 import { adminAssetResponse } from './assets.ts';
-import { ADMIN_ASSET_PREFIX, ADMIN_PREFIX, editUserPath, LOGIN_PATH } from '../site/admin-paths.ts';
-import { credentialProblem } from './credentials.ts';
+import {
+  ADMIN_ASSET_PREFIX,
+  ADMIN_PREFIX,
+  editUserPath,
+  LOGIN_PATH,
+  returnPath,
+} from '../site/admin-paths.ts';
+import { credentialProblem, MAXIMUM_USERNAME_LENGTH } from './credentials.ts';
 import {
   editorPath,
   mountDocumentScreens,
@@ -40,7 +46,7 @@ import { adminMenu } from './menu.ts';
 import { mountMessagesScreen } from './messages.ts';
 import { mountNavigationScreen } from './navigation.ts';
 import { mountPreview } from './preview.ts';
-import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
+import { FORGOT_PATH, mountRecovery, RECOVERY_FIELDS, RESET_PATH } from './recovery.ts';
 import { mountSettings } from './settings-pages.ts';
 import { mountSyndicationTargetsScreen } from './syndication-targets.ts';
 import {
@@ -50,14 +56,13 @@ import {
   csrfTokenMatches,
   retireOldSessionCookie,
   sessionIdFrom,
-  setSessionCookie,
   startSession,
 } from '../web/session.ts';
 import { CSRF_FIELD } from '../forms/protection.ts';
 import type { AdminStore, Session } from '../store/admin-store.ts';
 import { mountTaxonomyScreens, TAXONOMY_KINDS } from './taxonomy.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
-import { clientAddress, createLoginThrottle, describeWait, loginKeys } from '../web/throttle.ts';
+import { clientAddress, createSignInThrottle, describeWait } from '../web/throttle.ts';
 import { mountToolsScreen } from './tools.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { DEV_MODE_PATH, mountDevModeScreen } from './dev-mode.ts';
@@ -67,8 +72,9 @@ import { mountPersonalDataScreen } from './personal-data.ts';
 import { mountEditorActions } from './editor-actions.ts';
 import { mountItemLookup, mountItemSearch } from './item-lookup.ts';
 import { mountPluginsScreen, pluginScreens } from './plugins.ts';
-import type { LoginThrottle } from '../web/throttle.ts';
-import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
+import type { SignInThrottle } from '../web/throttle.ts';
+import { mountUploads, uploadBodyLimit, uploadTooLarge, UPLOADS_PATH } from './uploads.ts';
+import { readWithin } from '../webmention/fetch-public.ts';
 import { mountUsers } from './users.ts';
 import { createConfirmPassword } from './confirm-password.ts';
 import { mountWritingGoals } from './writing-goals.ts';
@@ -112,10 +118,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // nothing but recent failures, so it belongs to the process rather than to
   // the database — a restart clears it, which is the right trade for state an
   // anonymous caller can create.
-  let throttled: LoginThrottle | undefined;
+  let throttled: SignInThrottle | undefined;
 
-  function loginThrottle(config: ResolvedConfig): LoginThrottle {
-    throttled ??= createLoginThrottle({
+  function loginThrottle(config: ResolvedConfig): SignInThrottle {
+    throttled ??= createSignInThrottle({
       attempts: config.loginAttempts,
       lockoutSeconds: config.loginLockout,
       now: config.now,
@@ -130,10 +136,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // would let a stranger lock somebody out of signing in by asking for their
   // password to be reset over and over, which would turn the recovery feature
   // into a weapon against the person it exists for.
-  let recoveryThrottled: LoginThrottle | undefined;
+  let recoveryThrottled: SignInThrottle | undefined;
 
-  function recoveryThrottle(config: ResolvedConfig): LoginThrottle {
-    recoveryThrottled ??= createLoginThrottle({
+  function recoveryThrottle(config: ResolvedConfig): SignInThrottle {
+    recoveryThrottled ??= createSignInThrottle({
       attempts: config.loginAttempts,
       lockoutSeconds: config.loginLockout,
       now: config.now,
@@ -202,14 +208,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return response ?? c.notFound();
   });
 
-  // In front of the guard, because the guard parses the form to find the CSRF
-  // token and parsing a multipart form reads the whole file into memory. Every
-  // multipart endpoint needs it: the editor's uploads and the media screen's
-  // own form.
-  app.use(UPLOADS_PATH, refuseOversizedUpload);
-  app.use(MEDIA_UPLOAD_PATH, refuseOversizedUpload);
-
-  app.use(ADMIN_PREFIX, guard);
   app.use(`${ADMIN_PREFIX}/*`, guard);
 
   app.get(SETUP_PATH, (c) => {
@@ -261,7 +259,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // Forgetting a password. Registered beside the login form, and named in the
   // guard below, because both of its screens are reached by somebody who by
   // definition cannot sign in.
-  mountRecovery(app, { render, anonymousSession, throttle: recoveryThrottle });
+  mountRecovery(app, { render, anonymousSession, recoveryThrottle, loginThrottle });
 
   app.post(LOGIN_PATH, async (c) => {
     const config = c.var.config;
@@ -271,7 +269,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const returnTo = returnPath(body[RETURN_TO_FIELD]);
 
     const address = clientAddress(c, config);
-    const keys = loginKeys(username, address);
+    const keys = { identifier: username, address };
+    const attempted = `${shortened(username)} from ${address === undefined ? 'an unknown address' : shortened(address)}`;
+    const shown = username.length > MAXIMUM_USERNAME_LENGTH ? '' : username;
 
     // Checked before the password is verified, so a lockout refuses the right
     // password too. An attacker who found the password on the last allowed
@@ -279,16 +279,14 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const throttle = loginThrottle(config);
     const wait = throttle.retryAfter(keys);
     if (wait !== undefined) {
-      console.warn(
-        `Refused a sign-in for ${JSON.stringify(username)} from ${address ?? 'an unknown address'}: locked out for another ${wait}s`,
-      );
+      console.warn(`Refused a sign-in for ${attempted}: locked out for another ${wait}s`);
       anonymousSession(c);
       c.status(429);
       c.header('Retry-After', String(wait));
       return render(c, ADMIN_TEMPLATES.login, {
         loginUrl: LOGIN_PATH,
         forgotUrl: FORGOT_PATH,
-        username,
+        username: shown,
         returnTo,
         // Says nothing about whether that username exists: an unknown one is
         // counted and locked out exactly as a real one is.
@@ -299,9 +297,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const user = verifyUserPassword(c.var.config.dataDir, username, password);
     if (user === undefined) {
       throttle.fail(keys);
-      console.warn(
-        `Failed sign-in for ${JSON.stringify(username)} from ${address ?? 'an unknown address'}`,
-      );
+      console.warn(`Failed sign-in for ${attempted}`);
       // One message for both failures, so the form cannot be used to find out
       // which usernames exist.
       anonymousSession(c);
@@ -309,7 +305,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       return render(c, ADMIN_TEMPLATES.login, {
         loginUrl: LOGIN_PATH,
         forgotUrl: FORGOT_PATH,
-        username,
+        username: shown,
         returnTo,
         error: 'That username and password do not match.',
       });
@@ -463,21 +459,9 @@ const RETURN_TO_FIELD = 'return_to';
  */
 const RETURNABLE_PATHS: ReadonlySet<string> = new Set([CONSENT_PATH]);
 
-/**
- * A return address that stays in the admin, or `undefined`.
- *
- * Only a path under `/admin`, in printable ASCII with no backslash, which a
- * browser could read as a different host, and no space or control character,
- * which a header would refuse: the login form can never be used to send
- * somebody off the site.
- */
-function returnPath(value: unknown): string | undefined {
-  if (typeof value !== 'string' || !/^[!-[\]-~]+$/.test(value)) return undefined;
-  const url = URL.parse(value, 'http://admin.invalid');
-  if (url === null || url.origin !== 'http://admin.invalid') return undefined;
-  const { pathname } = url;
-  if (pathname !== ADMIN_PREFIX && !pathname.startsWith(`${ADMIN_PREFIX}/`)) return undefined;
-  return value.startsWith('/') ? value : undefined;
+function shortened(text: string): string {
+  const cut = text.slice(0, MAXIMUM_USERNAME_LENGTH);
+  return JSON.stringify(cut) + (cut.length < text.length ? '…' : '');
 }
 
 /** `Clear-Site-Data` on logout: every kind of data a browser keeps for the site. */
@@ -498,7 +482,9 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
 
   const admin = c.var.admin;
   const dataDir = c.var.config.dataDir;
-  const pathname = new URL(c.req.url).pathname;
+  // The decoded path the router dispatches on, so every decision below is made
+  // about the handler that will actually run.
+  const pathname = c.req.path;
 
   // Reading a session prunes it when it has expired, so an expired session is
   // gone from here on, not merely ignored.
@@ -509,8 +495,7 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
     sessionId === undefined ? undefined : admin.getSession(sessionId),
   );
   if (retireOldSessionCookie(c) && session === undefined) {
-    session = admin.createSession({ userId: null, lifetimeSeconds: c.var.config.sessionLifetime });
-    setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
+    session = startSession(c, undefined);
     admin.pushFlash(session.id, { kind: 'notice', message: RENAMED_COOKIE_NOTICE });
   }
   c.set('session', session);
@@ -541,7 +526,13 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   }
 
   if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
-    if (session === undefined || !csrfTokenMatches(session.csrfToken, await submittedToken(c))) {
+    const form = await boundedForm(c, pathname, session?.userId != null);
+    if (form instanceof Response) return form;
+    const token = await form.field(CSRF_FIELD);
+    if (session === undefined && (isSetup || isAnonymous) && typeof token === 'string') {
+      return expiredForm(c, pathname, form);
+    }
+    if (session === undefined || !csrfTokenMatches(session.csrfToken, token)) {
       return c.text('That form was stale or came from somewhere else. Reload and try again.', 403);
     }
   }
@@ -578,8 +569,41 @@ function liveSession(
   return undefined;
 }
 
-/** The CSRF token in the request body, if the body is a form at all. */
-async function submittedToken(c: Context<GeekityEnv>): Promise<unknown> {
+const ANONYMOUS_FORM_MAX_BYTES = 64 * 1024;
+
+const SIGNED_IN_FORM_MAX_BYTES = 8 * 1024 * 1024;
+
+const UPLOAD_PATHS: ReadonlySet<string> = new Set([UPLOADS_PATH, MEDIA_UPLOAD_PATH]);
+
+/** A request body already cut to its limit, so reading its fields cannot buffer more. */
+interface BoundedForm {
+  field(name: string): Promise<unknown>;
+}
+
+async function boundedForm(
+  c: Context<GeekityEnv>,
+  pathname: string,
+  signedIn: boolean,
+): Promise<Response | BoundedForm> {
+  const form: BoundedForm = { field: (name) => submittedField(c, name) };
+  if (c.req.raw.body === null) return form;
+  const upload = signedIn && UPLOAD_PATHS.has(pathname);
+  const limit = upload
+    ? uploadBodyLimit(c.var.config)
+    : signedIn
+      ? SIGNED_IN_FORM_MAX_BYTES
+      : ANONYMOUS_FORM_MAX_BYTES;
+
+  const read = await readWithin(c.req.raw, limit, 'refuse');
+  if (read !== undefined) {
+    c.req.raw = new Request(c.req.raw, { body: read.body });
+    return form;
+  }
+  if (upload) return uploadTooLarge(c);
+  return c.text(`That form is larger than the ${String(limit)} bytes the admin accepts.`, 413);
+}
+
+async function submittedField(c: Context<GeekityEnv>, name: string): Promise<unknown> {
   const contentType = c.req.header('content-type') ?? '';
   if (
     !contentType.includes('application/x-www-form-urlencoded') &&
@@ -589,7 +613,29 @@ async function submittedToken(c: Context<GeekityEnv>): Promise<unknown> {
   }
   // Hono caches the parsed form, so the handler behind this parses nothing twice.
   const body = await c.req.parseBody();
-  return body[CSRF_FIELD];
+  return body[name];
+}
+
+const EXPIRED_FORM_NOTICE = 'That form expired before it was sent. Please try again.';
+
+async function expiredForm(
+  c: Context<GeekityEnv>,
+  pathname: string,
+  form: BoundedForm,
+): Promise<Response> {
+  const session = startSession(c, undefined);
+  c.var.admin.pushFlash(session.id, { kind: 'warning', message: EXPIRED_FORM_NOTICE });
+
+  const query = new URLSearchParams();
+  if (pathname === RESET_PATH) {
+    const token = await form.field(RECOVERY_FIELDS.token);
+    if (typeof token === 'string' && token !== '') query.set(RECOVERY_FIELDS.token, token);
+  } else if (pathname === LOGIN_PATH) {
+    const returnTo = returnPath(await form.field(RETURN_TO_FIELD));
+    if (returnTo !== undefined) query.set(RETURN_TO_FIELD, returnTo);
+  }
+  const search = query.size === 0 ? '' : `?${query.toString()}`;
+  return c.redirect(`${pathname}${search}`, 303);
 }
 
 /**

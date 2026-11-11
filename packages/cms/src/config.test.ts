@@ -288,6 +288,22 @@ describe('resolveConfig', () => {
     );
   });
 
+  it('refuses a session lifetime longer than ten years', () => {
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_SESSION_LIFETIME: '1e12' } }),
+      /GEEKITY_SESSION_LIFETIME/,
+    );
+    assert.throws(
+      () => resolveConfig({ sessionLifetime: 1e12 }, { cwd: '/srv/site', env: {} }),
+      /sessionLifetime/,
+    );
+    const tenYears = 10 * 365 * 24 * 60 * 60;
+    assert.equal(
+      resolveConfig({ sessionLifetime: tenYears }, { cwd: '/srv/site', env: {} }).sessionLifetime,
+      tenYears,
+    );
+  });
+
   it('caps an upload at ten mebibytes unless the site says otherwise', () => {
     assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).uploadMaxBytes, 10 * 1024 * 1024);
     assert.equal(
@@ -804,7 +820,7 @@ describe('what the environment and config may say', () => {
       ],
       [
         { GEEKITY_SESSION_LIFETIME: '0' },
-        'TypeError: GEEKITY_SESSION_LIFETIME must be a positive number of seconds, received "0"',
+        'TypeError: GEEKITY_SESSION_LIFETIME must be a positive number of seconds no more than 315360000 (ten years), received "0"',
       ],
       [
         { GEEKITY_UPLOAD_MAX_BYTES: '1.5' },
@@ -869,7 +885,7 @@ describe('what the environment and config may say', () => {
       ],
       [
         { sessionLifetime: -1 },
-        'TypeError: config.sessionLifetime must be a positive number of seconds, received -1',
+        'TypeError: config.sessionLifetime must be a positive number of seconds no more than 315360000 (ten years), received -1',
       ],
       [
         { uploadMaxBytes: 0 },

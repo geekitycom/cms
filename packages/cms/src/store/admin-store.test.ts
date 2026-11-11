@@ -98,6 +98,18 @@ describe('sessions', () => {
     );
   });
 
+  it('keeps a session whose lifetime reaches past year 9999', async () => {
+    const admin = await store();
+    const now = new Date('2026-09-02T12:00:00Z');
+
+    const long = admin.createSession({ userId: ADA, lifetimeSeconds: 3e11, now });
+    assert.equal(admin.getSession(long.id, now)?.id, long.id);
+    assert.equal(admin.pruneSessions(now), 0);
+
+    const beyondDates = admin.createSession({ userId: ADA, lifetimeSeconds: 1e13, now });
+    assert.equal(admin.getSession(beyondDates.id, now)?.id, beyondDates.id);
+  });
+
   it('sweeps every expired session at once', async () => {
     const admin = await store();
     const now = new Date('2026-09-02T12:00:00Z');

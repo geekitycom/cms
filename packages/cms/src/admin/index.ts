@@ -57,7 +57,6 @@ export {
   newEditorPath,
   PAGE_SCREENS,
   POST_SCREENS,
-  returnPath,
 } from './documents.ts';
 export type {
   AdminRender,
@@ -172,11 +171,16 @@ export {
 export {
   clientAddress,
   createLoginThrottle,
+  createSignInThrottle,
   describeWait,
   LOCKOUT_GROWTH_LIMIT,
-  loginKeys,
 } from '../web/throttle.ts';
-export type { LoginThrottle, LoginThrottleOptions } from '../web/throttle.ts';
+export type {
+  LoginThrottle,
+  LoginThrottleOptions,
+  SignInAttempt,
+  SignInThrottle,
+} from '../web/throttle.ts';
 export { mountPreview } from './preview.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from '../site/passwords.ts';
 export { guard, LOGOUT_PATH, mountAdmin, postEditorPath, SETUP_PATH } from './routes.ts';
@@ -258,7 +262,7 @@ export {
   resetLink,
 } from './recovery.ts';
 export type { MountRecoveryOptions } from './recovery.ts';
-export { ADMIN_PREFIX } from '../site/admin-paths.ts';
+export { ADMIN_PREFIX, returnPath } from '../site/admin-paths.ts';
 export {
   clearSessionCookie,
   csrfTokenMatches,
@@ -319,7 +323,7 @@ export {
   PACKAGED_ADMIN_DIR,
 } from './templates.ts';
 export type { CreateAdminTemplateEnvironmentOptions } from './templates.ts';
-export { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
+export { mountUploads, UPLOADS_PATH } from './uploads.ts';
 export {
   refusedUpload,
   storeUpload,

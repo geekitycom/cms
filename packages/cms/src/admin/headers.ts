@@ -4,6 +4,7 @@ import type { MiddlewareHandler } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../web/env.ts';
+import { ADMIN_ASSET_PREFIX } from '../site/admin-paths.ts';
 import { usesSecureCookies } from '../web/session.ts';
 
 /**
@@ -66,6 +67,9 @@ export const adminSecurityHeaders: MiddlewareHandler<GeekityEnv> = async (c, nex
   // Not DENY: the editor puts its preview in a sandboxed iframe of its own, and
   // `frame-ancestors 'self'` below is the modern half of the same statement.
   headers.set('X-Frame-Options', 'SAMEORIGIN');
+  if (!headers.has('Cache-Control') && !c.req.path.startsWith(ADMIN_ASSET_PREFIX)) {
+    headers.set('Cache-Control', 'no-store');
+  }
 };
 
 /**

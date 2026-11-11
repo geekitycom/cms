@@ -835,7 +835,7 @@ describe('a database whose users are still rows', () => {
     assert.match(await (await agent.get('/admin')).text(), /Hoopla! ada/);
   });
 
-  it('keeps the logins the database already held', async () => {
+  it('ends the logins the database held, since sessions are now kept as hashes', async () => {
     const dataDir = await legacyDatabase('not-a-hash');
 
     const cms = await box.site({ dataDir });
@@ -843,8 +843,8 @@ describe('a database whose users are still rows', () => {
     const agent = browser(cms);
     agent.setSession('a-session-from-before');
     const dashboard = await agent.get('/admin');
-    assert.equal(dashboard.status, 200, 'the session survived the schema change');
-    assert.match(await dashboard.text(), /Hoopla! ada/);
+    assert.equal(dashboard.status, 302, 'the old session is gone');
+    assert.equal(dashboard.headers.get('location'), '/admin/login');
   });
 
   it('leaves a users.json that is already there alone, because files win', async () => {

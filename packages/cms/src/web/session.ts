@@ -85,14 +85,19 @@ export function setSessionCookie(
   });
 }
 
+export const ANONYMOUS_SESSION_SECONDS = 60 * 60;
+
 export function startSession(
   c: Context<GeekityEnv>,
   user: Pick<User, 'id' | 'uid'> | undefined,
 ): Session {
-  const session = c.var.admin.createSession({
+  const admin = c.var.admin;
+  const lifetime = c.var.config.sessionLifetime;
+  if (user === undefined) admin.pruneSessions();
+  const session = admin.createSession({
     userId: user?.id ?? null,
     ...(user?.uid === undefined ? {} : { userUid: user.uid }),
-    lifetimeSeconds: c.var.config.sessionLifetime,
+    lifetimeSeconds: user === undefined ? Math.min(lifetime, ANONYMOUS_SESSION_SECONDS) : lifetime,
   });
   setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
   c.set('session', session);
@@ -174,9 +179,12 @@ export const CROSS_SITE_REFUSAL = 'That request came from another site, so it wa
  * Whether a submitted token is this session's, compared in constant time.
  *
  * Both are hex of a fixed length, so a length mismatch is already a mismatch
- * and short-circuiting on it leaks nothing.
+ * and short-circuiting on it leaks nothing. The lengths compared are in bytes,
+ * the unit `timingSafeEqual` needs equal.
  */
 export function csrfTokenMatches(expected: string, submitted: unknown): boolean {
-  if (typeof submitted !== 'string' || submitted.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(submitted, 'utf8'), Buffer.from(expected, 'utf8'));
+  if (typeof submitted !== 'string') return false;
+  const left = Buffer.from(submitted, 'utf8');
+  const right = Buffer.from(expected, 'utf8');
+  return left.length === right.length && timingSafeEqual(left, right);
 }
