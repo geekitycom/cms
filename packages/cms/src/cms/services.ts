@@ -6,6 +6,7 @@ import { postEngagement } from '../admin/engagement.ts';
 import { postsByPath, postsPublishedSince } from '../admin/posts-by-path.ts';
 import { readObjectIds } from '../federation/object-ids.ts';
 import type { ConversationWrite } from '../store/admin-store.ts';
+import { releaseOrderingLocks } from '../store/queue-database.ts';
 import { createAvatarService } from '../avatars/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
 import { createFontStore, createPageFonts, fontFetchJob, queueFontFetch } from '../fonts/index.ts';
@@ -497,9 +498,14 @@ export function createServices({
   for (const listener of conversationWriteSubscribers) admin.onConversationWrite(listener);
 
   const lifecycle: readonly Service[] = [
+    // Before the federation queue listens. On a reload the old worker has
+    // stopped taking messages by now; only a send it still has in hand after
+    // the drain's patience loses its lock, and may then finish after the
+    // next message on its key.
     {
-      name: 'deliveries the queue no longer holds',
+      name: 'what the last worker left in the queue',
       start: () => {
+        if (resolved.federation.queue === undefined) releaseOrderingLocks(resolved.dataDir);
         markForgottenDeliveries(admin, {
           dataDir: resolved.dataDir,
           queue: resolved.federation.queue,

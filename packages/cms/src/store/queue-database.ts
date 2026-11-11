@@ -25,6 +25,27 @@ export function openQueueDatabase(dataDir: string): DatabaseSync {
   return new DatabaseSync(file, { timeout: BUSY_TIMEOUT_MS });
 }
 
+/**
+ * Drop the ordering locks a worker left behind. `SqliteMessageQueue` holds a
+ * lock row while a handler runs and deletes it when the handler ends, so a
+ * worker killed mid-send leaves its key locked and every message on that key
+ * is skipped for good. Only safe before this process's queue listens and once
+ * the previous worker has stopped taking messages.
+ */
+export function releaseOrderingLocks(dataDir: string): void {
+  if (!existsSync(queueFile(dataDir))) return;
+  const db = openQueueDatabase(dataDir);
+  try {
+    const locks = `${FEDERATION_QUEUE_TABLE}_locks`;
+    const table = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(locks);
+    if (table !== undefined) db.exec(`DELETE FROM "${locks}"`);
+  } finally {
+    db.close();
+  }
+}
+
 export function countWaitingMessages(dataDir: string): number {
   return countMessages(dataDir, '', []);
 }

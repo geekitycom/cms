@@ -19,7 +19,7 @@ import type { Delivery as RecordedDelivery } from '../store/admin-store.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { listUsers } from '../site/users.ts';
-import { queuedMessages } from '../__testing__/federation-queue.ts';
+import { lockQueuedOrderingKeys, queuedMessages } from '../__testing__/federation-queue.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { signedInAs } from './__testing__/session.ts';
@@ -1017,6 +1017,21 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
     await queued.cms.delivery.settled();
     await queued.cms.close();
     assert.deepEqual(deliveries, [], 'a CMS that never served took nothing from the queue');
+
+    await nextCms(queued).serve();
+
+    const create = await waitForDelivery('Create');
+    assert.equal(create.url, REMOTE_SHARED_INBOX);
+  });
+
+  it('sends a delivery whose ordering key a worker killed mid-send still holds a lock for', async () => {
+    const queued = await site({ queued: true });
+    const agent = signedInAs(queued.cms, ADA);
+    await publishNewPost(agent);
+    await queued.cms.delivery.settled();
+    await queued.cms.close();
+    assert.equal(queuedMessages(queued.dataDir).length, 1);
+    lockQueuedOrderingKeys(queued.dataDir);
 
     await nextCms(queued).serve();
 

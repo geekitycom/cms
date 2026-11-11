@@ -133,6 +133,12 @@ does not touch it.
   wait until the retry is sent or Fedify gives up on it. Deliveries to other
   inboxes do not wait. A queue passed as `queue` keeps the order that queue
   gives.
+- To keep that order, the queue locks a post and inbox, or a relay, while a
+  delivery to it is being sent. A server that starts removes the locks a
+  stopped server left, before it takes any message, so a process that died
+  mid-send does not hold back the later deliveries on that lock. On a reload, a
+  send the old server still holds after the drain's 10 seconds loses its lock,
+  and the next delivery on that lock can go out before it finishes.
 - While dev mode is on, the server drops each outgoing delivery it takes from
   the queue and records it in `data/dev-mode.jsonl` as held. A `data/` copied
   from a live site can hold deliveries that are still waiting.
