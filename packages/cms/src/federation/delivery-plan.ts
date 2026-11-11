@@ -46,19 +46,23 @@ export interface ActivityAbout {
 /**
  * What a version of a post is to a peer, and the id that names
  * it: the post's object id, or its `Like` or `Announce`'s activity id, which
- * carries the id of what it cites.
+ * carries the id of what it cites. `actor` is the username it is sent as: a
+ * peer files a status under the actor that created it, and takes an `Update`
+ * or `Delete` of it from that actor alone.
  */
 export type Shape = ObjectShape | CitingShape;
 
 export interface ObjectShape {
   readonly kind: 'object';
   readonly id: string;
+  readonly actor: string;
   readonly replyTo: CitedObject | undefined;
 }
 
 export interface CitingShape {
   readonly kind: 'citing';
   readonly id: string;
+  readonly actor: string;
   readonly citing: Citing;
 }
 
@@ -260,7 +264,9 @@ export function revisionStep(
   | { readonly kind: 'revise'; readonly shape: ObjectShape }
   | { readonly kind: 'none' }
   | { readonly kind: 'replace' } {
-  if (was.kind !== is.kind || was.id !== is.id) return { kind: 'replace' };
+  if (was.kind !== is.kind || was.id !== is.id || was.actor !== is.actor) {
+    return { kind: 'replace' };
+  }
   return is.kind === 'citing' ? { kind: 'none' } : { kind: 'revise', shape: is };
 }
 

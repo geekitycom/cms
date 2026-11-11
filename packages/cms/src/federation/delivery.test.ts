@@ -507,6 +507,19 @@ function waitForDelivery(type: string): Promise<Delivery> {
   });
 }
 
+/** The first delivery of any type, waiting for it to arrive. */
+function waitForAnyDelivery(): Promise<Delivery> {
+  return nextEvent('a delivery', (done) => {
+    const check = () => {
+      const found = deliveries[0];
+      if (found !== undefined) done(found);
+    };
+    check();
+    arrivals.add(check);
+    return () => arrivals.delete(check);
+  });
+}
+
 /** A draft nobody outside the site has ever seen. */
 function draftPost(): string {
   return `---
@@ -2848,10 +2861,14 @@ describe('renaming a post that has already been announced (TASK-127)', () => {
 });
 
 describe('two users', () => {
-  it('delivers a post only to its own author’s followers (AC #3)', async () => {
-    // decision-14: a post belongs to a person, and only that person's
-    // followers agreed to hear from them.
-    const { cms, contentDir } = await site({ account: true });
+  const FILE = 'posts/2026-03-04-watched.md';
+  const GRACE_URL = `${BASE_URL}/author/grace/`;
+  const POST_ID = `${BASE_URL}/2026/03/watched/`;
+
+  /** A site where Ada has her follower and Grace has Bob. */
+  async function adaAndGrace(options: { watch?: boolean } = {}): Promise<Site> {
+    const built = await site({ account: true, ...options });
+    const { cms, contentDir } = built;
     writeUsers(cms.config.dataDir, [
       { username: ADA, id: 1 },
       { username: 'grace', id: 2 },
@@ -2866,12 +2883,41 @@ describe('two users', () => {
       iconUrl: null,
       url: null,
     });
+    return built;
+  }
 
-    await writeDocument(
-      contentDir,
-      'posts/2026-03-04-watched.md',
-      publishedPost('Ada wrote this one.'),
-    );
+  /** Rewrite the post file on disk and wait for what the watcher sends about it. */
+  async function rewrite(
+    cms: Cms,
+    contentDir: string,
+    edit: (source: string) => string,
+  ): Promise<void> {
+    const file = path.join(contentDir, ...FILE.split('/'));
+    deliveries.length = 0;
+    await writeFile(file, edit(await readFile(file, 'utf8')), 'utf8');
+    await waitForAnyDelivery();
+    await cms.delivery.settled();
+  }
+
+  /** Each delivery as its type, actor, inbox and the id of what it is about. */
+  function sent(): unknown[] {
+    return deliveries.map((one) => {
+      const object = one.body['object'];
+      return [
+        one.body['type'],
+        one.body['actor'],
+        one.url,
+        typeof object === 'string' ? object : (object as Record<string, unknown>)['id'],
+      ];
+    });
+  }
+
+  it('delivers a post only to its own author’s followers (AC #3)', async () => {
+    // decision-14: a post belongs to a person, and only that person's
+    // followers agreed to hear from them.
+    const { cms, contentDir } = await adaAndGrace();
+
+    await writeDocument(contentDir, FILE, publishedPost('Ada wrote this one.'));
     await cms.sync();
     const report = await cms.delivery.resend(pathOf(cms, 'watched'));
 
@@ -2882,6 +2928,49 @@ describe('two users', () => {
       [REMOTE_SHARED_INBOX],
       'Grace’s follower heard nothing about Ada’s post',
     );
+  });
+
+  it('withdraws a post from the old author’s followers as the old author when the author changes', async () => {
+    const { cms, contentDir } = await adaAndGrace({ watch: true });
+    await cms.serve();
+    await writeDocument(contentDir, FILE, publishedPost('Ada wrote this one.'));
+    await waitForAnyDelivery();
+    await cms.delivery.settled();
+    assert.deepEqual(sent(), [['Create', ACTOR_URL, REMOTE_SHARED_INBOX, POST_ID]]);
+
+    await rewrite(cms, contentDir, (source) => source.replace(`author: ${ADA}`, 'author: grace'));
+    assert.deepEqual(sent(), [
+      ['Delete', ACTOR_URL, REMOTE_SHARED_INBOX, POST_ID],
+      ['Create', GRACE_URL, OTHER_INBOX, `${POST_ID}?v=2`],
+    ]);
+
+    await rewrite(cms, contentDir, (source) =>
+      source.replace('Ada wrote this one.', 'Grace took it over.'),
+    );
+    assert.deepEqual(
+      sent(),
+      [['Update', GRACE_URL, OTHER_INBOX, `${POST_ID}?v=2`]],
+      'a later edit reaches only the new author’s followers',
+    );
+  });
+
+  it('pins a pinned post for the new author after it changes hands', async () => {
+    const { cms, contentDir } = await adaAndGrace({ watch: true });
+    await cms.serve();
+    await writeDocument(
+      contentDir,
+      FILE,
+      publishedPost('Ada pinned this one.').replace('tags:', 'pinned: true\ntags:'),
+    );
+    await waitForAnyDelivery();
+    await cms.delivery.settled();
+
+    await rewrite(cms, contentDir, (source) => source.replace(`author: ${ADA}`, 'author: grace'));
+    assert.deepEqual(sent(), [
+      ['Delete', ACTOR_URL, REMOTE_SHARED_INBOX, POST_ID],
+      ['Create', GRACE_URL, OTHER_INBOX, `${POST_ID}?v=2`],
+      ['Add', GRACE_URL, OTHER_INBOX, `${POST_ID}?v=2`],
+    ]);
   });
 });
 

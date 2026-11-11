@@ -287,8 +287,14 @@ deleted would reach no Mastodon server that saw the `Delete`.
 The site sends a `Delete` when a post becomes a draft, is trashed, or has its
 file deleted. It also sends one when an edit changes the post's object id, for
 example when a permalink is changed by hand in the file: the old id gets a
-`Delete` and the new id gets a `Create`. So a post can come back under a
-deleted id in two ways:
+`Delete` and the new id gets a `Create`. An edit that changes the post's
+author does the same. A peer files a post under the actor that created it and
+accepts an `Update` or `Delete` from that actor only, so the old author sends
+the `Delete` to their followers, and the new author sends a `Create` to theirs
+under a new id. A post whose `author` names a deleted user is sent by the
+site's first account from then on. The copies the deleted user sent stay on
+the servers that hold them, because no remaining actor can update or delete
+them. So a post can come back under a deleted id in two ways:
 
 - it is published again after a draft or the trash
 - an edit moves it back to a permalink it had before

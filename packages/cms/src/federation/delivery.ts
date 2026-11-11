@@ -315,13 +315,15 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     context: Context<FederationContextData>,
     document: Document,
   ): Promise<Shape> {
+    const actor = requireSender(context, document).username;
     const citing = await citingActivity(context, document);
     if (citing !== undefined) {
-      return { kind: 'citing', id: citing.activity.id?.href ?? '', citing };
+      return { kind: 'citing', id: citing.activity.id?.href ?? '', actor, citing };
     }
     return {
       kind: 'object',
       id: articleObjectId(context, document).href,
+      actor,
       replyTo: await repliedTo(context, document),
     };
   }
@@ -724,13 +726,16 @@ function cites(document: Document, target: string): boolean {
   );
 }
 
-/** Whether two versions of a post are one object to a peer: the same id. */
+/** Whether two versions of a post are one object to a peer: the same id from the same author. */
 function sameObject(
   context: Context<FederationContextData>,
   before: Document,
   after: Document,
 ): boolean {
-  return articleObjectId(context, before).href === articleObjectId(context, after).href;
+  return (
+    articleObjectId(context, before).href === articleObjectId(context, after).href &&
+    documentAuthor(context, before)?.username === documentAuthor(context, after)?.username
+  );
 }
 
 /**
