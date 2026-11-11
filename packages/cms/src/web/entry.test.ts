@@ -348,26 +348,23 @@ describe('the bio (AC #2)', () => {
     );
   });
 
-  it('prints a link the Links box would now refuse (TASK-112 AC #5)', async () => {
-    // What shll.me's file held before the box was checked. The check is on the
-    // way in, not on the way out: a profile written under an older version
-    // still renders, because a page that dropped somebody's link — or refused
-    // to render at all — would break a site on upgrade to report a typo.
+  it('does not print a link that breaks the link rule', async () => {
     const cms = await sharedSite(
       {},
       {
         displayName: 'Ada Lovelace',
-        links: [{ label: 'Mastodon', href: 'https://shll.me/@a | me' }],
+        links: [
+          { label: 'Mastodon', href: 'https://shll.me/@a | me' },
+          { label: 'Script', href: 'javascript:alert(1)' },
+          { label: 'Site', href: 'https://ada.example' },
+        ],
       },
     );
 
     const inside = bio(await body(cms, '/2026/09/hello/'));
 
-    assert.match(
-      inside,
-      /<a class="u-url" rel="me" href="https:\/\/shll\.me\/@a \| me">Mastodon<\/a>/,
-      'a link stored before the check was dropped from the page',
-    );
+    assert.doesNotMatch(inside, /shll\.me|javascript:/, 'a link that breaks the rule is printed');
+    assert.match(inside, /href="https:\/\/ada\.example"/, 'the good link is missing');
   });
 });
 

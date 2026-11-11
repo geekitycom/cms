@@ -58,7 +58,8 @@ export function avatarUrl(avatar: string, baseUrl: string): string | undefined {
   if (baseUrl === '') return undefined;
 
   try {
-    return absoluteUrl(value, baseUrl);
+    const resolved = absoluteUrl(value, baseUrl);
+    return URL.canParse(resolved) ? resolved : undefined;
   } catch {
     return undefined;
   }

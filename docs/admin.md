@@ -878,13 +878,22 @@ this site, and IndieAuth uses it to confirm the link is yours. Nothing else in
 Geekity CMS reads it. Typing `| me` therefore adds nothing, and
 `| me nofollow author` puts all three values on the rendered `rel`.
 
-A link stored before the box was validated still renders and still appears in
-the box. When the panel is saved, the server refuses a line that is not a
-link and names the line to fix.
+When the panel is saved, the server refuses a line that is not a link, or an
+avatar that is not a path or an absolute `http(s)` URL, and names what to fix. The same rule applies to every profile read from
+`data/users.json`, however it was written: a link whose URL is not a path or
+an absolute `http(s)` URL is not rendered and does not appear in the box, and
+neither does an avatar that breaks the rule.
 
 A form with a problem returns a 400, with one message under each field, and
 nothing is written. The add form keeps the submitted username. The password
 forms keep nothing, because a password does not belong in rendered HTML.
+
+The profile and email forms carry a hash of the stored value they were loaded
+from. When that value has been saved since, from another tab or by another
+admin, the save is refused with a 409 and nothing is written. The page shows
+your version and the stored version side by side, and the form keeps what you
+typed. Saving again from that page replaces the stored version. A save that
+would store what is already there is not refused.
 
 **An email address is optional.** You can set it on the add form, or inline on
 any row, including another user's. With one role, every user already has every

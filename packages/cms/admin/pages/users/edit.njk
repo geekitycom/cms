@@ -12,10 +12,27 @@
    lands back here, so a Save always shows its own result. #}
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/alert.njk" import alert %}
 {% from "components/badge.njk" import badge, status %}
 {% from "components/button.njk" import button %}
 {% from "components/card.njk" import card, cardActions %}
 {% from "components/upload.njk" import uploadControl %}
+
+{% macro conflict(id, noun, versions, rows) %}
+  <div class="mb-4 flex flex-col gap-4">
+    {% call alert(color='error', style='soft', polite=true) %}
+      <span>
+        Nothing was saved. This {{ noun }} changed since this form was loaded:
+        somebody else, or another tab, saved it. Read both versions, then save
+        again to keep yours, or reload the page to keep the stored one.
+      </span>
+    {% endcall %}
+    <div class="grid gap-4 sm:grid-cols-2">
+      {{ field.textarea(id + '-conflict-submitted', '', 'Your version', value=versions.submitted, rows=rows, readonly=true) }}
+      {{ field.textarea(id + '-conflict-current', '', 'The stored version', value=versions.current, rows=rows, readonly=true) }}
+    </div>
+  </div>
+{% endmacro %}
 
 {% block title %}Edit {{ account.username }}{% endblock %}
 
@@ -30,6 +47,11 @@
   <form method="post" action="{{ userEmailUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
     <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+    <input type="hidden" name="{{ fields.emailHash }}" value="{{ account.emailHash }}" />
+
+    {% if emailConflict %}
+      {{ conflict('email', 'address', emailConflict, 2) }}
+    {% endif %}
 
     <p>
       Signs in as <strong>{{ account.username }}</strong>, and writes at
@@ -58,7 +80,8 @@
         Optional, and this site sends no mail yet, so nothing will be sent to one. Choose a provider on <a class="link" href="{{ adminUrl }}/settings/email">Settings &rsaquo; Email</a> to turn password recovery on.
       {% endif %}
     {% endset %}
-    {{ field.text('user-email', fields.email, 'Email address', account.email,
+    {{ field.text('user-email', fields.email, 'Email address',
+         emailConflict.submitted if emailConflict else account.email,
          type='email', autocomplete='email', hintHtml=emailHint) }}
 
     {{ field.password('user-email-current-password', fields.currentPassword, 'Your password',
@@ -78,6 +101,11 @@
   <form method="post" action="{{ userProfileUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
     <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+    <input type="hidden" name="{{ fields.profileHash }}" value="{{ account.profileHash }}" />
+
+    {% if profileConflict %}
+      {{ conflict('profile', 'profile', profileConflict, 8) }}
+    {% endif %}
 
     <p class="text-sm">
       A profile is public. Nothing in it is required — a user with no profile
@@ -85,8 +113,9 @@
       field they do not have.
     </p>
 
-    {% if profileProblems.links %}
-      {% call field.summary('Nothing was saved. Fix the Links box below and save again; every other box here still holds what you typed.') %}
+    {% if profileProblems.avatar or profileProblems.links %}
+      {% call field.summary('Nothing was saved. Fix the boxes marked below and save again; every other box here still holds what you typed.') %}
+        {{ field.problem('profile-avatar', profileProblems.avatar) }}
         {{ field.problem('profile-links', profileProblems.links) }}
       {% endcall %}
     {% endif %}
@@ -100,7 +129,7 @@
 
     {% set avatarHint %}A path such as <code>/uploads/2026/09/me.jpg</code>, or a full URL.{% endset %}
     {{ field.text('profile-avatar', fields.avatar, 'Avatar', account.profile.avatar,
-         hintHtml=avatarHint) }}
+         hintHtml=avatarHint, error=profileProblems.avatar) }}
     {{ uploadControl('field', 'profile-avatar', uploadsUrl, images=true) }}
 
     {{ field.text('profile-job-title', fields.jobTitle, 'Job title', account.profile.jobTitle,

@@ -414,6 +414,19 @@ describe('a user actor', () => {
     );
   });
 
+  for (const avatar of ['http://exa mple.com/me.png', '//[']) {
+    it(`serves the actor with no icon when the stored avatar ${avatar} does not parse`, async () => {
+      const instance = await site({}, { displayName: 'Ada Lovelace', avatar });
+
+      const response = await get(instance, `/author/${ADA}/`, 'application/activity+json');
+
+      assert.equal(response.status, 200);
+      const actor = (await response.json()) as Record<string, unknown>;
+      assert.equal(actor['preferredUsername'], ADA);
+      assert.equal(actor['icon'], undefined);
+    });
+  }
+
   it('publishes a profile’s links as property attachments', async () => {
     const instance = await site(
       {},

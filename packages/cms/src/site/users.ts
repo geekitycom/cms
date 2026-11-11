@@ -16,7 +16,7 @@ import {
 } from './notification-preferences.ts';
 import { systemClock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
-import { relText } from './navigation.ts';
+import { isLinkUrl, relText } from './navigation.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
 import { USERS, dataPath, fileToken } from '../files/data-files.ts';
 
@@ -488,19 +488,29 @@ export function cleanProfile(profile: UserProfile): UserProfile | undefined {
     })
     // A link needs somewhere to go; a label it does not have is the URL again,
     // because a list of blank links is worse than a list of bare addresses.
-    .filter((link) => link.href !== '')
+    .filter((link) => isLinkUrl(link.href))
     .map((link) => (link.label === '' ? { ...link, label: link.href } : link));
 
   const cleaned: UserProfile = {
     ...(displayName === '' ? {} : { displayName }),
     ...(bio === '' ? {} : { bio }),
-    ...(avatar === '' ? {} : { avatar }),
+    ...(isAvatarUrl(avatar) ? { avatar } : {}),
     ...(jobTitle === '' ? {} : { jobTitle }),
     ...(location === '' ? {} : { location }),
     ...(links.length === 0 ? {} : { links }),
   };
 
   return Object.keys(cleaned).length === 0 ? undefined : cleaned;
+}
+
+const ANY_SITE = 'https://site.invalid/';
+
+export function isAvatarUrl(avatar: string): boolean {
+  return isLinkUrl(avatar) && resolvesOnAnySite(avatar);
+}
+
+function resolvesOnAnySite(path: string): boolean {
+  return URL.canParse(path, ANY_SITE);
 }
 
 /**
@@ -952,9 +962,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
  * nothing usable.
  *
  * Read through the same {@link cleanProfile} a save goes through, so a file
- * written by hand and one written by the users screen are read identically:
- * whitespace is trimmed, an empty field is no field, and a link with no URL is
- * no link.
+ * written by hand and one written by the users screen are read identically.
  */
 function profileFrom(value: unknown): UserProfile | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;

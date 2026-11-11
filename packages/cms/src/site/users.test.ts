@@ -10,6 +10,7 @@ import { writeUsers } from '../admin/__testing__/users.ts';
 import { actorKeyFile } from '../federation/keys.ts';
 import { hashPassword } from './passwords.ts';
 import {
+  cleanProfile,
   ConflictingActorIdError,
   countUsers,
   createUser,
@@ -485,6 +486,67 @@ describe('a user with a profile (TASK-67 AC #1)', () => {
     assert.equal(stored?.jobTitle, 'Analyst');
     assert.equal(stored?.location, undefined, 'a location that is not a string is dropped');
     assert.deepEqual(stored?.links, [{ label: 'Home', href: 'https://ada.example' }]);
+  });
+});
+
+describe('profile links and avatars hold to the link rule', () => {
+  const SCRIPT = 'javascript:alert(1)';
+
+  it('keeps a site path or an http(s) link and drops any other scheme', () => {
+    const cleaned = cleanProfile({
+      links: [
+        { label: 'x', href: SCRIPT },
+        { label: 'Data', href: 'data:text/html,hi' },
+        { label: 'About', href: '/about/' },
+        { label: 'Home', href: 'https://ada.example' },
+      ],
+    });
+    assert.deepEqual(cleaned?.links, [
+      { label: 'About', href: '/about/' },
+      { label: 'Home', href: 'https://ada.example' },
+    ]);
+  });
+
+  it('keeps a site path or an http(s) avatar and drops any other', () => {
+    assert.equal(cleanProfile({ avatar: '/uploads/ada.jpg' })?.avatar, '/uploads/ada.jpg');
+    assert.equal(
+      cleanProfile({ avatar: 'https://cdn.example/ada.jpg' })?.avatar,
+      'https://cdn.example/ada.jpg',
+    );
+    assert.equal(cleanProfile({ avatar: SCRIPT }), undefined);
+    assert.equal(cleanProfile({ avatar: 'uploads/ada.jpg' }), undefined);
+  });
+
+  it('reads a users file holding other schemes without them', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [
+      {
+        username: 'ada',
+        profile: {
+          avatar: SCRIPT,
+          links: [
+            { label: 'x', href: SCRIPT },
+            { label: 'Home', href: 'https://ada.example' },
+          ],
+        },
+      },
+    ]);
+    const profile = findUserById(dataDir, 1)?.profile;
+    assert.equal(profile?.avatar, undefined);
+    assert.deepEqual(profile?.links, [{ label: 'Home', href: 'https://ada.example' }]);
+  });
+
+  it('does not store other schemes through setUserProfile', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada' }]);
+    await setUserProfile({
+      dataDir,
+      userId: 1,
+      profile: { avatar: SCRIPT, links: [{ label: 'x', href: SCRIPT }] },
+    });
+    const file = await readFile(usersFile(dataDir), 'utf8');
+    assert.ok(!file.includes(SCRIPT), file);
+    assert.equal(findUserById(dataDir, 1)?.profile, undefined);
   });
 });
 

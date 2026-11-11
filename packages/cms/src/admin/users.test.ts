@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { after, describe, it } from 'node:test';
 
 import {
@@ -15,9 +16,11 @@ import {
   countUsers,
   findUser,
   findUserById,
-  setUserProfile,
+  usersFile,
+  usersJsonText,
   verifyUserPassword,
 } from '../site/users.ts';
+import type { UsersFileContents } from '../site/users.ts';
 import { createToken, findAccessToken } from '../indieauth/tokens.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import { addUser, writeUsers } from './__testing__/users.ts';
@@ -1720,6 +1723,32 @@ describe('a profile link is checked the way a menu line is (TASK-112)', () => {
     assert.equal(findUserById(cms.config.dataDir, ada)?.profile, undefined, 'nothing was written');
   });
 
+  for (const avatar of ['http://exa mple.com/me.png', '//[', 'javascript:alert(1)']) {
+    it(`refuses an avatar that is not a path or an http(s) URL (${avatar}), and stores nothing`, async () => {
+      const cms = await box.site();
+      const agent = await signedIn(cms);
+      const ada = idOf(cms.config.dataDir, 'ada');
+      const { token } = await editScreen(agent, ada);
+
+      const response = await agent.post('/admin/users/profile', {
+        csrf_token: token,
+        user_id: String(ada),
+        display_name: 'Ada Lovelace',
+        avatar,
+      });
+
+      assert.equal(response.status, 400);
+      const html = await response.text();
+      assert.match(html, /id="profile-avatar-error"/, 'the avatar box carries the message');
+      assert.match(html, /an absolute http:\/\/ or https:\/\/ URL/, 'it says what a URL is');
+      assert.equal(
+        findUserById(cms.config.dataDir, ada)?.profile,
+        undefined,
+        'nothing was written',
+      );
+    });
+  }
+
   it('takes the line the menu box takes, rel values and all (AC #1, TASK-114)', async () => {
     // TASK-112 made this line an error, on the reasoning that a profile link
     // carries rel="me" already. Every box that takes a link takes the same
@@ -1777,70 +1806,36 @@ describe('what the Links box says about itself (TASK-112)', () => {
     assert.doesNotMatch(html, /flag/, 'a rel value is not a flag, and none is refused here');
   });
 
-  it('keeps a link stored before the check existed, in the box and in the file (AC #5)', async () => {
+  it('leaves a stored link that breaks the link rule out of the box', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
     const ada = idOf(cms.config.dataDir, 'ada');
-    // What a file may hold that this box would not take: a href with a space
-    // in it, whose tail is not a list of rel values either, so it is still
-    // part of the URL and still refused.
-    const stored = { label: 'Odd', href: '/some where/' };
-    await setUserProfile({
-      dataDir: cms.config.dataDir,
-      userId: ada,
-      profile: { bio: 'Wrote the first program.', links: [stored] },
-    });
-
-    const { html, token } = await editScreen(agent, ada);
-    assert.match(html, />Odd \| \/some where\/</, 'the stored line is not shown');
-
-    // And saving the panel back is refused rather than silently dropping it:
-    // what is in the file is still in the file, and the person is told which
-    // line to fix.
-    const response = await agent.post('/admin/users/profile', {
-      csrf_token: token,
-      user_id: String(ada),
-      bio: 'Wrote the first program.',
-      links: 'Odd | /some where/',
-    });
-
-    assert.equal(response.status, 400);
-    const profile = findUserById(cms.config.dataDir, ada)?.profile;
-    assert.deepEqual(profile?.links, [stored], 'the stored link was lost on the way through');
-    assert.equal(profile?.bio, 'Wrote the first program.', 'and the rest of the profile with it');
-  });
-
-  it('repairs the shll.me line when the box it came back in is saved (TASK-114)', async () => {
-    const cms = await box.site();
-    const agent = await signedIn(cms);
-    const ada = idOf(cms.config.dataDir, 'ada');
-    // The href that sent a reader to /author/a%20%7C%20me/, as the file still
-    // holds it. It shows in the box as the line somebody meant to type, and
-    // saving that line now reads it as a URL and a rel value rather than
-    // refusing it, so the profile fixes itself on the next save.
-    await setUserProfile({
-      dataDir: cms.config.dataDir,
-      userId: ada,
-      profile: { links: [{ label: 'Mastodon', href: 'https://shll.me/@a | me' }] },
-    });
-
-    const { html, token } = await editScreen(agent, ada);
-    assert.match(
-      html,
-      />Mastodon \| https:\/\/shll\.me\/@a \| me</,
-      'the stored line is not shown',
+    const file = usersFile(cms.config.dataDir);
+    const contents = JSON.parse(readFileSync(file, 'utf8')) as UsersFileContents;
+    writeFileSync(
+      file,
+      usersJsonText({
+        ...contents,
+        users: contents.users.map((user) =>
+          user.id === ada
+            ? {
+                ...user,
+                profile: {
+                  bio: 'Wrote the first program.',
+                  links: [
+                    { label: 'Odd', href: '/some where/' },
+                    { label: 'Home', href: 'https://ada.example' },
+                  ],
+                },
+              }
+            : user,
+        ),
+      }),
     );
 
-    const response = await agent.post('/admin/users/profile', {
-      csrf_token: token,
-      user_id: String(ada),
-      links: 'Mastodon | https://shll.me/@a | me',
-    });
-
-    assert.equal(response.status, 303);
-    assert.deepEqual(findUserById(cms.config.dataDir, ada)?.profile?.links, [
-      { label: 'Mastodon', href: 'https://shll.me/@a', rel: 'me' },
-    ]);
+    const { html } = await editScreen(agent, ada);
+    assert.doesNotMatch(html, /some where/, 'the stored line is shown');
+    assert.match(html, /Home \| https:\/\/ada\.example/, 'the good line is not shown');
   });
 });
 
@@ -1868,4 +1863,106 @@ describe('a form naming a user who is already gone', () => {
       });
     }
   }
+});
+
+describe('a profile or email form older than the stored one', () => {
+  function hiddenField(html: string, name: string): string {
+    const match = new RegExp(`name="${name}"\\s+value="([^"]*)"`).exec(html);
+    assert.ok(match?.[1] !== undefined, `the screen carried ${name}`);
+    return match[1];
+  }
+
+  async function profileForm(agent: Browser, id: number): Promise<Record<string, string>> {
+    const { html, token } = await editScreen(agent, id);
+    return {
+      csrf_token: token,
+      user_id: String(id),
+      profile_hash: hiddenField(html, 'profile_hash'),
+      display_name: '',
+      bio: '',
+      avatar: '',
+      job_title: '',
+      location: '',
+      links: '',
+    };
+  }
+
+  it('refuses a profile save from a form loaded before a newer save, and keeps the newer one', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const dataDir = cms.config.dataDir;
+    const ada = idOf(dataDir, 'ada');
+    const first = await profileForm(agent, ada);
+    const second = await profileForm(agent, ada);
+
+    const one = await agent.post('/admin/users/profile', {
+      ...first,
+      bio: 'Wrote the first program.',
+    });
+    assert.equal(one.status, 303);
+
+    const two = await agent.post('/admin/users/profile', {
+      ...second,
+      display_name: 'Ada Lovelace',
+    });
+
+    assert.equal(two.status, 409);
+    const html = await two.text();
+    assert.match(html, /changed since this form was loaded/);
+    assert.match(html, /Wrote the first program\./, 'the stored version is shown');
+    assert.match(html, /value="Ada Lovelace"/, 'what was typed is still in the box');
+    assert.equal(findUserById(dataDir, ada)?.profile?.bio, 'Wrote the first program.');
+    assert.equal(findUserById(dataDir, ada)?.profile?.displayName, undefined);
+
+    const again = await agent.post('/admin/users/profile', {
+      ...second,
+      profile_hash: hiddenField(html, 'profile_hash'),
+      display_name: 'Ada Lovelace',
+    });
+    assert.equal(again.status, 303, 'saving from the conflict screen is a deliberate overwrite');
+    assert.equal(findUserById(dataDir, ada)?.profile?.displayName, 'Ada Lovelace');
+  });
+
+  it('takes a save from an older form that changes nothing stored', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const dataDir = cms.config.dataDir;
+    const ada = idOf(dataDir, 'ada');
+    const first = await profileForm(agent, ada);
+    const second = await profileForm(agent, ada);
+    const same = { bio: '  Wrote the first program.  ', links: 'https://ada.example' };
+
+    assert.equal((await agent.post('/admin/users/profile', { ...first, ...same })).status, 303);
+    const two = await agent.post('/admin/users/profile', { ...second, ...same });
+
+    assert.equal(two.status, 303);
+  });
+
+  it('refuses an email save from a form loaded before a newer one, and keeps the newer address', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const dataDir = cms.config.dataDir;
+    const ada = idOf(dataDir, 'ada');
+    const { html, token } = await editScreen(agent, ada);
+    const form = {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      user_id: String(ada),
+      email_hash: hiddenField(html, 'email_hash'),
+    };
+
+    const one = await agent.post('/admin/users/email', { ...form, email: 'ada@example.com' });
+    assert.equal(one.status, 303);
+    const two = await agent.post('/admin/users/email', { ...form, email: 'ada@example.org' });
+
+    assert.equal(two.status, 409);
+    const refused = await two.text();
+    assert.match(refused, /changed since this form was loaded/);
+    assert.match(refused, /ada@example\.com/, 'the stored address is shown');
+    assert.match(refused, /value="ada@example\.org"/, 'what was typed is still in the box');
+    assert.equal(findUserById(dataDir, ada)?.email, 'ada@example.com');
+
+    const same = await agent.post('/admin/users/email', { ...form, email: 'ada@example.com' });
+    assert.equal(same.status, 303, 'an older form that changes nothing is taken');
+  });
 });
