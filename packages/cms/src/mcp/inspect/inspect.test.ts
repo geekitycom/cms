@@ -229,7 +229,7 @@ describe('the inspect tools', () => {
     const { structured } = status;
 
     assert.deepEqual(structured['queue'], { waiting: 0, retrying: 0 });
-    assert.deepEqual(structured['relays'], { pending: 1, accepted: 0, rejected: 0 });
+    assert.deepEqual(structured['relays'], { pending: 1, accepted: 0, rejected: 0, leaving: 0 });
     const [actor] = structured['actors'] as Row[];
     assert.equal(actor?.['username'], 'ada');
     assert.equal(actor?.['followerCount'], 2);

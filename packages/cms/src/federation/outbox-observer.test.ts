@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
 import {
@@ -8,13 +11,18 @@ import {
   SendActivityError,
 } from '@fedify/fedify';
 import type { FederationOptions } from '@fedify/fedify';
+import { SqliteMessageQueue } from '@fedify/sqlite';
 import { Create, Note } from '@fedify/vocab';
 
+import { queuedMessages } from '../__testing__/federation-queue.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import type { DeliveryOutcome } from '../store/deliveries.ts';
+import { FEDERATION_QUEUE_TABLE, openQueueDatabase } from '../store/queue-database.ts';
+import { queueOrder } from '../store/queue-order.ts';
 import { testKeyPair } from './__testing__/keys.ts';
+import { createOrderedSqliteQueue } from './ordered-queue.ts';
 import { observeOutbox } from './outbox-observer.ts';
-import { createCountingQueue } from './queue.ts';
+import { createCountingQueue, createPausingQueue } from './queue.ts';
 import type { CountingQueue } from './queue.ts';
 
 type Handler = (message: unknown) => Promise<void> | void;
@@ -37,7 +45,7 @@ function duplicate(): SendActivityError {
   return new SendActivityError(new URL(INBOX), 400, 'Bad Request', DUPLICATE_BODY);
 }
 
-function innerQueue(): {
+function innerQueue({ redelivers = false } = {}): {
   queue: CountingQueue;
   enqueued: unknown[];
   deliver(message: unknown): Promise<void>;
@@ -48,6 +56,7 @@ function innerQueue(): {
     enqueued,
     queue: {
       kind: 'counting',
+      redelivers,
       enqueue(message) {
         enqueued.push(message);
         return Promise.resolve();
@@ -69,12 +78,12 @@ function innerQueue(): {
   };
 }
 
-function observed(): {
+function observed(options: { redelivers?: boolean } = {}): {
   outbox: ReturnType<typeof observeOutbox>;
   inner: ReturnType<typeof innerQueue>;
   outcomes: DeliveryOutcome[];
 } {
-  const inner = innerQueue();
+  const inner = innerQueue(options);
   const outcomes: DeliveryOutcome[] = [];
   return {
     inner,
@@ -186,14 +195,38 @@ describe('observeOutbox', () => {
     ]);
   });
 
-  it('settles a handler that throws as retrying, for the queue to retry, and rethrows', async () => {
-    const { outbox: observer, inner, outcomes } = observed();
+  it('settles a handler that throws as retrying when the queue hands the message over again, and rethrows', async () => {
+    const { outbox: observer, inner, outcomes } = observed({ redelivers: true });
     void observer.queue.listen(() => {
       throw new Error('backend will retry');
     });
     await assert.rejects(inner.deliver(outbox()), /backend will retry/);
     assert.deepEqual(outcomes, [
       { activityId: ACTIVITY, inbox: INBOX, status: 'retrying', error: 'backend will retry' },
+    ]);
+  });
+
+  it('settles a handler that throws as failed when the queue does not hand the message over again', async () => {
+    const { outbox: observer, inner, outcomes } = observed();
+    void observer.queue.listen(() => {
+      throw new Error('the outbox handler blew up');
+    });
+    await assert.rejects(inner.deliver(outbox()), /blew up/);
+    assert.deepEqual(outcomes, [
+      { activityId: ACTIVITY, inbox: INBOX, status: 'failed', error: 'the outbox handler blew up' },
+    ]);
+  });
+
+  it('settles a handler that throws after it queued the retry as retrying', async () => {
+    const { outbox: observer, inner, outcomes } = observed();
+    void observer.queue.listen(async (message) => {
+      observer.onOutboxError(new Error('503 Service Unavailable'));
+      await observer.queue.enqueue({ ...(message as object), attempt: 1 });
+      throw new Error('after the retry');
+    });
+    await assert.rejects(inner.deliver(outbox()), /after the retry/);
+    assert.deepEqual(outcomes, [
+      { activityId: ACTIVITY, inbox: INBOX, status: 'retrying', error: '503 Service Unavailable' },
     ]);
   });
 
@@ -323,5 +356,57 @@ describe('observeOutbox through Fedify', () => {
     const outcome = await deliverTo('/gone', [410]);
     assert.equal(outcome.status, 'failed');
     assert.match(outcome.error ?? '', /\b410\b/);
+  });
+});
+
+describe('observeOutbox over the queue in data/queue.sqlite', () => {
+  let dataDir: string;
+
+  before(async () => {
+    dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-observer-'));
+  });
+
+  after(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it('settles a handler that throws as failed, as the queue has already let the message go', async () => {
+    const db = openQueueDatabase(dataDir);
+    const sqlite = createOrderedSqliteQueue(
+      new SqliteMessageQueue(db, { tableName: FEDERATION_QUEUE_TABLE }),
+      queueOrder(db, FEDERATION_QUEUE_TABLE),
+    );
+    const outcomes: DeliveryOutcome[] = [];
+    const observer = observeOutbox(
+      createPausingQueue(sqlite, () => Promise.resolve(false)),
+      (outcome) => outcomes.push(outcome),
+    );
+    const stop = new AbortController();
+    let handled = 0;
+    const listening = observer.queue.listen(
+      () => {
+        handled += 1;
+        throw new Error('the outbox handler blew up');
+      },
+      { signal: stop.signal },
+    );
+
+    await observer.queue.enqueue(outbox(), { orderingKey: 'https://blog.example/posts/1' });
+    await nextEvent('the outcome', (done) => {
+      const timer = setInterval(() => {
+        if (outcomes.length > 0) done();
+      }, 10);
+      return () => clearInterval(timer);
+    });
+    await observer.queue.settled();
+    stop.abort();
+    await listening;
+    observer.queue.close();
+
+    assert.equal(handled, 1, 'the queue handed the message over once');
+    assert.deepEqual(queuedMessages(dataDir), [], 'the queue holds nothing to retry');
+    assert.deepEqual(outcomes, [
+      { activityId: ACTIVITY, inbox: INBOX, status: 'failed', error: 'the outbox handler blew up' },
+    ]);
   });
 });

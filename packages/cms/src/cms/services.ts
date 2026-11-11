@@ -6,6 +6,7 @@ import { postEngagement } from '../admin/engagement.ts';
 import { postsByPath, postsPublishedSince } from '../admin/posts-by-path.ts';
 import { readObjectIds } from '../federation/object-ids.ts';
 import type { ConversationWrite } from '../store/admin-store.ts';
+import { releaseOrderingLocks } from '../store/queue-database.ts';
 import { createAvatarService } from '../avatars/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
 import { createFontStore, createPageFonts, fontFetchJob, queueFontFetch } from '../fonts/index.ts';
@@ -21,6 +22,7 @@ import type { ConversationSite } from '../comments/conversation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { citedPostReader } from '../federation/cited-post.ts';
 import { mintMissingIndexNowKey, SITE } from '../site/namespace.ts';
+import { DEV_MODE } from '../settings/dev-mode.ts';
 import { messageOf } from '../util/errors.ts';
 import { handleLearner } from '../federation/handles.ts';
 import type { HandleLearner } from '../federation/handles.ts';
@@ -422,12 +424,17 @@ export function createServices({
   // database has never heard of is followed here, which is what makes a
   // rebuilt database catch up rather than silently stop federating to it.
   const relays = createRelayService({ ...federated, federation });
-  relays.sync().catch((thrown: unknown) => {
-    console.warn(`The relays could not be read: ${messageOf(thrown)}`);
-  });
-  settings.watch(SITE.relays, async () => {
-    await relays.sync();
-  });
+  const startRelaySync = (): void => {
+    relays.sync().catch((thrown: unknown) => {
+      console.warn(`The relays could not be read: ${messageOf(thrown)}`);
+    });
+  };
+  const sendRelayUndosHeldByDevMode = ({ next }: { readonly next: boolean }): void => {
+    if (!next) startRelaySync();
+  };
+  startRelaySync();
+  settings.watch(SITE.relays, startRelaySync);
+  settings.watch(DEV_MODE.on, sendRelayUndosHeldByDevMode);
   settings.watch(SITE.wiki_base, rescanOnWikiBaseChange(content));
   settings.watch(SITE.gemini, async ({ next }) => {
     if (next) await warnAboutGeminiCertificate(resolved, settings);
@@ -497,9 +504,14 @@ export function createServices({
   for (const listener of conversationWriteSubscribers) admin.onConversationWrite(listener);
 
   const lifecycle: readonly Service[] = [
+    // Before the federation queue listens. On a reload the old worker has
+    // stopped taking messages by now; only a send it still has in hand after
+    // the drain's patience loses its lock, and may then finish after the
+    // next message on its key.
     {
-      name: 'deliveries the queue no longer holds',
+      name: 'what the last worker left in the queue',
       start: () => {
+        if (resolved.federation.queue === undefined) releaseOrderingLocks(resolved.dataDir);
         markForgottenDeliveries(admin, {
           dataDir: resolved.dataDir,
           queue: resolved.federation.queue,

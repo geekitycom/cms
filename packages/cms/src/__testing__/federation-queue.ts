@@ -13,3 +13,16 @@ export function queuedMessages(dataDir: string): unknown[] {
     db.close();
   }
 }
+
+/** Hold every queued message's ordering key, as a worker killed mid-send leaves it. */
+export function lockQueuedOrderingKeys(dataDir: string): void {
+  const db = new DatabaseSync(queueFile(dataDir));
+  try {
+    db.exec(
+      `INSERT OR IGNORE INTO ${FEDERATION_QUEUE_TABLE}_locks (ordering_key)
+         SELECT DISTINCT ordering_key FROM ${FEDERATION_QUEUE_TABLE} WHERE ordering_key IS NOT NULL`,
+    );
+  } finally {
+    db.close();
+  }
+}

@@ -19,7 +19,7 @@ import type { Delivery as RecordedDelivery } from '../store/admin-store.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { listUsers } from '../site/users.ts';
-import { queuedMessages } from '../__testing__/federation-queue.ts';
+import { lockQueuedOrderingKeys, queuedMessages } from '../__testing__/federation-queue.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { signedInAs } from './__testing__/session.ts';
@@ -124,6 +124,7 @@ let slowPage: Promise<void> = Promise.resolve();
 let inboxes: Promise<void> = Promise.resolve();
 let rejectingEveryPost = false;
 let refusalStatus = 503;
+let refusalBody = 'Try again later.';
 const refused: string[] = [];
 let postsBegun = 0;
 let statusUnavailable = false;
@@ -174,6 +175,7 @@ before(async () => {
 afterEach(async () => {
   rejectingEveryPost = false;
   refusalStatus = 503;
+  refusalBody = 'Try again later.';
   statusUnavailable = false;
   inboxes = Promise.resolve();
   for (const instance of started.splice(0)) await instance.close();
@@ -238,7 +240,7 @@ function routeRemoteHost(): () => void {
       if (rejectingEveryPost) {
         refused.push(request.url);
         for (const arrived of arrivals) arrived();
-        return new Response('Try again later.', { status: refusalStatus });
+        return new Response(refusalBody, { status: refusalStatus });
       }
       deliveries.push({
         url: request.url,
@@ -1024,6 +1026,21 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
     assert.equal(create.url, REMOTE_SHARED_INBOX);
   });
 
+  it('sends a delivery whose ordering key a worker killed mid-send still holds a lock for', async () => {
+    const queued = await site({ queued: true });
+    const agent = signedInAs(queued.cms, ADA);
+    await publishNewPost(agent);
+    await queued.cms.delivery.settled();
+    await queued.cms.close();
+    assert.equal(queuedMessages(queued.dataDir).length, 1);
+    lockQueuedOrderingKeys(queued.dataDir);
+
+    await nextCms(queued).serve();
+
+    const create = await waitForDelivery('Create');
+    assert.equal(create.url, REMOTE_SHARED_INBOX);
+  });
+
   it('sends a retry Fedify scheduled for later after the CMS is stopped and started again (AC #1)', async () => {
     refused.length = 0;
     rejectingEveryPost = true;
@@ -1078,6 +1095,32 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
     assert.equal(queuedMessages(queued.dataDir).length, 0);
   });
 
+  it('records a follower whose inbox is no http(s) URL as failed, as nothing can be queued for it', async () => {
+    const queued = await site({ queued: true });
+    const portable = 'https://portable.example/users/p';
+    await addFollower(
+      { admin: queued.cms.admin, contentDir: queued.contentDir, dataDir: queued.dataDir },
+      ADA,
+      {
+        actorId: portable,
+        inboxId: 'ap://portable.example/inbox',
+        sharedInboxId: null,
+        handle: '@p@portable.example',
+        name: 'P',
+        iconUrl: null,
+        url: null,
+      },
+    );
+    const agent = signedInAs(queued.cms, ADA);
+    await publishNewPost(agent);
+    await queued.cms.delivery.settled();
+
+    const [row] = queued.cms.admin.searchDeliveries({ actorId: portable }).items;
+    assert.equal(row?.status, 'failed', `row ${JSON.stringify(row)}`);
+    assert.match(row.error ?? '', /ap:\/\/portable\.example\/inbox/);
+    assert.equal(queuedMessages(queued.dataDir).length, 1, 'only the other follower is queued');
+  });
+
   it('holds a delivery left in the queue when the next CMS boots in dev mode (AC #4)', async () => {
     const queued = await site({ queued: true });
     const agent = signedInAs(queued.cms, ADA);
@@ -1097,32 +1140,35 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
       check();
       return () => watcher.close();
     });
+    await next.drain();
+    const row = next.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX);
     await next.close();
 
     assert.deepEqual(deliveries, []);
+    assert.equal(row, undefined, 'a held delivery keeps no row');
     assert.equal(held.type === 'held' && held.kind, 'activitypub');
     assert.match(held.type === 'held' ? held.what : '', /^Create /);
     assert.equal(queuedMessages(queued.dataDir).length, 0, 'a held delivery is dropped, not kept');
   });
 });
 
-describe('how a queued delivery settles in the delivery log', () => {
-  function settledAt(
-    cms: Cms,
-    inbox: string,
-    settled: (delivery: RecordedDelivery) => boolean,
-  ): Promise<RecordedDelivery> {
-    return nextEvent(`the delivery to ${inbox} settling`, (done) => {
-      const timer = setInterval(() => {
-        const last = cms.admin.lastDeliveryToInbox(inbox);
-        if (last !== undefined && settled(last)) done(last);
-      }, 10);
-      return () => {
-        clearInterval(timer);
-      };
-    });
-  }
+function settledAt(
+  cms: Cms,
+  inbox: string,
+  settled: (delivery: RecordedDelivery) => boolean,
+): Promise<RecordedDelivery> {
+  return nextEvent(`the delivery to ${inbox} settling`, (done) => {
+    const timer = setInterval(() => {
+      const last = cms.admin.lastDeliveryToInbox(inbox);
+      if (last !== undefined && settled(last)) done(last);
+    }, 10);
+    return () => {
+      clearInterval(timer);
+    };
+  });
+}
 
+describe('how a queued delivery settles in the delivery log', () => {
   it('records a delivery the inbox accepted as sent', async () => {
     const { cms } = await site({ queued: true });
     await cms.serve();
@@ -1158,6 +1204,80 @@ describe('how a queued delivery settles in the delivery log', () => {
     const settled = await settledAt(cms, REMOTE_SHARED_INBOX, (one) => one.status !== 'queued');
     assert.equal(settled.status, 'failed');
     assert.match(settled.error ?? '', /410/);
+  });
+});
+
+describe('the log line for a delivery the inbox refused', () => {
+  it('is one line with no control characters, whatever the refusal body holds', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    rejectingEveryPost = true;
+    refusalStatus = 500;
+    refusalBody = 'oops\nCould not deliver https://forged.example/ to nobody: fake\u001b[2J\u009b';
+    const { cms } = await site();
+    await publishNewPost(signedInAs(cms, ADA));
+    await cms.delivery.settled();
+
+    const lines = warn.mock.calls.map((call) => String(call.arguments[0]));
+    const refusals = lines.filter((line) => line.startsWith('Could not deliver'));
+    assert.equal(refusals.length, 1, `warned ${JSON.stringify(lines)}`);
+    const line = refusals[0] ?? '';
+    const controls = [...line].filter((character) => {
+      const code = character.charCodeAt(0);
+      return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+    });
+    assert.deepEqual(controls, [], `logged ${JSON.stringify(line)}`);
+    assert.doesNotMatch(line, /forged/);
+    assert.match(line, /500/);
+    assert.match(cms.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX)?.error ?? '', /forged/);
+  });
+});
+
+describe('a post changed while its Create waits in the queue for a retry', () => {
+  function queueEmpty(dataDir: string): Promise<void> {
+    return nextEvent('the queue emptying', (done) => {
+      const timer = setInterval(() => {
+        if (queuedMessages(dataDir).length === 0) done();
+      }, 20);
+      return () => {
+        clearInterval(timer);
+      };
+    });
+  }
+
+  async function publishedAndRefused(): Promise<{
+    site: Site;
+    agent: ReturnType<typeof signedInAs>;
+  }> {
+    rejectingEveryPost = true;
+    const queued = await site({ queued: true });
+    await queued.cms.serve();
+    const agent = signedInAs(queued.cms, ADA);
+    await publishNewPost(agent);
+    await settledAt(queued.cms, REMOTE_SHARED_INBOX, (one) => one.status === 'retrying');
+    rejectingEveryPost = false;
+    return { site: queued, agent };
+  }
+
+  async function everythingSent({ cms, dataDir }: Site): Promise<string[]> {
+    await cms.delivery.settled();
+    await queueEmpty(dataDir);
+    await cms.drain();
+    return deliveries.map((one) => String(one.body['type']));
+  }
+
+  it('delivers the retried Create before the Update of an edit', async () => {
+    const { site: queued, agent } = await publishedAndRefused();
+    await submitEditor(agent, '/admin/posts/hello-world', { body: 'A second thought.' });
+
+    assert.deepEqual(await everythingSent(queued), ['Create', 'Update']);
+    assert.match(contentOf(deliveries.at(-1)), /A second thought/);
+  });
+
+  it('delivers the retried Create before the Delete of a withdrawal', async () => {
+    const { site: queued, agent } = await publishedAndRefused();
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+
+    assert.deepEqual(await everythingSent(queued), ['Create', 'Delete']);
   });
 });
 
@@ -2850,6 +2970,47 @@ describe('retrying a failed delivery', () => {
     assert.deepEqual(delivered('Update'), []);
     assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
     assert.match(contentOf(delivered('Create')[0]), /Edited while it was down\./);
+  });
+
+  it('sends a recipient whose pin failed the Update it also missed, then the Add', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    rejectingEveryPost = true;
+    await submitEditor(agent, '/admin/posts/hello-world', { pinned: '1' });
+    await cms.delivery.settled();
+    assert.equal(cms.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX)?.activityType, 'Add');
+    rejectingEveryPost = false;
+    deliveries.length = 0;
+
+    await retry(cms);
+
+    assert.deepEqual(
+      deliveries.map((delivery) => delivery.body['type']),
+      ['Update', 'Add'],
+    );
+    assert.equal(cms.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX)?.status, 'sent');
+  });
+
+  it('sends a recipient whose unpin failed the Update it also missed, then the Remove', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent, { pinned: '1' });
+    await cms.delivery.settled();
+    rejectingEveryPost = true;
+    await submitEditor(agent, '/admin/posts/hello-world', {});
+    await cms.delivery.settled();
+    assert.equal(cms.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX)?.activityType, 'Remove');
+    rejectingEveryPost = false;
+    deliveries.length = 0;
+
+    await retry(cms);
+
+    assert.deepEqual(
+      deliveries.map((delivery) => delivery.body['type']),
+      ['Update', 'Remove'],
+    );
   });
 });
 

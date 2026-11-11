@@ -6,7 +6,7 @@ import type { ActorProfile, AdminStore } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
-import { messageOf } from '../util/errors.ts';
+import { oneLineMessageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import type { FederationContextData } from './federation.ts';
 import { siteLoaders } from './site-loaders.ts';
@@ -141,7 +141,9 @@ export function createActorProfileService(
     try {
       profile = await load(actorId, signal);
     } catch (thrown) {
-      if (!signal.aborted) logger.warn(`Could not read the actor ${actorId}: ${messageOf(thrown)}`);
+      if (!signal.aborted) {
+        logger.warn(`Could not read the actor ${actorId}: ${oneLineMessageOf(thrown)}`);
+      }
     }
     if (signal.aborted) return;
     if (profile === undefined) {
@@ -178,7 +180,7 @@ export function createActorProfileService(
 
     sweep() {
       return sweeps.run(sweepOnce).catch((thrown: unknown) => {
-        logger.warn(`The actor profile sweep failed: ${messageOf(thrown)}`);
+        logger.warn(`The actor profile sweep failed: ${oneLineMessageOf(thrown)}`);
       });
     },
 

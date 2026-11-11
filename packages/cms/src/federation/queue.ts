@@ -9,10 +9,15 @@ import { SqliteMessageQueue } from '@fedify/sqlite';
 
 import { holdOutbound } from '../dev-mode.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
+import type { DeliveryStore } from '../store/deliveries.ts';
 import { FEDERATION_QUEUE_TABLE, openQueueDatabase } from '../store/queue-database.ts';
+import { queueOrder } from '../store/queue-order.ts';
 import type { Clock } from '../util/clock.ts';
+import { createOrderedSqliteQueue } from './ordered-queue.ts';
 
 interface Settling extends MessageQueue {
+  /** Whether a message whose handler threw is handed over again. */
+  readonly redelivers: boolean;
   settled(): Promise<void>;
   close(): void;
 }
@@ -100,6 +105,7 @@ export function createCountingQueue(inner: MessageQueue, drop: Drop): CountingQu
 
   return {
     kind: 'counting',
+    redelivers: inner.nativeRetrial === true,
 
     enqueue(message, enqueue) {
       return inner.enqueue(carry(message, enqueue), enqueue);
@@ -157,6 +163,7 @@ export function createPausingQueue(inner: MessageQueue & Disposable, drop: Drop)
 
   return {
     kind: 'pausing',
+    redelivers: inner.nativeRetrial === true,
 
     enqueue(message, enqueue) {
       return inner.enqueue(message, enqueue);
@@ -216,14 +223,16 @@ export function createPausingQueue(inner: MessageQueue & Disposable, drop: Drop)
 
 export function createFederationQueue(
   supplied: MessageQueue | null | undefined,
-  site: { readonly settings: SettingsRegistry; readonly config: DropConfig },
+  site: QueueSite,
 ): SettlingQueue | undefined {
   if (supplied === null) return undefined;
-  const drop = dropWhileInDevMode(site.settings, site.config);
+  const drop = dropWhileInDevMode(site);
   if (supplied !== undefined) return createCountingQueue(supplied, drop);
-  const inner = new SqliteMessageQueue(openQueueDatabase(site.config.dataDir), {
-    tableName: FEDERATION_QUEUE_TABLE,
-  });
+  const db = openQueueDatabase(site.config.dataDir);
+  const inner = createOrderedSqliteQueue(
+    new SqliteMessageQueue(db, { tableName: FEDERATION_QUEUE_TABLE }),
+    queueOrder(db, FEDERATION_QUEUE_TABLE),
+  );
   return createPausingQueue(inner, drop);
 }
 
@@ -232,21 +241,29 @@ interface DropConfig {
   readonly now: Clock;
 }
 
+interface QueueSite {
+  readonly settings: SettingsRegistry;
+  readonly config: DropConfig;
+  readonly admin: Pick<DeliveryStore, 'forgetHeldDeliveries'>;
+}
+
 interface Outgoing {
   readonly activityType: string;
   readonly activityId: string;
   readonly to: readonly string[];
 }
 
-function dropWhileInDevMode(settings: SettingsRegistry, config: DropConfig): Drop {
+function dropWhileInDevMode({ settings, config, admin }: QueueSite): Drop {
   return async (message) => {
     const outgoing = outgoingOf(message);
     if (outgoing === undefined) return false;
-    return await holdOutbound(settings, config, {
+    const held = await holdOutbound(settings, config, {
       kind: 'activitypub',
       what: `${outgoing.activityType} ${outgoing.activityId}`,
       to: outgoing.to,
     });
+    if (held) admin.forgetHeldDeliveries({ activityId: outgoing.activityId, inboxes: outgoing.to });
+    return held;
   };
 }
 

@@ -785,7 +785,9 @@ queue it, and it does not record a delivery or webmention as failed. Neither
 the Federation screen nor `geekity resend` offers it again. A post announced
 while the mode was on counts as announced, so its next edit goes out as an
 `Update`. A relay added while the mode was on stays pending. Press Retry on the
-Federation screen after the site is live.
+Federation screen after the site is live. A relay removed while the mode was on
+stays on the Federation screen as leaving. Turning the mode off sends its
+`Undo` and removes it.
 
 The site also holds password recovery mail, so in dev mode the forgot-password
 page offers no form; set a password from the shell with

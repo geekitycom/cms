@@ -389,6 +389,200 @@ describe('removing a relay', () => {
   });
 });
 
+async function devMode(cms: Cms, on: boolean): Promise<void> {
+  await cms.settings.set('dev_mode', new Map([['on', on]]), 'cli');
+}
+
+describe('removing a relay while dev mode is on', () => {
+  it('keeps the record as leaving, with a reason, and offers no Retry', async () => {
+    const { cms } = await site({ relays: [RELAY_INBOX] });
+    await cms.relays.settled();
+    sent.length = 0;
+
+    await devMode(cms, true);
+    await listRelays(cms, []);
+    await cms.relays.settled();
+
+    assert.deepEqual(sent, [], 'dev mode held the Undo');
+    const kept = cms.admin.getRelay(RELAY_INBOX);
+    assert.equal(kept?.state, 'leaving');
+    assert.match(kept?.reason ?? '', /dev mode/);
+    const screen = await (await signedInAs(cms, LOCAL_USER).get('/admin/federation')).text();
+    assert.match(screen, /Leaving/);
+    assert.doesNotMatch(screen, /\/admin\/federation\/relays\/retry/);
+  });
+
+  it('sends the Undo once the site is live, then drops the record', async () => {
+    const { cms } = await site({ relays: [RELAY_INBOX] });
+    await cms.relays.settled();
+    const followId = String(ofType('Follow')[0]?.body['id']);
+    sent.length = 0;
+    await devMode(cms, true);
+    await listRelays(cms, []);
+    await cms.relays.settled();
+
+    await devMode(cms, false);
+    await cms.relays.settled();
+
+    assert.deepEqual(
+      ofType('Undo').map((one) => [one.url, one.body['object']]),
+      [[RELAY_INBOX, followId]],
+    );
+    assert.equal(cms.admin.getRelay(RELAY_INBOX), undefined);
+  });
+
+  it('follows the relay again, and owes it no Undo, when it is listed again', async () => {
+    const { cms } = await site({ relays: [RELAY_INBOX] });
+    await cms.relays.settled();
+    sent.length = 0;
+    await devMode(cms, true);
+    await listRelays(cms, []);
+    await cms.relays.settled();
+
+    await listRelays(cms, [RELAY_INBOX]);
+    await cms.relays.settled();
+    assert.equal(cms.admin.getRelay(RELAY_INBOX)?.state, 'pending');
+
+    await devMode(cms, false);
+    await cms.relays.settled();
+    assert.deepEqual(sent, [], 'nothing is undone, and a held Follow waits for Retry');
+    assert.equal(cms.admin.getRelay(RELAY_INBOX)?.state, 'pending');
+  });
+});
+
+async function siteWithAnsweredRelay(answer: 'accept' | 'reject'): Promise<Cms> {
+  const { cms } = await site({ relays: [RELAY_INBOX] });
+  await cms.relays.settled();
+  const followId = String(ofType('Follow')[0]?.body['id']);
+  await deliver(cms, answer === 'accept' ? accept(followId) : reject(followId, 'No.'));
+  sent.length = 0;
+  return cms;
+}
+
+async function pressRetry(cms: Cms): Promise<string> {
+  const agent = signedInAs(cms, LOCAL_USER);
+  const token = csrfField(await (await agent.get('/admin/federation')).text());
+  assert.ok(token !== undefined, 'the federation screen carried a CSRF token');
+  const response = await agent.post('/admin/federation/relays/retry', {
+    csrf_token: token,
+    relay: RELAY_INBOX,
+  });
+  assert.equal(response.status, 303, await response.text());
+  await cms.relays.settled();
+  return await (await agent.get('/admin/federation')).text();
+}
+
+function beforePostsTo(inbox: string, before: () => Promise<void>): () => void {
+  const inner = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.method === 'POST' && request.url === inbox) await before();
+    return await inner(request);
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = inner;
+  };
+}
+
+function holdPostsTo(inbox: string): () => void {
+  let open: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => (open = resolve));
+  const restore = beforePostsTo(inbox, () => gate);
+  return () => {
+    restore();
+    open();
+  };
+}
+
+async function listRelays(cms: Cms, relays: string[]): Promise<void> {
+  await cms.settings.set('site', new Map([['relays', relays]]), 'admin');
+}
+
+describe('Retry on a relay that has answered', () => {
+  it('leaves a rejected relay rejected, sends no Follow, and says why', async () => {
+    const cms = await siteWithAnsweredRelay('reject');
+
+    const screen = await pressRetry(cms);
+
+    assert.equal(cms.admin.getRelay(RELAY_INBOX)?.state, 'rejected');
+    assert.equal(ofType('Follow').length, 0);
+    assert.match(screen, /refused the subscription/);
+  });
+
+  it('leaves an accepted relay accepted, sends no Follow, and says why', async () => {
+    const cms = await siteWithAnsweredRelay('accept');
+
+    const screen = await pressRetry(cms);
+
+    assert.equal(cms.admin.getRelay(RELAY_INBOX)?.state, 'accepted');
+    assert.equal(ofType('Follow').length, 0);
+    assert.match(screen, /already accepted the subscription/);
+  });
+});
+
+describe('relay list changes while earlier subscription work is in flight', () => {
+  it('leaves no record of a relay added then removed before the subscriptions settle', async () => {
+    const { cms } = await site();
+    const release = holdPostsTo(OTHER_RELAY_INBOX);
+    try {
+      await listRelays(cms, [OTHER_RELAY_INBOX]);
+      await listRelays(cms, [OTHER_RELAY_INBOX, RELAY_INBOX]);
+      await listRelays(cms, [OTHER_RELAY_INBOX]);
+    } finally {
+      release();
+    }
+    await cms.relays.settled();
+
+    assert.equal(cms.admin.getRelay(RELAY_INBOX), undefined);
+    assert.equal(cms.admin.getRelay(OTHER_RELAY_INBOX)?.state, 'pending');
+  });
+
+  it('does not bring back a relay whose removal a Retry raced', async () => {
+    const { cms } = await site({ relays: [RELAY_INBOX] });
+    await cms.relays.settled();
+    sent.length = 0;
+    const release = holdPostsTo(RELAY_INBOX);
+    let retried: Promise<unknown>;
+    try {
+      await listRelays(cms, []);
+      retried = cms.relays.retry(RELAY_INBOX);
+    } finally {
+      release();
+    }
+    assert.equal(await retried, undefined, 'the retry found no subscription');
+    await cms.relays.settled();
+
+    assert.equal(cms.admin.getRelay(RELAY_INBOX), undefined);
+    assert.deepEqual(
+      sent.map((one) => one.body['type']),
+      ['Undo'],
+    );
+  });
+});
+
+describe('a Follow the relay refuses after accepting it', () => {
+  it('keeps the Accept that arrived while the POST was in flight', async () => {
+    const { cms } = await site();
+    const restore = beforePostsTo(RELAY_INBOX, async () => {
+      const followId = cms.admin.getRelay(RELAY_INBOX)?.followId;
+      assert.ok(typeof followId === 'string', 'the record was written before the POST');
+      relayInboxStatus = 500;
+      await deliver(cms, accept(followId));
+    });
+    try {
+      await listRelays(cms, [RELAY_INBOX]);
+      await cms.relays.settled();
+    } finally {
+      restore();
+      relayInboxStatus = 202;
+    }
+
+    const stored = cms.admin.getRelay(RELAY_INBOX);
+    assert.equal(stored?.state, 'accepted');
+    assert.equal(stored?.reason, null);
+  });
+});
+
 describe('with the clock pinned through createCms', () => {
   const PINNED = '2026-05-06T07:08:09.000Z';
 

@@ -14,7 +14,7 @@ import type { DeliveryStatus } from '../store/deliveries.ts';
 import { systemClock } from '../util/clock.ts';
 import type { WebmentionReport } from '../webmention/service.ts';
 import type { DeliveryReport } from './delivery.ts';
-import { RESEND_JOB, resendJob } from './resend-job.ts';
+import { RESEND_JOB, resendActivity, resendJob } from './resend-job.ts';
 import type { ResendJobServices, ResendPayload } from './resend-job.ts';
 
 const directories: string[] = [];
@@ -139,6 +139,23 @@ describe('the resend job', () => {
       },
     ]);
     assert.deepEqual(site.mentioned, [], 'no webmention was sent when none was asked for');
+  });
+
+  it('counts followers behind one shared inbox as one inbox', () => {
+    const sent = report('hello', ['failed', 'failed', 'sent']);
+    const shared = 'https://remote.example/inbox';
+    const deliveries = sent.deliveries.map((row, index) =>
+      index < 2 ? { ...row, inboxId: shared } : row,
+    );
+
+    assert.deepEqual(resendActivity({ ...sent, deliveries }), {
+      activityType: 'Update',
+      heldByDevMode: false,
+      inboxes: 2,
+      reached: 1,
+      queued: 0,
+      failed: 1,
+    });
   });
 
   it('resends every announced post as the job runs, not as it was queued (AC #2)', async () => {

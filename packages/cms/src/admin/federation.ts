@@ -91,6 +91,7 @@ export const RELAY_STATE_LABELS: Readonly<Record<RelayState, string>> = {
   pending: 'Waiting',
   accepted: 'Accepted',
   rejected: 'Rejected',
+  leaving: 'Leaving',
 };
 
 /**
@@ -237,6 +238,19 @@ export function mountFederationScreen(
 
     if (relay === undefined) {
       flash(c, 'error', 'The site does not subscribe to that relay, so there is nothing to retry.');
+    } else if (relay.state === 'accepted') {
+      flash(
+        c,
+        'error',
+        `${relay.inboxId} has already accepted the subscription, so the follow was not sent again.`,
+      );
+    } else if (relay.state === 'rejected') {
+      flash(
+        c,
+        'error',
+        `${relay.inboxId} refused the subscription, so the follow was not sent again. ` +
+          'To ask again, remove the relay and add it back.',
+      );
     } else {
       flash(
         c,
@@ -731,7 +745,7 @@ export interface RelayRow {
   readonly inboxId: string;
   /** Where the subscription stands. */
   readonly state: RelayState;
-  /** What that state reads as: "Waiting", "Accepted", "Rejected". */
+  /** What that state reads as: "Waiting", "Accepted", "Rejected", "Leaving". */
   readonly stateLabel: string;
   /** The relay's actor, once it has answered, for a human following the link. */
   readonly actorId: string | null;

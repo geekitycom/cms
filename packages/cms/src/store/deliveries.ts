@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 import { decodeEntities } from '../util/html.ts';
@@ -15,11 +15,12 @@ export const DELIVERY_STATUSES = ['sent', 'queued', 'retrying', 'failed', 'unkno
  * `sent` is a POST the follower's server accepted. `queued` is one handed to
  * Fedify's outbox queue and not yet settled. `retrying` is one whose last
  * attempt failed, with that error, and which the queue will try again.
- * `failed` is a delivery Fedify gave up on, or one that threw before it
- * reached the queue, with the reason in the row. `unknown` is one left
- * `queued` or `retrying` with nothing for it in the queue any more: a version
- * that did not settle outcomes wrote it, or the queue lost it, so how it
- * ended was never seen.
+ * `failed` is a delivery Fedify gave up on, one that threw before it reached
+ * the queue or in a queue that does not hand a message over again, or one to
+ * an inbox nothing can be queued for, with the reason in the row. `unknown`
+ * is one left `queued` or `retrying` with nothing for it in the queue any
+ * more: a version that did not settle outcomes wrote it, or the queue lost it,
+ * so how it ended was never seen.
  */
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
@@ -103,12 +104,17 @@ export interface DeliverySearch {
   readonly actorId?: string | undefined;
 }
 
-const DELIVERY_SEARCH = `
-  WHERE (:objectIds IS NULL OR object_id IN (SELECT value FROM json_each(:objectIds)))
-    AND (:activityId IS NULL OR activity_id = :activityId)
-    AND (:statuses IS NULL OR status IN (SELECT value FROM json_each(:statuses)))
-    AND (:inboxId IS NULL OR inbox_id = :inboxId)
-    AND (:actorId IS NULL OR actor_id = :actorId)`;
+// Only the given filters go into the statement: SQLite cannot use an index
+// for a column test written as `:param IS NULL OR column = :param`.
+const DELIVERY_SEARCH_FILTERS = {
+  objectIds: 'object_id IN (SELECT value FROM json_each(:objectIds))',
+  activityId: 'activity_id = :activityId',
+  statuses: 'status IN (SELECT value FROM json_each(:statuses))',
+  inboxId: 'inbox_id = :inboxId',
+  actorId: 'actor_id = :actorId',
+} as const satisfies Record<keyof DeliverySearch, string>;
+
+type DeliverySearchStatements = { readonly items: StatementSync; readonly count: StatementSync };
 
 export interface DeliveryStore {
   /**
@@ -118,6 +124,15 @@ export interface DeliveryStore {
    */
   recordDelivery(delivery: NewDelivery): Delivery;
   settleDeliveries(outcome: DeliveryOutcome): void;
+  /**
+   * Remove the unsettled rows of a delivery dev mode dropped from the queue.
+   * A held delivery keeps no row, so nothing reads it as failed or sends it
+   * again.
+   */
+  forgetHeldDeliveries(held: {
+    readonly activityId: string;
+    readonly inboxes: readonly string[];
+  }): void;
   /**
    * Turn every `queued` or `retrying` row attempted before `before` that no
    * waiting message carries into `unknown`, keeping its error and its time.
@@ -181,14 +196,21 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
       UPDATE ap_deliveries SET status = ?, error = ?, attempted_at = ?
       WHERE activity_id = ? AND inbox_id = ?
     `),
+    forgetHeldDeliveries: db.prepare(`
+      DELETE FROM ap_deliveries
+      WHERE activity_id = :activityId
+        AND inbox_id IN (SELECT value FROM json_each(:inboxes))
+        AND status IN ('queued', 'retrying')
+    `),
     markUnsettledDeliveriesUnknown: db.prepare(`
       UPDATE ap_deliveries SET status = 'unknown'
       WHERE status IN ('queued', 'retrying')
         AND attempted_at < :before
-        AND NOT EXISTS (
-          SELECT 1 FROM json_each(:waiting) AS waiting
-          WHERE json_extract(waiting.value, '$.activityId') = ap_deliveries.activity_id
-            AND json_extract(waiting.value, '$.inbox') = ap_deliveries.inbox_id
+        -- Uncorrelated, so SQLite reads the waiting list into a lookup once
+        -- instead of scanning it again for every row.
+        AND (activity_id, inbox_id) NOT IN (
+          SELECT json_extract(value, '$.activityId'), json_extract(value, '$.inbox')
+          FROM json_each(:waiting)
         )
     `),
     listDeliveries: db.prepare(`
@@ -216,8 +238,10 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
         AND NOT EXISTS (
           SELECT 1 FROM ap_deliveries AS later
           WHERE later.actor_id = failure.actor_id
-            AND COALESCE(later.slug, later.object_id) = COALESCE(failure.slug, failure.object_id)
+            AND later.object_id = failure.object_id
             AND (later.attempted_at, later.rowid) > (failure.attempted_at, failure.rowid)
+            -- A peer drops an Update of a status it never stored.
+            AND (failure.activity_type <> 'Create' OR later.activity_type IN ('Create', 'Delete'))
         )
       ORDER BY attempted_at DESC, rowid DESC
     `),
@@ -235,15 +259,28 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
       GROUP BY activity_id
       ORDER BY last_attempted_at DESC, activity_id
     `),
-    searchDeliveries: db.prepare(`
-      SELECT * FROM ap_deliveries ${DELIVERY_SEARCH}
-      ORDER BY attempted_at DESC, rowid DESC
-      LIMIT :limit OFFSET :offset
-    `),
-    countDeliverySearch: db.prepare(
-      `SELECT COUNT(*) AS count FROM ap_deliveries ${DELIVERY_SEARCH}`,
-    ),
   };
+  const searchStatements = new Map<string, DeliverySearchStatements>();
+  function searchStatementsFor(filters: readonly (keyof DeliverySearch)[]) {
+    const key = filters.join(',');
+    let prepared = searchStatements.get(key);
+    if (prepared === undefined) {
+      const where =
+        filters.length === 0
+          ? ''
+          : `WHERE ${filters.map((filter) => DELIVERY_SEARCH_FILTERS[filter]).join(' AND ')}`;
+      prepared = {
+        items: db.prepare(`
+          SELECT * FROM ap_deliveries ${where}
+          ORDER BY attempted_at DESC, rowid DESC
+          LIMIT :limit OFFSET :offset
+        `),
+        count: db.prepare(`SELECT COUNT(*) AS count FROM ap_deliveries ${where}`),
+      };
+      searchStatements.set(key, prepared);
+    }
+    return prepared;
+  }
   return {
     recordDelivery(delivery) {
       const recorded = getRow(
@@ -275,6 +312,10 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
         outcome.activityId,
         outcome.inbox,
       );
+    },
+
+    forgetHeldDeliveries({ activityId, inboxes }) {
+      statements.forgetHeldDeliveries.run({ activityId, inboxes: JSON.stringify(inboxes) });
     },
 
     markUnsettledDeliveriesUnknown({ before, waiting }) {
@@ -315,16 +356,21 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
 
     searchDeliveries(search, page = {}) {
       const filter = {
-        objectIds: search.objectIds === undefined ? null : JSON.stringify(search.objectIds),
-        activityId: search.activityId ?? null,
-        statuses: search.statuses === undefined ? null : JSON.stringify(search.statuses),
-        inboxId: search.inboxId ?? null,
-        actorId: search.actorId ?? null,
+        objectIds: search.objectIds === undefined ? undefined : JSON.stringify(search.objectIds),
+        activityId: search.activityId,
+        statuses: search.statuses === undefined ? undefined : JSON.stringify(search.statuses),
+        inboxId: search.inboxId,
+        actorId: search.actorId,
       };
+      const given = Object.entries(filter).filter(
+        (entry): entry is [keyof DeliverySearch, string] => entry[1] !== undefined,
+      );
+      const prepared = searchStatementsFor(given.map(([name]) => name));
+      const params = Object.fromEntries(given);
       return {
-        total: Number(statements.countDeliverySearch.get(filter)?.['count'] ?? 0),
-        items: statements.searchDeliveries
-          .all({ ...filter, limit: page.limit ?? NO_LIMIT, offset: page.offset ?? 0 })
+        total: Number(prepared.count.get(params)?.['count'] ?? 0),
+        items: prepared.items
+          .all({ ...params, limit: page.limit ?? NO_LIMIT, offset: page.offset ?? 0 })
           .map(toDelivery),
       };
     },

@@ -187,9 +187,11 @@ describe('the health widget (TASK-450)', () => {
     assert.ok(words.indexOf('Needs attention') < words.indexOf('Activity'), words);
   });
 
-  it('leaves out a failure a later activity about the same post reached that recipient with', async () => {
+  it('leaves out a failed Update a later Update reached that recipient with', async () => {
     const { cms, agent } = await site();
-    cms.admin.recordDelivery(delivery({ status: 'failed', error: '400', attemptedAt: ago(3) }));
+    cms.admin.recordDelivery(
+      delivery({ activityType: 'Update', status: 'failed', error: '400', attemptedAt: ago(3) }),
+    );
     cms.admin.recordDelivery(
       delivery({
         activityId: 'https://blog.example/activities/2',

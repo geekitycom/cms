@@ -8,6 +8,12 @@
     },
     {
       "type": "index",
+      "name": "ap_deliveries_actor_id",
+      "tbl_name": "ap_deliveries",
+      "sql": "CREATE INDEX ap_deliveries_actor_id ON ap_deliveries (actor_id, object_id, attempted_at)"
+    },
+    {
+      "type": "index",
       "name": "ap_deliveries_attempted_at",
       "tbl_name": "ap_deliveries",
       "sql": "CREATE INDEX ap_deliveries_attempted_at ON ap_deliveries (attempted_at)"
@@ -334,6 +340,6 @@
   "userVersion": 0,
   "ledger": [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-    27, 28, 29
+    27, 28, 29, 30
   ]
 }

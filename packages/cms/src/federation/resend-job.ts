@@ -83,14 +83,21 @@ export function resendJob(services: ResendJobServices): JobDefinition<ResendPayl
   };
 }
 
+/**
+ * Counted per inbox, because followers behind one shared inbox get one POST
+ * and the queue settles that POST's outcome for all of them.
+ */
 export function resendActivity(report: DeliveryReport): ResendActivity {
+  const inboxes = [
+    ...new Map(report.deliveries.map((row) => [row.inboxId, row] as const)).values(),
+  ];
   return {
     activityType: report.activityType,
     heldByDevMode: report.held,
-    inboxes: report.deliveries.length,
-    reached: countOf(report.deliveries, 'sent'),
-    queued: countOf(report.deliveries, 'queued'),
-    failed: countOf(report.deliveries, 'failed'),
+    inboxes: inboxes.length,
+    reached: countOf(inboxes, 'sent'),
+    queued: countOf(inboxes, 'queued'),
+    failed: countOf(inboxes, 'failed'),
   };
 }
 

@@ -13,7 +13,7 @@ import type { SettingsRegistry } from '../settings/types.ts';
 import { SITE } from '../site/namespace.ts';
 import { primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
-import { messageOf } from '../util/errors.ts';
+import { messageOf, oneLineMessageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { actorId, senderKeyPairs } from './actor.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
@@ -63,7 +63,9 @@ export interface RelayService {
   /**
    * Bring the subscriptions in line with the relay list in the settings: a
    * listed relay with no record is followed, a record no longer listed is
-   * undone. Called at boot and after every save of the settings.
+   * undone. Called at boot and after every save of the settings. It waits
+   * behind subscription changes already under way, reads the list and the
+   * records only then, and resolves once its own changes are made.
    *
    * A listed relay whose record was lost — a rebuilt database, a restored
    * content directory — is followed again, which is what makes the file the
@@ -71,9 +73,14 @@ export interface RelayService {
    */
   sync(): Promise<RelaySyncReport>;
   /**
-   * Send the `Follow` again for one relay, under a fresh id, and put its
-   * record back to pending. This is the Retry on the federation screen: a
-   * relay may have been down, or may have lost the subscription.
+   * Send the `Follow` again for one pending relay, under a fresh id. This is
+   * the Retry on the federation screen: a relay may have been down, or may
+   * have lost the subscription.
+   *
+   * A relay that has answered is returned as it stands and sent nothing: an
+   * accepted one would stop receiving posts until it accepted again, and a
+   * rejected one has already said no. `undefined` when the settings do not
+   * list the relay or there is no subscription to it.
    */
   retry(inboxId: string): Promise<Relay | undefined>;
   /** Resolve once every queued `Follow` and `Undo` has finished, however it finished. */
@@ -123,10 +130,10 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
   const logger = options.logger ?? console;
   const synchronous = config.federation.queue === null;
 
-  // A relay that is told to unfollow before it has been told to follow keeps
-  // the subscription.
+  // Each change is decided here as well as made here: a decision read from
+  // records an earlier change has not written yet follows a relay the list
+  // has since dropped, or brings back one whose Undo just went out.
   const subscriptions = createSerialQueue();
-  const listReadsApartFromRelays = createSerialQueue();
 
   /** A context outside any request, which is where a follow is sent from. */
   async function relayContext(): Promise<Context<FederationContextData>> {
@@ -257,30 +264,45 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
         }),
       );
       if (outcome === 'held') {
-        return admin.putRelay({
-          ...stored,
-          reason: 'Not sent: the site is in dev mode. Retry once it is live.',
-        });
+        return noteWhilePending(
+          stored,
+          'Not sent: the site is in dev mode. Retry once it is live.',
+        );
       }
     } catch (thrown) {
       // The record stays pending with the reason on it: the relay may simply
       // have been down, and Retry is what the screen offers for that.
-      const message = messageOf(thrown);
-      logger.warn(`Could not follow the relay at ${stored.inboxId}: ${message}`);
-      return admin.putRelay({ ...stored, reason: message });
+      logger.warn(`Could not follow the relay at ${stored.inboxId}: ${oneLineMessageOf(thrown)}`);
+      return noteWhilePending(stored, messageOf(thrown));
     }
 
     return stored;
   }
 
-  /** Undo one relay's follow and forget it. */
+  /**
+   * Say why a follow went nowhere, unless the relay answered it meanwhile: its
+   * `Accept` can arrive before the POST that carried the `Follow` has failed.
+   */
+  function noteWhilePending(stored: Relay, reason: string): Relay {
+    const current = admin.getRelay(stored.inboxId);
+    if (current?.state !== 'pending' || current.followId !== stored.followId) {
+      return current ?? stored;
+    }
+    return admin.putRelay({ ...current, reason });
+  }
+
+  /**
+   * Undo one relay's follow and forget it, unless dev mode holds the `Undo`:
+   * then the record is kept as leaving, and the first sync once the site is
+   * live sends it.
+   */
   async function unfollow(relay: Relay): Promise<void> {
     const user = subscriber();
     if (relay.followId !== null && user !== undefined) {
       try {
         const context = await relayContext();
         const id = actorId(context, user);
-        await send(
+        const outcome = await send(
           context,
           user,
           relay,
@@ -292,78 +314,89 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
             object: new URL(relay.followId),
           }),
         );
+        if (outcome === 'held') {
+          admin.putRelay({
+            ...relay,
+            state: 'leaving',
+            reason: 'Undo not sent: the site is in dev mode. It goes out once the site is live.',
+          });
+          return;
+        }
       } catch (thrown) {
         // The subscription is gone from this side whatever the relay heard: a
         // relay that keeps sending is one whose activities land in the inbox
         // log, which is a nuisance rather than a leak, and re-adding it would
         // strand the record against a list that no longer names it.
-        logger.warn(`Could not tell the relay at ${relay.inboxId} to stop: ${messageOf(thrown)}`);
+        logger.warn(
+          `Could not tell the relay at ${relay.inboxId} to stop: ${oneLineMessageOf(thrown)}`,
+        );
       }
     }
 
     admin.deleteRelay(relay.inboxId);
   }
 
+  async function attempt(change: () => Promise<unknown>): Promise<void> {
+    try {
+      await change();
+    } catch (thrown) {
+      logger.warn(`A relay subscription failed: ${oneLineMessageOf(thrown)}`);
+    }
+  }
+
   return {
     sync() {
-      return listReadsApartFromRelays.run(async () => {
+      return subscriptions.run(async () => {
         const listed = await settings.get(SITE.relays);
         const known = admin.listRelays();
 
-        const followed: string[] = [];
-        const unfollowed: string[] = [];
+        const recordOf = (inboxId: string): Relay | undefined =>
+          known.find((relay) => relay.inboxId === inboxId);
 
-        for (const inboxId of listed) {
-          if (known.some((relay) => relay.inboxId === inboxId)) continue;
-          followed.push(inboxId);
-          queue(() => {
-            const at = config.now().toISOString();
-            return follow({
-              inboxId,
-              actorId: null,
-              state: 'pending',
-              reason: null,
-              followId: null,
-              createdAt: at,
-              updatedAt: at,
-            });
-          });
+        // A leaving relay listed again is followed again: its record no
+        // longer says how the relay last answered, so the site asks again.
+        const followed = listed.filter((inboxId) => {
+          const record = recordOf(inboxId);
+          return record === undefined || record.state === 'leaving';
+        });
+        const leaving = known.filter((relay) => !listed.includes(relay.inboxId));
+
+        for (const inboxId of followed) {
+          const at = config.now().toISOString();
+          await attempt(() =>
+            follow(
+              recordOf(inboxId) ?? {
+                inboxId,
+                actorId: null,
+                state: 'pending',
+                reason: null,
+                followId: null,
+                createdAt: at,
+                updatedAt: at,
+              },
+            ),
+          );
         }
+        for (const relay of leaving) await attempt(() => unfollow(relay));
 
-        for (const relay of known) {
-          if (listed.includes(relay.inboxId)) continue;
-          unfollowed.push(relay.inboxId);
-          queue(() => unfollow(relay));
-        }
-
-        return { followed, unfollowed };
+        return { followed, unfollowed: leaving.map((relay) => relay.inboxId) };
       });
     },
 
-    async retry(inboxId) {
-      const relay = admin.getRelay(inboxId);
-      if (relay === undefined) return undefined;
-      return await subscriptions.run(() => follow(relay));
+    retry(inboxId) {
+      return subscriptions.run(async () => {
+        const relay = admin.getRelay(inboxId);
+        const listed = await settings.get(SITE.relays);
+        if (relay === undefined || !listed.includes(inboxId)) return undefined;
+        if (relay.state !== 'pending') return relay;
+        return await follow(relay);
+      });
     },
 
-    async settled() {
-      await listReadsApartFromRelays.settled();
-      await subscriptions.settled();
+    settled() {
+      return subscriptions.settled();
     },
   };
-
-  /**
-   * Put one subscription change on the queue and stop caring about its result.
-   *
-   * Nothing is waiting for the follow a settings save set off, so a rejection
-   * here has nowhere to go but the log; a failed follow has already been
-   * written to its record by then.
-   */
-  function queue(task: () => Promise<unknown>): void {
-    subscriptions.run(task).catch((thrown: unknown) => {
-      logger.warn(`A relay subscription failed: ${messageOf(thrown)}`);
-    });
-  }
 }
 
 /**

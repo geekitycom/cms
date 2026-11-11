@@ -1197,6 +1197,128 @@ describe('the delivery outcome cache', () => {
     });
   });
 
+  describe('standing failures', () => {
+    const SINCE = '2026-03-01T00:00:00.000Z';
+
+    it('stay standing when a later delivery about another post with the same slug succeeds', async () => {
+      const admin = await store();
+      admin.recordDelivery(
+        outcome({ status: 'failed', error: '502', attemptedAt: '2026-03-04T10:00:00.000Z' }),
+      );
+      const otherHello = 'https://blog.example/2025/01/hello/';
+      admin.recordDelivery(
+        outcome({
+          activityId: `${otherHello}#create`,
+          objectId: otherHello,
+          attemptedAt: '2026-03-05T10:00:00.000Z',
+        }),
+      );
+
+      assert.deepEqual(
+        admin.listStandingFailuresSince(SINCE).map((failure) => failure.objectId),
+        [OBJECT_ID],
+      );
+    });
+
+    it('go once a later delivery about the same post reaches that actor', async () => {
+      const admin = await store();
+      admin.recordDelivery(
+        outcome({
+          activityId: `${OBJECT_ID}#update/2026-03-04T10:00:00.000Z`,
+          activityType: 'Update',
+          status: 'failed',
+          error: '502',
+          attemptedAt: '2026-03-04T10:00:00.000Z',
+        }),
+      );
+      admin.recordDelivery(
+        outcome({
+          activityId: `${OBJECT_ID}#update/2026-03-05T10:00:00.000Z`,
+          activityType: 'Update',
+          attemptedAt: '2026-03-05T10:00:00.000Z',
+        }),
+      );
+
+      assert.deepEqual(admin.listStandingFailuresSince(SINCE), []);
+    });
+
+    it('keep a failed Create standing when only a later Update reached that actor', async () => {
+      const admin = await store();
+      admin.recordDelivery(
+        outcome({ status: 'failed', error: '502', attemptedAt: '2026-03-04T10:00:00.000Z' }),
+      );
+      admin.recordDelivery(
+        outcome({
+          activityId: `${OBJECT_ID}#update/2026-03-05T10:00:00.000Z`,
+          activityType: 'Update',
+          attemptedAt: '2026-03-05T10:00:00.000Z',
+        }),
+      );
+
+      assert.deepEqual(
+        admin.listStandingFailuresSince(SINCE).map((failure) => failure.activityType),
+        ['Create'],
+      );
+    });
+
+    it('drop a failed Create once the post is deleted and announced again under a new id', async () => {
+      const admin = await store();
+      admin.recordDelivery(
+        outcome({ status: 'failed', error: '502', attemptedAt: '2026-03-04T10:00:00.000Z' }),
+      );
+      admin.recordDelivery(
+        outcome({
+          activityId: `${OBJECT_ID}#delete`,
+          activityType: 'Delete',
+          attemptedAt: '2026-03-05T10:00:00.000Z',
+        }),
+      );
+      const reissued = `${OBJECT_ID}?v=2`;
+      admin.recordDelivery(
+        outcome({
+          activityId: `${reissued}#create`,
+          objectId: reissued,
+          attemptedAt: '2026-03-06T10:00:00.000Z',
+        }),
+      );
+
+      assert.deepEqual(admin.listStandingFailuresSince(SINCE), []);
+    });
+
+    it('are listed for 20,000 failed rows over 1,000 actors and 20 posts in under a second', async () => {
+      const admin = await store();
+      const db = new DatabaseSync(admin.file);
+      const insert = db.prepare(`
+        INSERT INTO ap_deliveries (
+          activity_id, activity_type, object_id, slug, actor_id, inbox_id, status, error, attempted_at
+        ) VALUES (?, 'Create', ?, ?, ?, 'https://remote.example/inbox', 'failed', '500', ?)
+      `);
+      db.exec('BEGIN');
+      for (let post = 0; post < 20; post += 1) {
+        const objectId = `https://blog.example/2026/03/post-${post}/`;
+        const attemptedAt = new Date(Date.UTC(2026, 2, 4, 0, post)).toISOString();
+        for (let actor = 0; actor < 1000; actor += 1) {
+          insert.run(
+            `${objectId}#create`,
+            objectId,
+            `post-${post}`,
+            `https://remote.example/users/u${actor}`,
+            attemptedAt,
+          );
+        }
+      }
+      db.exec('COMMIT');
+      db.close();
+
+      const started = performance.now();
+      const failures = admin.listStandingFailuresSince(SINCE);
+      const elapsed = performance.now() - started;
+
+      assert.equal(failures.length, 20_000);
+      assert.ok(elapsed < 1000, `listing them took ${Math.round(elapsed)} ms`);
+    });
+  });
+
   describe('rows the queue no longer holds', () => {
     const BEFORE = '2026-06-01T00:00:00.000Z';
     const WAITING_INBOX = 'https://waiting.example/inbox';
@@ -1266,6 +1388,45 @@ describe('the delivery outcome cache', () => {
         admin.listDeliveries(ACTIVITY_ID).map((row) => row.status),
         ['failed', 'sent'],
       );
+    });
+
+    it('are found among 10,000 retrying rows and 10,000 waiting messages in under a second', async () => {
+      const admin = await store();
+      const db = new DatabaseSync(admin.file);
+      const insert = db.prepare(`
+        INSERT INTO ap_deliveries (
+          activity_id, activity_type, object_id, slug, actor_id, inbox_id, status, error, attempted_at
+        ) VALUES (?, 'Create', ?, ?, ?, ?, 'retrying', '500', '2026-03-04T00:00:00.000Z')
+      `);
+      const waiting: { activityId: string; inbox: string }[] = [];
+      db.exec('BEGIN');
+      for (let host = 0; host < 10_000; host += 1) {
+        const objectId = `https://blog.example/2026/03/post-${host % 20}/`;
+        const inbox = `https://host-${host}.example/inbox`;
+        insert.run(
+          `${objectId}#create`,
+          objectId,
+          `post-${host % 20}`,
+          `https://host-${host}.example/users/u`,
+          inbox,
+        );
+        waiting.push({ activityId: `${objectId}#create`, inbox });
+      }
+      db.exec('COMMIT');
+
+      const started = performance.now();
+      admin.markUnsettledDeliveriesUnknown({ before: BEFORE, waiting });
+      const elapsed = performance.now() - started;
+
+      const statuses = db
+        .prepare('SELECT status, COUNT(*) AS count FROM ap_deliveries GROUP BY status')
+        .all();
+      db.close();
+      assert.deepEqual(
+        statuses.map((row) => [row['status'], row['count']]),
+        [['retrying', 10_000]],
+      );
+      assert.ok(elapsed < 1000, `marking them took ${Math.round(elapsed)} ms`);
     });
   });
 });

@@ -602,6 +602,13 @@ export const MIGRATIONS: readonly Migration[] = [
     version: 29,
     sql: `DELETE FROM sessions;`,
   },
+  {
+    // Rows grow as followers times posts, and how many followers sit behind
+    // one inbox is up to the remote server. The standing-failure check and
+    // the retry job ask per actor and post, which without this is a scan.
+    version: 30,
+    sql: `CREATE INDEX ap_deliveries_actor_id ON ap_deliveries (actor_id, object_id, attempted_at);`,
+  },
 ];
 
 export function openAdminDatabase(dataDir: string, now: Clock): DatabaseSync {

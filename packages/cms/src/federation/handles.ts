@@ -5,6 +5,7 @@ import { isWebUrl } from '../content/enclosure.ts';
 import { handleDirectory, rememberHandles } from '../content/handles.ts';
 import type { ResolvedHandle } from '../content/handles.ts';
 import { handlesIn } from '../content/markdown.ts';
+import { oneLineMessageOf } from '../util/errors.ts';
 import type { FederationContextData } from './federation.ts';
 import { siteLoaders } from './site-loaders.ts';
 
@@ -58,7 +59,7 @@ export function handleLearner(
             },
           ];
         } catch (thrown) {
-          logger.warn(`Could not resolve @${handle}: ${String(thrown)}`);
+          logger.warn(`Could not resolve @${handle}: ${oneLineMessageOf(thrown)}`);
           return undefined;
         }
       }),

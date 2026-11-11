@@ -127,9 +127,22 @@ does not touch it.
 - A delivery whose handler is running when the process dies is lost. The queue
   removes a message when a server takes it. Resend the post from the
   federation screen.
+- The activities about one post reach an inbox in the order they were queued,
+  and so do the activities sent to one relay. A delivery that failed and waits
+  for a retry stays ahead of the later ones for the same post and inbox. Those
+  wait until the retry is sent or Fedify gives up on it. Deliveries to other
+  inboxes do not wait. A queue passed as `queue` keeps the order that queue
+  gives.
+- To keep that order, the queue locks a post and inbox, or a relay, while a
+  delivery to it is being sent. A server that starts removes the locks a
+  stopped server left, before it takes any message, so a process that died
+  mid-send does not hold back the later deliveries on that lock. On a reload, a
+  send the old server still holds after the drain's 10 seconds loses its lock,
+  and the next delivery on that lock can go out before it finishes.
 - While dev mode is on, the server drops each outgoing delivery it takes from
-  the queue and records it in `data/dev-mode.jsonl` as held. A `data/` copied
-  from a live site can hold deliveries that are still waiting.
+  the queue and records it in `data/dev-mode.jsonl` as held. It also deletes
+  the delivery's `queued` or `retrying` row, as a held delivery has no row. A
+  `data/` copied from a live site can hold deliveries that are still waiting.
 
 The file is mode `0600`. A waiting delivery holds the activity, the inbox it
 goes to and the private key it is signed with. An inbox activity waiting to be
@@ -401,13 +414,16 @@ announced and there is nothing to withdraw.
 
 A retry sends what each recipient missed. The `retry_deliveries`
 [MCP tool](mcp.md) passes `resend` the recipients whose newest delivery failed
-or has an unknown outcome, in two groups. A recipient whose newest `Create` for
-the post failed, or has an unknown outcome, may never have
+or has an unknown outcome, grouped by what they missed. A recipient whose
+newest `Create` for the post failed, or has an unknown outcome, may never have
 stored the post, and Mastodon drops an `Update` of a status it does not hold,
-so that group is sent the `Create` again, built from the post as it reads now,
-under the `Create` id the other followers already have. The other group is sent
-an `Update`. A resend with no recipients, as the Resend button and
-`geekity resend` send, follows the table above for every follower.
+so it is sent the `Create` again, built from the post as it reads now, under
+the `Create` id the other followers already have. A recipient for which a later
+activity about the post failed is sent an `Update`. A recipient whose newest `Add` or `Remove` for the post failed is
+sent the `Add` or the `Remove` for whether the post is pinned now, after the
+`Create` or `Update` when it is owed one of those too. A resend with no
+recipients, as the Resend button and `geekity resend` send, follows the table
+above for every follower.
 
 The site stores nothing else. For each activity it sends, SQLite keeps one
 outcome row per recipient: the activity's id, type, object id and slug, the
@@ -433,7 +449,11 @@ A status is one of:
   the markup. A plain-text or JSON body is kept as it came.
 - `failed`: Fedify gave up, with the error. Fedify gives up on an inbox that
   answers `404` or `410`, and on any other failure once its retry policy runs
-  out. A send that throws before it reaches the queue is also `failed`.
+  out. A send that throws before it reaches the queue is also `failed`. So is
+  an attempt whose queue handler throws, when the queue does not hand the
+  message over again, as `data/queue.sqlite` does not. An inbox that is not an
+  `http` or `https` URL is `failed` without an attempt, because Fedify would
+  queue nothing for it.
 - `unknown`: the row said `queued` or `retrying`, but the queue holds no
   message for it, so nobody saw how it ended. Versions before 0.43.0 never
   updated a `queued` row, so most of their rows end up here. A queue that loses
@@ -496,7 +516,8 @@ posts/2026-03-04-hello-world.md: Update to 3 of 3 inboxes
 posts/2026-03-05-another-post.md: Update to 3 of 3 inboxes
 ```
 
-`geekity resend <slug-or-path>...` does the same for named posts. The command
+Each line counts inboxes, not followers, and followers behind one shared inbox
+count once. `geekity resend <slug-or-path>...` does the same for named posts. The command
 refuses a slug that more than one post has and lists their paths, so you can
 name the post you mean. Both run the same
 `resend` [admin job](configuration.md#admin-jobs) as Federation > Resend.
@@ -596,7 +617,18 @@ site can pick without asking.
 The relay answers `Accept` or `Reject`, possibly days later, because a
 subscription may need a human to approve it. The answer arrives in the site's
 inbox and updates the subscription. Removing the line sends an `Undo` of the
-same `Follow`.
+same `Follow`. Subscription changes run one at a time, and each one reads the
+setting and the records when its turn comes. A relay that is added and then
+removed while earlier changes are still sending leaves no record.
+
+In dev mode the site holds the `Undo`. The record stays, in the `leaving`
+state, with the reason on it, because the relay still holds the subscription.
+The first sync after dev mode is turned off sends the `Undo` and drops the
+record. A leaving relay that is listed again is followed again.
+
+Retry on the federation screen sends a new `Follow` only to a pending relay
+that the setting still lists. An accepted relay keeps its subscription. A
+rejected relay is not asked again: remove it and add it back to ask again.
 
 The site delivers only to an accepted relay. An accepted relay is one more
 inbox in the fan-out. It receives, as well as the author's followers:
@@ -617,7 +649,7 @@ the actor id.
 ```ts
 cms.admin.listRelays(); // inbox, actor, state, reason, follow id, times
 await cms.relays.sync(); // reconcile the records with the setting
-await cms.relays.retry(inboxId); // send the follow again
+await cms.relays.retry(inboxId); // send the follow again, if still pending
 ```
 
 The records live in `ap_relays`, keyed by inbox. They are operational state,
@@ -813,7 +845,8 @@ Resend page does what `geekity resend --all` does.
 The Resend page shows the latest resend job, whichever button queued it: queued, running with the posts
 sent out of the total, finished, failed with the error, or interrupted. A
 finished job says how many posts went to how many inboxes, and how many of
-those were reached, queued or failed. A disclosure under that line lists each
+those were reached, queued or failed. Followers behind one shared inbox get one
+delivery, so that inbox counts once. A disclosure under that line lists each
 post with the same counts, and its webmentions when it sent them. The page names
 the posts dev mode held and the paths with nothing to resend. The status updates
 every few seconds without a page load until the job ends. Without JavaScript,
@@ -833,19 +866,23 @@ federated post with no outcome recorded, and Resend works on any of them.
 ### Failed deliveries
 
 The Failed deliveries panel lists each delivery from the last 7 days that
-failed and is still the newest delivery of its post to that recipient. Each row
-shows the post, the activity, when it was sent, the inbox and the error. A
-failure leaves the list when the same post is delivered to the same recipient
-again, whatever activity it carries, or when it is 7 days old. If that later
-delivery fails too, it takes the earlier one's place. The
+failed and is still the newest delivery of its object to that recipient. Each
+row shows the post, the activity, when it was sent, the inbox and the error. A
+failure leaves the list when the same object id is delivered to the same
+recipient again, or when it is 7 days old. A failed `Create` leaves only for a
+later `Create` or `Delete`, because a peer drops an `Update` of a post it never
+stored. A delivery about another post that shares the slug does not count. If
+that later delivery fails too, it takes the earlier one's place. The
 dashboard's Needs attention card counts the same failures and links to this
 panel.
 
 **Retry** on a row queues the `retry-deliveries` job for that post and inbox.
 It is the job the MCP `retry_deliveries` tool queues. The job sends the post,
 as its file reads then, to the recipients at that inbox whose newest delivery
-failed. A recipient that never received the `Create` gets the `Create`; the
-others get an `Update`. The panel shows the latest retry job as the Resend
+of an activity failed. A recipient whose newest `Create` failed gets the
+`Create`, even when a later `Update` reached it, unless a `Delete` went out
+since. The others get an `Update`. A recipient whose pin or unpin failed then gets the
+`Add` or the `Remove` again. The panel shows the latest retry job as the Resend
 page shows the latest resend.
 
 A Relays panel sits between the followers and the inbox log. It has one row per

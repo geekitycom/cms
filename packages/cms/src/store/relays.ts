@@ -6,7 +6,7 @@ import { allRows, getRow, nullableText, oneOf } from './rows.ts';
 import type { Row } from './rows.ts';
 
 /** Where a relay subscription stands (FEP-ae0c). */
-export const RELAY_STATES = ['pending', 'accepted', 'rejected'] as const;
+export const RELAY_STATES = ['pending', 'accepted', 'rejected', 'leaving'] as const;
 
 /**
  * One of {@link RELAY_STATES}.
@@ -15,7 +15,9 @@ export const RELAY_STATES = ['pending', 'accepted', 'rejected'] as const;
  * take days, because a relay is allowed to hold one for a human to approve.
  * `accepted` is one the relay answered `Accept` to, and the only state the
  * site delivers to. `rejected` is one it answered `Reject` to, with whatever
- * it said in {@link Relay.reason}.
+ * it said in {@link Relay.reason}. `leaving` is one the list no longer names
+ * whose `Undo` dev mode held: the relay still holds the subscription, so the
+ * record stays until the `Undo` can go out.
  */
 export type RelayState = (typeof RELAY_STATES)[number];
 
@@ -34,7 +36,7 @@ export interface Relay {
   readonly actorId: string | null;
   /** Where the subscription stands. */
   readonly state: RelayState;
-  /** Why a `Reject` was a reject, when it gave a reason, or `null`. */
+  /** Why a `Reject` was a reject, or why a `Follow` or `Undo` was not sent, or `null`. */
   readonly reason: string | null;
   /** The id of the `Follow` that was sent, which an `Accept` names. */
   readonly followId: string | null;

@@ -13,6 +13,7 @@ import { citationsOf } from '../content/citation.ts';
 import type { CitedPage, CitedPageReader } from '../content/citation.ts';
 import type { ConversationSite } from '../comments/conversation.ts';
 import type { Document } from '../content/document.ts';
+import { isWebUrl } from '../content/enclosure.ts';
 import { postObjectId } from '../content/guids.ts';
 import { isMigrated } from '../content/migrated.ts';
 import { replyTarget } from '../content/post-type.ts';
@@ -23,7 +24,7 @@ import { visibilityOf } from '../content/visibility.ts';
 import { SITE } from '../site/namespace.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
-import { messageOf } from '../util/errors.ts';
+import { messageOf, oneLineMessageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { authorNames } from '../content/authors.ts';
 import { ActorUpdate, actorId, senderKeyPairs, userActor } from './actor.ts';
@@ -158,6 +159,12 @@ export interface DeliveryService {
    * than an `Update`, which a peer drops for a post it never stored.
    */
   resend(path: string, to?: ResendRecipients): Promise<DeliveryReport | undefined>;
+  /**
+   * Send `actors` the pin change for one post as it now stands: the `Add` to
+   * its author's featured collection when it is pinned, the `Remove` when it
+   * is not. `undefined` when no published post is at that content path.
+   */
+  resendPin(path: string, actors: ReadonlySet<string>): Promise<DeliveryReport | undefined>;
   /**
    * Bring the followers' copies of the posts that cite a page up to date with
    * its newly stored context: an `Update` for each served, announced post
@@ -486,6 +493,13 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     const keys = await senderKeyPairs(context, sender);
 
     for (const target of targets) {
+      if (!isWebUrl(target.inboxId)) {
+        // Fedify skips such an inbox without a word, or reaches it through a
+        // gateway under another address, so no outcome would ever come back
+        // for this row.
+        record(target, 'failed', `No http(s) inbox to deliver to: ${target.inboxId}`);
+        continue;
+      }
       if (!synchronous) record(target, 'queued', null);
       let status: DeliveryStatus = 'sent';
       let error: string | null = null;
@@ -504,7 +518,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         if (!isDuplicateDelivery(thrown)) {
           status = 'failed';
           error = messageOf(thrown);
-          logger.warn(`Could not deliver ${about.activityId} to ${target.inboxId}: ${error}`);
+          logger.warn(
+            `Could not deliver ${about.activityId} to ${target.inboxId}: ${oneLineMessageOf(thrown)}`,
+          );
         }
       }
 
@@ -535,12 +551,15 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     before: Document | undefined,
     after: Document,
   ): void {
-    const author = documentAuthor(context, after);
-    const names = author === undefined ? [] : authorNames(listUsers(config.dataDir), author);
-    const featured = store.listPinnedByAuthor(names).some((post) => post.path === after.path);
-    const pin = pinChange(featured, before, after, store.now());
+    const pin = pinChange(isFeatured(context, after), before, after, store.now());
     if (pin === undefined) return;
     queue(() => send(context, postPinActivity(context, after, pin.action, pin.revision), after));
+  }
+
+  function isFeatured(context: Context<FederationContextData>, document: Document): boolean {
+    const author = documentAuthor(context, document);
+    const names = author === undefined ? [] : authorNames(listUsers(config.dataDir), author);
+    return store.listPinnedByAuthor(names).some((post) => post.path === document.path);
   }
 
   return {
@@ -614,7 +633,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         .catch((thrown: unknown) => {
           // A profile update is a side effect of saving the settings, and losing
           // it must not lose the save.
-          logger.warn(`The actor update could not be delivered: ${messageOf(thrown)}`);
+          logger.warn(`The actor update could not be delivered: ${oneLineMessageOf(thrown)}`);
           return undefined;
         });
     },
@@ -660,6 +679,21 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       });
     },
 
+    async resendPin(path, actors) {
+      return await deliveryQueue.run(async () => {
+        const document = store.getByPath(path);
+        if (document?.type !== 'post' || !isFederatedDocument(document, store.now())) {
+          return undefined;
+        }
+        const context = await deliveryContext();
+        const change = isFeatured(context, document) ? 'pin' : 'unpin';
+        // A fresh id, because a peer may drop an activity id it has seen.
+        const revision = store.now().toISOString();
+        const activity = postPinActivity(context, document, change, revision);
+        return await send(context, activity, document, [], actors);
+      });
+    },
+
     citedPageStored(target, previous) {
       queue(async () => {
         const now = store.now();
@@ -702,7 +736,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
    */
   function queue(task: () => Promise<unknown>): void {
     deliveryQueue.run(task).catch((thrown: unknown) => {
-      logger.warn(`A delivery failed: ${messageOf(thrown)}`);
+      logger.warn(`A delivery failed: ${oneLineMessageOf(thrown)}`);
     });
   }
 }
