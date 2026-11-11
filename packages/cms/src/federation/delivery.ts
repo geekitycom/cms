@@ -5,6 +5,7 @@ import { Activity, getTypeId, PUBLIC_COLLECTION } from '@fedify/vocab';
 import type { Object as ActivityObject } from '@fedify/vocab';
 
 import type { AdminStore, Delivery, DeliveryStatus } from '../store/admin-store.ts';
+import { NO_LIMIT } from '../store/rows.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
@@ -42,6 +43,7 @@ import {
   citedAuthor,
   deliveryChange,
   deliveryRows,
+  earlierTargets,
   fanOutTargets,
   followerTargets,
   objectTargets,
@@ -269,7 +271,13 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     return author;
   }
 
-  /** Fan one activity about one post out to the followers. */
+  /**
+   * Fan one activity about one post out to the followers. An `Update` or a
+   * `Delete` also goes to everyone the post was sent to before, because the
+   * current version's audience can be narrower than the one holding a copy:
+   * a relay once the post is unlisted, an account whose mention was edited
+   * out, the author of a status it no longer replies to.
+   */
   async function send(
     context: Context<FederationContextData>,
     activity: Activity,
@@ -281,18 +289,19 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     if (activityId === undefined) {
       throw new TypeError('An activity cannot be delivered without an id.');
     }
+    const activityType = typeNameOf(activity);
+    const objectId = articleObjectId(context, about).href;
+    const earlier =
+      activityType === 'Update' || activityType === 'Delete'
+        ? admin.searchDeliveries({ objectIds: [objectId] }, { limit: NO_LIMIT }).items
+        : [];
     return await fanOut(
       context,
       requireSender(context, about),
       activity,
-      {
-        activityId,
-        activityType: typeNameOf(activity),
-        objectId: articleObjectId(context, about).href,
-        slug: about.slug,
-      },
+      { activityId, activityType, objectId, slug: about.slug },
       also,
-      { relays: visibilityOf(about) === 'public', to },
+      { relays: visibilityOf(about) === 'public', to, earlier },
     );
   }
 
@@ -449,10 +458,19 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     activity: Activity,
     about: ActivityAbout,
     also: readonly DeliveryTarget[] = [],
-    { relays = true, to }: { relays?: boolean; to?: ReadonlySet<string> | undefined } = {},
+    {
+      relays = true,
+      to,
+      earlier = [],
+    }: {
+      relays?: boolean;
+      to?: ReadonlySet<string> | undefined;
+      earlier?: readonly Delivery[];
+    } = {},
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
-    const targets = fanOutTargets(deliveryTargets(admin, sender.username, { relays }), also).filter(
+    const current = fanOutTargets(deliveryTargets(admin, sender.username, { relays }), also);
+    const targets = fanOutTargets(current, earlierTargets(earlier, current)).filter(
       (target) => to === undefined || target.actorIds.some((actor) => to.has(actor)),
     );
     const held =

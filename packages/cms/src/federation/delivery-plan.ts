@@ -1,6 +1,12 @@
 import type { Actor, Recipient } from '@fedify/vocab';
 
-import type { DeliveryStatus, Follower, NewDelivery, Relay } from '../store/admin-store.ts';
+import type {
+  Delivery,
+  DeliveryStatus,
+  Follower,
+  NewDelivery,
+  Relay,
+} from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import { isMigrated } from '../content/migrated.ts';
 import { pinnedAt } from '../content/pinned.ts';
@@ -98,7 +104,46 @@ export function fanOutTargets(
 ): DeliveryTarget[] {
   // One POST to an inbox the followers already share is enough.
   const reached = new Set(targets.map((target) => target.inboxId));
-  return [...targets, ...also.filter((target) => !reached.has(target.inboxId))];
+  const added = also.filter((target) => {
+    if (reached.has(target.inboxId)) return false;
+    reached.add(target.inboxId);
+    return true;
+  });
+  return [...targets, ...added];
+}
+
+/**
+ * Everyone the delivery log says was sent something about an object, other
+ * than the actors `current` already reaches, one target per inbox.
+ *
+ * Addressed to the inbox each was recorded at rather than to the actor
+ * looked up afresh: that inbox is the server holding the copy, and an actor
+ * who has since unfollowed, or a relay, has no record left to look up.
+ * `rows` come newest first, so an actor recorded at two inboxes is sent to
+ * the one it was last reached at.
+ */
+export function earlierTargets(
+  rows: readonly Delivery[],
+  current: readonly DeliveryTarget[],
+): DeliveryTarget[] {
+  const reached = new Set(current.flatMap((target) => target.actorIds));
+  const byInbox = new Map<string, string[]>();
+  for (const { actorId, inboxId } of rows) {
+    if (reached.has(actorId)) continue;
+    reached.add(actorId);
+    const actors = byInbox.get(inboxId);
+    if (actors === undefined) byInbox.set(inboxId, [actorId]);
+    else actors.push(actorId);
+  }
+  return [...byInbox].map(([inboxId, actorIds]) => ({
+    inboxId,
+    recipients: actorIds.map((actorId) => ({
+      id: new URL(actorId),
+      inboxId: new URL(inboxId),
+      endpoints: null,
+    })),
+    actorIds,
+  }));
 }
 
 /** The author of what a post likes, reposts or replies to, as one more inbox to tell. */

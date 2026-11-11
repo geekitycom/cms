@@ -86,6 +86,9 @@ const ERIN_ACTOR = `${REMOTE_ORIGIN}/users/erin`;
 const ERIN_INBOX = `${REMOTE_ORIGIN}/users/erin/inbox`;
 const ERIN_PROFILE = `${REMOTE_ORIGIN}/@erin`;
 
+const RELAY_ACTOR = `${REMOTE_ORIGIN}/relay`;
+const RELAY_INBOX = `${REMOTE_ORIGIN}/relay/inbox`;
+
 /** One POST the site made while delivering. */
 interface Delivery {
   /** Where it went. */
@@ -3394,6 +3397,95 @@ describe('a post that mentions a fediverse handle (TASK-194)', () => {
     assert.equal(response.status, 303, await response.text());
     await cms.delivery.settled();
     assert.deepEqual(webfingerLookups, ['acct:ghost@remote.example']);
+  });
+});
+
+describe('an Update or a Delete of a post whose audience has narrowed', () => {
+  function inboxesOf(type: string): string[] {
+    return delivered(type)
+      .map((one) => one.url)
+      .sort();
+  }
+
+  it('reaches an accepted relay that got the public Create once the post is unlisted, then drafted', async () => {
+    const { cms } = await site();
+    await cms.relays.settled();
+    cms.admin.putRelay({
+      inboxId: RELAY_INBOX,
+      actorId: RELAY_ACTOR,
+      state: 'accepted',
+      reason: null,
+      followId: `${ACTOR_URL}#relay-follow/1`,
+    });
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    assert.deepEqual(inboxesOf('Create'), [RELAY_INBOX, REMOTE_SHARED_INBOX].sort());
+
+    await submitEditor(agent, '/admin/posts/hello-world', { visibility: 'unlisted' });
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+    await cms.delivery.settled();
+
+    assert.deepEqual(
+      { update: inboxesOf('Update'), delete: inboxesOf('Delete') },
+      {
+        update: [RELAY_INBOX, REMOTE_SHARED_INBOX].sort(),
+        delete: [RELAY_INBOX, REMOTE_SHARED_INBOX].sort(),
+      },
+    );
+  });
+
+  it('reaches an account mentioned in an earlier version after the mention was edited out', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent, {
+      title: '',
+      slug: 'thanks',
+      body: 'Thanks @erin@remote.example.',
+    });
+    await cms.delivery.settled();
+    assert.deepEqual(inboxesOf('Create'), [ERIN_INBOX, REMOTE_SHARED_INBOX].sort());
+
+    await submitEditor(agent, '/admin/posts/thanks', { body: 'Thanks, everyone.' });
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/thanks', { action: 'save-draft' });
+    await cms.delivery.settled();
+
+    assert.deepEqual(
+      { update: inboxesOf('Update'), delete: inboxesOf('Delete') },
+      {
+        update: [ERIN_INBOX, REMOTE_SHARED_INBOX].sort(),
+        delete: [ERIN_INBOX, REMOTE_SHARED_INBOX].sort(),
+      },
+    );
+  });
+
+  it('records the earlier recipient in the delivery log like any other', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent, {
+      title: '',
+      slug: 'thanks',
+      body: 'Thanks @erin@remote.example.',
+    });
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/thanks', { body: 'Thanks, everyone.' });
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/thanks', { action: 'save-draft' });
+    await cms.delivery.settled();
+
+    const deleteId = String(delivered('Delete')[0]?.body['id']);
+    assert.deepEqual(
+      cms.admin
+        .listDeliveries(deleteId)
+        .map((row) => [row.actorId, row.inboxId, row.status])
+        .sort(),
+      [
+        [ERIN_ACTOR, ERIN_INBOX, 'sent'],
+        [REMOTE_ACTOR, REMOTE_SHARED_INBOX, 'sent'],
+      ].sort(),
+    );
   });
 });
 

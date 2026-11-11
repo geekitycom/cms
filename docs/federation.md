@@ -153,6 +153,15 @@ through the editor:
 | edited while published                                                       | `Update` of its object    |
 | drafted, trashed, or its file deleted                                        | `Delete` of a `Tombstone` |
 
+An `Update` or a `Delete` goes to the post's current audience and also to every
+recipient the delivery log recorded for the post's object id. The current
+version's audience can be narrower than the set of servers that hold a copy. A
+relay receives no `Create` of an unlisted post, but it still holds the public
+version. An account whose mention was edited out still holds the version that
+mentioned it. Each of these earlier recipients is sent to the inbox the log
+recorded for it, and the outcome is recorded against its actor id as for any
+other recipient.
+
 Only posts federate. Pages and [wiki pages](content.md#wiki-pages) are never
 delivered and are not in the outbox.
 
@@ -570,7 +579,9 @@ same `Follow`.
 The site delivers only to an accepted relay. An accepted relay is one more
 inbox in the fan-out. It receives, as well as the author's followers:
 
-- every `Create`, `Update`, and `Delete` for a post, whoever wrote it
+- every `Create`, `Update`, and `Delete` for a public post, whoever wrote it
+- every `Update` and `Delete` for a post it was sent before, after the post is
+  unlisted
 - the actor `Update` that a profile change sends
 
 The delivery log records each relay outcome against the relay's actor id and
