@@ -23,6 +23,7 @@ replace them when a site outgrows them:
 | `kv`                  | `MemoryKvStore`                             | Fedify's cache and idempotence store. Nothing that has to survive a restart lives in it.                                                                                                    |
 | `queue`               | `SqliteMessageQueue` in `data/queue.sqlite` | The delivery and inbox queue. `null` means no queue: activities are handled and delivered inside the request that carried them, with no retry. See [The message queue](#the-message-queue). |
 | `allowPrivateAddress` | `false`                                     | Whether Fedify may fetch private and loopback addresses. Leave it off: turning it on removes an SSRF guard. It exists for tests.                                                            |
+| `deliveryTimeoutMs`   | `30000`                                     | How long one delivery POST is waited for before it is recorded as `failed`.                                                                                                                 |
 
 The CMS owns the followers and the inbox log. Both are files the site
 publishes (decision-9):
@@ -79,7 +80,10 @@ Each write updates the SQLite index in the same step, behind a lock on the
 file, so the file and the index always agree. The `followers` and `ap_inbox`
 tables are only an index. Every boot empties them and reads them back from the
 files. You can therefore edit `followers.json` by hand and restart, and
-deleting the database loses nothing. The rebuild calls
+deleting the database loses nothing. A follower whose `actorId` or `inboxId` is
+missing, or whose `actorId`, `inboxId` or `sharedInboxId` is not a URL, stops
+the boot with an error that names the file and the follower. A follow with
+such an id is not recorded. The rebuild calls
 `cms.admin.replaceFollowers` and `replaceInboxActivities`.
 `rebuildFederationIndexes({ admin, contentDir })` is the rebuild itself.
 
@@ -158,7 +162,11 @@ it exits. What happens to its scheduled retries depends on the queue: an
 
 Publishing a post federates it. The delivery service listens to the index, so
 a post edited on disk reaches the followers in the same way as a post saved
-through the editor:
+through the editor. An edit that does not change `updated` is sent with the
+time of the `Update` as the object's `updated`, because Mastodon applies an
+`Update` in full only when `updated` is later than the edit it holds. Each
+`Update` id carries the time it was built, so an edit back to an earlier text
+is a new activity:
 
 | What happened to the post                                                    | What the followers get    |
 | ---------------------------------------------------------------------------- | ------------------------- |
@@ -428,6 +436,11 @@ above for every follower.
 The site stores nothing else. For each activity it sends, SQLite keeps one
 outcome row per recipient: the activity's id, type, object id and slug, the
 inbox used, the status, the error, and the time. That cache may be empty.
+The retention sweep deletes a row more than 30 days old when a later row of
+the same activity type, for the same recipient and object, exists. The newest
+row of each type for each recipient and object is kept, because an `Update` or
+a `Delete` reaches earlier recipients through those rows and a retry reads
+them.
 
 - `cms.admin.lastDeliveryToObject(objectId)` returns the newest outcome for one
   post.
@@ -436,10 +449,13 @@ inbox used, the status, the error, and the time. That cache may be empty.
 
 A status is one of:
 
-- `sent`: the inbox accepted it. An inbox that answers `400` with a
-  [FEP-c180](https://w3id.org/fep/c180) problem of type
+- `sent`: the inbox accepted it. An inbox that answers with a `4xx` status and
+  a [FEP-c180](https://w3id.org/fep/c180) problem of type
   `https://w3id.org/fep/c180#duplicate-delivery`, as tags.pub does for an
   activity it already holds, has it too, so that is `sent` and is not retried.
+  Fedify keeps only the first KiB of a response body, so in a longer problem
+  document the site looks for the `type` member in that part. The same rule
+  applies to a relay's `Follow` and `Undo`.
 - `queued`: it is in Fedify's queue and has not settled.
 - `retrying`: its last attempt failed, and the queue will try again. The error
   says why the attempt failed, including the status code the inbox answered
@@ -450,6 +466,9 @@ A status is one of:
 - `failed`: Fedify gave up, with the error. Fedify gives up on an inbox that
   answers `404` or `410`, and on any other failure once its retry policy runs
   out. A send that throws before it reaches the queue is also `failed`. So is
+  a POST that has no answer within `federation.deliveryTimeoutMs`, 30 seconds
+  by default. Fedify cannot cancel the request, so the site stops waiting for
+  it and records the failure, and the request ends on its own. So is
   an attempt whose queue handler throws, when the queue does not hand the
   message over again, as `data/queue.sqlite` does not. An inbox that is not an
   `http` or `https` URL is `failed` without an attempt, because Fedify would

@@ -66,6 +66,7 @@ const temporaryDirs: string[] = [];
 const sent: Sent[] = [];
 
 let relayInboxStatus = 202;
+let relayInboxBody = 'No.';
 let relayKeys: CryptoKeyPair;
 let strangerKeys: CryptoKeyPair;
 const actorDocuments = new Map<string, unknown>();
@@ -122,7 +123,9 @@ function routeRelayHost(): () => void {
 
     if (request.method === 'POST') {
       sent.push({ url: request.url, body: (await request.json()) as Record<string, unknown> });
-      return new Response(relayInboxStatus < 300 ? '' : 'No.', { status: relayInboxStatus });
+      return new Response(relayInboxStatus < 300 ? '' : relayInboxBody, {
+        status: relayInboxStatus,
+      });
     }
     const document = actorDocuments.get(`${url.origin}${url.pathname}`);
     if (document !== undefined) {
@@ -326,6 +329,22 @@ describe('the follow as a delivery to the relay', () => {
       assert.match(last.error ?? '', /410/);
     } finally {
       relayInboxStatus = 202;
+    }
+  });
+  it('records a Follow the relay says it already holds as sent', async () => {
+    relayInboxStatus = 409;
+    relayInboxBody = JSON.stringify({ type: 'https://w3id.org/fep/c180#duplicate-delivery' });
+    try {
+      const { cms } = await site();
+      await saveSettings(signedInAs(cms, LOCAL_USER), { relays: RELAY_INBOX });
+      await cms.relays.settled();
+
+      const last = cms.admin.lastDeliveryToInbox(RELAY_INBOX);
+      assert.equal(last?.activityType, 'Follow');
+      assert.equal(last.status, 'sent', `row ${JSON.stringify(last)}`);
+    } finally {
+      relayInboxStatus = 202;
+      relayInboxBody = 'No.';
     }
   });
 });

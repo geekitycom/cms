@@ -299,6 +299,7 @@ export function postObject(
   context: Context<FederationContextData>,
   document: Document,
   replyTo?: CitedObject,
+  updated: string | undefined = document.updated,
 ): Article | Note | Event {
   const { baseUrl } = context.data.config;
   const { actor, followers } = attribution(context, document);
@@ -331,7 +332,7 @@ export function postObject(
     url: new URL(permalink),
     source: new Source({ content: document.body, mediaType: SOURCE_MEDIA_TYPE }),
     published: toInstant(document.date) ?? null,
-    updated: toInstant(document.updated) ?? null,
+    updated: toInstant(updated) ?? null,
     attribution: actor,
     ...addressing(document, followers, replyTo, mentioned),
     // FEP-044f: a post with no policy is one Mastodon lets nobody quote. Every
@@ -631,30 +632,32 @@ export function postCreateActivity(
  * The `Update` that announces an edit to a post followers already hold.
  *
  * The whole object goes with it rather than a diff, because that is all
- * ActivityPub offers and all a peer can apply. Its id carries the document's
- * hash, so two edits are two activities and the same edit delivered twice is
- * one; see {@link updateActivityId}.
+ * ActivityPub offers and all a peer can apply. `revision` names it, and is the
+ * moment it is sent rather than the content: a post edited back to an earlier
+ * text is a new event, and an activity id a peer has seen is one it is
+ * entitled to drop; see {@link updateActivityId}.
  *
- * `revision` overrides that. A resend is asking for a revision
- * the followers have already been offered to be offered again, and an activity
- * id a peer has seen is one it is entitled to drop, so a resend passes the
- * moment instead of the hash. Everything else about the activity is the same,
- * which is what makes a resent `Update` and a saved one the same shape.
+ * `updated` is what the object says it was last edited, which defaults to the
+ * post's own. Mastodon applies an `Update` in full only when that is later
+ * than the edit it holds.
  */
 export function postUpdateActivity(
   context: Context<FederationContextData>,
   document: Document,
-  revision: string = revisionOf(document),
-  replyTo?: CitedObject,
+  {
+    revision,
+    replyTo,
+    updated = document.updated,
+  }: { revision: string; replyTo?: CitedObject | undefined; updated?: string | undefined },
 ): Update {
-  const object = postObject(context, document, replyTo);
+  const object = postObject(context, document, replyTo, updated);
   const { actor, followers } = attribution(context, document);
 
   return new Update({
     id: updateActivityId(articleObjectId(context, document), revision),
     actor,
     object,
-    published: toInstant(document.updated ?? document.date) ?? null,
+    published: toInstant(updated ?? document.date) ?? null,
     ...addressing(
       document,
       followers,
@@ -771,16 +774,6 @@ function replyTargetId(context: Context<FederationContextData>, inReplyTo: strin
 export function articleObjectId(context: Context<FederationContextData>, document: Document): URL {
   const ids = ownObjectIds(context.data.store, document, context.data.config);
   return new URL(ids.at(-1) ?? ids[0]);
-}
-
-/**
- * Which revision of a document an `Update` is announcing.
- *
- * The content hash: it changes with every real edit and with nothing else, so
- * it names the revision without a clock and without a counter to keep.
- */
-function revisionOf(document: Document): string {
-  return document.hash.slice(0, 16);
 }
 
 /**

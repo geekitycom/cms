@@ -127,15 +127,28 @@ const DUPLICATE_DELIVERY = 'https://w3id.org/fep/c180#duplicate-delivery';
 
 /**
  * Whether an inbox refused an activity because it already holds it, as
- * tags.pub does with a FEP-c180 problem: the delivery has reached it.
+ * tags.pub does with a FEP-c180 problem: the delivery has reached it. FEP-c180
+ * names the problem by its type and leaves the client error status to the
+ * server.
  */
 export function isDuplicateDelivery(error: unknown): boolean {
-  if (!(error instanceof SendActivityError) || error.statusCode !== 400) return false;
+  if (!(error instanceof SendActivityError)) return false;
+  if (error.statusCode < 400 || error.statusCode > 499) return false;
+  return problemType(error.responseBody) === DUPLICATE_DELIVERY;
+}
+
+const TYPE_MEMBER = /"type"\s*:\s*"([^"]*)"/;
+
+/**
+ * A problem document's `type`. Fedify keeps only the first KiB of the body, so
+ * one cut short is searched for the member instead of parsed.
+ */
+function problemType(body: string): string | undefined {
   try {
-    const problem: unknown = JSON.parse(error.responseBody);
-    return isRecord(problem) && problem['type'] === DUPLICATE_DELIVERY;
+    const problem: unknown = JSON.parse(body);
+    return isRecord(problem) && typeof problem['type'] === 'string' ? problem['type'] : undefined;
   } catch {
-    return false;
+    return TYPE_MEMBER.exec(body)?.[1];
   }
 }
 

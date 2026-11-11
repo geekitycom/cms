@@ -392,6 +392,7 @@ async function site(
     queue?: MessageQueue;
     /** The config a site that names no `allowPrivateAddress` runs with. */
     defaultAddressGuard?: boolean;
+    deliveryTimeoutMs?: number;
   } = {},
 ): Promise<Site> {
   slowPage = Promise.resolve();
@@ -432,14 +433,18 @@ async function site(
     port: 0,
     watch: options.watch ?? false,
     baseUrl: BASE_URL,
-    federation:
-      options.defaultAddressGuard === true
+    federation: {
+      ...(options.defaultAddressGuard === true
         ? { queue: null }
         : options.queue !== undefined
           ? { queue: options.queue, allowPrivateAddress: true }
           : options.queued === true
             ? { allowPrivateAddress: true }
-            : { queue: null, allowPrivateAddress: true },
+            : { queue: null, allowPrivateAddress: true }),
+      ...(options.deliveryTimeoutMs === undefined
+        ? {}
+        : { deliveryTimeoutMs: options.deliveryTimeoutMs }),
+    },
     hostLookup: (host) =>
       Promise.resolve(
         [REMOTE_ORIGIN, STRANGER_ORIGIN].some((origin) => new URL(origin).hostname === host)
@@ -1471,6 +1476,27 @@ describe('likes, reposts and bookmarks (TASK-169 AC #3)', () => {
     );
   });
 
+  it('sends an unlisted repost addressed to the followers, with Public in cc', async () => {
+    const { cms } = await site();
+    const response = await publishNewPost(signedInAs(cms, ADA), {
+      title: '',
+      slug: 'cited',
+      body: 'So good.',
+      'repost-of': STATUS_URL,
+      visibility: 'unlisted',
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    const announce = delivered('Announce')[0];
+    assert.ok(announce !== undefined, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(announce.body['to'], `${ACTOR_URL}followers/`);
+    assert.deepEqual(
+      [announce.body['cc']].flat().sort(),
+      ['https://www.w3.org/ns/activitystreams#Public', CAROL_ACTOR].sort(),
+    );
+  });
+
   it('federates a like of a page that is no fediverse object as a note linking it', async () => {
     await cite('like-of', PLAIN_PAGE);
 
@@ -2248,6 +2274,51 @@ describe('editing a published post file on disk', () => {
     assert.equal(delivered('Create').length, 0, 'an edit is not a new post');
   });
 
+  it('dates the Update when it is sent, so a peer applies an edit that left updated alone', async () => {
+    const { cms, contentDir } = await site({
+      watch: true,
+      account: true,
+      files: { [POST_FILE]: announcedPost('The version everybody already has.') },
+    });
+    await cms.serve();
+    await cms.delivery.settled();
+
+    await writeDocument(contentDir, POST_FILE, announcedPost('A second thought, written later.'));
+
+    const update = await waitForDelivery('Update');
+    const object = update.body['object'] as Record<string, unknown>;
+    assert.ok(
+      Date.parse(String(object['updated'])) > Date.parse(String(object['published'])),
+      `updated ${String(object['updated'])}`,
+    );
+  });
+
+  it('gives each Update its own id when the text goes back to an earlier version', async () => {
+    const { cms, contentDir } = await site({
+      watch: true,
+      account: true,
+      files: { [POST_FILE]: announcedPost('First.') },
+    });
+    await cms.serve();
+    await cms.delivery.settled();
+
+    for (const [at, body] of ['Second.', 'First.', 'Second.'].entries()) {
+      await writeDocument(contentDir, POST_FILE, announcedPost(body));
+      await nextEvent(`Update ${String(at + 1)}`, (done) => {
+        const check = () => {
+          if (delivered('Update').length > at) done(undefined);
+        };
+        check();
+        arrivals.add(check);
+        return () => arrivals.delete(check);
+      });
+      await cms.delivery.settled();
+    }
+
+    const ids = delivered('Update').map((update) => update.body['id']);
+    assert.equal(new Set(ids).size, 3, `ids ${JSON.stringify(ids)}`);
+  });
+
   it('delivers a Create when the post was served but never announced', async () => {
     const { cms, contentDir } = await site({
       watch: true,
@@ -2707,6 +2778,20 @@ describe('resending a post', () => {
     const object = update.body['object'] as Record<string, unknown>;
     assert.equal(object['id'], PUBLISHED_OBJECT, 'about the object the followers hold');
     assert.match(String(object['content']), /A second thought, written later\./);
+  });
+
+  it('gives up on an inbox that never answers, and records it as failed', async () => {
+    const { cms } = await site({
+      account: true,
+      deliveryTimeoutMs: 50,
+      files: { 'posts/2026-03-04-watched.md': announcedPost('Waiting for nobody.') },
+    });
+    inboxes = new Promise<void>(() => undefined);
+
+    const report = await cms.delivery.resend('posts/2026-03-04-watched.md');
+
+    assert.equal(report?.deliveries[0]?.status, 'failed', JSON.stringify(report));
+    assert.match(report.deliveries[0]?.error ?? '', /no answer/i);
   });
 
   it('gives two resends of an unchanged post two activity ids (AC #1)', async () => {
@@ -3403,6 +3488,26 @@ describe('a user’s own profile', () => {
     );
   });
 
+  it('saves the profile when working out who to tell about it fails', async () => {
+    const { cms } = await site();
+    cms.admin.putFollower({
+      username: ADA,
+      actorId: `${REMOTE_ORIGIN}/users/odd`,
+      inboxId: 'not a url',
+      sharedInboxId: null,
+      handle: null,
+      name: null,
+      iconUrl: null,
+      url: null,
+      followedAt: '2026-03-04T10:00:00.000Z',
+    });
+
+    const response = await saveProfile(signedInAs(cms, ADA), { display_name: 'Ada Lovelace' });
+
+    assert.equal(response.status, 303, await response.text());
+    assert.equal(listUsers(cms.config.dataDir)[0]?.profile?.displayName, 'Ada Lovelace');
+  });
+
   it('sends no Update when a save leaves the profile as it was', async () => {
     const { cms } = await site();
     const agent = signedInAs(cms, ADA);
@@ -3595,6 +3700,11 @@ describe('a cited page whose context is stored after the Create (TASK-263)', () 
     assert.equal(updates.length, 1, `expected one Update, saw ${JSON.stringify(deliveries)}`);
     assert.equal(contentOf(updates[0]), line('A slow page'));
     assert.equal(updates[0]?.url, create?.url);
+    const dated = (delivery: Delivery | undefined): number => {
+      const object = delivery?.body['object'] as Record<string, unknown>;
+      return Date.parse(String(object['updated'] ?? object['published']));
+    };
+    assert.ok(dated(updates[0]) > dated(create), 'dated after the Create, so a peer applies it');
     assert.deepEqual(
       deliveries.map((delivery) => delivery.url),
       [REMOTE_SHARED_INBOX],

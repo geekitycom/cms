@@ -150,6 +150,44 @@ describe('observeOutbox', () => {
     assert.deepEqual(inner.enqueued, []);
   });
 
+  for (const [what, error] of [
+    ['a 409', new SendActivityError(new URL(INBOX), 409, 'Conflict', DUPLICATE_BODY)],
+    [
+      'a problem longer than the excerpt Fedify keeps',
+      new SendActivityError(
+        new URL(INBOX),
+        400,
+        'Bad Request',
+        `${JSON.stringify({
+          type: 'https://w3id.org/fep/c180#duplicate-delivery',
+          detail: 'x'.repeat(2000),
+        }).slice(0, 1024)}… (truncated)`,
+      ),
+    ],
+  ] as const) {
+    it(`settles ${what} saying the inbox already holds it as sent`, async () => {
+      const { outbox: observer, inner, outcomes } = observed();
+      void observer.queue.listen(() => {
+        observer.onOutboxError(error);
+      });
+      await inner.deliver(outbox());
+      assert.deepEqual(outcomes, [
+        { activityId: ACTIVITY, inbox: INBOX, status: 'sent', error: null },
+      ]);
+    });
+  }
+
+  it('settles a server error that names the duplicate-delivery type as failed', async () => {
+    const { outbox: observer, inner, outcomes } = observed();
+    void observer.queue.listen(() => {
+      observer.onOutboxError(
+        new SendActivityError(new URL(INBOX), 500, 'Server Error', DUPLICATE_BODY),
+      );
+    });
+    await inner.deliver(outbox());
+    assert.equal(outcomes[0]?.status, 'failed');
+  });
+
   it('settles a 400 that is no duplicate delivery as it always did', async () => {
     const { outbox: observer, inner, outcomes } = observed();
     void observer.queue.listen(async (message) => {

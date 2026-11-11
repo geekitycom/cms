@@ -71,10 +71,9 @@ export function createActivityId(objectId: URL | string): URL {
  *
  * A `Create` happens once and so needs no revision in its id; an `Update`
  * happens as often as the post is edited, and an activity id a peer has
- * already seen is one it is entitled to ignore. The revision is the document's
- * content hash, which makes the id deterministic — the same edit redelivered
- * is the same activity rather than a second one — and unique, because the sync
- * only reports an update when the hash has moved.
+ * already seen is one it is entitled to ignore. The revision is the moment the
+ * `Update` was built, so a redelivery of it keeps its id and every new one,
+ * an edit back to an earlier text included, has its own.
  */
 export function updateActivityId(objectId: URL | string, revision: string): URL {
   return new URL(`${objectId.toString()}#update/${encodeURIComponent(revision)}`);

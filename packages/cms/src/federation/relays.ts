@@ -17,6 +17,8 @@ import { messageOf, oneLineMessageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { actorId, senderKeyPairs } from './actor.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
+import { isDuplicateDelivery } from './outbox-observer.ts';
+import { sendWithinDeadline } from './send-deadline.ts';
 
 /** What every relay follow id's fragment starts with, after the subscriber's actor id. */
 const RELAY_FOLLOW_FRAGMENT = '#relay-follow/';
@@ -204,20 +206,21 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     };
     if (!synchronous) record('queued', null);
     try {
-      await context.sendActivity(
-        await senderKeyPairs(context, user),
-        relayRecipient(relay),
-        activity,
-        {
+      await sendWithinDeadline(
+        config,
+        relay.inboxId,
+        context.sendActivity(await senderKeyPairs(context, user), relayRecipient(relay), activity, {
           // A relay has one inbox and no shared one, and its activities are about
           // the subscription rather than about any post, so they are ordered
           // against each other rather than against a post's Create.
           orderingKey: relay.inboxId,
-        },
+        }),
       );
     } catch (thrown) {
-      record('failed', messageOf(thrown));
-      throw thrown;
+      if (!isDuplicateDelivery(thrown)) {
+        record('failed', messageOf(thrown));
+        throw thrown;
+      }
     }
     if (synchronous) record('sent', null);
     return 'sent';

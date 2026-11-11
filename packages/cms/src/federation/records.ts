@@ -170,6 +170,8 @@ export async function addFollower(
 ): Promise<Follower> {
   const { admin, contentDir, dataDir } = records;
   const file = followersFile(contentDir, username);
+  const unreadable = unreadableId(follower);
+  if (unreadable !== undefined) throw new Error(`Not followed: ${unreadable}`);
 
   return await withFileLock(file, async () => {
     const held = readFollowers(contentDir, username);
@@ -537,7 +539,7 @@ function parseFollowers(source: string, file: string, username: string): Followe
       throw new Error(`${file}: the follower "${actorId}" has no inboxId to deliver to.`);
     }
 
-    return {
+    const parsed = {
       username,
       actorId,
       inboxId,
@@ -548,7 +550,23 @@ function parseFollowers(source: string, file: string, username: string): Followe
       url: nonEmptyStringOrNull(follower['url']),
       followedAt: typeof follower['followedAt'] === 'string' ? follower['followedAt'] : '',
     };
+    const unreadable = unreadableId(parsed);
+    if (unreadable !== undefined) throw new Error(`${file}: ${unreadable}`);
+    return parsed;
   });
+}
+
+/** Why a follower cannot be delivered to, when one of its ids is not a URL. */
+function unreadableId(
+  follower: Pick<Follower, 'actorId' | 'inboxId' | 'sharedInboxId'>,
+): string | undefined {
+  for (const field of ['actorId', 'inboxId', 'sharedInboxId'] as const) {
+    const value = follower[field];
+    if (value !== null && !URL.canParse(value)) {
+      return `the follower "${follower.actorId}" has a ${field} that is not a URL: ${value}`;
+    }
+  }
+  return undefined;
 }
 
 /** Every month log a site has, oldest first. */

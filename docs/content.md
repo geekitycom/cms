@@ -465,17 +465,17 @@ keeps the value through a save until you choose Public or Unlisted.
 
 The same rules apply to pages.
 
-| Where                                                                      | An unlisted post                                                                                                                             |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Its permalink, in every representation                                     | 200, with `X-Robots-Tag: noindex`. The default theme also prints `<meta name="robots" content="noindex">`.                                   |
-| The home page, tag, category and author archives, the `archive: true` page | Absent, and not counted in a pager or a tag count.                                                                                           |
-| Previous and next links under other posts, a front page's `newestPosts`    | Absent.                                                                                                                                      |
-| Every RSS, Atom and JSON feed, and the site-wide comments feed             | Absent. Saving one pings no notify server. An unlisted reply post shown in a thread is still in that thread's comments feeds.                |
-| The sitemap, search (HTML and JSON) and `llms.txt`                         | Absent.                                                                                                                                      |
-| IndexNow                                                                   | Not submitted. A public post that becomes unlisted is submitted once, so a search engine reads the `noindex`.                                |
-| The ActivityPub outbox and featured collection                             | Absent.                                                                                                                                      |
-| Followers                                                                  | Get the `Create` and every `Update`, addressed `to` the followers with Public in `cc`, which Mastodon shows as unlisted. Relays get nothing. |
-| Webmentions                                                                | Sent as for any post, because the page is public.                                                                                            |
+| Where                                                                      | An unlisted post                                                                                                                                                       |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Its permalink, in every representation                                     | 200, with `X-Robots-Tag: noindex`. The default theme also prints `<meta name="robots" content="noindex">`.                                                             |
+| The home page, tag, category and author archives, the `archive: true` page | Absent, and not counted in a pager or a tag count.                                                                                                                     |
+| Previous and next links under other posts, a front page's `newestPosts`    | Absent.                                                                                                                                                                |
+| Every RSS, Atom and JSON feed, and the site-wide comments feed             | Absent. Saving one pings no notify server. An unlisted reply post shown in a thread is still in that thread's comments feeds.                                          |
+| The sitemap, search (HTML and JSON) and `llms.txt`                         | Absent.                                                                                                                                                                |
+| IndexNow                                                                   | Not submitted. A public post that becomes unlisted is submitted once, so a search engine reads the `noindex`.                                                          |
+| The ActivityPub outbox and featured collection                             | Absent.                                                                                                                                                                |
+| Followers                                                                  | Get the `Create` and every `Update`, or a repost's `Announce`, addressed `to` the followers with Public in `cc`, which Mastodon shows as unlisted. Relays get nothing. |
+| Webmentions                                                                | Sent as for any post, because the page is public.                                                                                                                      |
 
 When a published post changes between public and unlisted, the server sends
 its followers an `Update` with the new addressing.

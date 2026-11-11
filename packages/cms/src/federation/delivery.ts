@@ -59,6 +59,7 @@ import { updateActivityId } from './paths.ts';
 import { claimObjectId, readObjectIds, recordDeleted } from './object-ids.ts';
 import { isDuplicateDelivery } from './outbox-observer.ts';
 import { acceptedRelays } from './relays.ts';
+import { sendWithinDeadline } from './send-deadline.ts';
 
 /** What one activity's delivery came to, recipient by recipient. */
 export interface DeliveryReport {
@@ -410,20 +411,16 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     context: Context<FederationContextData>,
     document: Document,
     shape: ObjectShape,
-    revision?: string,
-    to?: ReadonlySet<string>,
+    { updated, to }: { updated?: string | undefined; to?: ReadonlySet<string> | undefined } = {},
   ): Promise<DeliveryReport> {
+    const revision = store.now().toISOString();
     return await sendAndRecordObject(
       context,
-      postUpdateActivity(context, document, revision, shape.replyTo),
+      postUpdateActivity(context, document, { revision, replyTo: shape.replyTo, updated }),
       document,
       shape,
       to,
     );
-  }
-
-  function contentRevision(hash: string): string {
-    return hash.slice(0, 16);
   }
 
   async function sendAndRecordObject(
@@ -469,7 +466,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       earlier?: readonly Delivery[];
     } = {},
   ): Promise<DeliveryReport> {
-    const deliveries: Delivery[] = [];
+    const recorded = new Map<string, Delivery>();
     const current = fanOutTargets(deliveryTargets(admin, sender.username, { relays }), also);
     const targets = fanOutTargets(current, earlierTargets(earlier, current)).filter(
       (target) => to === undefined || target.actorIds.some((actor) => to.has(actor)),
@@ -481,14 +478,14 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         what: `${about.activityType} ${about.objectId}`,
         to: targets.map((target) => target.inboxId),
       }));
-    const report = {
+    const report = (): DeliveryReport => ({
       activityId: about.activityId,
       activityType: about.activityType,
       objectId: about.objectId,
-      deliveries,
+      deliveries: [...recorded.values()],
       held,
-    };
-    if (held) return report;
+    });
+    if (held) return report();
     const keys = await senderKeyPairs(context, sender);
 
     for (const target of targets) {
@@ -504,14 +501,18 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       let error: string | null = null;
 
       try {
-        await context.sendActivity(
-          keys,
-          target.recipients,
-          activity,
-          // The object id keeps a post's activities in order per server, so a
-          // follower cannot be shown an Update of something it has not been
-          // told about yet.
-          { preferSharedInbox: true, orderingKey: about.objectId },
+        await sendWithinDeadline(
+          config,
+          target.inboxId,
+          context.sendActivity(
+            keys,
+            target.recipients,
+            activity,
+            // The object id keeps a post's activities in order per server, so a
+            // follower cannot be shown an Update of something it has not been
+            // told about yet.
+            { preferSharedInbox: true, orderingKey: about.objectId },
+          ),
         );
       } catch (thrown) {
         if (!isDuplicateDelivery(thrown)) {
@@ -526,14 +527,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       if (synchronous || status === 'failed') record(target, status, error);
     }
 
-    return report;
+    return report();
 
     function record(target: DeliveryTarget, status: DeliveryStatus, error: string | null): void {
-      for (const row of deliveryRows(about, target, { status, error })) {
-        const recorded = admin.recordDelivery(row);
-        const at = deliveries.findIndex((one) => one.actorId === recorded.actorId);
-        if (at === -1) deliveries.push(recorded);
-        else deliveries[at] = recorded;
+      for (const row of admin.recordDeliveries(deliveryRows(about, target, { status, error }))) {
+        recorded.set(row.actorId, row);
       }
     }
   }
@@ -586,7 +584,13 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         const was = await shapeOf(context, before);
         const step = revisionStep(was, is);
         if (step.kind === 'none') return undefined;
-        if (step.kind === 'revise') return await revise(context, after, step.shape);
+        if (step.kind === 'revise') {
+          // An edit that leaves `updated` alone, as one made on disk may, is
+          // dated when it is sent.
+          const moved = after.updated !== undefined && after.updated !== before.updated;
+          const updated = moved ? after.updated : store.now().toISOString();
+          return await revise(context, after, step.shape, { updated });
+        }
         await withdraw(context, before, was);
         return await announce(context, after, is);
       });
@@ -594,13 +598,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     },
 
     async updateActor(user) {
-      // Building the actor loads — and on a cold database generates — the key
-      // pairs, so a user with nowhere to send a profile update does not pay
-      // for one. A relay counts: it is holding a copy of the profile too.
-      if (deliveryTargets(admin, user.username).length === 0) return undefined;
-
       return await deliveryQueue
         .run(async () => {
+          // Building the actor loads — and on a cold database generates — the
+          // key pairs, so a user with nowhere to send a profile update does not
+          // pay for one. A relay counts: it is holding a copy of the profile too.
+          if (deliveryTargets(admin, user.username).length === 0) return undefined;
           const context = await deliveryContext();
           const id = actorId(context, user);
           const actor = await userActor(context, user, { baseUrl: config.baseUrl });
@@ -670,11 +673,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
           return await announce(context, document, shape, to?.actors);
         }
 
-        // The moment rather than the content hash, which is what a save uses:
-        // the point of a resend is that the followers hear about a revision
-        // they have already been sent and ignored, or never received at all,
-        // and an activity id a peer has seen is one it is entitled to drop.
-        return await revise(context, document, shape, store.now().toISOString(), to?.actors);
+        // Dated by the post's own `updated`, not the moment: a resend is not
+        // an edit, and a peer that applied it in full would mark the post edited.
+        return await revise(context, document, shape, { to: to?.actors });
       });
     },
 
@@ -716,7 +717,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
             sentThisProcess.get(shape.id) ??
             (await fingerprint(postObject(before, document, shape.replyTo)));
           if (current === sent) continue;
-          await revise(context, document, shape, contentRevision(current));
+          await revise(context, document, shape, { updated: now.toISOString() });
         }
       });
     },
@@ -740,8 +741,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   }
 }
 
+/** What a peer's copy of an object says, leaving out when it says it was edited. */
 async function fingerprint(object: ActivityObject): Promise<string> {
-  const json = JSON.stringify(await object.toJsonLd());
+  const json = JSON.stringify(await object.clone({ updated: null }).toJsonLd());
   return createHash('sha256').update(json).digest('hex');
 }
 

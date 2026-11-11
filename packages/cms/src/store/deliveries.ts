@@ -3,7 +3,15 @@ import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import type { Clock } from '../util/clock.ts';
 import { decodeEntities } from '../util/html.ts';
 
-import { allRows, countByStatus, getRow, NO_LIMIT, nullableText, oneOf } from './rows.ts';
+import {
+  allRows,
+  countByStatus,
+  getRow,
+  inTransaction,
+  NO_LIMIT,
+  nullableText,
+  oneOf,
+} from './rows.ts';
 import type { ListPageOptions, Page, Row } from './rows.ts';
 
 /** How one delivery of one activity to one follower ended. */
@@ -123,6 +131,15 @@ export interface DeliveryStore {
    * with each follower", which a resend moves rather than adds to.
    */
   recordDelivery(delivery: NewDelivery): Delivery;
+  /** {@link recordDelivery} for each of them, in one transaction. */
+  recordDeliveries(deliveries: readonly NewDelivery[]): Delivery[];
+  /**
+   * Delete each outcome attempted before `before` that a later outcome of the
+   * same activity type, to the same actor about the same object, supersedes,
+   * and say how many went. What every reader asks for is the newest outcome
+   * of each kind per actor and object, so that is what is kept for good.
+   */
+  pruneSupersededDeliveries(before: string): number;
   settleDeliveries(outcome: DeliveryOutcome): void;
   /**
    * Remove the unsettled rows of a delivery dev mode dropped from the queue.
@@ -191,6 +208,17 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
         error = excluded.error,
         attempted_at = excluded.attempted_at
       RETURNING *
+    `),
+    pruneSupersededDeliveries: db.prepare(`
+      DELETE FROM ap_deliveries
+      WHERE attempted_at < :before
+        AND EXISTS (
+          SELECT 1 FROM ap_deliveries AS later
+          WHERE later.actor_id = ap_deliveries.actor_id
+            AND later.object_id = ap_deliveries.object_id
+            AND later.activity_type = ap_deliveries.activity_type
+            AND (later.attempted_at, later.rowid) > (ap_deliveries.attempted_at, ap_deliveries.rowid)
+        )
     `),
     settleDeliveries: db.prepare(`
       UPDATE ap_deliveries SET status = ?, error = ?, attempted_at = ?
@@ -281,27 +309,41 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     }
     return prepared;
   }
-  return {
-    recordDelivery(delivery) {
-      const recorded = getRow(
-        statements.recordDelivery,
-        toDelivery,
-        delivery.activityId,
-        delivery.activityType,
-        delivery.objectId,
-        delivery.slug,
-        delivery.actorId,
-        delivery.inboxId,
-        delivery.status,
-        withHtmlPageAsTitle(delivery.error),
-        delivery.attemptedAt ?? clock().toISOString(),
+  function recordDelivery(delivery: NewDelivery): Delivery {
+    const recorded = getRow(
+      statements.recordDelivery,
+      toDelivery,
+      delivery.activityId,
+      delivery.activityType,
+      delivery.objectId,
+      delivery.slug,
+      delivery.actorId,
+      delivery.inboxId,
+      delivery.status,
+      withHtmlPageAsTitle(delivery.error),
+      delivery.attemptedAt ?? clock().toISOString(),
+    );
+    if (recorded === undefined) {
+      throw new Error(
+        `The delivery of "${delivery.activityId}" to "${delivery.actorId}" was not recorded.`,
       );
-      if (recorded === undefined) {
-        throw new Error(
-          `The delivery of "${delivery.activityId}" to "${delivery.actorId}" was not recorded.`,
-        );
-      }
+    }
+    return recorded;
+  }
+
+  return {
+    recordDelivery,
+
+    recordDeliveries(deliveries) {
+      const recorded: Delivery[] = [];
+      inTransaction(db, () => {
+        for (const delivery of deliveries) recorded.push(recordDelivery(delivery));
+      });
       return recorded;
+    },
+
+    pruneSupersededDeliveries(before) {
+      return Number(statements.pruneSupersededDeliveries.run({ before }).changes);
     },
 
     settleDeliveries(outcome) {
