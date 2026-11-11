@@ -12,6 +12,7 @@ import type { Cms } from './index.ts';
 import { createMemoryMailProvider } from './mail/memory.ts';
 import type { MemoryMailProvider } from './mail/memory.ts';
 import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
+import { listUsers } from './site/users.ts';
 import { writeSiteSettings } from './__testing__/site-settings.ts';
 
 const BASE_URL = 'https://blog.example';
@@ -188,13 +189,17 @@ describe('a site in dev mode', () => {
     assert.equal(resent.state, 'finished');
     const [post] = finishedResult(RESEND_JOB, resent)?.posts ?? [];
     assert.ok(post?.resent);
-    assert.equal(post.activity?.activityType, 'Update');
+    // Dev mode held the first Create, so no follower holds the post yet.
+    assert.equal(post.activity?.activityType, 'Create');
     assert.equal(
       post.activity.heldByDevMode,
       true,
       'the job result says dev mode held the resend (TASK-393 AC #5)',
     );
     await cms.relays.retry(RELAY_INBOX);
+    const [author] = listUsers(cms.config.dataDir);
+    assert.ok(author !== undefined);
+    await cms.delivery.updateActor(author);
     await cms.notifyFeeds([`${BASE_URL}/feed/`]);
     await cms.mail.send({ to: 'ada@example.com', template: 'test', subject: 'Hello' });
 

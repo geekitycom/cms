@@ -5,6 +5,7 @@ import { exists } from '../util/files.ts';
 import type { Document } from './document.ts';
 import { handleDirectory } from './handles.ts';
 import { parseDocument } from './parser.ts';
+import { withDocumentWrites } from './save.ts';
 import { wikiBaseOf } from './slug.ts';
 import { isTrashedPath, TRASH_DIRECTORY } from './store.ts';
 import type { DocumentLookup, IndexWriter } from './store.ts';
@@ -63,26 +64,32 @@ export async function moveDocumentFile(
     }
   }
 
-  const from = path.join(contentDir, ...document.path.split('/'));
-  const to = path.join(contentDir, ...target.split('/'));
+  const moved = await withDocumentWrites(contentDir, async () => {
+    const from = path.join(contentDir, ...document.path.split('/'));
+    const to = path.join(contentDir, ...target.split('/'));
 
-  let source: string;
-  try {
-    source = await readFile(from, 'utf8');
-    await mkdir(path.dirname(to), { recursive: true });
-    await rename(from, to);
-  } catch {
+    let source: string;
+    try {
+      source = await readFile(from, 'utf8');
+      await mkdir(path.dirname(to), { recursive: true });
+      await rename(from, to);
+    } catch {
+      return undefined;
+    }
+
+    const parsed = parseDocument(source, {
+      path: target,
+      type: document.type,
+      handles: handleDirectory(contentDir),
+      wikiBase: wikiBaseOf(document),
+    });
+    store.remove(document.path);
+    store.upsert(parsed);
+    return parsed;
+  });
+  if (moved === undefined) {
     return refusedMove(`Could not move ${document.path}. Is the file still there?`);
   }
-
-  const moved = parseDocument(source, {
-    path: target,
-    type: document.type,
-    handles: handleDirectory(contentDir),
-    wikiBase: wikiBaseOf(document),
-  });
-  store.remove(document.path);
-  store.upsert(moved);
 
   // Trashing takes a post off the public site and restoring puts it back, so
   // both are visibility changes a subscriber has to hear about.

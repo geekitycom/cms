@@ -222,6 +222,18 @@ The first activity about a post writes one key into its front matter:
 decides between `Create` and `Update`, and a resend reads it. Restoring a
 trashed post keeps it too.
 
+The site writes the key after it records the delivery rows and hands the
+activity to the delivery queue. If dev mode holds the activity, or the send
+fails before the activity is queued, the post stays unstamped. The next save or
+resend then sends a `Create` again, not an `Update` that a peer without the
+post would drop.
+
+A save does not wait for delivery, so the key can arrive after the editor has
+reloaded. The key goes into the post as it stands at that moment, so an edit
+saved in the meantime stays in the file and goes out as an `Update`. The
+editor's conflict check ignores a difference in `activitypub.published` alone,
+and the next save keeps the key.
+
 If a post's file already names an `activitypub.id`, the post keeps that as its
 object id for the life of the post. A post migrated from WordPress keeps the
 `https://example.com/?p=813` that its followers, its replies, and its RSS

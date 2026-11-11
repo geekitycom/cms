@@ -23,8 +23,9 @@ import type { PostLocation } from './location.ts';
 import { resolveLocation } from './location-form.ts';
 import { postLocations } from './locations.ts';
 import { renderMarkdown } from './markdown.ts';
-import { parseDocument, slugForPermalink } from './parser.ts';
+import { hashDocument, parseDocument, slugForPermalink } from './parser.ts';
 import { photosOf } from './photo.ts';
+import { documentContent } from './writer.ts';
 import type { Photo } from './photo.ts';
 import { resolvePhotos } from './photo-form.ts';
 import { resolveReview } from './review-form.ts';
@@ -32,7 +33,7 @@ import { PINNED_POST_LIMIT, pinnedAt } from './pinned.ts';
 import { discoverPostType, replyTarget } from './post-type.ts';
 import type { PostType } from './post-type.ts';
 import { RSVP_VALUES, rsvpValue } from './rsvp.ts';
-import { contentFilePath, freeSlug, saveDocument } from './save.ts';
+import { contentFilePath, freeSlug, saveDocument, withDocumentWrites } from './save.ts';
 import { htmlToText } from './search.ts';
 import { isServed } from './served.ts';
 import { defaultPermalink, slugify, wikiBaseOf } from './slug.ts';
@@ -395,48 +396,66 @@ async function persist(
   const { target, permalink, promised } = identity;
   const contentDir = config.contentDir;
 
-  if (document !== undefined) {
-    const conflict = await conflictWith(contentDir, document, form.hash);
-    if (conflict !== undefined) {
-      return { outcome: 'conflict', document, media, conflict };
+  // Locked against the federation's stamp, which lands after the save that
+  // set it off has answered: the check, the stamp the save keeps and the write
+  // see one version of the file.
+  const written = await withDocumentWrites(contentDir, async () => {
+    const current =
+      document === undefined ? undefined : (store.getByPath(document.path) ?? document);
+    if (document !== undefined) {
+      const conflict = await conflictWith(contentDir, document, form.hash);
+      if (conflict !== undefined) {
+        return { outcome: 'conflict', document, media, conflict } as const;
+      }
     }
-  }
 
-  if (target !== document?.path && store.getByPath(target) !== undefined) {
-    return refused(`Another ${kind.singular} already lives in ${target}.`, 'editor-slug');
-  }
+    if (target !== document?.path && store.getByPath(target) !== undefined) {
+      return refused(`Another ${kind.singular} already lives in ${target}.`, 'editor-slug');
+    }
 
-  const tags = respellTags(kind.tagged ? splitTags(form.tags) : [], (tag) =>
-    store.tagSpelling(tag, { excluding: document?.path }),
-  );
+    const tags = respellTags(kind.tagged ? splitTags(form.tags) : [], (tag) =>
+      store.tagSpelling(tag, { excluding: document?.path }),
+    );
 
-  const content: DocumentContent = {
-    title: form.title,
-    ...(date === undefined ? {} : { date }),
-    updated: store.now().toISOString(),
-    permalink,
-    ...optional('redirectFrom', formerPermalinks(document, promised, permalink)),
-    tags: tags.tags,
-    categories: kind.categorised ? splitTags(form.categories) : [],
-    draft,
-    ...(form.description === '' ? {} : { description: form.description }),
-    ...optional('author', chosenAuthor(site.users(), form.author, document, writer)),
-    ...optional('inReplyTo', formInReplyTo(kind, form, document)),
-    ...optional('activitypub', keptIdentity(kind, document, promised, permalink, config.baseUrl)),
-    extra: keptGuid(
-      kind,
-      extraFromForm(kind, document, form, store.now(), media, site.syndicationTargets(), timezone),
-      promised,
+    const content: DocumentContent = {
+      title: form.title,
+      ...(date === undefined ? {} : { date }),
+      updated: store.now().toISOString(),
       permalink,
-      config.baseUrl,
-    ),
-    body: form.body,
-  };
+      ...optional('redirectFrom', formerPermalinks(document, promised, permalink)),
+      tags: tags.tags,
+      categories: kind.categorised ? splitTags(form.categories) : [],
+      draft,
+      ...(form.description === '' ? {} : { description: form.description }),
+      ...optional('author', chosenAuthor(site.users(), form.author, document, writer)),
+      ...optional('inReplyTo', formInReplyTo(kind, form, document)),
+      ...optional('activitypub', keptIdentity(kind, current, promised, permalink, config.baseUrl)),
+      extra: keptGuid(
+        kind,
+        extraFromForm(
+          kind,
+          document,
+          form,
+          store.now(),
+          media,
+          site.syndicationTargets(),
+          timezone,
+        ),
+        promised,
+        permalink,
+        config.baseUrl,
+      ),
+      body: form.body,
+    };
 
-  await site.learnHandles(content.body);
+    await site.learnHandles(content.body);
 
-  const saved = await replaceFile(site, { previous: document, target, content, timezone });
-  if ('outcome' in saved) return saved;
+    const saved = await replaceFile(site, { previous: document, target, content, timezone });
+    if ('outcome' in saved) return saved;
+    return { outcome: 'written' as const, saved, respelled: tags.respelled };
+  });
+  if (written.outcome !== 'written') return written;
+  const { saved } = written;
   await fillAltTexts(contentDir, photosOf(saved.extra), saved.html);
 
   const moved = document !== undefined && document.permalink !== saved.permalink;
@@ -453,10 +472,7 @@ async function persist(
 
   // Announced rather than left to the watcher: the index already holds what
   // was written, so the watcher's re-read is a no-op and nobody would ever
-  // hear that this post was published. Awaited, so a subscriber that writes
-  // back to the file — the federation stamping `activitypub` into a post it
-  // has just announced — has finished before the editor is reloaded with a
-  // hash that would otherwise be one save behind.
+  // hear that this post was published.
   await site.announce({
     type: document === undefined ? 'created' : 'updated',
     path: saved.path,
@@ -465,7 +481,12 @@ async function persist(
     origin: 'admin',
   });
 
-  return { outcome: 'saved', saved, undescribed: checked.undescribed, respelled: tags.respelled };
+  return {
+    outcome: 'saved',
+    saved,
+    undescribed: checked.undescribed,
+    respelled: written.respelled,
+  };
 }
 
 async function replaceFile(
@@ -876,17 +897,31 @@ export async function conflictWith(
     return undefined;
   }
 
-  let hash: string;
+  let current: Document;
   try {
-    hash = parseDocument(source, { path: document.path, type: document.type }).hash;
+    current = parseDocument(source, { path: document.path, type: document.type });
   } catch {
     // A file that will not parse cannot be compared, and overwriting it would
     // throw away whatever is wrong with it before anyone has seen it.
-    hash = '';
+    return { current: source, hash: '' };
   }
 
-  if (hash === submittedHash) return undefined;
-  return { current: source, hash };
+  if (current.hash === submittedHash || unstampedHash(current) === submittedHash) return undefined;
+  return { current: source, hash: current.hash };
+}
+
+/**
+ * The hash a document had before the federation stamped it as announced. The
+ * stamp lands after the save that set it off has answered, so an editor
+ * reloaded from that save holds this hash, and the save keeps the stamp
+ * because it writes over the indexed document, which carries it.
+ */
+function unstampedHash(document: Document): string {
+  const content = documentContent(document);
+  return hashDocument(
+    { ...content, activitypub: { ...content.activitypub, published: undefined } },
+    document.type,
+  );
 }
 
 /** What the editor calls each citing field, which a refusal names. */

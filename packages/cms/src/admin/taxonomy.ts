@@ -16,7 +16,7 @@ import type { Context, Hono } from 'hono';
 
 import type { Document } from '../content/document.ts';
 import { parseDocument } from '../content/parser.ts';
-import { saveDocument } from '../content/save.ts';
+import { saveDocument, withDocumentWrites } from '../content/save.ts';
 import type { TermUsage } from '../content/store.ts';
 import { documentContent } from '../content/writer.ts';
 import type { GeekityEnv } from '../web/env.ts';
@@ -240,30 +240,38 @@ export async function rewriteTerm(
   for (const indexed of carriers(c, kind, from)) {
     const file = path.join(contentDir, ...indexed.path.split('/'));
 
-    let document: Document;
-    try {
-      document = parseDocument(await readFile(file, 'utf8'), {
+    const rewrite = await withDocumentWrites(contentDir, async () => {
+      let document: Document;
+      try {
+        document = parseDocument(await readFile(file, 'utf8'), {
+          path: indexed.path,
+          type: indexed.type,
+        });
+      } catch {
+        return 'unreadable';
+      }
+
+      const terms = changedTerms(document, kind.taxonomy, from, to);
+      if (terms === undefined) return undefined;
+
+      const saved = await saveDocument({
+        contentDir,
+        store,
+        timezone: c.var.siteAtRequestStart.timezone,
         path: indexed.path,
-        type: indexed.type,
+        content: {
+          ...documentContent(document),
+          ...(kind.taxonomy === 'tag' ? { tags: terms } : { categories: terms }),
+        },
       });
-    } catch {
+      return { document, saved };
+    });
+    if (rewrite === 'unreadable') {
       report.skipped.push(indexed.path);
       continue;
     }
-
-    const terms = changedTerms(document, kind.taxonomy, from, to);
-    if (terms === undefined) continue;
-
-    const saved = await saveDocument({
-      contentDir,
-      store,
-      timezone: c.var.siteAtRequestStart.timezone,
-      path: indexed.path,
-      content: {
-        ...documentContent(document),
-        ...(kind.taxonomy === 'tag' ? { tags: terms } : { categories: terms }),
-      },
-    });
+    if (rewrite === undefined) continue;
+    const { document, saved } = rewrite;
 
     report.rewritten += 1;
     await c.var.announce({

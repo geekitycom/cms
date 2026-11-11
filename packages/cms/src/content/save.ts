@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { writeFileAtomically } from '../files/atomic.ts';
+import { withFileLock, writeFileAtomically } from '../files/atomic.ts';
 import { exists } from '../util/files.ts';
 import type { Document, DocumentContent, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
@@ -100,6 +100,15 @@ export interface SaveDocumentOptions {
    */
   timezone?: string | undefined;
   wikiBase?: string | undefined;
+}
+
+/**
+ * Run one read-then-write of the documents with no other between the read and
+ * the write. The editor's save, a move to or from the trash, a taxonomy rename
+ * and the federation's stamp write the same files from what they last read.
+ */
+export function withDocumentWrites<T>(contentDir: string, task: () => Promise<T>): Promise<T> {
+  return withFileLock(path.join(contentDir, '.document-writes'), task);
 }
 
 /**

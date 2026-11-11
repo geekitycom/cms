@@ -604,6 +604,137 @@ describe('publishing a post from the admin', () => {
   });
 });
 
+describe('a publish whose Create never went out', () => {
+  it('leaves the post unstamped when the Create threw, so a resend sends a Create', async () => {
+    const { cms, contentDir } = await site();
+    const objectIds = path.join(contentDir, '_data', 'federation', 'objectIds.json');
+    await mkdir(path.dirname(objectIds), { recursive: true });
+    await writeFile(objectIds, '<<<<<<< HEAD\n', 'utf8');
+    const agent = signedInAs(cms, ADA);
+
+    const response = await publishNewPost(agent);
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+    assert.deepEqual(deliveries, [], 'the damaged objectIds.json stopped the Create');
+    const source = await readFile(
+      path.join(contentDir, 'posts', '2026-03-04-hello-world.md'),
+      'utf8',
+    );
+    assert.doesNotMatch(source, /^activitypub:$/m, 'no stamp for a Create that never went out');
+
+    await rm(objectIds);
+    const report = await cms.delivery.resend(pathOf(cms, 'hello-world'));
+    assert.equal(report?.activityType, 'Create');
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(
+      cms.store.getBySlug('hello-world')?.activitypub?.published,
+      '2026-03-04T10:00:00Z',
+    );
+  });
+
+  it('resends a post first published while dev mode held its Create as a Create', async () => {
+    const { cms } = await site();
+    await cms.settings.set('dev_mode', new Map([['on', true]]), 'cli');
+    const agent = signedInAs(cms, ADA);
+
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    assert.deepEqual(deliveries, [], 'dev mode held the Create');
+    assert.equal(cms.store.getBySlug('hello-world')?.activitypub?.published, undefined);
+
+    await cms.settings.set('dev_mode', new Map([['on', false]]), 'cli');
+    const report = await cms.delivery.resend(pathOf(cms, 'hello-world'));
+    assert.equal(report?.activityType, 'Create');
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+  });
+});
+
+describe('a save while the post’s Create is still on its way', () => {
+  it('answers without waiting for an inbox that has not answered', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    let openInboxes = (): void => undefined;
+    inboxes = new Promise((resolve) => {
+      openInboxes = resolve;
+    });
+
+    const response = await publishNewPost(agent);
+    assert.equal(response.status, 303, await response.text());
+    assert.deepEqual(deliveries, [], 'the inbox has not answered yet');
+
+    openInboxes();
+    await cms.delivery.settled();
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+  });
+
+  it('sends an edit saved before the Create went out as an Update, and stamps the edit', async () => {
+    const { cms, contentDir } = await site();
+    const agent = signedInAs(cms, ADA);
+    let openInboxes = (): void => undefined;
+    inboxes = new Promise((resolve) => {
+      openInboxes = resolve;
+    });
+    await publishNewPost(agent);
+
+    const response = await submitEditor(agent, '/admin/posts/hello-world', {
+      body: 'The first post, revised.',
+    });
+    assert.equal(response.status, 303, await response.text());
+    openInboxes();
+    await cms.delivery.settled();
+
+    const source = await readFile(
+      path.join(contentDir, 'posts', '2026-03-04-hello-world.md'),
+      'utf8',
+    );
+    assert.match(source, /The first post, revised\./);
+    assert.match(source, /^ {2}published: '2026-03-04T10:00:00Z'$/m);
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(delivered('Update').length, 1, `saw ${JSON.stringify(deliveries)}`);
+  });
+
+  it('takes a second save from an editor loaded before the stamp, and keeps both', async () => {
+    const { cms, contentDir } = await site();
+    const agent = signedInAs(cms, ADA);
+    let openInboxes = (): void => undefined;
+    inboxes = new Promise((resolve) => {
+      openInboxes = resolve;
+    });
+    await publishNewPost(agent);
+    const html = await (await agent.get('/admin/posts/hello-world')).text();
+    openInboxes();
+    await cms.delivery.settled();
+    assert.equal(
+      cms.store.getBySlug('hello-world')?.activitypub?.published,
+      '2026-03-04T10:00:00Z',
+    );
+
+    const response = await agent.post('/admin/posts/hello-world', {
+      csrf_token: csrfField(html) ?? '',
+      hash: field(html, 'hash') ?? '',
+      title: field(html, 'title') ?? '',
+      slug: field(html, 'slug') ?? '',
+      permalink: field(html, 'permalink') ?? '',
+      date: field(html, 'date') ?? '',
+      tags: field(html, 'tags') ?? '',
+      description: '',
+      body: 'The first post, revised.',
+      action: 'update',
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    const source = await readFile(
+      path.join(contentDir, 'posts', '2026-03-04-hello-world.md'),
+      'utf8',
+    );
+    assert.match(source, /The first post, revised\./);
+    assert.match(source, /^ {2}published: '2026-03-04T10:00:00Z'$/m);
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(delivered('Update').length, 1, `saw ${JSON.stringify(deliveries)}`);
+  });
+});
+
 describe('an unlisted post (TASK-227 AC #3)', () => {
   const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
   const FOLLOWERS = `${BASE_URL}/author/${ADA}/followers/`;
