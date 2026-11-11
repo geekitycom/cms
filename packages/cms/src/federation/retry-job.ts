@@ -1,8 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { postObjectId } from '../content/guids.ts';
 import type { Document } from '../content/document.ts';
-import type { CatalogReader, DocumentLookup } from '../content/store.ts';
+import type { CatalogReader, DocumentLookup, IndexClock } from '../content/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { jobName } from '../jobs/types.ts';
 import type { JobDefinition, Json } from '../jobs/types.ts';
@@ -10,7 +9,7 @@ import type { AdminStore, Delivery, DeliveryStatus } from '../store/admin-store.
 import { NO_LIMIT } from '../store/rows.ts';
 import { isRecord } from '../util/guards.ts';
 import type { DeliveryService } from './delivery.ts';
-import { objectIdsOf, readObjectIds } from './object-ids.ts';
+import { ownObjectIds } from './article.ts';
 import { resendActivity } from './resend-job.ts';
 import type { ResendActivity } from './resend-job.ts';
 
@@ -44,7 +43,7 @@ export const RETRY_DELIVERIES_JOB = jobName<RetryFilter, RetryReport>('retry-del
 export const RETRY_PACE_MS = 2000;
 
 export interface RetryPlanServices {
-  readonly store: DocumentLookup & CatalogReader;
+  readonly store: DocumentLookup & CatalogReader & IndexClock;
   readonly admin: Pick<AdminStore, 'searchDeliveries'>;
   readonly config: Pick<ResolvedConfig, 'contentDir' | 'baseUrl'>;
 }
@@ -60,9 +59,7 @@ export function failedRetries(services: RetryPlanServices, filter: RetryFilter):
   if (filter.path !== null) {
     const document = services.store.getByPath(filter.path);
     if (document?.type !== 'post') return [];
-    objectIds = [
-      ...objectIdsOf(readObjectIds(config.contentDir), postObjectId(document, config.baseUrl)),
-    ];
+    objectIds = [...ownObjectIds(services.store, document, config)];
     postOf = () => document;
   }
   const all = { limit: NO_LIMIT };
@@ -117,10 +114,9 @@ export function federatedPostOf(
 }
 
 function postsByObjectId({ store, config }: RetryPlanServices): Map<string, Document> {
-  const record = readObjectIds(config.contentDir);
   const posts = new Map<string, Document>();
   for (const document of store.listFederated()) {
-    for (const id of objectIdsOf(record, postObjectId(document, config.baseUrl))) {
+    for (const id of ownObjectIds(store, document, config)) {
       if (!posts.has(id)) posts.set(id, document);
     }
   }

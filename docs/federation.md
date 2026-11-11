@@ -266,6 +266,12 @@ until the next `Delete`, so every later `Update`, `Delete`, pin, and outbox
 entry names it. A resend of a post whose current id was deleted sends a
 `Create` under a new id, not an `Update`.
 
+A trashed post keeps its permalink until a live post takes it. The live post
+then has the same natural id, so it is announced under the next revision, and
+that revision belongs to the live post. A resend of the trashed post sends its
+`Delete` under the id before that revision, never under the live post's id. A
+retry of a failed delivery of the live post's id resends the live post.
+
 The permalink route ignores the query, so the new id dereferences to the post.
 An ActivityStreams request for the page URL answers with an object whose `id`
 is the current id, and Mastodon then fetches that id. The page's

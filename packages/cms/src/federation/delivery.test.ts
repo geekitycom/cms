@@ -1520,6 +1520,77 @@ describe('a post that comes back after its Delete (TASK-417)', () => {
     assert.equal((creates[0] as Delivery).body['id'], `${PERMALINK_ID}?v=2#create`);
   });
 
+  /** Post A announced and trashed, then a live post B announced at A's permalink. */
+  async function trashedUnderLivePost(): Promise<{
+    cms: Cms;
+    contentDir: string;
+    trashed: string;
+  }> {
+    const { cms, contentDir } = await site();
+    const agent = signedInAs(cms, ADA);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'trash', return: '' });
+    await cms.delivery.settled();
+    const trashed = pathOf(cms, 'hello-world');
+
+    // Dated before the trashed post, so a walk of the announced posts, newest
+    // first, meets the trashed one first.
+    const response = await publishNewPost(agent, {
+      title: 'Another',
+      slug: 'another',
+      permalink: '/2026/03/hello-world/',
+      date: '2026-03-01T10:00:00.000Z',
+      body: 'The live post.',
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+    assert.equal(objectOf(delivered('Create').at(-1))['id'], `${PERMALINK_ID}?v=2`);
+    deliveries.length = 0;
+    return { cms, contentDir, trashed };
+  }
+
+  it('resends a trashed post’s Delete under its own id, not the live post’s at its permalink', async () => {
+    const { cms, contentDir, trashed } = await trashedUnderLivePost();
+
+    await cms.delivery.resend(trashed);
+    await cms.delivery.settled();
+
+    assert.deepEqual(
+      delivered('Delete').map((delivery) => objectOf(delivery)['id']),
+      [PERMALINK_ID],
+    );
+    const record = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'federation', 'objectIds.json'), 'utf8'),
+    ) as { deleted: string[] };
+    assert.deepEqual(record.deleted, [PERMALINK_ID]);
+  });
+
+  it('retries a failed Create of the live post’s id as the live post, not the trashed one', async () => {
+    const { cms } = await trashedUnderLivePost();
+    cms.admin.recordDelivery({
+      activityId: `${PERMALINK_ID}?v=2#create`,
+      activityType: 'Create',
+      objectId: `${PERMALINK_ID}?v=2`,
+      slug: 'hello-world',
+      actorId: REMOTE_ACTOR,
+      inboxId: REMOTE_SHARED_INBOX,
+      status: 'failed',
+      error: 'HTTP 503',
+    });
+
+    await retryDeliveriesJob(cms, () => Promise.resolve()).run(
+      { path: null, inbox: REMOTE_SHARED_INBOX },
+      { signal: new AbortController().signal, attempt: 1, progress: () => Promise.resolve() },
+    );
+
+    assert.deepEqual(delivered('Delete'), [], 'nothing was withdrawn');
+    assert.deepEqual(
+      delivered('Create').map((delivery) => objectOf(delivery)['id']),
+      [`${PERMALINK_ID}?v=2`],
+    );
+  });
+
   it('announces a post published again from a draft under a fresh id each time (AC #1)', async () => {
     const { cms } = await site();
     const agent = signedInAs(cms, ADA);
