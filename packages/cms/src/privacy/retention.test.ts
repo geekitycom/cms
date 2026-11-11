@@ -263,6 +263,31 @@ describe('the retention sweep', () => {
     assert.equal(readContactMessage(dataDir, oldMessage)?.addressHash, 'contact-hash');
   });
 
+  it('drops delivery outcomes over 30 days old that a later one of the same kind supersedes', async () => {
+    const { cms } = await siteWith([]);
+    const object = 'https://blog.example/2026/03/hello-world/';
+    const update = (attemptedAt: string) => ({
+      activityId: `${object}#update/${attemptedAt}`,
+      activityType: 'Update',
+      objectId: object,
+      slug: 'hello-world',
+      actorId: 'https://remote.example/users/ada',
+      inboxId: 'https://remote.example/inbox',
+      status: 'sent' as const,
+      error: null,
+      attemptedAt,
+    });
+    const lastWeek = '2026-09-21T10:00:00.000Z';
+    cms.admin.recordDeliveries([update(OLD), update(RECENT), update(lastWeek)]);
+
+    await cms.retention.sweep();
+
+    assert.deepEqual(
+      cms.admin.searchDeliveries({}).items.map((row) => row.attemptedAt),
+      [lastWeek, RECENT],
+    );
+  });
+
   it('runs once the site serves', async () => {
     const { cms } = await siteWith([
       { id: '00000000000000a1', name: 'Ada', email: 'ada@example.com', submitted: OLD },

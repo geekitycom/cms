@@ -181,7 +181,7 @@ add its own. decision-64 records the set.
 | `media`   | Upload media.                                                                  |
 | `publish` | Publish drafts and change posts that are already public.                       |
 | `inspect` | Read the site's federation and delivery records, inbox and followers included. |
-| `repair`  | Resend posts, retry failed deliveries and refresh remote actors.               |
+| `repair`  | Resend any post, retry failed deliveries and refresh remote actors.            |
 
 A tool call whose token lacks the scope gets 403 with
 `WWW-Authenticate: Bearer error="insufficient_scope"`. Its `scope` names the
@@ -269,7 +269,11 @@ output, or refused inbox signatures, which are only logged. See
 ### The repair tools
 
 The `repair` tools fix the common federation problems that the `inspect`
-tools find. They change what the site has sent or stored, so each one is
+tools find. Like `inspect`, `repair` covers the whole site rather than your own
+posts: `resend_post` sends any post as its author's actor, and
+`retry_deliveries` at an inbox retries every post that failed there. A resend
+sends a post as its author last saved it, so a `repair` token cannot change
+what another user's post says, only send it again. They change what the site has sent or stored, so each one is
 annotated with `readOnlyHint` set to false and `openWorldHint` set to true. None
 of them removes anything, so `destructiveHint` is false. Each one is
 annotated `idempotentHint`, because a second call does not add more work:

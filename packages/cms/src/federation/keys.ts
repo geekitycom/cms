@@ -1,5 +1,6 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { exportJwk, generateCryptoKeyPair, importJwk } from '@fedify/fedify';
 
@@ -10,6 +11,7 @@ import {
 } from '../files/atomic.ts';
 import { ACTOR_KEYS, dataFolder, dataPath, fileToken } from '../files/data-files.ts';
 import { messageOf } from '../util/errors.ts';
+import { isRecord } from '../util/guards.ts';
 
 /**
  * The algorithms an actor holds a key pair for, in the order Fedify wants them:
@@ -24,6 +26,26 @@ export type ActorKeyAlgorithm = (typeof ACTOR_KEY_ALGORITHMS)[number];
 /** Where an actor's key files live: `data/keys`, beside the disposable index. */
 export function actorKeysDir(dataDir: string): string {
   return dataFolder(dataDir, ACTOR_KEYS);
+}
+
+/**
+ * The private part (`d`) of every key file in `data/keys`, whoever it belongs
+ * to: the keys the site signs with now.
+ */
+export function heldPrivateKeys(dataDir: string): Set<string> {
+  const dir = actorKeysDir(dataDir);
+  const held = new Set<string>();
+  if (!existsSync(dir)) return held;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith('.jwk')) continue;
+    try {
+      const key: unknown = JSON.parse(readFileSync(path.join(dir, name), 'utf8'));
+      if (isRecord(key) && typeof key['d'] === 'string') held.add(key['d']);
+    } catch {
+      // A file that is not a key holds no key to keep a message for.
+    }
+  }
+  return held;
 }
 
 /**

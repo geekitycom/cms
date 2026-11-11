@@ -37,7 +37,15 @@ const RELAY_INBOX = `${RELAY_ORIGIN}/user/_____relay_____/inbox`;
  * nothing.
  */
 const RELAY_PAIR = 1;
-const RELAY_KEY = `${RELAY_ACTOR}#main-key`;
+
+/**
+ * Two actors that are not the relay, one on its host and one on another, who
+ * sign with a key of their own.
+ */
+const STRANGER_PAIR = 2;
+const NEIGHBOUR_ACTOR = `${RELAY_ORIGIN}/users/stranger`;
+const STRANGER_ORIGIN = 'https://stranger.example';
+const STRANGER_ACTOR = `${STRANGER_ORIGIN}/actor`;
 
 /** A second relay, so a test can tell one subscription from another. */
 const OTHER_RELAY_INBOX = `${RELAY_ORIGIN}/user/_____other_____/inbox`;
@@ -58,13 +66,22 @@ const temporaryDirs: string[] = [];
 const sent: Sent[] = [];
 
 let relayInboxStatus = 202;
+let relayInboxBody = 'No.';
 let relayKeys: CryptoKeyPair;
-let relayActorDocument: unknown;
+let strangerKeys: CryptoKeyPair;
+const actorDocuments = new Map<string, unknown>();
 let restoreFetch: () => void;
 
 before(async () => {
   relayKeys = await testKeyPair(RELAY_PAIR);
-  relayActorDocument = await relayActor(relayKeys.publicKey);
+  strangerKeys = await testKeyPair(STRANGER_PAIR);
+  actorDocuments.set(RELAY_ACTOR, await relayActor(RELAY_ACTOR, RELAY_INBOX, relayKeys.publicKey));
+  for (const stranger of [NEIGHBOUR_ACTOR, STRANGER_ACTOR]) {
+    actorDocuments.set(
+      stranger,
+      await relayActor(stranger, `${stranger}/inbox`, strangerKeys.publicKey),
+    );
+  }
   restoreFetch = routeRelayHost();
 });
 
@@ -75,18 +92,18 @@ after(async () => {
 });
 
 /**
- * The relay's actor document, an `Application` as most relay servers are, with
- * the key its `Accept` is signed by.
+ * An actor document, an `Application` as most relay servers are, with the key
+ * its `Accept` is signed by.
  */
-async function relayActor(publicKey: CryptoKey): Promise<unknown> {
+async function relayActor(id: string, inbox: string, publicKey: CryptoKey): Promise<unknown> {
   const actor = new Application({
-    id: new URL(RELAY_ACTOR),
+    id: new URL(id),
     preferredUsername: '_____relay_____',
     name: 'Example Relay',
-    inbox: new URL(RELAY_INBOX),
+    inbox: new URL(inbox),
     publicKey: new CryptographicKey({
-      id: new URL(RELAY_KEY),
-      owner: new URL(RELAY_ACTOR),
+      id: new URL(`${id}#main-key`),
+      owner: new URL(id),
       publicKey: await importJwk(await exportJwk(publicKey), 'public'),
     }),
   });
@@ -100,14 +117,19 @@ function routeRelayHost(): () => void {
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
-    if (url.origin !== RELAY_ORIGIN) return await original(input, init);
+    if (url.origin !== RELAY_ORIGIN && url.origin !== STRANGER_ORIGIN) {
+      return await original(input, init);
+    }
 
     if (request.method === 'POST') {
       sent.push({ url: request.url, body: (await request.json()) as Record<string, unknown> });
-      return new Response(relayInboxStatus < 300 ? '' : 'No.', { status: relayInboxStatus });
+      return new Response(relayInboxStatus < 300 ? '' : relayInboxBody, {
+        status: relayInboxStatus,
+      });
     }
-    if (url.pathname === new URL(RELAY_ACTOR).pathname) {
-      return new Response(JSON.stringify(relayActorDocument), {
+    const document = actorDocuments.get(`${url.origin}${url.pathname}`);
+    if (document !== undefined) {
+      return new Response(JSON.stringify(document), {
         headers: { 'content-type': 'application/activity+json' },
       });
     }
@@ -135,7 +157,8 @@ interface Site {
 /**
  * A federated CMS with no queue — so a delivery is a POST that has already
  * happened by the time `settled()` resolves — and the private-address guard
- * off, because the relay host does not resolve.
+ * off, because the relay host does not resolve. One given a relay list
+ * serves, because serving is what subscribes to the listed relays.
  */
 async function site(
   options: {
@@ -143,6 +166,7 @@ async function site(
     dataDir?: string;
     now?: () => Date;
     queued?: boolean;
+    serve?: boolean;
   } = {},
 ): Promise<Site> {
   const dataDir = options.dataDir ?? (await temporaryDir('geekity-relays-data-'));
@@ -177,6 +201,7 @@ async function site(
   });
   started.push(cms);
   await cms.sync();
+  if (options.serve ?? options.relays !== undefined) await cms.serve();
   return { cms, contentDir, dataDir };
 }
 
@@ -190,23 +215,27 @@ function ofType(type: string): Sent[] {
   return sent.filter((one) => one.body['type'] === type);
 }
 
-/** Deliver one activity to the site's inbox, signed as the relay would sign it. */
-async function deliver(cms: Cms, activity: { toJsonLd(): Promise<unknown> }): Promise<Response> {
+async function deliver(
+  cms: Cms,
+  activity: { toJsonLd(): Promise<unknown> },
+  signer: string = RELAY_ACTOR,
+): Promise<Response> {
   const request = new Request(SITE_INBOX, {
     method: 'POST',
     headers: { 'content-type': 'application/activity+json' },
     body: JSON.stringify(await activity.toJsonLd()),
   });
+  const keys = signer === RELAY_ACTOR ? relayKeys : strangerKeys;
   return await cms.app.request(
-    await signRequest(request, relayKeys.privateKey, new URL(RELAY_KEY)),
+    await signRequest(request, keys.privateKey, new URL(`${signer}#main-key`)),
   );
 }
 
 /** The relay's `Accept` of the follow the site sent, as FEP-ae0c spells it. */
-function accept(followId: string): Accept {
+function accept(followId: string, actor: string = RELAY_ACTOR): Accept {
   return new Accept({
-    id: new URL(`${RELAY_ORIGIN}/accepts/1`),
-    actor: new URL(RELAY_ACTOR),
+    id: new URL(`${new URL(actor).origin}/accepts/1`),
+    actor: new URL(actor),
     object: new Follow({
       id: new URL(followId),
       actor: new URL(SITE_ACTOR),
@@ -216,10 +245,10 @@ function accept(followId: string): Accept {
 }
 
 /** The relay's `Reject`, which names the follow by id and says why. */
-function reject(followId: string, reason: string): Reject {
+function reject(followId: string, reason: string, actor: string = RELAY_ACTOR): Reject {
   return new Reject({
-    id: new URL(`${RELAY_ORIGIN}/rejects/1`),
-    actor: new URL(RELAY_ACTOR),
+    id: new URL(`${new URL(actor).origin}/rejects/1`),
+    actor: new URL(actor),
     object: new URL(followId),
     summary: reason,
   });
@@ -298,6 +327,22 @@ describe('the follow as a delivery to the relay', () => {
       relayInboxStatus = 202;
     }
   });
+  it('records a Follow the relay says it already holds as sent', async () => {
+    relayInboxStatus = 409;
+    relayInboxBody = JSON.stringify({ type: 'https://w3id.org/fep/c180#duplicate-delivery' });
+    try {
+      const { cms } = await site();
+      await saveSettings(signedInAs(cms, LOCAL_USER), { relays: RELAY_INBOX });
+      await cms.relays.settled();
+
+      const last = cms.admin.lastDeliveryToInbox(RELAY_INBOX);
+      assert.equal(last?.activityType, 'Follow');
+      assert.equal(last.status, 'sent', `row ${JSON.stringify(last)}`);
+    } finally {
+      relayInboxStatus = 202;
+      relayInboxBody = 'No.';
+    }
+  });
 });
 
 describe('the relay’s answer', () => {
@@ -337,6 +382,42 @@ describe('the relay’s answer', () => {
     await cms.relays.settled();
 
     await deliver(cms, accept(`${SITE_ACTOR}#relay-follow/an-older-one`));
+
+    assert.equal(cms.admin.getRelay(RELAY_INBOX)?.state, 'accepted');
+  });
+
+  it('does not take an Accept of the follow from an actor on another host', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, LOCAL_USER);
+    await saveSettings(agent, { relays: RELAY_INBOX });
+    await cms.relays.settled();
+    const followId = String(ofType('Follow')[0]?.body['id']);
+
+    await deliver(cms, accept(followId, STRANGER_ACTOR), STRANGER_ACTOR);
+    await deliver(cms, reject(followId, 'Not you.', STRANGER_ACTOR), STRANGER_ACTOR);
+
+    const stored = cms.admin.getRelay(RELAY_INBOX);
+    assert.equal(stored?.state, 'pending');
+    assert.equal(stored.actorId, null);
+  });
+
+  it('does not take an Accept from the relay’s host that names no follow of the site', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, LOCAL_USER);
+    await saveSettings(agent, { relays: RELAY_INBOX });
+    await cms.relays.settled();
+
+    await deliver(cms, accept(`${RELAY_ORIGIN}/follows/1`, NEIGHBOUR_ACTOR), NEIGHBOUR_ACTOR);
+
+    const stored = cms.admin.getRelay(RELAY_INBOX);
+    assert.equal(stored?.state, 'pending');
+    assert.equal(stored.actorId, null);
+  });
+
+  it('keeps an accepted relay accepted when it rejects something other than a follow', async () => {
+    const cms = await siteWithAnsweredRelay('accept');
+
+    await deliver(cms, reject(`${RELAY_ORIGIN}/notes/1`, 'Spam.'));
 
     assert.equal(cms.admin.getRelay(RELAY_INBOX)?.state, 'accepted');
   });
@@ -609,6 +690,14 @@ describe('booting', () => {
     assert.equal(ofType('Follow').length, 1);
     assert.equal(ofType('Follow')[0]?.url, RELAY_INBOX);
     assert.equal(cms.admin.getRelay(RELAY_INBOX)?.state, 'pending');
+  });
+
+  it('follows nothing from a CMS that is not serving, as a CLI command builds', async () => {
+    const { cms } = await site({ relays: [RELAY_INBOX], serve: false });
+    await cms.relays.settled();
+
+    assert.deepEqual(sent, []);
+    assert.equal(cms.admin.getRelay(RELAY_INBOX), undefined);
   });
 
   it('does not follow again one it already has a record of', async () => {

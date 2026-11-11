@@ -2,6 +2,7 @@ import { statSync } from 'node:fs';
 import path from 'node:path';
 
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
+import { lockFileFor, withLockFile } from '../files/lock-file.ts';
 import { messageOf } from '../util/errors.ts';
 import { FEDERATION_DATA_DIRECTORY } from './records.ts';
 
@@ -99,12 +100,12 @@ export function naturalObjectId(objectId: string): string {
 }
 
 export async function recordDeleted(contentDir: string, objectId: string): Promise<void> {
-  const file = objectIdsFile(contentDir);
-  await withFileLock(file, () => {
-    const record = parseObjectIds(file);
-    if (record.deleted.includes(objectId)) return;
-    write(file, { ...record, deleted: [...record.deleted, objectId] });
-  });
+  await changeObjectIds(objectIdsFile(contentDir), (record) => ({
+    value: undefined,
+    next: record.deleted.includes(objectId)
+      ? undefined
+      : { ...record, deleted: [...record.deleted, objectId] },
+  }));
 }
 
 /**
@@ -122,16 +123,36 @@ export function backfillDeleted(contentDir: string, deletedIds: readonly string[
 }
 
 export async function claimObjectId(contentDir: string, naturalId: string): Promise<string> {
-  const file = objectIdsFile(contentDir);
-  return await withFileLock(file, () => {
-    const record = parseObjectIds(file);
+  return await changeObjectIds(objectIdsFile(contentDir), (record) => {
     const current = currentObjectId(record, naturalId);
-    if (!record.deleted.includes(current)) return current;
-
+    if (!record.deleted.includes(current)) return { value: current, next: undefined };
     const reissued = record.reissued[naturalId] ?? [];
     const fresh = withRevision(naturalId, reissued.length + 2);
-    write(file, { ...record, reissued: { ...record.reissued, [naturalId]: [...reissued, fresh] } });
-    return fresh;
+    return {
+      value: fresh,
+      next: { ...record, reissued: { ...record.reissued, [naturalId]: [...reissued, fresh] } },
+    };
+  });
+}
+
+/**
+ * Read the file and write what `decide` makes of it, with no other writer in
+ * between. Another process (a CLI resend beside the server) writes this file
+ * too, so a write is decided again under the lock file they share; a call
+ * that changes nothing, which is most of them, skips that lock's round trips.
+ */
+async function changeObjectIds<T>(
+  file: string,
+  decide: (record: ObjectIdRecord) => { value: T; next: ObjectIdRecord | undefined },
+): Promise<T> {
+  return await withFileLock(file, async () => {
+    const first = decide(parseObjectIds(file));
+    if (first.next === undefined) return first.value;
+    return await withLockFile(lockFileFor(file), () => {
+      const decided = decide(parseObjectIds(file));
+      if (decided.next !== undefined) write(file, decided.next);
+      return Promise.resolve(decided.value);
+    });
   });
 }
 

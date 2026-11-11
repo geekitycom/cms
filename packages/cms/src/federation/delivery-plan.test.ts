@@ -7,6 +7,7 @@ import type { Follower, Relay } from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import {
+  audienceTargets,
   citedAuthor,
   deliveryChange,
   deliveryRows,
@@ -120,6 +121,42 @@ describe('delivery targets', () => {
       [
         { inboxId: 'https://relay.example/inbox', actorIds: ['https://relay.example/actor'] },
         { inboxId: 'https://other.example/inbox', actorIds: ['https://other.example/inbox'] },
+      ],
+    );
+  });
+
+  it('sends once to a relay whose inbox is the followers’ shared inbox, writing both outcomes', () => {
+    const targets = audienceTargets(
+      [
+        follower(
+          'https://a.example/users/1',
+          'https://a.example/users/1/inbox',
+          'https://a.example/inbox',
+        ),
+      ],
+      [
+        relay('https://a.example/inbox', 'https://a.example/actor'),
+        relay('https://relay.example/inbox', 'https://relay.example/actor'),
+      ],
+    );
+
+    assert.deepEqual(
+      targets.map(({ inboxId, recipients, actorIds }) => ({
+        inboxId,
+        recipients: recipients.map((recipient) => recipient.id?.href),
+        actorIds,
+      })),
+      [
+        {
+          inboxId: 'https://a.example/inbox',
+          recipients: ['https://a.example/users/1', 'https://a.example/actor'],
+          actorIds: ['https://a.example/users/1', 'https://a.example/actor'],
+        },
+        {
+          inboxId: 'https://relay.example/inbox',
+          recipients: ['https://relay.example/actor'],
+          actorIds: ['https://relay.example/actor'],
+        },
       ],
     );
   });

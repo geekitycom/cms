@@ -23,6 +23,7 @@ replace them when a site outgrows them:
 | `kv`                  | `MemoryKvStore`                             | Fedify's cache and idempotence store. Nothing that has to survive a restart lives in it.                                                                                                    |
 | `queue`               | `SqliteMessageQueue` in `data/queue.sqlite` | The delivery and inbox queue. `null` means no queue: activities are handled and delivered inside the request that carried them, with no retry. See [The message queue](#the-message-queue). |
 | `allowPrivateAddress` | `false`                                     | Whether Fedify may fetch private and loopback addresses. Leave it off: turning it on removes an SSRF guard. It exists for tests.                                                            |
+| `deliveryTimeoutMs`   | `30000`                                     | How long one delivery POST is waited for before it is recorded as `failed`.                                                                                                                 |
 
 The CMS owns the followers and the inbox log. Both are files the site
 publishes (decision-9):
@@ -79,7 +80,10 @@ Each write updates the SQLite index in the same step, behind a lock on the
 file, so the file and the index always agree. The `followers` and `ap_inbox`
 tables are only an index. Every boot empties them and reads them back from the
 files. You can therefore edit `followers.json` by hand and restart, and
-deleting the database loses nothing. The rebuild calls
+deleting the database loses nothing. A follower whose `actorId` or `inboxId` is
+missing, or whose `actorId`, `inboxId` or `sharedInboxId` is not a URL, stops
+the boot with an error that names the file and the follower. A follow with
+such an id is not recorded. The rebuild calls
 `cms.admin.replaceFollowers` and `replaceInboxActivities`.
 `rebuildFederationIndexes({ admin, contentDir })` is the rebuild itself.
 
@@ -107,6 +111,12 @@ identity, and every follower's cached public key would stop verifying. Fedify's
 own fallback, an actor document with no `publicKey`, is worse, because peers
 cache it. Restore the file from a backup, or delete it to request a new key on
 purpose.
+
+Each queued delivery carries a copy of the private keys it is signed with. When
+the server starts, it removes every waiting message signed with a key that no
+file in `dataDir/keys` holds now. To retire a compromised key, replace or
+delete its file and restart the server: deliveries and retries signed with the
+old key are not sent. Their rows read `unknown`.
 
 ## The message queue
 
@@ -144,10 +154,13 @@ does not touch it.
   the delivery's `queued` or `retrying` row, as a held delivery has no row. A
   `data/` copied from a live site can hold deliveries that are still waiting.
 
-The file is mode `0600`. A waiting delivery holds the activity, the inbox it
-goes to and the private key it is signed with. An inbox activity waiting to be
-handled holds what the peer sent. You can delete the file while the site is
-stopped. The waiting deliveries and retries are lost, and nothing else.
+The file is mode `0600`, and so are its `-wal` and `-shm` files. A waiting
+delivery holds the activity, the inbox it goes to and the private key it is
+signed with. The server opens the file with `secure_delete`, so a message it
+has taken is overwritten rather than left in a free page. An inbox activity
+waiting to be handled holds what the peer sent. You can delete the file while
+the site is stopped. The waiting deliveries and retries are lost, and nothing
+else.
 
 A queue passed as `federation.queue` replaces this one, and is never paused,
 durable or not. A server that stops sends everything it queued for now before
@@ -158,7 +171,11 @@ it exits. What happens to its scheduled retries depends on the queue: an
 
 Publishing a post federates it. The delivery service listens to the index, so
 a post edited on disk reaches the followers in the same way as a post saved
-through the editor:
+through the editor. An edit that does not change `updated` is sent with the
+time of the `Update` as the object's `updated`, because Mastodon applies an
+`Update` in full only when `updated` is later than the edit it holds. Each
+`Update` id carries the time it was built, so an edit back to an earlier text
+is a new activity:
 
 | What happened to the post                                                    | What the followers get    |
 | ---------------------------------------------------------------------------- | ------------------------- |
@@ -321,9 +338,10 @@ author does the same. A peer files a post under the actor that created it and
 accepts an `Update` or `Delete` from that actor only, so the old author sends
 the `Delete` to their followers, and the new author sends a `Create` to theirs
 under a new id. A post whose `author` names a deleted user is sent by the
-site's first account from then on. The copies the deleted user sent stay on
-the servers that hold them, because no remaining actor can update or delete
-them. So a post can come back under a deleted id in two ways:
+site's first account from then on. When the user is deleted, the site sends a
+`Delete` of their actor, and a server that accepts it removes the copies the
+user sent. No remaining actor can update or delete a copy on a server that did
+not. So a post can come back under a deleted id in two ways:
 
 - it is published again after a draft or the trash
 - an edit moves it back to a permalink it had before
@@ -398,8 +416,10 @@ report?.deliveries; // one row per follower and relay: inbox, status, error, tim
 ```
 
 `resend` sends the post as it reads now. It does not repeat an earlier
-activity. It builds the activity from the file at the moment you call it, so a
-follower whose server was down receives the current post. The activity follows
+activity. It builds the activity from the file when the post's turn in the
+job comes, so a follower whose server was down receives the current post. A
+`geekity resend --all` that runs for minutes reads each file again just before
+it sends that post. The activity follows
 the same table as a save:
 
 - A published post that no follower has received is a `Create`, and the site
@@ -428,6 +448,11 @@ above for every follower.
 The site stores nothing else. For each activity it sends, SQLite keeps one
 outcome row per recipient: the activity's id, type, object id and slug, the
 inbox used, the status, the error, and the time. That cache may be empty.
+The retention sweep deletes a row more than 30 days old when a later row of
+the same activity type, for the same recipient and object, exists. The newest
+row of each type for each recipient and object is kept, because an `Update` or
+a `Delete` reaches earlier recipients through those rows and a retry reads
+them.
 
 - `cms.admin.lastDeliveryToObject(objectId)` returns the newest outcome for one
   post.
@@ -436,10 +461,13 @@ inbox used, the status, the error, and the time. That cache may be empty.
 
 A status is one of:
 
-- `sent`: the inbox accepted it. An inbox that answers `400` with a
-  [FEP-c180](https://w3id.org/fep/c180) problem of type
+- `sent`: the inbox accepted it. An inbox that answers with a `4xx` status and
+  a [FEP-c180](https://w3id.org/fep/c180) problem of type
   `https://w3id.org/fep/c180#duplicate-delivery`, as tags.pub does for an
   activity it already holds, has it too, so that is `sent` and is not retried.
+  Fedify keeps only the first KiB of a response body, so in a longer problem
+  document the site looks for the `type` member in that part. The same rule
+  applies to a relay's `Follow` and `Undo`.
 - `queued`: it is in Fedify's queue and has not settled.
 - `retrying`: its last attempt failed, and the queue will try again. The error
   says why the attempt failed, including the status code the inbox answered
@@ -450,6 +478,9 @@ A status is one of:
 - `failed`: Fedify gave up, with the error. Fedify gives up on an inbox that
   answers `404` or `410`, and on any other failure once its retry policy runs
   out. A send that throws before it reaches the queue is also `failed`. So is
+  a POST that has no answer within `federation.deliveryTimeoutMs`, 30 seconds
+  by default. Fedify cannot cancel the request, so the site stops waiting for
+  it and records the failure, and the request ends on its own. So is
   an attempt whose queue handler throws, when the queue does not hand the
   message over again, as `data/queue.sqlite` does not. An inbox that is not an
   `http` or `https` URL is `failed` without an attempt, because Fedify would
@@ -481,10 +512,11 @@ from.
 
 Mastodon 4.5 lets people quote a post only when the post says who may quote
 it. It shows a quote only after the quoted author's server approves it
-([FEP-044f]). Every post this site federates is public. Every `Note` and
-`Article` carries `interactionPolicy.canQuote` with `automaticApproval` set to
-the public collection. Anyone may quote the post, and no manual approval is
-needed. Pages, drafts, and scheduled and trashed posts do not federate, so
+([FEP-044f]). A post this site federates is public or
+[unlisted](content.md#unlisted-posts), and either can be read by anyone with
+its URL. Every `Note` and `Article`, unlisted ones too, carries
+`interactionPolicy.canQuote` with `automaticApproval` set to the public
+collection. Anyone may quote the post, and no manual approval is needed. Pages, drafts, and scheduled and trashed posts do not federate, so
 they cannot be quoted.
 
 A quoting server sends a `QuoteRequest` to the post's author. The inbox
@@ -616,7 +648,10 @@ site can pick without asking.
 
 The relay answers `Accept` or `Reject`, possibly days later, because a
 subscription may need a human to approve it. The answer arrives in the site's
-inbox and updates the subscription. Removing the line sends an `Undo` of the
+inbox and updates the subscription. The site takes an answer only from the
+relay: the actor its earlier answer named, or, before it has answered, an actor
+on the host of the relay inbox. The answer must also name a relay `Follow` that
+the site sent. Removing the line sends an `Undo` of the
 same `Follow`. Subscription changes run one at a time, and each one reads the
 setting and the records when its turn comes. A relay that is added and then
 removed while earlier changes are still sending leaves no record.
@@ -631,7 +666,8 @@ that the setting still lists. An accepted relay keeps its subscription. A
 rejected relay is not asked again: remove it and add it back to ask again.
 
 The site delivers only to an accepted relay. An accepted relay is one more
-inbox in the fan-out. It receives, as well as the author's followers:
+inbox in the fan-out. A relay inbox that is also a follower's shared inbox gets
+one POST for both. It receives, as well as the author's followers:
 
 - every `Create`, `Update`, and `Delete` for a public post, whoever wrote it
 - every `Update` and `Delete` for a post it was sent before, after the post is
@@ -655,7 +691,8 @@ await cms.relays.retry(inboxId); // send the follow again, if still pending
 The records live in `ap_relays`, keyed by inbox. They are operational state,
 not a source. The setting is the source. If the setting names a relay that has
 no record, after a rebuilt database or a restored content directory, the site
-follows it again on the next boot.
+follows it again the next time the server starts. CLI commands such as
+`geekity resend` do not change relay subscriptions.
 
 [fepae0c]: https://w3id.org/fep/ae0c
 
@@ -884,6 +921,13 @@ of an activity failed. A recipient whose newest `Create` failed gets the
 since. The others get an `Update`. A recipient whose pin or unpin failed then gets the
 `Add` or the `Remove` again. The panel shows the latest retry job as the Resend
 page shows the latest resend.
+
+The panel also lists failed deliveries that are not about a post: a relay's
+`Follow` or `Undo`, shown as a relay subscription, and an actor `Update` or
+`Delete`, shown as the profile. These rows have no Retry button, and each one
+stays for 7 days unless a later delivery to that recipient replaces it. To retry a
+relay subscription, use Retry on the Relays panel. The profile goes out again
+to every follower the next time it changes.
 
 A Relays panel sits between the followers and the inbox log. It has one row per
 subscription, with:

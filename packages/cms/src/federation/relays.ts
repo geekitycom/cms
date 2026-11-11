@@ -17,6 +17,10 @@ import { messageOf, oneLineMessageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { actorId, senderKeyPairs } from './actor.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
+import { isDuplicateDelivery } from './outbox-observer.ts';
+import { sendWithinDeadline } from './send-deadline.ts';
+
+const RELAY_FOLLOW_FRAGMENT = '#relay-follow/';
 
 /** Where a relay reports what it could not do. `console` will do. */
 export interface RelayLogger {
@@ -201,20 +205,21 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     };
     if (!synchronous) record('queued', null);
     try {
-      await context.sendActivity(
-        await senderKeyPairs(context, user),
-        relayRecipient(relay),
-        activity,
-        {
+      await sendWithinDeadline(
+        config,
+        relay.inboxId,
+        context.sendActivity(await senderKeyPairs(context, user), relayRecipient(relay), activity, {
           // A relay has one inbox and no shared one, and its activities are about
           // the subscription rather than about any post, so they are ordered
           // against each other rather than against a post's Create.
           orderingKey: relay.inboxId,
-        },
+        }),
       );
     } catch (thrown) {
-      record('failed', messageOf(thrown));
-      throw thrown;
+      if (!isDuplicateDelivery(thrown)) {
+        record('failed', messageOf(thrown));
+        throw thrown;
+      }
     }
     if (synchronous) record('sent', null);
     return 'sent';
@@ -238,7 +243,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
       return admin.putRelay({ ...relay, reason: 'The site has no account to subscribe with.' });
     }
     const id = actorId(context, user);
-    const followId = new URL(`#relay-follow/${randomUUID()}`, id);
+    const followId = new URL(`${RELAY_FOLLOW_FRAGMENT}${randomUUID()}`, id);
 
     const stored = admin.putRelay({
       inboxId: relay.inboxId,
@@ -434,33 +439,35 @@ export function rejectRelay(admin: AdminStore, activity: Reject): Relay | undefi
 /**
  * Match an `Accept` or a `Reject` to the subscription it answers.
  *
- * The follow id is what FEP-ae0c says the answer names, so it is tried first.
- * A relay that has answered before is then recognised by its actor id, which
- * covers a re-follow whose answer echoes a stale id. Last, a single pending
- * subscription on the answering relay's own origin is taken as the one meant:
- * a relay answering from the host its inbox is on is answering about that
- * inbox, and there is nothing else it could be about. Two pending
- * subscriptions on one host are left alone rather than guessed between.
+ * The answer has to come from the relay: the actor it recorded once it had
+ * answered before, and until then an actor on the relay inbox's host. The
+ * follow id is what FEP-ae0c says the answer names, so it is tried first.
+ * After that the answer has to name some relay follow of this site, and a
+ * relay that has answered before is recognised by its actor id, which covers
+ * a re-follow whose answer echoes a stale id. Last, a single pending
+ * subscription on the answering relay's own origin is taken as the one meant.
+ * Two pending subscriptions on one host are left alone rather than guessed
+ * between.
  */
 export function relayAnswering(admin: AdminStore, activity: Accept | Reject): Relay | undefined {
-  const followId = activity.objectId?.href;
-  if (followId !== undefined) {
-    const byFollow = admin.getRelayByFollow(followId);
-    if (byFollow !== undefined) return byFollow;
-  }
-
   const actorId = activity.actorId?.href;
   if (actorId === undefined) return undefined;
+  const answeredBy = (relay: Relay): boolean =>
+    relay.actorId === null
+      ? originOf(relay.inboxId) === originOf(actorId)
+      : relay.actorId === actorId;
 
-  const relays = admin.listRelays();
+  const followId = activity.objectId?.href;
+  if (followId === undefined) return undefined;
+  const byFollow = admin.getRelayByFollow(followId);
+  if (byFollow !== undefined) return answeredBy(byFollow) ? byFollow : undefined;
+  if (!new URL(followId).hash.startsWith(RELAY_FOLLOW_FRAGMENT)) return undefined;
+
+  const relays = admin.listRelays().filter(answeredBy);
   const byActor = relays.find((relay) => relay.actorId === actorId);
   if (byActor !== undefined) return byActor;
 
-  const origin = originOf(actorId);
-  if (origin === undefined) return undefined;
-  const pending = relays.filter(
-    (relay) => relay.state === 'pending' && originOf(relay.inboxId) === origin,
-  );
+  const pending = relays.filter((relay) => relay.state === 'pending');
   return pending.length === 1 ? pending[0] : undefined;
 }
 

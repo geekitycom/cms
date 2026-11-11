@@ -1,4 +1,5 @@
 import { createHash, randomInt } from 'node:crypto';
+import { existsSync } from 'node:fs';
 
 import type { Context, Hono } from 'hono';
 
@@ -30,6 +31,7 @@ import {
   notificationEvent,
   notificationSwitches,
 } from '../site/notification-preferences.ts';
+import { ACTOR_KEY_ALGORITHMS, actorKeyFile } from '../federation/keys.ts';
 import { revokeTokensForUser } from '../indieauth/tokens.ts';
 import { autosaveCopies } from '../autosave/index.ts';
 import { discardWritingLedger } from '../writing/ledger.ts';
@@ -471,13 +473,19 @@ async function removeUser(c: Context<GeekityEnv>): Promise<Response> {
   const target = userInForm(dataDir, await c.req.parseBody());
 
   if (target === undefined) return flashAndRedirect(c, 'error', GONE_USER, USERS_PATH);
+  const signedInAs = c.var.session?.userId ?? null;
+  const refusal = deleteUserRefusal({ target, signedInAs, total: countUsers(dataDir) });
+  if (refusal !== undefined) return flashAndRedirect(c, 'error', refusal, USERS_PATH);
+  // Signed while the user still exists: the actor's keys are looked up through
+  // its user record.
+  await c.var.delivery.deleteActor(target);
 
   let deleted: boolean;
   try {
     deleted = await deleteUser({
       dataDir,
       userId: target.id,
-      signedInAs: c.var.session?.userId ?? null,
+      signedInAs,
       now: c.var.config.now(),
       endSessions: (userId) => c.var.admin.deleteSessionsForUser(userId),
     });
@@ -537,6 +545,10 @@ export async function deleteUser(input: {
 }): Promise<boolean> {
   return await removeUserRecord({
     ...input,
+    retire: (user) =>
+      ACTOR_KEY_ALGORITHMS.some((algorithm) =>
+        existsSync(actorKeyFile(input.dataDir, user.username, algorithm)),
+      ),
     beforeRemoval: async (userId) => {
       input.endSessions?.(userId);
       await revokeTokensForUser(input.dataDir, userId, input.now);

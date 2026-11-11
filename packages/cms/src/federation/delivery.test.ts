@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { watch } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -23,7 +25,8 @@ import { lockQueuedOrderingKeys, queuedMessages } from '../__testing__/federatio
 import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { signedInAs } from './__testing__/session.ts';
-import { addFollower } from './records.ts';
+import { addFollower, removeFollower } from './records.ts';
+import { handleDirectory } from '../content/handles.ts';
 import { resendJob } from './resend-job.ts';
 import { retryDeliveriesJob } from './retry-job.ts';
 import { SITE } from '../site/namespace.ts';
@@ -89,6 +92,14 @@ const ERIN_ACTOR = `${REMOTE_ORIGIN}/users/erin`;
 const ERIN_INBOX = `${REMOTE_ORIGIN}/users/erin/inbox`;
 const ERIN_PROFILE = `${REMOTE_ORIGIN}/@erin`;
 
+/**
+ * An account whose handle is on the stranger's host while its actor is on the
+ * remote one, as a Mastodon server with a separate web domain publishes it:
+ * the actor's own host answers WebFinger with the handle as its subject.
+ */
+const FRANK_ACTOR = `${REMOTE_ORIGIN}/users/frank`;
+const FRANK_INBOX = `${REMOTE_ORIGIN}/users/frank/inbox`;
+
 const RELAY_ACTOR = `${REMOTE_ORIGIN}/relay`;
 const RELAY_INBOX = `${REMOTE_ORIGIN}/relay/inbox`;
 
@@ -117,6 +128,7 @@ let statusDocument: unknown;
 let sharedInboxAuthorDocument: unknown;
 let sharedInboxAuthorStatusDocument: unknown;
 let erinDocument: unknown;
+let frankDocument: unknown;
 let misattributedNoteDocument: unknown;
 const webfingerLookups: string[] = [];
 let restoreFetch: () => void;
@@ -160,6 +172,11 @@ before(async () => {
     preferredUsername: 'erin',
     url: new URL(ERIN_PROFILE),
     inbox: new URL(ERIN_INBOX),
+  }).toJsonLd();
+  frankDocument = await new Person({
+    id: new URL(FRANK_ACTOR),
+    preferredUsername: 'frank',
+    inbox: new URL(FRANK_INBOX),
   }).toJsonLd();
   misattributedNoteDocument = await new Note({
     id: new URL(MISATTRIBUTED_NOTE),
@@ -225,6 +242,19 @@ function routeRemoteHost(): () => void {
     }
     if (url.origin === BASE_URL) ownFetches.push(url.href);
     if (url.origin === STRANGER_ORIGIN) {
+      if (url.pathname === '/.well-known/webfinger') {
+        const resource = url.searchParams.get('resource') ?? '';
+        webfingerLookups.push(resource);
+        const self = new Map([
+          ['acct:mallory@stranger.example', ERIN_ACTOR],
+          ['acct:frank@stranger.example', FRANK_ACTOR],
+        ]).get(resource);
+        if (self === undefined) return new Response('', { status: 404 });
+        return Response.json({
+          subject: resource,
+          links: [{ rel: 'self', type: 'application/activity+json', href: self }],
+        });
+      }
       if (url.href !== MISATTRIBUTED_NOTE) return new Response('Not found.', { status: 404 });
       return new Response(JSON.stringify(misattributedNoteDocument), {
         headers: { 'content-type': 'application/activity+json' },
@@ -264,6 +294,7 @@ function routeRemoteHost(): () => void {
     const served = new Map([
       [new URL(CAROL_ACTOR).pathname, carolDocument],
       [new URL(ERIN_ACTOR).pathname, erinDocument],
+      [new URL(FRANK_ACTOR).pathname, frankDocument],
       [new URL(STATUS_ID).pathname, statusDocument],
       [new URL(STATUS_URL).pathname, statusDocument],
       [new URL(SHARED_INBOX_AUTHOR).pathname, sharedInboxAuthorDocument],
@@ -278,10 +309,17 @@ function routeRemoteHost(): () => void {
     if (url.pathname === '/.well-known/webfinger') {
       const resource = url.searchParams.get('resource') ?? '';
       webfingerLookups.push(resource);
-      if (resource !== 'acct:erin@remote.example') return new Response('', { status: 404 });
+      const found = new Map([
+        ['acct:erin@remote.example', { subject: resource, self: ERIN_ACTOR }],
+        [
+          'acct:frank@remote.example',
+          { subject: 'acct:frank@stranger.example', self: FRANK_ACTOR },
+        ],
+      ]).get(resource);
+      if (found === undefined) return new Response('', { status: 404 });
       return Response.json({
-        subject: resource,
-        links: [{ rel: 'self', type: 'application/activity+json', href: ERIN_ACTOR }],
+        subject: found.subject,
+        links: [{ rel: 'self', type: 'application/activity+json', href: found.self }],
       });
     }
     if (url.href === SLOW_PAGE) {
@@ -352,6 +390,9 @@ async function site(
     /** Fedify's in-process queue, as a site that names none runs, instead of sending inline. */
     queued?: boolean;
     queue?: MessageQueue;
+    /** The config a site that names no `allowPrivateAddress` runs with. */
+    defaultAddressGuard?: boolean;
+    deliveryTimeoutMs?: number;
   } = {},
 ): Promise<Site> {
   slowPage = Promise.resolve();
@@ -392,12 +433,18 @@ async function site(
     port: 0,
     watch: options.watch ?? false,
     baseUrl: BASE_URL,
-    federation:
-      options.queue !== undefined
-        ? { queue: options.queue, allowPrivateAddress: true }
-        : options.queued === true
-          ? { allowPrivateAddress: true }
-          : { queue: null, allowPrivateAddress: true },
+    federation: {
+      ...(options.defaultAddressGuard === true
+        ? { queue: null }
+        : options.queue !== undefined
+          ? { queue: options.queue, allowPrivateAddress: true }
+          : options.queued === true
+            ? { allowPrivateAddress: true }
+            : { queue: null, allowPrivateAddress: true }),
+      ...(options.deliveryTimeoutMs === undefined
+        ? {}
+        : { deliveryTimeoutMs: options.deliveryTimeoutMs }),
+    },
     hostLookup: (host) =>
       Promise.resolve(
         [REMOTE_ORIGIN, STRANGER_ORIGIN].some((origin) => new URL(origin).hostname === host)
@@ -1041,6 +1088,24 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
     assert.equal(create.url, REMOTE_SHARED_INBOX);
   });
 
+  it('drops a queued delivery signed with a key file that was replaced before the next start', async () => {
+    const queued = await site({ queued: true });
+    const agent = signedInAs(queued.cms, ADA);
+    await publishNewPost(agent);
+    await queued.cms.delivery.settled();
+    await queued.cms.close();
+    assert.equal(queuedMessages(queued.dataDir).length, 1);
+    seedActorKeys(queued.dataDir, ADA, 1);
+
+    const next = nextCms(queued);
+    await next.serve();
+
+    assert.equal(queuedMessages(queued.dataDir).length, 0);
+    const row = next.admin.lastDeliveryToObject(`${BASE_URL}/2026/03/hello-world/`);
+    assert.equal(row?.status, 'unknown', 'the dropped message was never handed to the worker');
+    assert.deepEqual(deliveries, []);
+  });
+
   it('sends a retry Fedify scheduled for later after the CMS is stopped and started again (AC #1)', async () => {
     refused.length = 0;
     rejectingEveryPost = true;
@@ -1426,6 +1491,27 @@ describe('likes, reposts and bookmarks (TASK-169 AC #3)', () => {
     assert.deepEqual(
       [announce.body['cc']].flat().sort(),
       [`${ACTOR_URL}followers/`, CAROL_ACTOR].sort(),
+    );
+  });
+
+  it('sends an unlisted repost addressed to the followers, with Public in cc', async () => {
+    const { cms } = await site();
+    const response = await publishNewPost(signedInAs(cms, ADA), {
+      title: '',
+      slug: 'cited',
+      body: 'So good.',
+      'repost-of': STATUS_URL,
+      visibility: 'unlisted',
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    const announce = delivered('Announce')[0];
+    assert.ok(announce !== undefined, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(announce.body['to'], `${ACTOR_URL}followers/`);
+    assert.deepEqual(
+      [announce.body['cc']].flat().sort(),
+      ['https://www.w3.org/ns/activitystreams#Public', CAROL_ACTOR].sort(),
     );
   });
 
@@ -2206,6 +2292,51 @@ describe('editing a published post file on disk', () => {
     assert.equal(delivered('Create').length, 0, 'an edit is not a new post');
   });
 
+  it('dates the Update when it is sent, so a peer applies an edit that left updated alone', async () => {
+    const { cms, contentDir } = await site({
+      watch: true,
+      account: true,
+      files: { [POST_FILE]: announcedPost('The version everybody already has.') },
+    });
+    await cms.serve();
+    await cms.delivery.settled();
+
+    await writeDocument(contentDir, POST_FILE, announcedPost('A second thought, written later.'));
+
+    const update = await waitForDelivery('Update');
+    const object = update.body['object'] as Record<string, unknown>;
+    assert.ok(
+      Date.parse(String(object['updated'])) > Date.parse(String(object['published'])),
+      `updated ${String(object['updated'])}`,
+    );
+  });
+
+  it('gives each Update its own id when the text goes back to an earlier version', async () => {
+    const { cms, contentDir } = await site({
+      watch: true,
+      account: true,
+      files: { [POST_FILE]: announcedPost('First.') },
+    });
+    await cms.serve();
+    await cms.delivery.settled();
+
+    for (const [at, body] of ['Second.', 'First.', 'Second.'].entries()) {
+      await writeDocument(contentDir, POST_FILE, announcedPost(body));
+      await nextEvent(`Update ${String(at + 1)}`, (done) => {
+        const check = () => {
+          if (delivered('Update').length > at) done(undefined);
+        };
+        check();
+        arrivals.add(check);
+        return () => arrivals.delete(check);
+      });
+      await cms.delivery.settled();
+    }
+
+    const ids = delivered('Update').map((update) => update.body['id']);
+    assert.equal(new Set(ids).size, 3, `ids ${JSON.stringify(ids)}`);
+  });
+
   it('delivers a Create when the post was served but never announced', async () => {
     const { cms, contentDir } = await site({
       watch: true,
@@ -2454,6 +2585,43 @@ describe('the delivery log', () => {
   });
 });
 
+describe('a follower whose inbox is on a private address', () => {
+  it('is sent nothing, and the delivery is recorded as failed', async () => {
+    const received: string[] = [];
+    const server = createServer((request, response) => {
+      received.push(`${request.method ?? ''} ${request.url ?? ''}`);
+      response.writeHead(202).end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    const localInbox = `http://127.0.0.1:${String(port)}/inbox`;
+    try {
+      const { cms, contentDir, dataDir } = await site({ defaultAddressGuard: true });
+      const records = { admin: cms.admin, contentDir, dataDir };
+      await removeFollower(records, ADA, REMOTE_ACTOR);
+      await addFollower(records, ADA, {
+        actorId: `http://127.0.0.1:${String(port)}/users/mallory`,
+        inboxId: localInbox,
+        sharedInboxId: null,
+        handle: '@mallory@127.0.0.1',
+        name: 'Mallory',
+        iconUrl: null,
+        url: null,
+      });
+
+      await publishNewPost(signedInAs(cms, ADA));
+      await cms.delivery.settled();
+
+      assert.deepEqual(received, []);
+      const last = cms.admin.lastDeliveryToInbox(localInbox);
+      assert.equal(last?.status, 'failed');
+      assert.match(last.error ?? '', /private address/i);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+});
+
 describe('a user whose record carries a stored actor id', () => {
   /** What the WordPress ActivityPub plugin published this person as. */
   const STORED = `${BASE_URL}/?author=2`;
@@ -2628,6 +2796,20 @@ describe('resending a post', () => {
     const object = update.body['object'] as Record<string, unknown>;
     assert.equal(object['id'], PUBLISHED_OBJECT, 'about the object the followers hold');
     assert.match(String(object['content']), /A second thought, written later\./);
+  });
+
+  it('gives up on an inbox that never answers, and records it as failed', async () => {
+    const { cms } = await site({
+      account: true,
+      deliveryTimeoutMs: 50,
+      files: { 'posts/2026-03-04-watched.md': announcedPost('Waiting for nobody.') },
+    });
+    inboxes = new Promise<void>(() => undefined);
+
+    const report = await cms.delivery.resend('posts/2026-03-04-watched.md');
+
+    assert.equal(report?.deliveries[0]?.status, 'failed', JSON.stringify(report));
+    assert.match(report.deliveries[0]?.error ?? '', /no answer/i);
   });
 
   it('gives two resends of an unchanged post two activity ids (AC #1)', async () => {
@@ -3056,6 +3238,7 @@ Hello from ${year}.
     const cms = await twoHellos();
     const job = resendJob({
       store: cms.store,
+      content: { reread: () => Promise.resolve() },
       delivery: cms.delivery,
       webmentions: { send: () => Promise.resolve(undefined) },
     });
@@ -3211,6 +3394,20 @@ describe('two users', () => {
     );
   });
 
+  it('tells a deleted user’s followers that their account is gone, as that account', async () => {
+    const { cms } = await adaAndGrace();
+    const agent = signedInAs(cms, ADA);
+    const token = csrfField(await (await agent.get('/admin/users/2')).text());
+    assert.ok(token !== undefined);
+    deliveries.length = 0;
+
+    const response = await agent.post('/admin/users/delete', { csrf_token: token, user_id: '2' });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    assert.deepEqual(sent(), [['Delete', GRACE_URL, OTHER_INBOX, GRACE_URL]]);
+  });
+
   it('withdraws a post from the old author’s followers as the old author when the author changes', async () => {
     const { cms, contentDir } = await adaAndGrace({ watch: true });
     await cms.serve();
@@ -3322,6 +3519,26 @@ describe('a user’s own profile', () => {
       cms.admin.listDeliveries(recorded.activityId).map((delivery) => delivery.status),
       ['sent'],
     );
+  });
+
+  it('saves the profile when working out who to tell about it fails', async () => {
+    const { cms } = await site();
+    cms.admin.putFollower({
+      username: ADA,
+      actorId: `${REMOTE_ORIGIN}/users/odd`,
+      inboxId: 'not a url',
+      sharedInboxId: null,
+      handle: null,
+      name: null,
+      iconUrl: null,
+      url: null,
+      followedAt: '2026-03-04T10:00:00.000Z',
+    });
+
+    const response = await saveProfile(signedInAs(cms, ADA), { display_name: 'Ada Lovelace' });
+
+    assert.equal(response.status, 303, await response.text());
+    assert.equal(listUsers(cms.config.dataDir)[0]?.profile?.displayName, 'Ada Lovelace');
   });
 
   it('sends no Update when a save leaves the profile as it was', async () => {
@@ -3516,6 +3733,11 @@ describe('a cited page whose context is stored after the Create (TASK-263)', () 
     assert.equal(updates.length, 1, `expected one Update, saw ${JSON.stringify(deliveries)}`);
     assert.equal(contentOf(updates[0]), line('A slow page'));
     assert.equal(updates[0]?.url, create?.url);
+    const dated = (delivery: Delivery | undefined): number => {
+      const object = delivery?.body['object'] as Record<string, unknown>;
+      return Date.parse(String(object['updated'] ?? object['published']));
+    };
+    assert.ok(dated(updates[0]) > dated(create), 'dated after the Create, so a peer applies it');
     assert.deepEqual(
       deliveries.map((delivery) => delivery.url),
       [REMOTE_SHARED_INBOX],
@@ -3754,6 +3976,50 @@ describe('a post that mentions a fediverse handle (TASK-194)', () => {
         .map((one) => one.url)
         .sort(),
       [ERIN_INBOX, REMOTE_SHARED_INBOX].sort(),
+    );
+  });
+
+  it('does not take a handle whose WebFinger names an account on another host', async () => {
+    const { cms, contentDir } = await site();
+    const response = await publishNewPost(signedInAs(cms, ADA), {
+      title: '',
+      slug: 'thanks',
+      body: 'Thanks @mallory@stranger.example.',
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    assert.equal(handleDirectory(contentDir)('mallory@stranger.example'), undefined);
+    const create = delivered('Create').find((one) => one.url === REMOTE_SHARED_INBOX);
+    assert.ok(create !== undefined);
+    assert.deepEqual(
+      list(objectOf(create)['tag']).filter(
+        (tag) => (tag as Record<string, unknown>)['type'] === 'Mention',
+      ),
+      [],
+    );
+    assert.deepEqual(
+      delivered('Create').map((one) => one.url),
+      [REMOTE_SHARED_INBOX],
+    );
+  });
+
+  it('takes a handle on another host when the account’s own host names it', async () => {
+    const { cms, contentDir } = await site();
+    const response = await publishNewPost(signedInAs(cms, ADA), {
+      title: '',
+      slug: 'thanks',
+      body: 'Thanks @frank@stranger.example.',
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    assert.equal(handleDirectory(contentDir)('frank@stranger.example')?.actor, FRANK_ACTOR);
+    assert.deepEqual(
+      delivered('Create')
+        .map((one) => one.url)
+        .sort(),
+      [FRANK_INBOX, REMOTE_SHARED_INBOX].sort(),
     );
   });
 

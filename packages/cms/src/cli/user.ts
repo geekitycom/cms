@@ -43,7 +43,8 @@ async function addUser(
   const config = await loadResolvedConfig(configPath);
   const { adminStoreOwning, openAdminDatabase } = await import('../store/admin-store.ts');
   const { migrateUsersToFile } = await import('../admin/legacy-migrations.ts');
-  const { createUser, DuplicateUsernameError } = await import('../site/users.ts');
+  const { createUser, DuplicateUsernameError, RetiredUsernameError } =
+    await import('../site/users.ts');
   const adminDb = openAdminDatabase(config.dataDir, config.now);
   migrateUsersToFile(adminDb, config.dataDir);
   const admin = adminStoreOwning(adminDb, databaseFile(config.dataDir), config.now);
@@ -63,6 +64,10 @@ async function addUser(
     );
     return 0;
   } catch (error) {
+    if (error instanceof RetiredUsernameError) {
+      process.stderr.write(`${error.message}\n`);
+      return 1;
+    }
     if (error instanceof DuplicateUsernameError) {
       process.stderr.write(
         `${error.message} Pick another name, or set that user's password with ` +

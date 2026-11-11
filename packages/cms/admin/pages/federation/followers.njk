@@ -98,6 +98,8 @@
                   <a class="link link-hover font-medium" href="{{ failure.post.editUrl }}">{{ failure.post.title }}</a>
                 {% elif failure.slug %}
                   <code class="break-all">{{ failure.slug }}</code>
+                {% elif failure.activityType == 'Follow' or failure.activityType == 'Undo' %}
+                  A relay subscription
                 {% else %}
                   The profile
                 {% endif %}
@@ -124,6 +126,8 @@
         inbox since. Retry sends the post again, as it now reads, to that inbox
         alone. A failure leaves this list once the post goes to that inbox
         again, or after seven days. If that fails too, the new failure is listed.
+        A relay subscription has no Retry here: retry it from the Relays panel.
+        Nor does the profile: its next change goes to every follower.
       </p>
     {% else %}
       <p>No delivery has failed in the last seven days.</p>

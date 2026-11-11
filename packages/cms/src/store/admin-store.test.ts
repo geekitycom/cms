@@ -1048,6 +1048,41 @@ describe('the delivery outcome cache', () => {
     assert.ok(recorded.attemptedAt !== '', 'the attempt was timed');
   });
 
+  it('prunes an old outcome only when a later one of the same kind to the same actor supersedes it', async () => {
+    const admin = await store();
+    const update = (at: string, actorId = 'https://remote.example/users/ada') =>
+      outcome({
+        activityId: `${OBJECT_ID}#update/${at}`,
+        activityType: 'Update',
+        actorId,
+        attemptedAt: at,
+      });
+    admin.recordDeliveries([
+      outcome({ attemptedAt: '2026-01-01T10:00:00.000Z', status: 'failed', error: 'Gone.' }),
+      update('2026-01-02T10:00:00.000Z'),
+      update('2026-01-03T10:00:00.000Z'),
+      update('2026-01-02T10:00:00.000Z', 'https://remote.example/users/bob'),
+      update('2026-03-01T10:00:00.000Z'),
+      update('2026-03-02T10:00:00.000Z'),
+    ]);
+
+    const pruned = admin.pruneSupersededDeliveries('2026-02-01T00:00:00.000Z');
+
+    assert.equal(pruned, 2);
+    assert.deepEqual(
+      admin
+        .searchDeliveries({})
+        .items.map((row) => [row.activityType, row.actorId.split('/').at(-1), row.attemptedAt])
+        .sort(),
+      [
+        ['Create', 'ada', '2026-01-01T10:00:00.000Z'],
+        ['Update', 'ada', '2026-03-01T10:00:00.000Z'],
+        ['Update', 'ada', '2026-03-02T10:00:00.000Z'],
+        ['Update', 'bob', '2026-01-02T10:00:00.000Z'],
+      ],
+    );
+  });
+
   it('records an activity about no post at all, which an actor update is', async () => {
     const admin = await store();
 

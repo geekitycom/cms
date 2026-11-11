@@ -98,6 +98,7 @@ async function devSite(): Promise<DevSite> {
     },
   );
   await cms.scheduler.start();
+  await cms.relays.sync();
   return {
     cms,
     agent,

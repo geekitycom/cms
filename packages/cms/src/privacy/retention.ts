@@ -35,6 +35,15 @@ import type { RetentionPolicy } from '../site/retention-policy.ts';
 /** How often the sweep runs once the site serves. */
 export const RETENTION_SWEEP_MS = 6 * 60 * 60 * 1000;
 
+/**
+ * How long a delivery outcome that a later one has superseded is kept, so a
+ * post's recent activity history stays readable. The newest outcome of each
+ * kind per actor and post is kept for good: it is what reaches an earlier
+ * recipient with an Update or a Delete, and what Retry reads.
+ */
+const DELIVERY_HISTORY_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /** What one sweep changed. */
 export interface RetentionReport {
   /** Comments that lost an email, an address hash or both. */
@@ -184,6 +193,10 @@ export function createRetentionService(options: CreateRetentionServiceOptions): 
     }
 
     const exportsDeleted = await expireExports(config.dataDir, now);
+
+    admin.pruneSupersededDeliveries(
+      new Date(now.getTime() - DELIVERY_HISTORY_DAYS * DAY_MS).toISOString(),
+    );
 
     return { comments, messagesDeleted, messagesRedacted, exportsDeleted };
   }

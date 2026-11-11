@@ -44,7 +44,7 @@ const FILES = {
 };
 
 /** A follower's inbox on loopback, recording each activity POSTed to it. */
-async function inbox(): Promise<{
+async function inbox(onPost: () => Promise<void> = () => Promise.resolve()): Promise<{
   url: string;
   received: Record<string, unknown>[];
   close: () => void;
@@ -55,7 +55,7 @@ async function inbox(): Promise<{
     request.on('data', (chunk: Buffer) => (body += chunk.toString()));
     request.on('end', () => {
       if (request.method === 'POST') received.push(JSON.parse(body) as Record<string, unknown>);
-      response.writeHead(202).end();
+      void onPost().then(() => response.writeHead(202).end());
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -119,6 +119,40 @@ describe('geekity resend (TASK-125 AC #6)', () => {
       assert.equal(run.code, 0, run.stderr);
       assert.equal(follower.received.length, 1);
       assert.equal(follower.received[0]!['type'], 'Update');
+    } finally {
+      follower.close();
+    }
+  });
+
+  it('sends each post as its file reads when its turn comes, not as it read when the command began', async () => {
+    let directory = '';
+    const later = (body: string) =>
+      [
+        '---',
+        'title: Later',
+        "date: '2026-09-04T09:00:00Z'",
+        'permalink: /2026/09/later/',
+        'author: ada',
+        'activitypub:',
+        "  published: '2026-09-04T09:00:01Z'",
+        '---',
+        '',
+        body,
+        '',
+      ].join('\n');
+    const file = () => path.join(directory, 'content', 'posts', '2026-09-04-later.md');
+    const follower = await inbox(async () => {
+      await fs.writeFile(file(), later('Edited while the resend ran.'));
+    });
+    try {
+      directory = await site(follower.url);
+      await fs.writeFile(file(), later('As it was.'));
+
+      const run = await runCli(['resend', 'hello', 'later'], directory);
+
+      assert.equal(run.code, 0, run.stderr);
+      const content = (follower.received[1]?.['object'] as Record<string, unknown>)['content'];
+      assert.match(String(content), /Edited while the resend ran\./);
     } finally {
       follower.close();
     }

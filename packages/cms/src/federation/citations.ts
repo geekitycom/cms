@@ -13,6 +13,7 @@ import type { Actor } from '@fedify/vocab';
 import { citationOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { postTypeOf, replyTarget } from '../content/post-type.ts';
+import { visibilityOf } from '../content/visibility.ts';
 import type { User } from '../site/users.ts';
 import { messageOf } from '../util/errors.ts';
 import { actorId, senderKeyPairs } from './actor.ts';
@@ -60,20 +61,20 @@ export async function citingActivity(
     published: toInstant(document.date) ?? null,
   };
   const of = encodeURIComponent(object.id.href);
-  // A repost is public, as a boost is; a like is addressed to the one who
-  // wrote what it likes, and copied to the followers as every activity is.
+  const authorIds = authorId === undefined ? [] : [authorId];
   const activity =
     postType === 'repost'
       ? new Announce({
           ...common,
           id: new URL(`${postId.href}#announce/${of}`),
-          to: PUBLIC_COLLECTION,
-          ccs: authorId === undefined ? [followers] : [followers, authorId],
+          ...(visibilityOf(document) === 'unlisted'
+            ? { tos: [followers], ccs: [PUBLIC_COLLECTION, ...authorIds] }
+            : { tos: [PUBLIC_COLLECTION], ccs: [followers, ...authorIds] }),
         })
       : new Like({
           ...common,
           id: new URL(`${postId.href}#like/${of}`),
-          tos: authorId === undefined ? [] : [authorId],
+          tos: authorIds,
           cc: followers,
         });
   return { activity, author };

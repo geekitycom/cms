@@ -187,7 +187,10 @@ that names the problem, and writes nothing:
 
 A `POST` with an `action` changes a post that already exists. Its `url` is the
 post's URL on this site. A URL that is not a post here gets 400
-`invalid_request`. A post that another user wrote gets 403 `forbidden`.
+`invalid_request`. A post that another user wrote gets 403 `forbidden`. A
+post whose `author` names no user, such as an imported display name or a
+deleted user, belongs to the site's first account, which is also the account
+that federates it. Only that account's tokens can change it.
 
 - `action=update` needs the update scope and a JSON body, such as
   `{"action": "update", "url": "…", "replace": {"content": ["…"]}}`.

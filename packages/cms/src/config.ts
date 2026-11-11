@@ -71,7 +71,16 @@ export interface FederationOverrides {
    * network. Tests that federate two make-believe hosts turn it on.
    */
   allowPrivateAddress?: boolean | undefined;
+  /**
+   * How long one delivery POST is waited for before it is recorded as failed,
+   * in milliseconds. Defaults to {@link DEFAULT_DELIVERY_TIMEOUT_MS}. Fedify
+   * has no way to cancel the request, so this bounds the wait, not the socket.
+   */
+  deliveryTimeoutMs?: number | undefined;
 }
+
+/** How long a delivery POST is waited for when the config names no limit. */
+export const DEFAULT_DELIVERY_TIMEOUT_MS = 30_000;
 
 /**
  * The admin job queue's two swap points, and the jobs a site

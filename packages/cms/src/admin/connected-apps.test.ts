@@ -89,7 +89,7 @@ describe('the connected apps screen', () => {
     );
     const row = rowFor(await screen(agent), 'Claude Code');
     assert.match(row, /Read your site’s federation and delivery records/);
-    assert.match(row, /Resend posts and retry federation deliveries/);
+    assert.match(row, /Resend any of the site’s posts and retry its federation deliveries/);
     assert.match(row, /Publish drafts and change published posts/);
   });
 

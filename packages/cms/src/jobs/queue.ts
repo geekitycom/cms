@@ -62,7 +62,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
       await records.transition(
         record.id,
         expected,
-        record.attempt >= maxAttempts
+        record.attempt >= maxAttempts || record.resumable === false
           ? { state: 'interrupted', attempt: record.attempt, interruptedAt: now() }
           : { state: 'queued', attempt: record.attempt + 1, interruptedAt: now() },
       );
@@ -71,7 +71,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
     for (const record of await records.list(['queued'])) await transport.enqueue({ id: record.id });
   }
 
-  async function claimAndRun(id: string, signal: AbortSignal): Promise<boolean> {
+  async function claimAndRun(id: string, signal: AbortSignal, resumable = true): Promise<boolean> {
     if (signal.aborted) return false;
     const record = await records.get(id);
     if (record?.state !== 'queued') return false;
@@ -92,6 +92,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
       owner,
       claimer: thisProcess(),
       startedAt: now(),
+      ...(resumable ? {} : { resumable: false as const }),
     };
     if (!(await records.transition(id, queued, claim))) return false;
 
@@ -199,8 +200,8 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
       return records.list(states);
     },
 
-    async run(id) {
-      await claimAndRun(id, stopping.signal);
+    async run(id, options = {}) {
+      await claimAndRun(id, stopping.signal, options.resumable ?? true);
       for (;;) {
         const status = await records.get(id);
         if (status === undefined) throw new Error(`No job ${id} is recorded.`);

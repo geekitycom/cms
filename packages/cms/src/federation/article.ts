@@ -50,12 +50,12 @@ import { htmlToText } from '../content/search.ts';
 import { respellTags } from '../content/tags.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { permalinkBasesFromSettings } from '../site/settings.ts';
-import { listUsers, primaryUser } from '../site/users.ts';
+import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { escapeAttribute, escapeText } from '../util/html.ts';
 import { absoluteHtmlUrls } from '../util/absolute-urls.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { userForAuthor } from '../content/authors.ts';
+import { postOwner } from '../content/authors.ts';
 import { permalinkOfObjectId } from '../content/permalinks.ts';
 import { postObjectId } from '../content/guids.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
@@ -72,8 +72,8 @@ import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } f
 import { resolvedTarget } from './reply-targets.ts';
 
 /**
- * The user a post is announced by: the one its `author` names, and the site's
- * first account for one that names nobody.
+ * The user a post is announced by: its {@link postOwner}, the same user who may
+ * edit it over Micropub and MCP.
  *
  * A post is attributed to a person rather than to the site, and
  * `userForAuthor` is the one rule that decides which — a username exactly, a
@@ -90,8 +90,7 @@ export function documentAuthor(
   context: Context<FederationContextData>,
   document: Document,
 ): User | undefined {
-  const { dataDir } = context.data.config;
-  return userForAuthor(listUsers(dataDir), document.author) ?? primaryUser(dataDir);
+  return postOwner(listUsers(context.data.config.dataDir), document.author);
 }
 
 /**
@@ -299,6 +298,7 @@ export function postObject(
   context: Context<FederationContextData>,
   document: Document,
   replyTo?: CitedObject,
+  updated: string | undefined = document.updated,
 ): Article | Note | Event {
   const { baseUrl } = context.data.config;
   const { actor, followers } = attribution(context, document);
@@ -331,7 +331,7 @@ export function postObject(
     url: new URL(permalink),
     source: new Source({ content: document.body, mediaType: SOURCE_MEDIA_TYPE }),
     published: toInstant(document.date) ?? null,
-    updated: toInstant(document.updated) ?? null,
+    updated: toInstant(updated) ?? null,
     attribution: actor,
     ...addressing(document, followers, replyTo, mentioned),
     // FEP-044f: a post with no policy is one Mastodon lets nobody quote. Every
@@ -631,30 +631,32 @@ export function postCreateActivity(
  * The `Update` that announces an edit to a post followers already hold.
  *
  * The whole object goes with it rather than a diff, because that is all
- * ActivityPub offers and all a peer can apply. Its id carries the document's
- * hash, so two edits are two activities and the same edit delivered twice is
- * one; see {@link updateActivityId}.
+ * ActivityPub offers and all a peer can apply. `revision` names it, and is the
+ * moment it is sent rather than the content: a post edited back to an earlier
+ * text is a new event, and an activity id a peer has seen is one it is
+ * entitled to drop; see {@link updateActivityId}.
  *
- * `revision` overrides that. A resend is asking for a revision
- * the followers have already been offered to be offered again, and an activity
- * id a peer has seen is one it is entitled to drop, so a resend passes the
- * moment instead of the hash. Everything else about the activity is the same,
- * which is what makes a resent `Update` and a saved one the same shape.
+ * `updated` is what the object says it was last edited, which defaults to the
+ * post's own. Mastodon applies an `Update` in full only when that is later
+ * than the edit it holds.
  */
 export function postUpdateActivity(
   context: Context<FederationContextData>,
   document: Document,
-  revision: string = revisionOf(document),
-  replyTo?: CitedObject,
+  {
+    revision,
+    replyTo,
+    updated = document.updated,
+  }: { revision: string; replyTo?: CitedObject | undefined; updated?: string | undefined },
 ): Update {
-  const object = postObject(context, document, replyTo);
+  const object = postObject(context, document, replyTo, updated);
   const { actor, followers } = attribution(context, document);
 
   return new Update({
     id: updateActivityId(articleObjectId(context, document), revision),
     actor,
     object,
-    published: toInstant(document.updated ?? document.date) ?? null,
+    published: toInstant(updated ?? document.date) ?? null,
     ...addressing(
       document,
       followers,
@@ -771,16 +773,6 @@ function replyTargetId(context: Context<FederationContextData>, inReplyTo: strin
 export function articleObjectId(context: Context<FederationContextData>, document: Document): URL {
   const ids = ownObjectIds(context.data.store, document, context.data.config);
   return new URL(ids.at(-1) ?? ids[0]);
-}
-
-/**
- * Which revision of a document an `Update` is announcing.
- *
- * The content hash: it changes with every real edit and with nothing else, so
- * it names the revision without a clock and without a counter to keep.
- */
-function revisionOf(document: Document): string {
-  return document.hash.slice(0, 16);
 }
 
 /**

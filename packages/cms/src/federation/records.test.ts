@@ -559,6 +559,29 @@ describe('rebuilding the indexes from the files', () => {
   });
 });
 
+describe('a follower whose ids are not URLs', () => {
+  for (const field of ['actorId', 'inboxId', 'sharedInboxId'] as const) {
+    it(`refuses a followers file whose ${field} is not a URL, naming the file`, async () => {
+      const site = await records();
+      await addFollower(site, BLOG, ada());
+      const file = followersFile(site.contentDir, BLOG);
+      const [entry] = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>[];
+      await writeFile(file, JSON.stringify([{ ...entry, [field]: 'not a url' }]), 'utf8');
+
+      assert.throws(() => rebuildFederationIndexes(site), /followers\.json.*not a URL/);
+      assert.equal(site.admin.countFollowers(BLOG), 1, 'the index is left as it was');
+    });
+  }
+
+  it('is not recorded by a follow', async () => {
+    const site = await records();
+
+    await assert.rejects(addFollower(site, BLOG, ada({ inboxId: 'not a url' })), /not a URL/);
+    assert.equal(readFileIfPresentSync(followersFile(site.contentDir, BLOG)), undefined);
+    assert.equal(site.admin.countFollowers(BLOG), 0);
+  });
+});
+
 describe('an older database, whose rows the files do not have yet', () => {
   it('has its inbox log written out once, and reads back the same', async () => {
     const site = await records();

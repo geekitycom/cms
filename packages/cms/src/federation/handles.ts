@@ -1,5 +1,6 @@
 import type { Context } from '@fedify/fedify';
 import { isActor } from '@fedify/vocab';
+import type { Actor } from '@fedify/vocab';
 
 import { isWebUrl } from '../content/enclosure.ts';
 import { handleDirectory, rememberHandles } from '../content/handles.ts';
@@ -47,6 +48,10 @@ export function handleLearner(
             logger.warn(`@${handle} did not resolve to a fediverse account.`);
             return undefined;
           }
+          if (!(await answersFor(context, handle, actor.id, actor, signal))) {
+            logger.warn(`@${handle} resolved to ${actor.id.href}, whose server does not claim it.`);
+            return undefined;
+          }
           const url = (actor.url instanceof URL ? actor.url : actor.url?.href)?.href;
           const sharedInbox = actor.endpoints?.sharedInbox?.href;
           return [
@@ -67,6 +72,32 @@ export function handleLearner(
     const found = resolved.filter((entry) => entry !== undefined);
     if (found.length > 0) await rememberHandles(contentDir, Object.fromEntries(found));
   };
+}
+
+/**
+ * Whether the actor a handle's WebFinger pointed at is that handle's account:
+ * it lives on the handle's host, or its own host's WebFinger names the handle,
+ * which is how a server whose handles use another domain publishes them.
+ */
+async function answersFor(
+  context: Context<FederationContextData>,
+  handle: string,
+  id: URL,
+  actor: Actor,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const host = handle.slice(handle.lastIndexOf('@') + 1).toLowerCase();
+  if (id.host === host) return true;
+  if (actor.preferredUsername === null) return false;
+  const descriptor = await context.lookupWebFinger(
+    `acct:${actor.preferredUsername.toString()}@${id.host}`,
+    { signal },
+  );
+  const claims = [descriptor?.subject, ...(descriptor?.aliases ?? [])];
+  return (
+    claims.some((claim) => claim?.toLowerCase() === `acct:${handle.toLowerCase()}`) &&
+    (descriptor?.links ?? []).some((link) => link.rel === 'self' && link.href === id.href)
+  );
 }
 
 /** One account a post mentions: the handle as `user@host` and what it resolved to. */

@@ -220,6 +220,21 @@ export class DuplicateUsernameError extends Error {
 }
 
 /**
+ * Thrown for a name a deleted user's fediverse account held. Its followers'
+ * servers know the actor by it, and its key files and follower records stay
+ * on disk: a new person under that name would sign with the old key and reach
+ * the old followers.
+ */
+export class RetiredUsernameError extends DuplicateUsernameError {
+  constructor(username: string) {
+    super(username);
+    this.message =
+      `"${username}" belonged to a deleted user whose fediverse account still has its keys ` +
+      `and followers on disk. Pick another name.`;
+  }
+}
+
+/**
  * Every user, by name, without password hashes.
  *
  * Sorted by code unit rather than by locale, which is how the `ORDER BY
@@ -340,7 +355,8 @@ export class SetupClosedError extends Error {
  * Throws {@link DuplicateUsernameError} when the name is taken, or differs
  * from a taken one only by case or punctuation: such names share a key file
  * under `data/keys`, and fediverse servers treat handles that differ only by
- * case as one account. Throws
+ * case as one account; and {@link RetiredUsernameError} when a deleted user's
+ * fediverse account held it. Throws
  * {@link SetupClosedError} when `onlyIfNoUsers` is set and the file already
  * holds somebody. Both checks are inside the write, not before it, which is
  * what makes the first the rule the `UNIQUE` index used to be: two requests
@@ -359,6 +375,7 @@ export async function createUser(input: CreateUserInput): Promise<User> {
     const folded = fileToken(input.username);
     const taken = contents.users.find((user) => fileToken(user.username) === folded);
     if (taken !== undefined) throw new DuplicateUsernameError(taken.username);
+    if (contents.retired?.includes(folded) === true) throw new RetiredUsernameError(input.username);
     created = {
       id: contents.nextId,
       uid: randomUUID(),
@@ -369,7 +386,7 @@ export async function createUser(input: CreateUserInput): Promise<User> {
       passwordHash: hash,
       createdAt: (input.now ?? systemClock()).toISOString(),
     };
-    return { users: [...contents.users, created], nextId: contents.nextId + 1 };
+    return { ...contents, users: [...contents.users, created], nextId: contents.nextId + 1 };
   });
 
   // `write` either threw or ran the callback, so this is only unreachable.
@@ -726,6 +743,8 @@ export async function removeUserRecord(input: {
   /** The user asking for the removal, when it is a person. */
   signedInAs?: number | null | undefined;
   beforeRemoval?: ((userId: number) => void | Promise<void>) | undefined;
+  /** Whether the user's name is retired with them, so nobody new can take it. */
+  retire?: ((user: User) => boolean) | undefined;
 }): Promise<boolean> {
   let deleted = false;
 
@@ -740,7 +759,10 @@ export async function removeUserRecord(input: {
       throw new UserRemovalRefusedError('own-account', target.username);
     }
     await input.beforeRemoval?.(target.id);
-    return { ...contents, users: contents.users.filter((user) => user.id !== input.userId) };
+    const users = contents.users.filter((user) => user.id !== input.userId);
+    if (input.retire?.(withoutHash(target)) !== true) return { ...contents, users };
+    const retired = [...new Set([...(contents.retired ?? []), fileToken(target.username)])];
+    return { ...contents, users, retired };
   });
 
   return deleted;
@@ -825,6 +847,12 @@ export interface UsersFileContents {
    * person it was written for.
    */
   nextId: number;
+  /**
+   * Usernames, folded as {@link fileToken} folds them, of deleted users who
+   * had a fediverse account. Their followers' servers still know the actor by
+   * that name, so no new user may take one.
+   */
+  retired?: string[];
 }
 
 /** The bytes of the file, as it is written. */
@@ -870,6 +898,14 @@ function parseUsersFile(source: string | undefined, file: string): UsersFileCont
   const stated = (parsed as Record<string, unknown>)['nextId'];
   const highest = users.reduce((top, user) => Math.max(top, user.id), 0);
 
+  const retired: unknown = (parsed as Record<string, unknown>)['retired'];
+  if (
+    retired !== undefined &&
+    !(Array.isArray(retired) && retired.every((name) => typeof name === 'string'))
+  ) {
+    throw unusableUsersFile(file, new Error('Its "retired" is not a list of usernames.'));
+  }
+
   // The stated `nextId` is the rule, but never one that would collide: a file
   // edited by hand, or one written before this field existed, still hands out
   // an id nobody has.
@@ -879,6 +915,7 @@ function parseUsersFile(source: string | undefined, file: string): UsersFileCont
       typeof stated === 'number' && stated > 0 ? Math.trunc(stated) : 1,
       highest + 1,
     ),
+    ...(retired === undefined ? {} : { retired: retired as string[] }),
   };
 }
 
@@ -1136,6 +1173,7 @@ function keepingUnreadFields(
       return before?.entry === undefined ? user : changedFields(before.entry, before.user, user);
     }),
     nextId: next.nextId,
+    ...(next.retired === undefined ? {} : { retired: next.retired }),
   };
 }
 
