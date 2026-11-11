@@ -4,6 +4,8 @@ import type { Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 
 import type { ResolvedConfig } from '../config.ts';
+import type { User } from '../site/users.ts';
+import type { Session } from '../store/sessions.ts';
 import type { GeekityEnv } from './env.ts';
 
 /**
@@ -81,6 +83,20 @@ export function setSessionCookie(
     secure: usesSecureCookies(options.config),
     expires: new Date(options.expiresAt),
   });
+}
+
+export function startSession(
+  c: Context<GeekityEnv>,
+  user: Pick<User, 'id' | 'uid'> | undefined,
+): Session {
+  const session = c.var.admin.createSession({
+    userId: user?.id ?? null,
+    ...(user?.uid === undefined ? {} : { userUid: user.uid }),
+    lifetimeSeconds: c.var.config.sessionLifetime,
+  });
+  setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
+  c.set('session', session);
+  return session;
 }
 
 /** Drop the session cookie. The attributes have to match the ones it was set with. */

@@ -139,6 +139,7 @@ describe('choosing a theme, over HTTP', async () => {
   const edit = await page(editUrl);
   await agent.post('/admin/users/new', {
     csrf_token: csrfField(edit) ?? '',
+    current_password: FIRST_ADMIN.password,
     username: 'grace',
     password: 'another horse battery staple',
   });

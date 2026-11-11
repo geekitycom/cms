@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import {
@@ -16,6 +18,8 @@ import {
   setUserProfile,
   verifyUserPassword,
 } from '../site/users.ts';
+import { createToken, findAccessToken } from '../indieauth/tokens.ts';
+import { createMemoryMailProvider } from '../mail/memory.ts';
 import { addUser, writeUsers } from './__testing__/users.ts';
 import {
   browser,
@@ -86,7 +90,12 @@ async function withEmail(
   email = 'someone@example.com',
 ): Promise<{ html: string; token: string }> {
   const { token } = await editScreen(agent, id);
-  await agent.post('/admin/users/email', { csrf_token: token, user_id: String(id), email });
+  await agent.post('/admin/users/email', {
+    csrf_token: token,
+    current_password: FIRST_ADMIN.password,
+    user_id: String(id),
+    email,
+  });
   return editScreen(agent, id);
 }
 
@@ -305,6 +314,7 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     const { token } = await editScreen(agent, ada);
     await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(ada),
       email: 'ada@example.com',
     });
@@ -415,6 +425,7 @@ describe('saving from the edit user screen (TASK-97 AC #3)', () => {
 
     const saved = await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(grace),
       email: 'grace@example.com',
     });
@@ -435,6 +446,7 @@ describe('saving from the edit user screen (TASK-97 AC #3)', () => {
 
     const refused = await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(ada),
       email: 'not-an-address',
     });
@@ -562,6 +574,7 @@ describe('adding a user', () => {
 
     const response = await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'grace',
       password: 'a password of her own',
     });
@@ -579,23 +592,70 @@ describe('adding a user', () => {
     const agent = await signedIn(cms);
     const { token } = await usersScreen(agent);
 
-    await agent.post('/admin/users/new', {
+    const response = await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'grace',
       password: '',
       generate: '1',
     });
 
-    const after = await (await agent.get('/admin/users')).text();
-    const shown = /Their password is ([^\s]+) /.exec(after)?.[1];
+    assert.equal(response.status, 200, 'the password is shown in the answer to the form');
+    assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+    const html = await response.text();
+    const shown = /id="added-password"[^>]*value="([^"]+)"/.exec(html)?.[1];
     assert.ok(shown !== undefined, 'the generated password was shown once');
+    assert.match(html, /href="\/admin\/users"/, 'the page leads on to the users list');
+    assert.doesNotMatch(html, /id="add-username"/, 'and does not offer the filled form again');
 
-    // The password on the screen is the one that was stored, not a decoration.
     const grace = await signIn(cms, { username: 'grace', password: shown });
     assert.match(await (await grace.get('/admin')).text(), /Hoopla! grace/);
 
-    // Shown once: the flash is cleared by the page that renders it.
-    assert.doesNotMatch(await (await agent.get('/admin/users')).text(), /Their password is/);
+    assert.doesNotMatch(await (await agent.get('/admin/users')).text(), new RegExp(shown));
+  });
+
+  it('keeps a generated password out of the session store', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+
+    const response = await agent.post('/admin/users/new', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      username: 'grace',
+      password: '',
+      generate: '1',
+    });
+    const shown = /id="added-password"[^>]*value="([^"]+)"/.exec(await response.text())?.[1];
+    assert.ok(shown !== undefined, 'the generated password was shown');
+
+    const db = new DatabaseSync(path.join(cms.config.dataDir, 'geekity.db'));
+    const flashes = (db.prepare('SELECT flash FROM sessions').all() as { flash: string | null }[])
+      .map((row) => row.flash ?? '')
+      .join('\n');
+    db.close();
+    assert.ok(!flashes.includes(shown), 'no session flash holds the password');
+  });
+
+  it('adds nobody else when the generate form is sent again', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+    const form = {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      username: 'grace',
+      password: '',
+      generate: '1',
+    };
+
+    assert.equal((await agent.post('/admin/users/new', form)).status, 200);
+    const before = countUsers(cms.config.dataDir);
+
+    const again = await agent.post('/admin/users/new', form);
+    assert.equal(again.status, 400, 'a resent form is refused');
+    assert.match(await again.text(), /Nobody was added/);
+    assert.equal(countUsers(cms.config.dataDir), before);
   });
 });
 
@@ -607,6 +667,7 @@ describe('a user email address (AC #1)', () => {
 
     await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'grace',
       password: 'a password of her own',
       email: 'grace@example.com',
@@ -628,6 +689,7 @@ describe('a user email address (AC #1)', () => {
 
     const saved = await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(grace.id),
       email: 'grace@example.com',
     });
@@ -636,6 +698,7 @@ describe('a user email address (AC #1)', () => {
 
     await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(grace.id),
       email: '',
     });
@@ -651,6 +714,7 @@ describe('a user email address (AC #1)', () => {
 
     const response = await agent.post('/admin/users/email', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       user_id: String(ada.id),
       email: 'not-an-address',
     });
@@ -658,6 +722,90 @@ describe('a user email address (AC #1)', () => {
     assert.equal(response.status, 303);
     assert.equal(findUser(cms.config.dataDir, 'ada')?.email, undefined);
     assert.match(await (await agent.get('/admin/users')).text(), /email address looks like/i);
+  });
+
+  for (const [label, typed] of [
+    ['with no password', undefined],
+    ['with the wrong password', 'not the right one'],
+  ] as const) {
+    it(`is not changed ${label}`, async () => {
+      const cms = await box.site();
+      const agent = await signedIn(cms);
+      const dataDir = cms.config.dataDir;
+      const grace = addUser({
+        dataDir,
+        username: 'grace',
+        password: 'a password of her own',
+        email: 'grace@example.com',
+      });
+      const { token } = await editScreen(agent, grace.id);
+
+      const response = await agent.post('/admin/users/email', {
+        csrf_token: token,
+        ...(typed === undefined ? {} : { current_password: typed }),
+        user_id: String(grace.id),
+        email: 'someone-else@example.com',
+      });
+
+      assert.equal(response.status, 303);
+      assert.equal(findUserById(dataDir, grace.id)?.email, 'grace@example.com');
+      assert.match(
+        (await editScreen(agent, grace.id)).html,
+        /Your password was not right, so the address was not changed\./,
+      );
+    });
+  }
+
+  it('asks for your password on the edit screen', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { html } = await editScreen(agent, idOf(cms.config.dataDir, 'ada'));
+
+    const form = /<form method="post" action="\/admin\/users\/email">[\s\S]*?<\/form>/.exec(
+      html,
+    )?.[0];
+    assert.ok(form !== undefined, 'the screen has the email form');
+    assert.match(form, /name="current_password"/);
+  });
+
+  it('tells the previous address when it changes, and nobody when there was none', async () => {
+    const provider = createMemoryMailProvider();
+    const cms = await box.site({
+      mail: { provider, backoffMs: () => 0, logger: { info: () => {}, warn: () => {} } },
+    });
+    const agent = await signedIn(cms);
+    const dataDir = cms.config.dataDir;
+    const grace = addUser({ dataDir, username: 'grace', password: 'a password of her own' });
+    const { token } = await editScreen(agent, grace.id);
+
+    const change = (email: string) =>
+      agent.post('/admin/users/email', {
+        csrf_token: token,
+        current_password: FIRST_ADMIN.password,
+        user_id: String(grace.id),
+        email,
+      });
+
+    await change('grace@example.com');
+    await cms.mail.settled();
+    assert.equal(provider.sent.length, 0, 'there was no previous address to tell');
+
+    await change('grace@example.com');
+    await cms.mail.settled();
+    assert.equal(provider.sent.length, 0, 'the same address is not a change');
+
+    await change('grace@elsewhere.example');
+    await cms.mail.settled();
+    assert.equal(provider.sent.length, 1);
+    const notice = provider.sent[0];
+    assert.ok(notice !== undefined);
+    assert.deepEqual(
+      notice.to.map((recipient) => recipient.address),
+      ['grace@example.com'],
+    );
+    assert.match(notice.subject, /email address/i);
+    assert.match(notice.text, /grace/);
+    assert.match(notice.text, /grace@elsewhere\.example/);
   });
 });
 
@@ -940,6 +1088,33 @@ describe('how often a notice arrives (AC #1)', () => {
 });
 
 describe('a bad add form', () => {
+  for (const [label, typed] of [
+    ['no password of your own', {}],
+    ['a wrong password of your own', { current_password: 'not the password' }],
+  ] as const) {
+    it(`adds nobody with ${label}`, async () => {
+      const cms = await box.site();
+      const agent = await signedIn(cms);
+      const form = await agent.get('/admin/users/new');
+      const token = csrfField(await form.text());
+      assert.ok(token !== undefined);
+
+      const response = await agent.post('/admin/users/new', {
+        csrf_token: token,
+        username: 'grace',
+        password: 'a password of her own',
+        email: '',
+        ...typed,
+      });
+
+      assert.equal(response.status, 400);
+      const html = await response.text();
+      assert.match(html, /Your password was not right, so nobody was added/);
+      assert.match(html, /value="grace"/, 'the field still holds what was typed');
+      assert.equal(countUsers(cms.config.dataDir), 1, 'nothing was written');
+    });
+  }
+
   it('refuses a name that could not be an author URL (TASK-67 AC #4)', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
@@ -947,6 +1122,7 @@ describe('a bad add form', () => {
 
     const response = await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: '..',
       password: 'a password of their own',
     });
@@ -963,6 +1139,7 @@ describe('a bad add form', () => {
 
     const response = await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'grace hopper',
       password: 'a password of her own',
     });
@@ -981,6 +1158,7 @@ describe('a bad add form', () => {
 
     const response = await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'grace',
       password: 'short',
     });
@@ -997,6 +1175,7 @@ describe('a bad add form', () => {
 
     const response = await agent.post('/admin/users/new', {
       csrf_token: token,
+      current_password: FIRST_ADMIN.password,
       username: 'ada',
       password: 'a completely different password',
     });
@@ -1082,6 +1261,104 @@ describe('changing your own password', () => {
     assert.equal(other.headers.get('location'), '/admin/login');
   });
 
+  it('gives this browser a new session and ends the one it had', async () => {
+    const cms = await box.site();
+    const here = await signedIn(cms);
+    const before = here.session();
+    assert.ok(before !== undefined, 'signed in with a session cookie');
+
+    const { token } = await usersScreen(here);
+    const response = await here.post('/admin/users/password', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      new_password: 'a brand new password',
+      new_password_confirmation: 'a brand new password',
+    });
+    assert.equal(response.status, 303, 'the password was changed');
+
+    const copied = browser(cms);
+    copied.setSession(before);
+    const stale = await copied.get('/admin');
+    assert.equal(stale.status, 302, 'the cookie from before the change is anonymous');
+    assert.equal(stale.headers.get('location'), '/admin/login');
+    assert.notEqual(here.session(), before, 'the browser that changed it has a new session id');
+    assert.match(
+      (await editScreen(here, idOf(cms.config.dataDir, 'ada'))).html,
+      /Your password was changed/,
+      'it stays signed in, and the notice followed it to the new session',
+    );
+  });
+
+  it('keeps a session from before the change out when its row comes back', async () => {
+    const cms = await box.site();
+    const earlier = (await signedIn(cms)).session();
+    assert.ok(earlier !== undefined);
+    const ada = idOf(cms.config.dataDir, 'ada');
+    const database = path.join(cms.config.dataDir, 'geekity.db');
+    const columns = ['id', 'user_id', 'user_uid', 'csrf_token', 'created_at', 'expires_at'];
+    const read = new DatabaseSync(database);
+    const backup = read
+      .prepare(`SELECT ${columns.join(', ')} FROM sessions WHERE user_id = ?`)
+      .all(ada) as Record<string, string | number | null>[];
+    read.close();
+    assert.ok(backup.length > 0, 'there was a session row to keep');
+
+    const here = await signIn(cms);
+    const { token } = await usersScreen(here);
+    const changed = await here.post('/admin/users/password', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      new_password: 'a brand new password',
+      new_password_confirmation: 'a brand new password',
+    });
+    assert.equal(changed.status, 303);
+
+    const restore = new DatabaseSync(database);
+    const insert = restore.prepare(
+      `INSERT OR REPLACE INTO sessions (${columns.join(', ')}) VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    for (const row of backup) insert.run(...columns.map((column) => row[column] ?? null));
+    restore.close();
+
+    const copied = browser(cms);
+    copied.setSession(earlier);
+    const response = await copied.get('/admin');
+    assert.equal(response.status, 302, 'the restored row does not sign in');
+    assert.equal(response.headers.get('location'), '/admin/login');
+    assert.equal((await here.get('/admin')).status, 200, 'the browser that changed it is still in');
+  });
+
+  it('disconnects every app the account had connected, and says so', async () => {
+    const cms = await box.site();
+    const here = await signedIn(cms);
+    const dataDir = cms.config.dataDir;
+    const ada = idOf(dataDir, 'ada');
+    const { accessToken } = await createToken(
+      dataDir,
+      {
+        userId: ada,
+        me: 'http://localhost/',
+        name: 'A connected app',
+        scopes: ['create'],
+        resource: 'http://localhost/_geekity/mcp',
+        lifetimeMs: 86_400_000,
+      },
+      cms.config.now(),
+    );
+    const { token } = await editScreen(here, ada);
+
+    const changed = await here.post('/admin/users/password', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      new_password: 'a brand new password',
+      new_password_confirmation: 'a brand new password',
+    });
+
+    assert.equal(changed.status, 303);
+    assert.equal(findAccessToken(dataDir, accessToken, cms.config.now()), undefined);
+    assert.match((await editScreen(here, ada)).html, /1 connected app was disconnected/);
+  });
+
   it('replaces the password, so only the new one logs in', async () => {
     const cms = await box.site();
     const here = await signedIn(cms);
@@ -1109,6 +1386,69 @@ describe('changing your own password', () => {
   });
 });
 
+describe('outstanding reset links', () => {
+  it('end when the email address changes', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const grace = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+      email: 'old@example.com',
+    });
+    const reset = cms.admin.createPasswordReset({ userId: grace.id, lifetimeSeconds: 3600 });
+    const { token } = await usersScreen(agent);
+
+    const saved = await agent.post('/admin/users/email', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      user_id: String(grace.id),
+      email: 'new@example.com',
+    });
+    assert.equal(saved.status, 303);
+    assert.equal(findUser(cms.config.dataDir, 'grace')?.email, 'new@example.com');
+    assert.equal(cms.admin.getPasswordReset(reset.token), undefined);
+  });
+
+  it('stay when the same address is saved again', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const grace = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+      email: 'grace@example.com',
+    });
+    const reset = cms.admin.createPasswordReset({ userId: grace.id, lifetimeSeconds: 3600 });
+    const { token } = await usersScreen(agent);
+
+    await agent.post('/admin/users/email', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      user_id: String(grace.id),
+      email: 'grace@example.com',
+    });
+    assert.notEqual(cms.admin.getPasswordReset(reset.token), undefined);
+  });
+
+  it('end when you change your password', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = idOf(cms.config.dataDir, 'ada');
+    const reset = cms.admin.createPasswordReset({ userId: ada, lifetimeSeconds: 3600 });
+    const { token } = await usersScreen(agent);
+
+    const changed = await agent.post('/admin/users/password', {
+      csrf_token: token,
+      current_password: FIRST_ADMIN.password,
+      new_password: 'a brand new password',
+      new_password_confirmation: 'a brand new password',
+    });
+    assert.equal(changed.status, 303);
+    assert.equal(cms.admin.getPasswordReset(reset.token), undefined);
+  });
+});
+
 describe('a bad password form', () => {
   it('refuses a wrong current password with a 400 and changes nothing', async () => {
     const cms = await box.site();
@@ -1130,6 +1470,53 @@ describe('a bad password form', () => {
       verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
       'the old password still works',
     );
+  });
+
+  it('locks the form after the attempt limit of wrong current passwords, even for the right one', async () => {
+    const cms = await box.site({ loginAttempts: 3, loginLockout: 900 });
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+    const form = (current: string) => ({
+      csrf_token: token,
+      current_password: current,
+      new_password: 'a brand new password',
+      new_password_confirmation: 'a brand new password',
+    });
+
+    for (let i = 0; i < 3; i += 1) {
+      assert.equal((await agent.post('/admin/users/password', form(`guess ${i}`))).status, 400);
+    }
+
+    const response = await agent.post('/admin/users/password', form(FIRST_ADMIN.password));
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get('retry-after'), '900');
+    assert.match(await response.text(), /Too many wrong passwords\. Try again in 15 minutes\./);
+    assert.ok(
+      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      'the old password still works',
+    );
+  });
+
+  it('counts wrong current passwords on the add-user form against the same limit', async () => {
+    const cms = await box.site({ loginAttempts: 2, loginLockout: 900 });
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+    const form = (current: string) => ({
+      csrf_token: token,
+      username: 'grace',
+      password: 'a long enough password',
+      email: '',
+      current_password: current,
+    });
+
+    for (let i = 0; i < 2; i += 1) {
+      assert.equal((await agent.post('/admin/users/new', form(`guess ${i}`))).status, 400);
+    }
+
+    const response = await agent.post('/admin/users/new', form(FIRST_ADMIN.password));
+    assert.equal(response.status, 429);
+    assert.match(await response.text(), /Too many wrong passwords/);
+    assert.equal(countUsers(cms.config.dataDir), 1, 'nothing was written');
   });
 
   it('refuses a confirmation that does not match, and a short new password', async () => {

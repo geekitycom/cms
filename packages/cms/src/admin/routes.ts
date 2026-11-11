@@ -51,6 +51,7 @@ import {
   retireOldSessionCookie,
   sessionIdFrom,
   setSessionCookie,
+  startSession,
 } from '../web/session.ts';
 import { CSRF_FIELD } from '../forms/protection.ts';
 import type { AdminStore, Session } from '../store/admin-store.ts';
@@ -69,6 +70,7 @@ import { mountPluginsScreen, pluginScreens } from './plugins.ts';
 import type { LoginThrottle } from '../web/throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 import { mountUsers } from './users.ts';
+import { createConfirmPassword } from './confirm-password.ts';
 import { mountWritingGoals } from './writing-goals.ts';
 import { mountDashboard } from './dashboard.ts';
 
@@ -120,6 +122,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     });
     return throttled;
   }
+
+  const confirmPassword = createConfirmPassword(loginThrottle);
 
   // A second throttle, on the same machinery and the same limits, for the
   // forgot-password form. Deliberately not the login one: sharing it
@@ -371,7 +375,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountEditorActions(app);
   mountItemLookup(app);
   mountItemSearch(app);
-  mountPluginsScreen(app, { render });
+  mountPluginsScreen(app, { render, confirmPassword });
 
   // The jobs a site runs rather than the things it sets: reading every file
   // back into the index, on a site that is serving.
@@ -379,7 +383,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountPersonalDataScreen(app, { render });
   mountMaintenanceScreen(app, { render });
   mountDevModeScreen(app, { render });
-  mountExportScreen(app, { render });
+  mountExportScreen(app, { render, confirmPassword });
 
   // The site's own settings, which are content/_data/site.json itself: the
   // screen reads that file and writes it back.
@@ -395,7 +399,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
   // Who may sign in: the list, the add form, and the change-password form for
   // whoever is looking at it.
-  mountUsers(app, { render });
+  mountUsers(app, { render, confirmPassword });
 
   // The fediverse side: the actor, the followers, the inbox log, and what the
   // site sent to whom.
@@ -409,16 +413,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
   /** The session to hang a CSRF token on, made on the spot if there is none. */
   function anonymousSession(c: Context<GeekityEnv>): Session {
-    const existing = c.var.session;
-    if (existing !== undefined) return existing;
-
-    const session = c.var.admin.createSession({
-      userId: null,
-      lifetimeSeconds: c.var.config.sessionLifetime,
-    });
-    setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
-    c.set('session', session);
-    return session;
+    return c.var.session ?? startSession(c, undefined);
   }
 
   /** Re-render the setup form with a message, and the status a bad form gets. */
@@ -443,13 +438,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     // Logging in is rare and cheap; it is a good moment to sweep the table.
     admin.pruneSessions();
 
-    const session = admin.createSession({
-      userId: user.id,
-      userUid: user.uid,
-      lifetimeSeconds: c.var.config.sessionLifetime,
-    });
-    setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
-    c.set('session', session);
+    startSession(c, user);
     return c.redirect(returnTo ?? ADMIN_PREFIX, 303);
   }
 }
@@ -578,7 +567,11 @@ function liveSession(
   session: Session | undefined,
 ): Session | undefined {
   if (session === undefined || session.userId === null) return session;
-  const issued = { userId: session.userId, userUid: session.userUid };
+  const issued = {
+    userId: session.userId,
+    userUid: session.userUid,
+    issuedAt: session.createdAt,
+  };
   if (userIssuedTo(dataDir, issued) !== undefined) return session;
 
   admin.deleteSession(session.id);

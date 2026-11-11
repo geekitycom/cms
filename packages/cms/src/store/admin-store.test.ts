@@ -188,9 +188,18 @@ describe('password reset tokens (AC #3)', () => {
     const admin = await store();
     const reset = admin.createPasswordReset({ userId: ADA, lifetimeSeconds: HOUR });
 
-    assert.equal(admin.deletePasswordReset(reset.token), true);
+    assert.equal(admin.spendPasswordReset(reset.token)?.userId, ADA);
     assert.equal(admin.getPasswordReset(reset.token), undefined);
-    assert.equal(admin.deletePasswordReset(reset.token), false);
+    assert.equal(admin.spendPasswordReset(reset.token), undefined);
+  });
+
+  it('cannot be spent once it has expired', async () => {
+    const admin = await store();
+    const now = new Date('2026-09-04T12:00:00Z');
+    const reset = admin.createPasswordReset({ userId: ADA, lifetimeSeconds: HOUR, now });
+
+    const past = new Date(now.getTime() + HOUR * 1000);
+    assert.equal(admin.spendPasswordReset(reset.token, past), undefined);
   });
 
   it('stops being valid an hour out, and the row goes with it', async () => {

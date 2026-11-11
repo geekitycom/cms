@@ -17,15 +17,16 @@ out.
 
 The package ships seven messages:
 
-| Name               | When it goes                                     | What `data` carries                                                                                                                        |
-| ------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `test`             | Send test email, on Settings.                    | Nothing.                                                                                                                                   |
-| `password-reset`   | A user asked to reset a password.                | `username`, `resetUrl`, `expiresAt`, `expiresInHours`.                                                                                     |
-| `password-changed` | A reset link was used.                           | `username`, `signedOut` (how many sessions ended).                                                                                         |
-| `comment-pending`  | A comment or webmention is waiting for approval. | `comment`, `post` (`title`, `url`), `actions` (one `{ action, label, url }` each for approve, spam and delete), `queueUrl`.                |
-| `comment-digest`   | An hourly or daily digest of what is waiting.    | `items` (one `{ comment, post, actions }` each), `total` waiting, `more` beyond the ones listed, the `mode` that asked for it, `queueUrl`. |
-| `comment-reply`    | A reply to a visitor's comment was approved.     | `reply`, `comment` (the one it answers), `post`, `unsubscribeUrl`.                                                                         |
-| `contact-message`  | A visitor sent a page's contact form.            | `message` (`id`, `subject`, `text`, `received`), `from` (`name`, `email`), `page` (`slug`, `permalink`, `title`, `url`), `messagesUrl`.    |
+| Name               | When it goes                                                          | What `data` carries                                                                                                                        |
+| ------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `test`             | Send test email, on Settings.                                         | Nothing.                                                                                                                                   |
+| `password-reset`   | A user asked to reset a password.                                     | `username`, `resetUrl`, `expiresAt`, `expiresInHours`.                                                                                     |
+| `password-changed` | A reset link was used.                                                | `username`, `signedOut` (how many sessions ended), `appsDisconnected` (how many app connections were revoked).                             |
+| `email-changed`    | An account's email address was changed. Sent to the previous address. | `username`, `email` (the new address, empty when it was removed).                                                                          |
+| `comment-pending`  | A comment or webmention is waiting for approval.                      | `comment`, `post` (`title`, `url`), `actions` (one `{ action, label, url }` each for approve, spam and delete), `queueUrl`.                |
+| `comment-digest`   | An hourly or daily digest of what is waiting.                         | `items` (one `{ comment, post, actions }` each), `total` waiting, `more` beyond the ones listed, the `mode` that asked for it, `queueUrl`. |
+| `comment-reply`    | A reply to a visitor's comment was approved.                          | `reply`, `comment` (the one it answers), `post`, `unsubscribeUrl`.                                                                         |
+| `contact-message`  | A visitor sent a page's contact form.                                 | `message` (`id`, `subject`, `text`, `received`), `from` (`name`, `email`), `page` (`slug`, `permalink`, `title`, `url`), `messagesUrl`.    |
 
 ### Digest items
 

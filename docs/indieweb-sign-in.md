@@ -87,7 +87,8 @@ signed in as and the same profile details.
 The site keeps only a SHA-256 hash of each token, in
 `data/indieauth-tokens.json`. Only the site's own user can read the file. Back
 it up with the rest of `data/`. Deleting `geekity.db` keeps every token.
-Deleting a user revokes every token they hold. A token issued for one resource,
+Deleting a user revokes every token they hold, and so does a password reset or
+a password change. A token issued for one resource,
 such as the [MCP endpoint](mcp.md), works only there. decision-24 records the
 rules.
 

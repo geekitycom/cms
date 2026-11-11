@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Clock } from '../util/clock.ts';
 
 import { getRow } from './rows.ts';
+import type { Row } from './rows.ts';
 import { randomToken } from './sessions.ts';
 
 /**
@@ -57,8 +58,7 @@ export interface TokenStore {
    * deleted on the way past, as an expired session's is.
    */
   getPasswordReset(token: string, now?: Date): PasswordReset | undefined;
-  /** Spend a token. Returns `false` when there was nothing to spend. */
-  deletePasswordReset(token: string): boolean;
+  spendPasswordReset(token: string, now?: Date): PasswordReset | undefined;
   /**
    * Cancel every reset a user has outstanding, and say how many went.
    *
@@ -92,6 +92,9 @@ export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
     `),
     passwordResetByHash: db.prepare('SELECT * FROM password_resets WHERE token_hash = ?'),
     deletePasswordReset: db.prepare('DELETE FROM password_resets WHERE token_hash = ?'),
+    spendPasswordReset: db.prepare(
+      'DELETE FROM password_resets WHERE token_hash = ? AND expires_at > ? RETURNING *',
+    ),
     deletePasswordResetsForUser: db.prepare('DELETE FROM password_resets WHERE user_id = ?'),
     prunePasswordResets: db.prepare('DELETE FROM password_resets WHERE expires_at <= ?'),
     spendToken: db.prepare(`
@@ -123,16 +126,7 @@ export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
 
     getPasswordReset(token, now = clock()) {
       const hash = hashToken(token);
-      const reset = getRow(
-        statements.passwordResetByHash,
-        (row): PasswordReset => ({
-          userId: Number(row['user_id']),
-          ...(typeof row['user_uid'] === 'string' ? { userUid: row['user_uid'] } : {}),
-          createdAt: String(row['created_at']),
-          expiresAt: String(row['expires_at']),
-        }),
-        hash,
-      );
+      const reset = getRow(statements.passwordResetByHash, passwordResetFromRow, hash);
       if (reset === undefined) return undefined;
 
       // The same rule the sessions follow: an expired row is deleted rather
@@ -144,8 +138,13 @@ export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
       return reset;
     },
 
-    deletePasswordReset(token) {
-      return statements.deletePasswordReset.run(hashToken(token)).changes > 0;
+    spendPasswordReset(token, now = clock()) {
+      return getRow(
+        statements.spendPasswordReset,
+        passwordResetFromRow,
+        hashToken(token),
+        now.toISOString(),
+      );
     },
 
     deletePasswordResetsForUser(userId) {
@@ -181,4 +180,13 @@ export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
  */
 function hashToken(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+function passwordResetFromRow(row: Row): PasswordReset {
+  return {
+    userId: Number(row['user_id']),
+    ...(typeof row['user_uid'] === 'string' ? { userUid: row['user_uid'] } : {}),
+    createdAt: String(row['created_at']),
+    expiresAt: String(row['expires_at']),
+  };
 }

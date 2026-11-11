@@ -2,6 +2,7 @@ import type { Context, Hono } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../web/env.ts';
+import { revokeTokensForUser } from '../indieauth/tokens.ts';
 import { findUserByIdentifier, setUserPassword, userIssuedTo } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { absoluteUrl } from '../util/url.ts';
@@ -30,8 +31,9 @@ import type { LoginThrottle } from '../web/throttle.ts';
  *   not a stack of working links, and the token is never rendered into the
  *   page of the browser that asked for it — only into the message.
  * - **It is spent when it is used.** Setting a password deletes every reset
- *   that user had outstanding and ends every session they had, because the
- *   ordinary reason to reset a password is that somebody else may have had it.
+ *   that user had outstanding, ends every session they had and disconnects
+ *   every app they had connected, because the ordinary reason to reset a
+ *   password is that somebody else may have had it.
  * - **It cannot be a lever.** Requests are rate limited exactly as sign-ins
  *   are, on a throttle of their own, so a flood of recovery requests
  *   for one username cannot lock that person out of logging in.
@@ -142,6 +144,7 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
       // A good moment to sweep: resets are rare, and this is the one handler
       // that writes a row to the table.
       c.var.admin.prunePasswordResets();
+      c.var.admin.deletePasswordResetsForUser(user.id);
       const reset = c.var.admin.createPasswordReset({
         userId: user.id,
         userUid: user.uid,
@@ -196,23 +199,18 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
       return render(c, ADMIN_TEMPLATES.reset, resetScreen(token, { problem }));
     }
 
-    const user = userIssuedTo(dataDir, reset);
-    if (user === undefined) {
-      // The account went while the link was in flight. The token is worthless
-      // now, and saying so beats a 500 from a write against nobody. Only this
-      // link goes: the id may belong to somebody new whose own links are good.
-      c.var.admin.deletePasswordReset(token);
-      return refuseToken(c);
-    }
+    const spent = c.var.admin.spendPasswordReset(token);
+    const user =
+      spent === undefined
+        ? undefined
+        : userIssuedTo(dataDir, { ...spent, issuedAt: spent.createdAt });
+    if (user === undefined) return refuseToken(c);
 
-    await setUserPassword({ dataDir, userId: user.id, password });
-
-    // Everything that was a way into this account is now closed: the link that
-    // was just used, every other link asked for while it was in flight, and
-    // every browser that was signed in. Nobody is spared, because the person
-    // doing this is not signed in — they are about to be.
     c.var.admin.deletePasswordResetsForUser(user.id);
     const ended = c.var.admin.deleteSessionsForUser(user.id);
+    const disconnected = await revokeTokensForUser(dataDir, user.id, c.var.config.now());
+
+    await setUserPassword({ dataDir, userId: user.id, password, now: c.var.config.now() });
 
     if (user.email !== undefined) {
       // The other half of the OWASP guidance: whoever owns the address hears
@@ -221,11 +219,17 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
       void c.var.mail.send({
         to: user.email,
         template: PASSWORD_CHANGED_TEMPLATE,
-        data: { username: user.username, signedOut: ended },
+        data: { username: user.username, signedOut: ended, appsDisconnected: disconnected },
       });
     }
 
-    flash(c, 'notice', 'Your password was changed. Sign in with the new one.');
+    flash(
+      c,
+      'notice',
+      disconnected === 0
+        ? 'Your password was changed. Sign in with the new one.'
+        : `Your password was changed, and ${appsDisconnectedPhrase(disconnected)}. Sign in with the new one.`,
+    );
     return c.redirect(LOGIN_REDIRECT, 303);
   });
 
@@ -274,6 +278,12 @@ function resetScreen(token: string, extra: Record<string, unknown> = {}): Record
     invalid: false,
     ...extra,
   };
+}
+
+export function appsDisconnectedPhrase(count: number): string {
+  return count === 1
+    ? '1 connected app was disconnected'
+    : `${String(count)} connected apps were disconnected`;
 }
 
 /**

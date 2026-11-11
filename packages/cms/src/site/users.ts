@@ -129,6 +129,7 @@ export interface User {
    * stored, query string and all, because that is what has to be matched.
    */
   readonly actorId?: string | undefined;
+  readonly sessionsValidAfter?: string | undefined;
   /** When the user was created, as an ISO 8601 instant. */
   readonly createdAt: string;
 }
@@ -275,6 +276,7 @@ export function findUserById(dataDir: string, id: number): User | undefined {
 export interface IssuedTo {
   readonly userId: number;
   readonly userUid?: string | undefined;
+  readonly issuedAt?: string | undefined;
 }
 
 /**
@@ -284,7 +286,16 @@ export interface IssuedTo {
  */
 export function userIssuedTo(dataDir: string, issued: IssuedTo): User | undefined {
   const user = findUserById(dataDir, issued.userId);
-  return user?.uid === issued.userUid ? user : undefined;
+  if (user === undefined || user.uid !== issued.userUid) return undefined;
+  const { sessionsValidAfter } = user;
+  if (
+    sessionsValidAfter !== undefined &&
+    issued.issuedAt !== undefined &&
+    Date.parse(issued.issuedAt) < Date.parse(sessionsValidAfter)
+  ) {
+    return undefined;
+  }
+  return user;
 }
 
 /**
@@ -389,8 +400,7 @@ export async function updateUser(
 
 /**
  * Hash a new password and put it on a user, replacing the old one. Returns
- * `false` when there is no such user. Sessions are left alone; deciding which
- * of them a password change should end is the caller's business.
+ * `false` when there is no such user.
  */
 export async function setUserPassword(input: {
   /** Which site's users file to write. */
@@ -399,11 +409,16 @@ export async function setUserPassword(input: {
   userId: number;
   /** The new plain password, hashed on the way in. */
   password: string;
+  now: Date;
 }): Promise<boolean> {
   // Hashed before the write rather than inside it, so a hash that throws
   // leaves the stored one alone.
   const hash = hashPassword(input.password);
-  return updateUser(input.dataDir, input.userId, () => ({ passwordHash: hash }));
+  const sessionsValidAfter = input.now.toISOString();
+  return updateUser(input.dataDir, input.userId, () => ({
+    passwordHash: hash,
+    sessionsValidAfter,
+  }));
 }
 
 /**
@@ -730,6 +745,9 @@ function withoutHash(user: StoredUser): User {
     ...(user.writingGoals === undefined ? {} : { writingGoals: user.writingGoals }),
     ...(user.profile === undefined ? {} : { profile: user.profile }),
     ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
+    ...(user.sessionsValidAfter === undefined
+      ? {}
+      : { sessionsValidAfter: user.sessionsValidAfter }),
     createdAt: user.createdAt,
   };
 }
@@ -865,6 +883,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const profile = profileFrom(record['profile']);
   const actorId = storedActorIdFrom(record['actorId']);
   const passwordHash = record['passwordHash'];
+  const sessionsValidAfter = record['sessionsValidAfter'];
   const createdAt = record['createdAt'];
 
   if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
@@ -878,6 +897,15 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   }
   if (typeof passwordHash !== 'string' || passwordHash === '') {
     throw unusableUsersFile(file, new Error(`${where} has no password hash.`));
+  }
+  if (
+    sessionsValidAfter !== undefined &&
+    (typeof sessionsValidAfter !== 'string' || Number.isNaN(Date.parse(sessionsValidAfter)))
+  ) {
+    throw unusableUsersFile(
+      file,
+      new Error(`${where} has a sessionsValidAfter that is not an instant.`),
+    );
   }
 
   return {
@@ -912,6 +940,9 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
     // would change nothing except to make a person's actor unreadable.
     ...(actorId === undefined ? {} : { actorId }),
     passwordHash,
+    ...(sessionsValidAfter === undefined
+      ? {}
+      : { sessionsValidAfter: new Date(sessionsValidAfter).toISOString() }),
     createdAt: typeof createdAt === 'string' ? createdAt : '',
   };
 }

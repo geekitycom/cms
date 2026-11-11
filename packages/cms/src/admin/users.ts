@@ -17,7 +17,6 @@ import {
   setUserPassword,
   setUserProfile,
   UserRemovalRefusedError,
-  verifyUserPassword,
 } from '../site/users.ts';
 import type { ProfileLink, User, UserRemovalRefusal } from '../site/users.ts';
 import type { FlashKind } from '../store/admin-store.ts';
@@ -33,10 +32,14 @@ import { revokeTokensForUser } from '../indieauth/tokens.ts';
 import { autosaveCopies } from '../autosave/index.ts';
 import { discardWritingLedger } from '../writing/ledger.ts';
 import { stringOrEmpty } from '../util/forms.ts';
+import { startSession } from '../web/session.ts';
 import { ADMIN_THEMES, adminTheme } from '../site/admin-theme.ts';
+import { lockedMessage, answerLockedOut } from './confirm-password.ts';
+import type { ConfirmPassword } from './confirm-password.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
 import { flashAndRedirect } from './flash.ts';
+import { appsDisconnectedPhrase } from './recovery.ts';
 import { editUserPath, USERS_PATH } from '../site/admin-paths.ts';
 import { toldFollowers } from './settings-page.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -70,6 +73,10 @@ export const USER_NOTIFICATION_MODE_PATH = `${USER_NOTIFICATIONS_PATH}/mode`;
 
 export const USER_THEME_PATH = `${USERS_PATH}/theme`;
 
+const EMAIL_CHANGED_TEMPLATE = 'email-changed';
+
+const WRONG_PASSWORD = 'Your password was not right, so';
+
 export const USER_FIELDS = {
   username: 'username',
   password: 'password',
@@ -95,6 +102,7 @@ export const USER_FIELDS = {
 
 export interface MountUsersOptions {
   render: AdminRender;
+  confirmPassword: ConfirmPassword;
 }
 
 export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): void {
@@ -102,9 +110,9 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
 
   app.get(USERS_PATH, (c) => showUsers(c, render));
   app.get(ADD_USER_PATH, (c) => showAddUser(c, render));
-  app.post(ADD_USER_PATH, (c) => addUser(c, render));
-  app.post(CHANGE_PASSWORD_PATH, (c) => changePassword(c, render));
-  app.post(USER_EMAIL_PATH, saveEmail);
+  app.post(ADD_USER_PATH, (c) => addUser(c, options));
+  app.post(CHANGE_PASSWORD_PATH, (c) => changePassword(c, options));
+  app.post(USER_EMAIL_PATH, (c) => saveEmail(c, options.confirmPassword));
   app.post(USER_PROFILE_PATH, (c) => saveProfile(c, render));
   app.post(USER_NOTIFICATIONS_PATH, saveNotification);
   app.post(USER_NOTIFICATION_MODE_PATH, saveNotificationMode);
@@ -121,7 +129,10 @@ function showAddUser(c: Context<GeekityEnv>, render: AdminRender): Response {
   return render(c, ADMIN_TEMPLATES.usersNew, addScreen(c));
 }
 
-async function addUser(c: Context<GeekityEnv>, render: AdminRender): Promise<Response> {
+async function addUser(
+  c: Context<GeekityEnv>,
+  { render, confirmPassword }: MountUsersOptions,
+): Promise<Response> {
   const body = await c.req.parseBody();
   const username = stringOrEmpty(body[USER_FIELDS.username]).trim();
   const supplied = stringOrEmpty(body[USER_FIELDS.password]);
@@ -130,6 +141,10 @@ async function addUser(c: Context<GeekityEnv>, render: AdminRender): Promise<Res
 
   const password = generate ? generatePassword() : supplied;
   const problems = addUserProblems(username, password, generate, email);
+  const confirmation = confirmPassword(c, stringOrEmpty(body[USER_FIELDS.currentPassword]));
+  if (confirmation.kind !== 'confirmed') {
+    problems.currentPassword = `${WRONG_PASSWORD} nobody was added.`;
+  }
 
   if (Object.keys(problems).length === 0) {
     try {
@@ -148,6 +163,8 @@ async function addUser(c: Context<GeekityEnv>, render: AdminRender): Promise<Res
 
   if (Object.keys(problems).length > 0) {
     c.status(400);
+    if (confirmation.kind === 'locked')
+      problems.currentPassword = answerLockedOut(c, confirmation.wait);
     return render(
       c,
       ADMIN_TEMPLATES.usersNew,
@@ -155,17 +172,18 @@ async function addUser(c: Context<GeekityEnv>, render: AdminRender): Promise<Res
     );
   }
 
-  return flashAndRedirect(
-    c,
-    'notice',
-    generate
-      ? `Added ${username}. Their password is ${password} — copy it now, it is not shown again.`
-      : `Added ${username}.`,
-    USERS_PATH,
-  );
+  if (generate) {
+    c.header('cache-control', 'no-store');
+    return render(c, ADMIN_TEMPLATES.usersNew, addScreen(c, { added: { username, password } }));
+  }
+
+  return flashAndRedirect(c, 'notice', `Added ${username}.`, USERS_PATH);
 }
 
-async function changePassword(c: Context<GeekityEnv>, render: AdminRender): Promise<Response> {
+async function changePassword(
+  c: Context<GeekityEnv>,
+  { render, confirmPassword }: MountUsersOptions,
+): Promise<Response> {
   const session = c.var.session;
   const user = signedInUser(c);
   if (session === undefined || user === undefined) return c.redirect(USERS_PATH, 303);
@@ -175,14 +193,16 @@ async function changePassword(c: Context<GeekityEnv>, render: AdminRender): Prom
   const next = stringOrEmpty(body[USER_FIELDS.newPassword]);
   const confirmation = stringOrEmpty(body[USER_FIELDS.newPasswordConfirmation]);
 
+  const confirmed = confirmPassword(c, current);
   const problems = changePasswordProblems({
-    correct: verifyUserPassword(c.var.config.dataDir, user.username, current) !== undefined,
+    correct: confirmed.kind === 'confirmed',
     next,
     confirmation,
   });
 
   if (Object.keys(problems).length > 0) {
     c.status(400);
+    if (confirmed.kind === 'locked') problems.currentPassword = answerLockedOut(c, confirmed.wait);
     return render(
       c,
       ADMIN_TEMPLATES.usersEdit,
@@ -190,29 +210,67 @@ async function changePassword(c: Context<GeekityEnv>, render: AdminRender): Prom
     );
   }
 
-  await setUserPassword({ dataDir: c.var.config.dataDir, userId: user.id, password: next });
+  await setUserPassword({
+    dataDir: c.var.config.dataDir,
+    userId: user.id,
+    password: next,
+    now: c.var.config.now(),
+  });
   const ended = c.var.admin.deleteSessionsForUser(user.id, { except: session.id });
+  c.var.admin.deleteSession(session.id);
+  startSession(c, user);
+  c.var.admin.deletePasswordResetsForUser(user.id);
+  const disconnected = await revokeTokensForUser(c.var.config.dataDir, user.id, c.var.config.now());
 
+  const closed = [
+    ...(ended === 0 ? [] : [`${signedOut(ended)} signed out`]),
+    ...(disconnected === 0 ? [] : [appsDisconnectedPhrase(disconnected)]),
+  ];
   return backToUser(
     c,
     'notice',
-    ended === 0
+    closed.length === 0
       ? 'Your password was changed.'
-      : `Your password was changed, and ${signedOut(ended)} signed out.`,
+      : `Your password was changed, and ${closed.join(' and ')}.`,
     user,
   );
 }
 
-async function saveEmail(c: Context<GeekityEnv>): Promise<Response> {
+async function saveEmail(
+  c: Context<GeekityEnv>,
+  confirmPassword: ConfirmPassword,
+): Promise<Response> {
   const named = await namedUser(c);
   if (named instanceof Response) return named;
   const { dataDir, body, target } = named;
   const email = stringOrEmpty(body[USER_FIELDS.email]).trim();
 
+  const confirmation = confirmPassword(c, stringOrEmpty(body[USER_FIELDS.currentPassword]));
+  if (confirmation.kind !== 'confirmed') {
+    const message =
+      confirmation.kind === 'locked'
+        ? lockedMessage(confirmation.wait)
+        : `${WRONG_PASSWORD} the address was not changed.`;
+    return backToUser(c, 'error', message, target);
+  }
+
   const problem = emailProblem(email);
   if (problem !== undefined) return backToUser(c, 'error', problem, target);
 
   await setUserEmail({ dataDir, userId: target.id, email });
+
+  const previous = target.email;
+  if (previous !== email) {
+    c.var.admin.deletePasswordResetsForUser(target.id);
+    if (previous !== undefined && c.var.mailConfigured) {
+      void c.var.mail.send({
+        to: previous,
+        template: EMAIL_CHANGED_TEMPLATE,
+        data: { username: target.username, email },
+      });
+    }
+  }
+
   return backToUser(
     c,
     'notice',
@@ -466,7 +524,12 @@ function signedOut(count: number): string {
   return count === 1 ? '1 other session was' : `${String(count)} other sessions were`;
 }
 
-export type AddUserProblems = { username?: string; password?: string; email?: string };
+export type AddUserProblems = {
+  username?: string;
+  password?: string;
+  email?: string;
+  currentPassword?: string;
+};
 
 export function addUserProblems(
   username: string,

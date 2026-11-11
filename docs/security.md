@@ -31,6 +31,13 @@ make grow. A guessing attack runs over minutes, and a restart does not happen
 often enough to help it. The server logs both refusals with the username and
 the address.
 
+Forms that ask a signed-in user for their password again use the same counts:
+changing your password, adding a user, changing an email address, exporting
+the site, and installing, updating or removing a plugin. A wrong password
+there counts against the signed-in user's username and the address. A
+lockout on either refuses the form, even with the right password, and says how
+long is left; the forms that render a page answer `429` with `Retry-After`.
+
 `trustProxy` decides where the address comes from. It defaults to `false`,
 and the address is the socket's own. Any client can send `X-Forwarded-For`. On
 a site reached directly, trusting it would let one attacker give each guess a
@@ -110,6 +117,7 @@ When the name matches an account with an address, the server sends the theme's
   of `data/geekity.db` does not contain working links.
 - The token is never rendered into the page of the browser that requested it.
 - The token lasts an hour and works once.
+- Asking again ends any link sent earlier, so only the newest one works.
 
 A password set through the link must meet the same rules as a password set
 anywhere else. The server then invalidates:
@@ -117,9 +125,13 @@ anywhere else. The server then invalidates:
 - the link that was used
 - every other reset link that user had outstanding
 - every session the user was signed in on
+- every app connected to the account: each IndieAuth, Micropub and MCP
+  connection, and each token made on Users > Connected apps
 
 The server then sends the theme's `password-changed` message, which has no link
-back in. A user who did not request the reset finds out about it.
+back in. A user who did not request the reset finds out about it. The message
+and the sign-in screen's notice say when apps were disconnected. Each app has
+to be connected again through the consent screen.
 
 The server rate limits reset requests by username and by address in the same
 way as sign-ins: the same limits, the same growing lockout, `429` and
@@ -127,9 +139,15 @@ way as sign-ins: the same limits, the same growing lockout, `429` and
 throttle, a stranger could lock a user out of signing in by requesting resets
 for them over and over.
 
-Reset tokens live in the database, which is a cache. A restart, a
-`geekity rebuild` or a deleted `data/geekity.db` invalidates every outstanding
-link. The user then has to click Forgot password again.
+Changing a password on the users screen also disconnects every app connected
+to that account, as a reset does. Changing a password there, or changing a
+user's email address there, also ends every reset link that user had
+outstanding. A link already
+sent to an old address stops working once the address changes.
+
+Reset tokens live in the database, so a restart leaves them working until they
+expire. A `geekity rebuild` or a deleted `data/geekity.db` ends every
+outstanding link, and the user then has to click Forgot password again.
 
 With no mail provider or credential, `/admin/forgot` shows no form. It says the
 site cannot send email and links to

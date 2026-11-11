@@ -8,6 +8,7 @@
 {% import "components/fields.njk" as field %}
 {% from "components/button.njk" import button %}
 {% from "components/card.njk" import card %}
+{% from "components/alert.njk" import alert %}
 
 {% block title %}Add new user{% endblock %}
 
@@ -15,15 +16,28 @@
   <h1 class="mb-6 text-2xl font-bold">Add new user</h1>
 
   <div class="flex max-w-2xl flex-col gap-6">
+  {% if added %}
+  {% call alert(color='success', style='soft', polite=true) %}
+    <div class="w-full">
+      <p class="mb-2">Added {{ added.username }}.</p>
+      {{ field.text('added-password', 'added-password', 'Password for ' ~ added.username, added.password,
+           readonly=true, spellcheck='false',
+           hint='Copy it now. It is not shown again, and the site keeps only a hash of it.') }}
+    </div>
+  {% endcall %}
+
+  <p class="text-sm"><a class="link" href="{{ usersUrl }}">Continue to all users</a></p>
+  {% else %}
   {% call card() %}
   <form method="post" action="{{ addUserUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
 
-    {% if addProblems.username or addProblems.password or addProblems.email %}
+    {% if addProblems.username or addProblems.password or addProblems.email or addProblems.currentPassword %}
       {% call field.summary('Nobody was added. Fix the fields marked below and try again.') %}
         {{ field.problem('add-username', addProblems.username) }}
         {{ field.problem('add-email', addProblems.email) }}
         {{ field.problem('add-password', addProblems.password) }}
+        {{ field.problem('add-current-password', addProblems.currentPassword) }}
       {% endcall %}
     {% endif %}
 
@@ -40,10 +54,14 @@
          'Generate one instead, and show it to me once', checked=addForm.generate,
          hint='A generated password is shown on the next page and nowhere else. Copy it before you leave.') }}
 
+    {{ field.password('add-current-password', fields.currentPassword, 'Your password',
+         error=addProblems.currentPassword, autocomplete='current-password', required=true) }}
+
     <div class="mt-2">{{ button('Add user', type='submit', color='primary') }}</div>
   </form>
   {% endcall %}
 
   <p class="text-sm"><a class="link" href="{{ usersUrl }}">Back to all users</a></p>
+  {% endif %}
   </div>
 {% endblock %}

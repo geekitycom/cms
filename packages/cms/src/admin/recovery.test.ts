@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -9,7 +11,8 @@ import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { createUser, usersFile, verifyUserPassword } from '../site/users.ts';
+import { createToken, findAccessToken } from '../indieauth/tokens.ts';
+import { createUser, findUser, usersFile, verifyUserPassword } from '../site/users.ts';
 import { addUser } from './__testing__/users.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
@@ -247,6 +250,75 @@ describe('the reset link (AC #3)', () => {
     assert.doesNotMatch(confirmation.text, /token=/, 'a confirmation carries no way back in');
   });
 
+  it('disconnects every app the account had connected, and says so in the confirmation', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+    const dataDir = cms.config.dataDir;
+    const ada = findUser(dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { accessToken } = await createToken(
+      dataDir,
+      {
+        userId: ada.id,
+        me: 'https://blog.example/',
+        name: 'A connected app',
+        scopes: ['create'],
+        resource: 'https://blog.example/_geekity/mcp',
+        lifetimeMs: 86_400_000,
+      },
+      cms.config.now(),
+    );
+    await askForReset(cms, 'ada');
+    const token = new URL(linkIn(provider.sent[0])).searchParams.get('token') ?? '';
+
+    const agent = browser(cms);
+    const csrf = csrfField(await (await agent.get(`${RESET_PATH}?token=${token}`)).text());
+    assert.ok(csrf !== undefined);
+    const response = await agent.post(RESET_PATH, {
+      csrf_token: csrf,
+      token,
+      password: 'a brand new password',
+      password_confirmation: 'a brand new password',
+    });
+    assert.equal(response.status, 303);
+    await cms.mail.settled();
+
+    assert.equal(findAccessToken(dataDir, accessToken, cms.config.now()), undefined);
+    assert.match(provider.sent[1]?.text ?? '', /app connected to the account was disconnected/);
+  });
+
+  it('sets the password once when the same link is posted twice at the same moment', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+    await askForReset(cms, 'ada');
+    const token = new URL(linkIn(provider.sent[0])).searchParams.get('token') ?? '';
+
+    const tabs = await Promise.all(
+      [0, 1].map(async () => {
+        const agent = browser(cms);
+        const csrf = csrfField(await (await agent.get(`${RESET_PATH}?token=${token}`)).text());
+        assert.ok(csrf !== undefined);
+        return { agent, csrf };
+      }),
+    );
+    const passwords = ['the first new password', 'the second new password'];
+
+    const responses = await Promise.all(
+      tabs.map(({ agent, csrf }, i) =>
+        agent.post(RESET_PATH, {
+          csrf_token: csrf,
+          token,
+          password: passwords[i] ?? '',
+          password_confirmation: passwords[i] ?? '',
+        }),
+      ),
+    );
+
+    assert.deepEqual(responses.map((response) => response.status).sort(), [303, 400]);
+    const working = passwords.filter(
+      (password) => verifyUserPassword(cms.config.dataDir, 'ada', password) !== undefined,
+    );
+    assert.equal(working.length, 1);
+  });
+
   it('refuses a token nobody was ever sent, and one that has expired', async () => {
     const { cms, provider } = await site({ email: 'ada@example.com' });
     const agent = browser(cms);
@@ -380,6 +452,76 @@ describe('repeated requests (AC #4)', () => {
 
     const agent = await signIn(cms);
     assert.equal((await agent.get('/admin')).status, 200, 'she can still sign in');
+  });
+});
+
+describe('a second request', () => {
+  it('ends the link the first one sent', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+    await askForReset(cms, 'ada');
+    await askForReset(cms, 'ada');
+    assert.equal(provider.sent.length, 2, 'two links were mailed');
+
+    const older = await browser(cms).get(pathOf(linkIn(provider.sent[0])));
+    assert.equal(older.status, 400, 'the older link was refused');
+    const newer = await browser(cms).get(pathOf(linkIn(provider.sent[1])));
+    assert.equal(newer.status, 200, 'the newer link opens the form');
+  });
+});
+
+describe('a link from before a password change', () => {
+  it('is refused when an older database brings its row back', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+    await askForReset(cms, 'ada');
+    const token = new URL(linkIn(provider.sent[0])).searchParams.get('token');
+    assert.ok(token !== null);
+
+    const database = path.join(cms.config.dataDir, 'geekity.db');
+    const read = new DatabaseSync(database);
+    const backup = read.prepare('SELECT * FROM password_resets').all() as Record<
+      string,
+      string | number | null
+    >[];
+    read.close();
+    assert.ok(backup.length > 0, 'there was a reset row to keep');
+
+    const here = await signIn(cms);
+    const csrf = csrfField(await (await here.get('/admin/users')).text());
+    assert.ok(csrf !== undefined);
+    const changed = await here.post('/admin/users/password', {
+      csrf_token: csrf,
+      current_password: FIRST_ADMIN.password,
+      new_password: 'the password she chose',
+      new_password_confirmation: 'the password she chose',
+    });
+    assert.equal(changed.status, 303, 'the password was changed');
+
+    const restore = new DatabaseSync(database);
+    for (const row of backup) {
+      const columns = Object.keys(row);
+      restore
+        .prepare(
+          `INSERT OR REPLACE INTO password_resets (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+        )
+        .run(...columns.map((column) => row[column] ?? null));
+    }
+    restore.close();
+
+    const agent = browser(cms);
+    const form = csrfField(await (await agent.get('/admin/login')).text());
+    assert.ok(form !== undefined);
+    const response = await agent.post(RESET_PATH, {
+      csrf_token: form,
+      token,
+      password: 'a password from the old link',
+      password_confirmation: 'a password from the old link',
+    });
+
+    assert.equal(response.status, 400, 'the restored link was refused');
+    assert.ok(
+      verifyUserPassword(cms.config.dataDir, 'ada', 'the password she chose') !== undefined,
+      'the password set after the link was asked for is still the one',
+    );
   });
 });
 
