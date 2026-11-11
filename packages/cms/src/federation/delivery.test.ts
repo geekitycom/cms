@@ -2489,6 +2489,101 @@ describe('resending a post', () => {
     assert.equal(await cms.delivery.resend(pathOf(cms, 'secret')), undefined);
     assert.deepEqual(deliveries, [], 'there is no copy anywhere to withdraw');
   });
+
+  describe('of a post that changes before its Create is stamped', () => {
+    const FILE = 'posts/2026-03-04-watched.md';
+
+    /** Publish another post and wait until its Create is in flight, blocking the queue. */
+    async function holdTheQueue(agent: Browser): Promise<() => void> {
+      let release = (): void => undefined;
+      inboxes = new Promise((resolve) => {
+        release = resolve;
+      });
+      postsBegun = 0;
+      await publishNewPost(agent);
+      await nextEvent('the blocking POST', (done) => {
+        const check = () => {
+          if (postsBegun > 0) done(undefined);
+        };
+        check();
+        arrivals.add(check);
+        return () => arrivals.delete(check);
+      });
+      return release;
+    }
+
+    it('does not mark an edit made on disk since the index read the post as announced', async () => {
+      const { cms, contentDir } = await site({
+        account: true,
+        files: { [FILE]: publishedPost('Published, but never announced.') },
+      });
+      const absolute = path.join(contentDir, ...FILE.split('/'));
+      await writeFile(absolute, publishedPost('A newer edit on disk.'), 'utf8');
+
+      const report = await cms.delivery.resend(FILE);
+      assert.equal(report?.activityType, 'Create');
+
+      const source = await readFile(absolute, 'utf8');
+      assert.match(source, /A newer edit on disk\./, source);
+      assert.doesNotMatch(source, /published:/, 'no follower has been sent this version');
+    });
+
+    it('sends nothing for a post trashed while the resend waited, and does not bring it back', async () => {
+      const { cms, contentDir } = await site({
+        files: { [FILE]: publishedPost('Published, but never announced.') },
+      });
+      const agent = signedInAs(cms, ADA);
+      const absolute = path.join(contentDir, ...FILE.split('/'));
+      const release = await holdTheQueue(agent);
+
+      const resending = cms.delivery.resend(FILE);
+      const trashed = await submitEditor(agent, '/admin/posts/watched', {
+        action: 'trash',
+        return: '',
+      });
+      assert.equal(trashed.status, 303, await trashed.text());
+      release();
+
+      assert.equal(await resending, undefined);
+      await cms.delivery.settled();
+      await assert.rejects(readFile(absolute, 'utf8'), 'the old path stays empty');
+      assert.ok(
+        delivered('Create').every(
+          (create) =>
+            (create.body['object'] as Record<string, unknown>)['id'] !==
+            `${BASE_URL}/2026/03/watched/`,
+        ),
+        `saw ${JSON.stringify(deliveries)}`,
+      );
+    });
+
+    it('sends and keeps an admin edit saved while the resend waited', async () => {
+      const { cms, contentDir } = await site({
+        files: { [FILE]: publishedPost('Published, but never announced.') },
+      });
+      const agent = signedInAs(cms, ADA);
+      const release = await holdTheQueue(agent);
+
+      const resending = cms.delivery.resend(FILE);
+      const edited = await submitEditor(agent, '/admin/posts/watched', {
+        body: 'Edited while the resend waited.',
+      });
+      assert.equal(edited.status, 303, await edited.text());
+      release();
+
+      const report = await resending;
+      assert.equal(report?.activityType, 'Create');
+      await cms.delivery.settled();
+
+      const create = delivered('Create').find(
+        (delivery) => delivery.body['id'] === report.activityId,
+      );
+      assert.match(contentOf(create), /Edited while the resend waited\./);
+      const source = await readFile(path.join(contentDir, ...FILE.split('/')), 'utf8');
+      assert.match(source, /Edited while the resend waited\./, source);
+      assert.match(source, /^ {2}published: /m, 'and the version sent is stamped');
+    });
+  });
 });
 
 describe('the first stamp of a hand-written post', () => {

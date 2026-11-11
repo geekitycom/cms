@@ -4,7 +4,7 @@ import path from 'node:path';
 import { dump } from 'js-yaml';
 
 import { withFileLock, writeFileAtomically } from '../files/atomic.ts';
-import { exists } from '../util/files.ts';
+import { exists, isNotFound } from '../util/files.ts';
 import { KNOWN_FRONT_MATTER_KEYS } from './document.ts';
 import type { Document, DocumentContent, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
@@ -152,6 +152,8 @@ export interface AddPublishedStampOptions {
   path: string;
   /** The `activitypub.published` to add, which the file does not carry yet. */
   published: string;
+  /** The {@link Document.hash} of the version being stamped. */
+  hash: string;
 }
 
 /**
@@ -163,11 +165,25 @@ export interface AddPublishedStampOptions {
  * hand-written file carries stay as they were. So does a date written with no
  * offset, which a rewrite would turn into an instant read in the site's zone
  * while the index and the activity already sent read it in the server's.
+ *
+ * A file that is gone, or that no longer reads as the version with
+ * {@link AddPublishedStampOptions.hash}, is left alone and `undefined`
+ * answered: the stamp says the followers were told about what the file holds,
+ * and a newer version is the business of the change that wrote it.
  */
-export async function addPublishedStamp(options: AddPublishedStampOptions): Promise<Document> {
+export async function addPublishedStamp(
+  options: AddPublishedStampOptions,
+): Promise<Document | undefined> {
   const relative = options.path.replace(/\\/g, '/');
   const file = path.join(options.contentDir, ...relative.split('/'));
-  const source = withPublishedLine(await readFile(file, 'utf8'), options.published, relative);
+  const written = await readFile(file, 'utf8').catch((error: unknown) => {
+    if (isNotFound(error)) return undefined;
+    throw error;
+  });
+  if (written === undefined || parseDocument(written, { path: relative }).hash !== options.hash) {
+    return undefined;
+  }
+  const source = withPublishedLine(written, options.published, relative);
 
   const document = parseDocument(source, {
     path: relative,

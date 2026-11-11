@@ -242,6 +242,13 @@ saved in the meantime stays in the file and goes out as an `Update`. The
 editor's conflict check ignores a difference in `activitypub.published` alone,
 and the next save keeps the key.
 
+The site writes the key only when the file still holds the version the content
+index holds. If the post was trashed, moved or deleted, or the file was changed
+on disk and the index has not read it yet, the site writes nothing. The site
+then handles the newer file as a change of its own. A resend reads the post when
+its turn in the delivery queue comes, not when it is queued, so it sends an
+edit, a move or a trash made while it waited.
+
 If a post's file already names an `activitypub.id`, the post keeps that as its
 object id for the life of the post. A post migrated from WordPress keeps the
 `https://example.com/?p=813` that its followers, its replies, and its RSS

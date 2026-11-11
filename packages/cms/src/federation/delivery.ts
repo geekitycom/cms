@@ -137,8 +137,9 @@ export interface DeliveryService {
    * Send one post as it now reads to every follower and every accepted relay
    * the site has.
    *
-   * Not "send that activity again": the activity is built from the file at the
-   * moment this is called, so a follower whose server was down
+   * Not "send that activity again": the activity is built from the post as it
+   * stands when the resend's turn in the delivery queue comes, so a follower
+   * whose server was down
    * ends up holding the post as it stands rather than the revision that failed
    * to reach it. Which activity that is follows the same rule a save does — a
    * published post no follower has been told about is a `Create` and is
@@ -214,9 +215,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
    * Add {@link stampFor}'s `activitypub.published` to the post's file.
    *
    * The stamp lands after the save that set it off has answered, so it goes
-   * into the post as it is now, which keeps an edit saved meanwhile. A post no
-   * longer at that path is left alone; the change that moved it is queued
-   * behind this one.
+   * into the post as the index holds it now, which keeps an edit saved
+   * meanwhile: that edit's own change is queued behind this one and finds the
+   * stamp. A file that no longer reads as the indexed version is left alone,
+   * because no change for what it holds has been queued yet, and the one that
+   * will be announces it itself. So is a post no longer at that path.
    *
    * No id is minted — the post's id is its permalink, so there is nothing to
    * freeze — and an `activitypub.id` the file already carries is left exactly
@@ -233,7 +236,13 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       const published = stampFor(document, store.now());
       if (published === undefined) return;
 
-      await addPublishedStamp({ contentDir: config.contentDir, store, path, published });
+      await addPublishedStamp({
+        contentDir: config.contentDir,
+        store,
+        path,
+        published,
+        hash: document.hash,
+      });
     });
   }
 
@@ -598,16 +607,16 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     },
 
     async resend(path, to) {
-      const document = store.getByPath(path);
-      if (document?.type !== 'post') return undefined;
-
-      // Read before the queue rather than inside it, so a post with nothing to
-      // send answers `undefined` rather than joining a queue to find that out.
-      const published = isFederatedDocument(document, store.now());
-      const announced = wasAnnounced(document);
-      if (!announced && (!published || isMigrated(document))) return undefined;
-
+      // Read inside the queue, so a post edited, moved or trashed while the
+      // resend waited is sent as it now stands.
       return await deliveryQueue.run(async () => {
+        const document = store.getByPath(path);
+        if (document?.type !== 'post') return undefined;
+
+        const published = isFederatedDocument(document, store.now());
+        const announced = wasAnnounced(document);
+        if (!announced && (!published || isMigrated(document))) return undefined;
+
         const context = await deliveryContext();
 
         if (!published) {
