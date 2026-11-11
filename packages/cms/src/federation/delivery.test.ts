@@ -63,9 +63,8 @@ const BROKEN_ORIGIN = 'https://broken.example';
 const BROKEN_ACTOR = `${BROKEN_ORIGIN}/users/nobody`;
 const BROKEN_INBOX = `${BROKEN_ORIGIN}/users/nobody/inbox`;
 
-/** A host that serves a note it says carol, on another host, wrote. */
 const STRANGER_ORIGIN = 'https://stranger.example';
-const STRANGER_NOTE = `${STRANGER_ORIGIN}/notes/1`;
+const MISATTRIBUTED_NOTE = `${STRANGER_ORIGIN}/notes/1`;
 
 /**
  * A fediverse author nobody here follows, and the status of theirs a post
@@ -118,7 +117,7 @@ let statusDocument: unknown;
 let sharedInboxAuthorDocument: unknown;
 let sharedInboxAuthorStatusDocument: unknown;
 let erinDocument: unknown;
-let strangerNoteDocument: unknown;
+let misattributedNoteDocument: unknown;
 const webfingerLookups: string[] = [];
 let restoreFetch: () => void;
 let slowPage: Promise<void> = Promise.resolve();
@@ -127,7 +126,6 @@ let rejectingEveryPost = false;
 let refusalStatus = 503;
 const refused: string[] = [];
 let postsBegun = 0;
-/** Whether the cited status's server answers every fetch of it with a 503. */
 let statusUnavailable = false;
 
 before(async () => {
@@ -162,9 +160,9 @@ before(async () => {
     url: new URL(ERIN_PROFILE),
     inbox: new URL(ERIN_INBOX),
   }).toJsonLd();
-  strangerNoteDocument = await new Note({
-    id: new URL(STRANGER_NOTE),
-    url: new URL(STRANGER_NOTE),
+  misattributedNoteDocument = await new Note({
+    id: new URL(MISATTRIBUTED_NOTE),
+    url: new URL(MISATTRIBUTED_NOTE),
     attribution: new URL(CAROL_ACTOR),
     content: 'Something carol did not write.',
   }).toJsonLd();
@@ -225,8 +223,8 @@ function routeRemoteHost(): () => void {
     }
     if (url.origin === BASE_URL) ownFetches.push(url.href);
     if (url.origin === STRANGER_ORIGIN) {
-      if (url.href !== STRANGER_NOTE) return new Response('Not found.', { status: 404 });
-      return new Response(JSON.stringify(strangerNoteDocument), {
+      if (url.href !== MISATTRIBUTED_NOTE) return new Response('Not found.', { status: 404 });
+      return new Response(JSON.stringify(misattributedNoteDocument), {
         headers: { 'content-type': 'application/activity+json' },
       });
     }
@@ -537,7 +535,6 @@ function waitForDelivery(type: string): Promise<Delivery> {
   });
 }
 
-/** The first delivery of any type, waiting for it to arrive. */
 function waitForAnyDelivery(): Promise<Delivery> {
   return nextEvent('a delivery', (done) => {
     const check = () => {
@@ -1637,7 +1634,7 @@ describe('a reply to a fediverse status (TASK-240)', () => {
   });
 
   it('neither mentions, copies nor delivers to an author on another host than the status', async () => {
-    await reply(STRANGER_NOTE);
+    await reply(MISATTRIBUTED_NOTE);
 
     const creates = delivered('Create');
     assert.deepEqual(
@@ -1648,7 +1645,7 @@ describe('a reply to a fediverse status (TASK-240)', () => {
     const create = creates[0] as Delivery;
     assert.equal(create.body['cc'], FOLLOWERS);
     const note = objectOf(create);
-    assert.equal(note['inReplyTo'], STRANGER_NOTE);
+    assert.equal(note['inReplyTo'], MISATTRIBUTED_NOTE);
     assert.equal(note['cc'], FOLLOWERS);
     assert.deepEqual(mentions(note), []);
   });
@@ -2991,7 +2988,6 @@ describe('two users', () => {
   const GRACE_URL = `${BASE_URL}/author/grace/`;
   const POST_ID = `${BASE_URL}/2026/03/watched/`;
 
-  /** A site where Ada has her follower and Grace has Bob. */
   async function adaAndGrace(options: { watch?: boolean } = {}): Promise<Site> {
     const built = await site({ account: true, ...options });
     const { cms, contentDir } = built;
@@ -3012,8 +3008,7 @@ describe('two users', () => {
     return built;
   }
 
-  /** Rewrite the post file on disk and wait for what the watcher sends about it. */
-  async function rewrite(
+  async function rewriteAndSettle(
     cms: Cms,
     contentDir: string,
     edit: (source: string) => string,
@@ -3025,8 +3020,7 @@ describe('two users', () => {
     await cms.delivery.settled();
   }
 
-  /** Each delivery as its type, actor, inbox and the id of what it is about. */
-  function sent(): unknown[] {
+  function sent(): [type: unknown, actor: unknown, inbox: string, objectId: unknown][] {
     return deliveries.map((one) => {
       const object = one.body['object'];
       return [
@@ -3064,13 +3058,15 @@ describe('two users', () => {
     await cms.delivery.settled();
     assert.deepEqual(sent(), [['Create', ACTOR_URL, REMOTE_SHARED_INBOX, POST_ID]]);
 
-    await rewrite(cms, contentDir, (source) => source.replace(`author: ${ADA}`, 'author: grace'));
+    await rewriteAndSettle(cms, contentDir, (source) =>
+      source.replace(`author: ${ADA}`, 'author: grace'),
+    );
     assert.deepEqual(sent(), [
       ['Delete', ACTOR_URL, REMOTE_SHARED_INBOX, POST_ID],
       ['Create', GRACE_URL, OTHER_INBOX, `${POST_ID}?v=2`],
     ]);
 
-    await rewrite(cms, contentDir, (source) =>
+    await rewriteAndSettle(cms, contentDir, (source) =>
       source.replace('Ada wrote this one.', 'Grace took it over.'),
     );
     assert.deepEqual(
@@ -3091,7 +3087,9 @@ describe('two users', () => {
     await waitForAnyDelivery();
     await cms.delivery.settled();
 
-    await rewrite(cms, contentDir, (source) => source.replace(`author: ${ADA}`, 'author: grace'));
+    await rewriteAndSettle(cms, contentDir, (source) =>
+      source.replace(`author: ${ADA}`, 'author: grace'),
+    );
     assert.deepEqual(sent(), [
       ['Delete', ACTOR_URL, REMOTE_SHARED_INBOX, POST_ID],
       ['Create', GRACE_URL, OTHER_INBOX, `${POST_ID}?v=2`],

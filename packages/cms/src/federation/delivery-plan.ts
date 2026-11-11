@@ -117,22 +117,17 @@ export function fanOutTargets(
 }
 
 /**
- * Everyone the delivery log says was sent something about an object, other
- * than the actors `current` already reaches, one target per inbox.
- *
- * Addressed to the inbox each was recorded at rather than to the actor
- * looked up afresh: that inbox is the server holding the copy, and an actor
- * who has since unfollowed, or a relay, has no record left to look up.
- * `rows` come newest first, so an actor recorded at two inboxes is sent to
- * the one it was last reached at.
+ * Addressed to the inbox each actor was recorded at, not looked up afresh:
+ * that inbox holds the copy, and an unfollowed actor or a relay has no record
+ * left to look up.
  */
 export function earlierTargets(
-  rows: readonly Delivery[],
+  newestFirst: readonly Delivery[],
   current: readonly DeliveryTarget[],
 ): DeliveryTarget[] {
   const reached = new Set(current.flatMap((target) => target.actorIds));
   const byInbox = new Map<string, string[]>();
-  for (const { actorId, inboxId } of rows) {
+  for (const { actorId, inboxId } of newestFirst) {
     if (reached.has(actorId)) continue;
     reached.add(actorId);
     const actors = byInbox.get(inboxId);

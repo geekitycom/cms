@@ -271,13 +271,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     return author;
   }
 
-  /**
-   * Fan one activity about one post out to the followers. An `Update`, a
-   * `Delete` or an `Undo` also goes to everyone the post was sent to before, because the
-   * current version's audience can be narrower than the one holding a copy:
-   * a relay once the post is unlisted, an account whose mention was edited
-   * out, the author of a status it no longer replies to.
-   */
+  /** Fan one activity about one post out to the followers. */
   async function send(
     context: Context<FederationContextData>,
     activity: Activity,
@@ -291,10 +285,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     }
     const activityType = typeNameOf(activity);
     const objectId = articleObjectId(context, about).href;
-    const earlier =
-      activityType === 'Update' || activityType === 'Delete' || activityType === 'Undo'
-        ? admin.searchDeliveries({ objectIds: [objectId] }, { limit: NO_LIMIT }).items
-        : [];
+    const earlier = reachesEarlierRecipients(activityType)
+      ? admin.searchDeliveries({ objectIds: [objectId] }, { limit: NO_LIMIT }).items
+      : [];
     return await fanOut(
       context,
       requireSender(context, about),
@@ -726,7 +719,10 @@ function cites(document: Document, target: string): boolean {
   );
 }
 
-/** Whether two versions of a post are one object to a peer: the same id from the same author. */
+function reachesEarlierRecipients(activityType: string): boolean {
+  return activityType === 'Update' || activityType === 'Delete' || activityType === 'Undo';
+}
+
 function sameObject(
   context: Context<FederationContextData>,
   before: Document,

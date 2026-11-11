@@ -96,10 +96,8 @@ export async function repliedTo(
 }
 
 /**
- * What a post cites, as a fediverse object, or `undefined` when it is none.
- * Which activity a post sends turns on the answer, so a server that cannot be
- * reached right now does not count as one: the answer last recorded stands
- * in, without the author it no longer names, and with none recorded the
+ * An unreachable server is no answer, because the answer decides which
+ * activity a post sends: the answer last recorded stands in, and with none the
  * delivery fails rather than send what may be the wrong activity.
  */
 async function resolveCited(
@@ -161,9 +159,7 @@ async function lookupCited(
   if (object === null || isActor(object) || object.id === null) {
     return { kind: 'answered', object: undefined };
   }
-  // A server speaks only for its own accounts: an author it names on another
-  // host would have the post mention and notify whoever it chose.
-  if (object.attributionId?.origin !== object.id.origin) {
+  if (!attributedOnOwnOrigin(object.attributionId, object.id)) {
     return { kind: 'answered', object: { id: object.id, author: undefined } };
   }
 
@@ -176,10 +172,16 @@ async function lookupCited(
   }
 }
 
+/** A server speaks only for its own accounts, so an author on another host is ignored. */
+function attributedOnOwnOrigin(attributionId: URL | null, objectId: URL): boolean {
+  return attributionId?.origin === objectId.origin;
+}
+
 /**
  * Whether a failed fetch is the server's settled answer that there is no
- * ActivityPub document there: gone, not found, or a page that is not one.
- * A timeout, a refusal, a rate limit or a server error says nothing either way.
+ * ActivityPub document there: a 404, a 410, or a 2xx, which Fedify's loader
+ * throws for an HTML page with no ActivityPub alternate link. A timeout, a
+ * refusal, a rate limit or a server error says nothing either way.
  */
 function answersNoObject(error: unknown): boolean {
   if (error instanceof SyntaxError) return true;
