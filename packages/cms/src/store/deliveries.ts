@@ -15,8 +15,9 @@ export const DELIVERY_STATUSES = ['sent', 'queued', 'retrying', 'failed', 'unkno
  * `sent` is a POST the follower's server accepted. `queued` is one handed to
  * Fedify's outbox queue and not yet settled. `retrying` is one whose last
  * attempt failed, with that error, and which the queue will try again.
- * `failed` is a delivery Fedify gave up on, or one that threw before it
- * reached the queue, with the reason in the row. `unknown` is one left
+ * `failed` is a delivery Fedify gave up on, one that threw before it reached
+ * the queue or in a queue that does not hand a message over again, or one to
+ * an inbox nothing can be queued for, with the reason in the row. `unknown` is one left
  * `queued` or `retrying` with nothing for it in the queue any more: a version
  * that did not settle outcomes wrote it, or the queue lost it, so how it
  * ended was never seen.
@@ -124,6 +125,15 @@ export interface DeliveryStore {
   recordDelivery(delivery: NewDelivery): Delivery;
   settleDeliveries(outcome: DeliveryOutcome): void;
   /**
+   * Remove the unsettled rows of a delivery dev mode dropped from the queue.
+   * A held delivery keeps no row, so nothing reads it as failed or sends it
+   * again.
+   */
+  forgetHeldDeliveries(held: {
+    readonly activityId: string;
+    readonly inboxes: readonly string[];
+  }): void;
+  /**
    * Turn every `queued` or `retrying` row attempted before `before` that no
    * waiting message carries into `unknown`, keeping its error and its time.
    */
@@ -185,6 +195,12 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     settleDeliveries: db.prepare(`
       UPDATE ap_deliveries SET status = ?, error = ?, attempted_at = ?
       WHERE activity_id = ? AND inbox_id = ?
+    `),
+    forgetHeldDeliveries: db.prepare(`
+      DELETE FROM ap_deliveries
+      WHERE activity_id = :activityId
+        AND inbox_id IN (SELECT value FROM json_each(:inboxes))
+        AND status IN ('queued', 'retrying')
     `),
     markUnsettledDeliveriesUnknown: db.prepare(`
       UPDATE ap_deliveries SET status = 'unknown'
@@ -294,6 +310,10 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
         outcome.activityId,
         outcome.inbox,
       );
+    },
+
+    forgetHeldDeliveries({ activityId, inboxes }) {
+      statements.forgetHeldDeliveries.run({ activityId, inboxes: JSON.stringify(inboxes) });
     },
 
     markUnsettledDeliveriesUnknown({ before, waiting }) {

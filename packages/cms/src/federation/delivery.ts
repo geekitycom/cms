@@ -13,6 +13,7 @@ import { citationsOf } from '../content/citation.ts';
 import type { CitedPage, CitedPageReader } from '../content/citation.ts';
 import type { ConversationSite } from '../comments/conversation.ts';
 import type { Document } from '../content/document.ts';
+import { isWebUrl } from '../content/enclosure.ts';
 import { postObjectId } from '../content/guids.ts';
 import { isMigrated } from '../content/migrated.ts';
 import { replyTarget } from '../content/post-type.ts';
@@ -486,6 +487,13 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     const keys = await senderKeyPairs(context, sender);
 
     for (const target of targets) {
+      if (!isWebUrl(target.inboxId)) {
+        // Fedify skips such an inbox without a word, or reaches it through a
+        // gateway under another address, so no outcome would ever come back
+        // for this row.
+        record(target, 'failed', `No http(s) inbox to deliver to: ${target.inboxId}`);
+        continue;
+      }
       if (!synchronous) record(target, 'queued', null);
       let status: DeliveryStatus = 'sent';
       let error: string | null = null;

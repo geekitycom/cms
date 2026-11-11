@@ -58,6 +58,7 @@ export function createOrderedSqliteQueue(
   }
 
   return {
+    nativeRetrial: inner.nativeRetrial,
     enqueue,
 
     async enqueueMany(messages, options) {

@@ -140,8 +140,9 @@ does not touch it.
   send the old server still holds after the drain's 10 seconds loses its lock,
   and the next delivery on that lock can go out before it finishes.
 - While dev mode is on, the server drops each outgoing delivery it takes from
-  the queue and records it in `data/dev-mode.jsonl` as held. A `data/` copied
-  from a live site can hold deliveries that are still waiting.
+  the queue and records it in `data/dev-mode.jsonl` as held. It also deletes
+  the delivery's `queued` or `retrying` row, as a held delivery has no row. A
+  `data/` copied from a live site can hold deliveries that are still waiting.
 
 The file is mode `0600`. A waiting delivery holds the activity, the inbox it
 goes to and the private key it is signed with. An inbox activity waiting to be
@@ -445,7 +446,11 @@ A status is one of:
   the markup. A plain-text or JSON body is kept as it came.
 - `failed`: Fedify gave up, with the error. Fedify gives up on an inbox that
   answers `404` or `410`, and on any other failure once its retry policy runs
-  out. A send that throws before it reaches the queue is also `failed`.
+  out. A send that throws before it reaches the queue is also `failed`. So is
+  an attempt whose queue handler throws, when the queue does not hand the
+  message over again, as `data/queue.sqlite` does not. An inbox that is not an
+  `http` or `https` URL is `failed` without an attempt, because Fedify would
+  queue nothing for it.
 - `unknown`: the row said `queued` or `retrying`, but the queue holds no
   message for it, so nobody saw how it ended. Versions before 0.43.0 never
   updated a `queued` row, so most of their rows end up here. A queue that loses

@@ -93,7 +93,7 @@ export function observeOutbox(
           } catch (thrown) {
             settleWithoutFailingMessage({
               ...where(frame),
-              status: 'retrying',
+              status: frame.retried || inner.redelivers ? 'retrying' : 'failed',
               error: frame.error ?? messageOf(thrown),
             });
             throw thrown;

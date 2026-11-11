@@ -1095,6 +1095,32 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
     assert.equal(queuedMessages(queued.dataDir).length, 0);
   });
 
+  it('records a follower whose inbox is no http(s) URL as failed, as nothing can be queued for it', async () => {
+    const queued = await site({ queued: true });
+    const portable = 'https://portable.example/users/p';
+    await addFollower(
+      { admin: queued.cms.admin, contentDir: queued.contentDir, dataDir: queued.dataDir },
+      ADA,
+      {
+        actorId: portable,
+        inboxId: 'ap://portable.example/inbox',
+        sharedInboxId: null,
+        handle: '@p@portable.example',
+        name: 'P',
+        iconUrl: null,
+        url: null,
+      },
+    );
+    const agent = signedInAs(queued.cms, ADA);
+    await publishNewPost(agent);
+    await queued.cms.delivery.settled();
+
+    const [row] = queued.cms.admin.searchDeliveries({ actorId: portable }).items;
+    assert.equal(row?.status, 'failed', `row ${JSON.stringify(row)}`);
+    assert.match(row.error ?? '', /ap:\/\/portable\.example\/inbox/);
+    assert.equal(queuedMessages(queued.dataDir).length, 1, 'only the other follower is queued');
+  });
+
   it('holds a delivery left in the queue when the next CMS boots in dev mode (AC #4)', async () => {
     const queued = await site({ queued: true });
     const agent = signedInAs(queued.cms, ADA);
@@ -1114,9 +1140,12 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
       check();
       return () => watcher.close();
     });
+    await next.drain();
+    const row = next.admin.lastDeliveryToInbox(REMOTE_SHARED_INBOX);
     await next.close();
 
     assert.deepEqual(deliveries, []);
+    assert.equal(row, undefined, 'a held delivery keeps no row');
     assert.equal(held.type === 'held' && held.kind, 'activitypub');
     assert.match(held.type === 'held' ? held.what : '', /^Create /);
     assert.equal(queuedMessages(queued.dataDir).length, 0, 'a held delivery is dropped, not kept');
