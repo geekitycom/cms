@@ -24,6 +24,11 @@ const ALLOWED: readonly Allowance[] = [
     because: ELAPSED_WALL_TIME,
   },
   {
+    file: 'federation/ordered-queue.ts',
+    line: 'const wait = last + 1 - Date.now();',
+    because: 'the SQLite queue schedules its rows by the wall clock, whatever clock the site has',
+  },
+  {
     file: 'theme/assets.ts',
     line: 'Date.now() - asset.stats.mtimeMs >= 1000',
     because: 'compares a file system mtime with the wall clock that stamped it',

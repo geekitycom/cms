@@ -1106,23 +1106,23 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
   });
 });
 
-describe('how a queued delivery settles in the delivery log', () => {
-  function settledAt(
-    cms: Cms,
-    inbox: string,
-    settled: (delivery: RecordedDelivery) => boolean,
-  ): Promise<RecordedDelivery> {
-    return nextEvent(`the delivery to ${inbox} settling`, (done) => {
-      const timer = setInterval(() => {
-        const last = cms.admin.lastDeliveryToInbox(inbox);
-        if (last !== undefined && settled(last)) done(last);
-      }, 10);
-      return () => {
-        clearInterval(timer);
-      };
-    });
-  }
+function settledAt(
+  cms: Cms,
+  inbox: string,
+  settled: (delivery: RecordedDelivery) => boolean,
+): Promise<RecordedDelivery> {
+  return nextEvent(`the delivery to ${inbox} settling`, (done) => {
+    const timer = setInterval(() => {
+      const last = cms.admin.lastDeliveryToInbox(inbox);
+      if (last !== undefined && settled(last)) done(last);
+    }, 10);
+    return () => {
+      clearInterval(timer);
+    };
+  });
+}
 
+describe('how a queued delivery settles in the delivery log', () => {
   it('records a delivery the inbox accepted as sent', async () => {
     const { cms } = await site({ queued: true });
     await cms.serve();
@@ -1158,6 +1158,55 @@ describe('how a queued delivery settles in the delivery log', () => {
     const settled = await settledAt(cms, REMOTE_SHARED_INBOX, (one) => one.status !== 'queued');
     assert.equal(settled.status, 'failed');
     assert.match(settled.error ?? '', /410/);
+  });
+});
+
+describe('a post changed while its Create waits in the queue for a retry', () => {
+  function queueEmpty(dataDir: string): Promise<void> {
+    return nextEvent('the queue emptying', (done) => {
+      const timer = setInterval(() => {
+        if (queuedMessages(dataDir).length === 0) done();
+      }, 20);
+      return () => {
+        clearInterval(timer);
+      };
+    });
+  }
+
+  async function publishedAndRefused(): Promise<{
+    site: Site;
+    agent: ReturnType<typeof signedInAs>;
+  }> {
+    rejectingEveryPost = true;
+    const queued = await site({ queued: true });
+    await queued.cms.serve();
+    const agent = signedInAs(queued.cms, ADA);
+    await publishNewPost(agent);
+    await settledAt(queued.cms, REMOTE_SHARED_INBOX, (one) => one.status === 'retrying');
+    rejectingEveryPost = false;
+    return { site: queued, agent };
+  }
+
+  async function everythingSent({ cms, dataDir }: Site): Promise<string[]> {
+    await cms.delivery.settled();
+    await queueEmpty(dataDir);
+    await cms.drain();
+    return deliveries.map((one) => String(one.body['type']));
+  }
+
+  it('delivers the retried Create before the Update of an edit', async () => {
+    const { site: queued, agent } = await publishedAndRefused();
+    await submitEditor(agent, '/admin/posts/hello-world', { body: 'A second thought.' });
+
+    assert.deepEqual(await everythingSent(queued), ['Create', 'Update']);
+    assert.match(contentOf(deliveries.at(-1)), /A second thought/);
+  });
+
+  it('delivers the retried Create before the Delete of a withdrawal', async () => {
+    const { site: queued, agent } = await publishedAndRefused();
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+
+    assert.deepEqual(await everythingSent(queued), ['Create', 'Delete']);
   });
 });
 

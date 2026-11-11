@@ -10,7 +10,9 @@ import { SqliteMessageQueue } from '@fedify/sqlite';
 import { holdOutbound } from '../dev-mode.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import { FEDERATION_QUEUE_TABLE, openQueueDatabase } from '../store/queue-database.ts';
+import { queueOrder } from '../store/queue-order.ts';
 import type { Clock } from '../util/clock.ts';
+import { createOrderedSqliteQueue } from './ordered-queue.ts';
 
 interface Settling extends MessageQueue {
   settled(): Promise<void>;
@@ -221,9 +223,11 @@ export function createFederationQueue(
   if (supplied === null) return undefined;
   const drop = dropWhileInDevMode(site.settings, site.config);
   if (supplied !== undefined) return createCountingQueue(supplied, drop);
-  const inner = new SqliteMessageQueue(openQueueDatabase(site.config.dataDir), {
-    tableName: FEDERATION_QUEUE_TABLE,
-  });
+  const db = openQueueDatabase(site.config.dataDir);
+  const inner = createOrderedSqliteQueue(
+    new SqliteMessageQueue(db, { tableName: FEDERATION_QUEUE_TABLE }),
+    queueOrder(db, FEDERATION_QUEUE_TABLE),
+  );
   return createPausingQueue(inner, drop);
 }
 

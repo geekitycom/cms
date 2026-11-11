@@ -127,6 +127,12 @@ does not touch it.
 - A delivery whose handler is running when the process dies is lost. The queue
   removes a message when a server takes it. Resend the post from the
   federation screen.
+- The activities about one post reach an inbox in the order they were queued,
+  and so do the activities sent to one relay. A delivery that failed and waits
+  for a retry stays ahead of the later ones for the same post and inbox. Those
+  wait until the retry is sent or Fedify gives up on it. Deliveries to other
+  inboxes do not wait. A queue passed as `queue` keeps the order that queue
+  gives.
 - While dev mode is on, the server drops each outgoing delivery it takes from
   the queue and records it in `data/dev-mode.jsonl` as held. A `data/` copied
   from a live site can hold deliveries that are still waiting.
