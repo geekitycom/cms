@@ -276,25 +276,84 @@ describe('the scheduler', () => {
     assert.equal(box.timers.delay(), undefined, 'the timer was cleared');
   });
 
-  it('releases a post whose moment passed while it was being saved, rather than waiting for nothing', async () => {
+  it('releases a post a scan found already due, rather than waiting for nothing', async () => {
     // Nothing scheduled, so after the boot scan the scheduler is not waiting.
     const box = await harness({ documents: [] });
     await box.scheduler.start();
     assert.equal(box.timers.delay(), undefined);
 
-    // A post dated a moment ahead, but the save took longer than that moment:
-    // by the time the index says it changed, its date is already behind the
-    // clock. Nothing is "next due", yet it has never been announced.
+    // No subscriber acts on a scan, so a post it finds dated after the last
+    // run has never been announced, and nothing is "next due" to wait for.
     box.set('2026-09-03T12:00:01Z');
     box.store.upsert(post({ date: '2026-09-03T12:00:00.500Z' }));
-    box.scheduler.handle(changeFor(box.store));
+    box.scheduler.handle({ ...changeFor(box.store), origin: 'scan' });
 
     assert.equal(box.timers.delay(), 1, 'it is released on the next tick');
     box.timers.fire();
     await box.scheduler.settled();
 
-    assert.equal(box.announced.length, 1, 'the post that came due during its save went out');
+    assert.equal(box.announced.length, 1, 'the post the scan found went out');
     assert.equal(box.timers.delay(), undefined, 'and nothing is waited for after it');
+  });
+
+  it('leaves a post saved live after its last run to the save, and still releases one held until now', async () => {
+    const box = await harness({
+      documents: [post({ date: '2026-09-03T12:03:00Z' })],
+    });
+    await box.scheduler.start();
+
+    box.set('2026-09-03T12:05:00Z');
+    box.store.upsert(
+      post({
+        path: 'posts/2026-09-03-live.md',
+        slug: 'live',
+        permalink: '/2026/09/live/',
+        title: 'Live',
+        date: '2026-09-03T12:04:00Z',
+      }),
+    );
+    box.scheduler.handle({
+      type: 'created',
+      path: 'posts/2026-09-03-live.md',
+      previous: undefined,
+      next: box.store.getByPath('posts/2026-09-03-live.md'),
+      origin: 'admin',
+    });
+
+    assert.equal(box.timers.delay(), 1, 'the held post is released on the next tick');
+    box.timers.fire();
+    await box.scheduler.settled();
+
+    assert.deepEqual(
+      box.announced.map((change) => change.next?.title),
+      ['Tomorrow'],
+      'the save already announced the live post',
+    );
+    assert.equal(
+      box.watermark.value(),
+      '2026-09-03T12:05:00.000Z',
+      'and the watermark moved past both',
+    );
+  });
+
+  it('releases a post saved live and then held again, once it comes due', async () => {
+    const box = await harness({ documents: [] });
+    await box.scheduler.start();
+
+    box.set('2026-09-03T12:05:00Z');
+    box.store.upsert(post({ date: '2026-09-03T12:04:00Z' }));
+    box.scheduler.handle(changeFor(box.store));
+    box.store.upsert(post({ date: '2026-09-04T09:00:00Z' }));
+    box.scheduler.handle(changeFor(box.store));
+
+    box.set('2026-09-04T09:00:00Z');
+    box.timers.fire();
+    await box.scheduler.settled();
+
+    assert.deepEqual(
+      box.announced.map((change) => change.next?.title),
+      ['Tomorrow'],
+    );
   });
 
   it('waits in hops rather than overflowing setTimeout on a post dated years out', async () => {

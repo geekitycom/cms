@@ -696,6 +696,25 @@ describe('a scheduled post', () => {
     assert.equal(delivered('Create').length, 1, 'and only once');
   });
 
+  it('federates one Create for a post published live with a date after the scheduler last ran', async () => {
+    let now = new Date('2026-09-03T12:00:00Z');
+    const { cms } = await site({ now: () => now });
+    const agent = signedInAs(cms, ADA);
+    await cms.scheduler.start();
+
+    now = new Date('2026-09-03T12:05:00Z');
+    const response = await publishNewPost(agent, { date: '2026-09-03T12:04:00.000Z' });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+    assert.equal(await cms.scheduler.run(), 0, 'the scheduler had nothing left to publish');
+    await cms.delivery.settled();
+
+    assert.deepEqual(
+      deliveries.map((delivery) => delivery.body['type']),
+      ['Create'],
+    );
+  });
+
   it('withdraws a published post whose date is pushed into the future', async () => {
     const now = new Date('2026-09-03T12:00:00Z');
     const { cms } = await site({ now: () => now });

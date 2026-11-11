@@ -224,12 +224,12 @@ describe('content change subscribers', () => {
     await cms.sync();
 
     assert.deepEqual(heard, [
+      'scheduler',
       'delivery',
       'webmentions',
       'replyContexts',
       'notifier',
       'indexNow',
-      'scheduler',
       'site',
     ]);
   });

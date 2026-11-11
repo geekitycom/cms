@@ -260,6 +260,26 @@ describe('pinging the notify server', () => {
     );
   });
 
+  it('pings once, and publishes once, for a post saved live with a date after the scheduler last ran', async () => {
+    let now = new Date('2026-09-03T12:00:00Z');
+    const { cms } = await site({ now: () => now });
+    const agent = await signedIn(cms);
+    const published: string[] = [];
+    cms.onPublish((change) => {
+      published.push(change.path);
+    });
+    await cms.scheduler.start();
+
+    now = new Date('2026-09-03T12:05:00Z');
+    await publish(agent, { date: '2026-09-03T12:04:00.000Z', tags: '', categories: '' });
+    await cms.notifier.settled();
+    await cms.scheduler.run();
+    await cms.notifier.settled();
+
+    assert.deepEqual(pingedFeeds(), feedsUnder('/').sort());
+    assert.equal(published.length, 1, `onPublish fired for ${JSON.stringify(published)}`);
+  });
+
   it('tells it about the feeds a post left as well as the ones it joined', async () => {
     const { cms } = await site();
     const agent = await signedIn(cms);

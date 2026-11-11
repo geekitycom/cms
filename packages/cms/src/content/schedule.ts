@@ -163,6 +163,7 @@ export function createScheduler(options: CreateSchedulerOptions): Scheduler {
   let handle: unknown;
   let waiting: string | undefined;
   let running: Promise<unknown> = Promise.resolve();
+  const servedLive = new Set<string>();
 
   /**
    * Announce one document that has come due.
@@ -208,11 +209,11 @@ export function createScheduler(options: CreateSchedulerOptions): Scheduler {
   /**
    * How long to wait, or nothing to wait for.
    *
-   * A document that has come due since the watermark but was never announced
-   * is released on the next tick. That happens to a post whose date was a
-   * moment ahead when it was saved and behind the clock by the time the index
-   * reported the change: it is not "next due" any more, and with nothing else
-   * to wait for it would otherwise sit unannounced until the next restart.
+   * Anything dated since the watermark is released on the next tick. A post a
+   * scan found already due is not "next due", and with nothing else to wait
+   * for it would otherwise sit unannounced until the next restart; one a live
+   * save already announced is skipped, but the release still moves the
+   * watermark past it before a restart could announce it again.
    */
   function delayUntil(due: string | undefined): number | undefined {
     const since = windowStart();
@@ -228,6 +229,25 @@ export function createScheduler(options: CreateSchedulerOptions): Scheduler {
       logger.warn(`A scheduled publish failed: ${messageOf(error)}`);
     }
     arm();
+  }
+
+  /**
+   * Remember a document a live change has already shown every subscriber as
+   * public with a date inside the window, so the next release leaves it out:
+   * the watermark only moves when the scheduler releases, and a post saved
+   * live dated after that would otherwise be announced a second time.
+   *
+   * A scan is not a live change because no subscriber acts on one, and a
+   * document the change holds again is the scheduler's to release.
+   */
+  function noteServedLive(change: DocumentChange): void {
+    if (change.origin === 'scan' || change.origin === SCHEDULE_ORIGIN) return;
+    const since = windowStart();
+    const at = change.next === undefined ? null : dateSortKey(change.next.date);
+    const shown =
+      since !== undefined && at !== null && at > since && at <= store.now().toISOString();
+    if (shown) servedLive.add(change.path);
+    else servedLive.delete(change.path);
   }
 
   function windowStart(): string | undefined {
@@ -259,6 +279,7 @@ export function createScheduler(options: CreateSchedulerOptions): Scheduler {
 
     let published = 0;
     for (const document of due) {
+      if (servedLive.delete(document.path)) continue;
       try {
         await publish(document);
         published += 1;
@@ -286,7 +307,8 @@ export function createScheduler(options: CreateSchedulerOptions): Scheduler {
       return await started;
     },
 
-    handle() {
+    handle(change) {
+      noteServedLive(change);
       // Every change is a reason to look again: a date moved, a post became a
       // draft, a file appeared. What is due next is one indexed lookup, so
       // asking after each change is cheaper than working out which changes

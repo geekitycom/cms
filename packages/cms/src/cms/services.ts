@@ -448,6 +448,12 @@ export function createServices({
   });
 
   const changeSubscribers: readonly ContentEventListener[] = [
+    // First, so it judges whether a post is public no later than the
+    // subscribers that act on it: one that saw the post still held must never
+    // find the scheduler has written it off as already announced.
+    (change) => {
+      scheduler.handle(change);
+    },
     // A watched change waits for its burst to settle, as a scan does: a git
     // pull that moves a post and adds another at its old URL must not hand the
     // new post's comments to the moved one before the new one is indexed.
@@ -473,9 +479,6 @@ export function createServices({
     },
     (change) => {
       indexNow.handle(change);
-    },
-    (change) => {
-      scheduler.handle(change);
     },
   ];
   for (const listener of changeSubscribers) content.events.on('change', listener);
