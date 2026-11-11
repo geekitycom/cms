@@ -272,8 +272,8 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   }
 
   /**
-   * Fan one activity about one post out to the followers. An `Update` or a
-   * `Delete` also goes to everyone the post was sent to before, because the
+   * Fan one activity about one post out to the followers. An `Update`, a
+   * `Delete` or an `Undo` also goes to everyone the post was sent to before, because the
    * current version's audience can be narrower than the one holding a copy:
    * a relay once the post is unlisted, an account whose mention was edited
    * out, the author of a status it no longer replies to.
@@ -292,7 +292,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     const activityType = typeNameOf(activity);
     const objectId = articleObjectId(context, about).href;
     const earlier =
-      activityType === 'Update' || activityType === 'Delete'
+      activityType === 'Update' || activityType === 'Delete' || activityType === 'Undo'
         ? admin.searchDeliveries({ objectIds: [objectId] }, { limit: NO_LIMIT }).items
         : [];
     return await fanOut(

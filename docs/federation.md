@@ -153,8 +153,9 @@ through the editor:
 | edited while published                                                       | `Update` of its object    |
 | drafted, trashed, or its file deleted                                        | `Delete` of a `Tombstone` |
 
-An `Update` or a `Delete` goes to the post's current audience and also to every
-recipient the delivery log recorded for the post's object id. The current
+An `Update`, a `Delete`, or the `Undo` of a like or a repost goes to the post's
+current audience and also to every recipient the delivery log recorded for the
+post's object id. The current
 version's audience can be narrower than the set of servers that hold a copy. A
 relay receives no `Create` of an unlisted post, but it still holds the public
 version. An account whose mention was edited out still holds the version that
@@ -186,7 +187,17 @@ profile's posts, so a reply to an ordinary web page has to go out as a post.
 The answer is kept in `content/_data/federation/replyTargets.json`, by the URL
 the reply cites, so the object a peer fetches and the outbox say what the
 delivery said. A reply that no delivery has looked up since the file was added
-is served with its target's URL as `inReplyTo`.
+is served with its target's URL as `inReplyTo`. The same file keeps the answer
+for the URL a like or a repost cites, which decides whether the post goes out
+as a `Like` or `Announce` or as a post of its own.
+
+Only a definite answer is kept: the object, or a 404, a 410, a document that
+is not ActivityPub, or an actor. A timeout, a network error, a 401, a 403, a
+429 or a 5xx is no answer. A delivery then uses the answer kept from before,
+without the author's inbox, and the earlier recipients in the delivery log
+still get it. With no answer kept, the delivery fails and its error is logged.
+Nothing is sent and the post is not stamped, so the next save of the post or a
+resend announces it.
 
 The object is a `Note` or an `Article`, depending on the post's discovered
 type. A post with no title, or whose text opens with its title, is a `Note`.

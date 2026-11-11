@@ -122,6 +122,8 @@ let rejectingEveryPost = false;
 let refusalStatus = 503;
 const refused: string[] = [];
 let postsBegun = 0;
+/** Whether the cited status's server answers every fetch of it with a 503. */
+let statusUnavailable = false;
 
 before(async () => {
   const keys = await testKeyPair(REMOTE_PAIR);
@@ -163,6 +165,7 @@ before(async () => {
 afterEach(async () => {
   rejectingEveryPost = false;
   refusalStatus = 503;
+  statusUnavailable = false;
   inboxes = Promise.resolve();
   for (const instance of started.splice(0)) await instance.close();
 });
@@ -234,6 +237,12 @@ function routeRemoteHost(): () => void {
       return new Response(JSON.stringify(remoteActorDocument), {
         headers: { 'content-type': 'application/activity+json' },
       });
+    }
+    if (
+      statusUnavailable &&
+      [STATUS_ID, STATUS_URL].some((status) => new URL(status).pathname === url.pathname)
+    ) {
+      return new Response('Service unavailable.', { status: 503 });
     }
     const served = new Map([
       [new URL(CAROL_ACTOR).pathname, carolDocument],
@@ -1341,6 +1350,66 @@ describe('likes, reposts and bookmarks (TASK-169 AC #3)', () => {
     );
   });
 
+  it('sends nothing for a like whose status cannot be reached, and the Like on a resend once it can', async () => {
+    statusUnavailable = true;
+    const { cms } = await cite('like-of', STATUS_URL);
+
+    assert.deepEqual(deliveries, [], 'a Note would be the wrong activity');
+
+    statusUnavailable = false;
+    const report = await cms.delivery.resend(pathOf(cms, 'cited'));
+
+    assert.equal(report?.activityType, 'Like');
+    assert.deepEqual(
+      delivered('Like')
+        .map((one) => one.url)
+        .sort(),
+      [CAROL_INBOX, REMOTE_SHARED_INBOX].sort(),
+    );
+  });
+
+  for (const [property, action] of [
+    ['like-of', 'save-draft'],
+    ['repost-of', 'trash'],
+  ] as const) {
+    it(`takes a ${property} post back with an Undo on ${action} while its status cannot be reached`, async () => {
+      const { cms, agent } = await cite(property, STATUS_URL);
+      deliveries.length = 0;
+
+      statusUnavailable = true;
+      const response = await submitEditor(agent, '/admin/posts/cited', {
+        action,
+        return: '',
+        [property]: STATUS_URL,
+      });
+      assert.equal(response.status, 303, await response.text());
+      await cms.delivery.settled();
+
+      assert.deepEqual(delivered('Delete'), []);
+      const undos = delivered('Undo');
+      assert.deepEqual(
+        undos.map((one) => one.url).sort(),
+        [CAROL_INBOX, REMOTE_SHARED_INBOX].sort(),
+      );
+      const undone = (undos[0] as Delivery).body['object'] as Record<string, unknown>;
+      assert.equal(undone['object'], STATUS_ID);
+    });
+  }
+
+  it('sends nothing when a like is edited while its status cannot be reached', async () => {
+    const { cms, agent } = await cite('like-of', STATUS_URL);
+    deliveries.length = 0;
+
+    statusUnavailable = true;
+    await submitEditor(agent, '/admin/posts/cited', {
+      body: 'So very good.',
+      'like-of': STATUS_URL,
+    });
+    await cms.delivery.settled();
+
+    assert.deepEqual(deliveries, []);
+  });
+
   it('sends nothing more when a like is edited without changing what it likes', async () => {
     const { cms, agent } = await cite('like-of', STATUS_URL);
     deliveries.length = 0;
@@ -1524,6 +1593,25 @@ describe('a reply to a fediverse status (TASK-240)', () => {
   it('serves the reply in reply to the status’s id, as it was delivered', async () => {
     const { cms } = await reply(STATUS_URL);
 
+    assert.equal((await served(cms))['inReplyTo'], STATUS_ID);
+  });
+
+  it('keeps the reply’s inReplyTo when its status cannot be reached during an edit', async () => {
+    const { cms, agent } = await reply(STATUS_URL);
+    deliveries.length = 0;
+
+    statusUnavailable = true;
+    const response = await submitEditor(agent, '/admin/posts/answer', {
+      body: 'I agree, mostly.',
+      'in-reply-to': STATUS_URL,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+    statusUnavailable = false;
+
+    const updates = delivered('Update');
+    assert.ok(updates.length > 0, JSON.stringify(deliveries.map((one) => one.body['type'])));
+    for (const update of updates) assert.equal(objectOf(update)['inReplyTo'], STATUS_ID);
     assert.equal((await served(cms))['inReplyTo'], STATUS_ID);
   });
 
