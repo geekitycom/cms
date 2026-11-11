@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.52.1](https://github.com/geekitycom/cms/compare/v0.52.0...v0.52.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **cms:** add the announced stamp as one line and leave the rest of the file as written ([5673fb8](https://github.com/geekitycom/cms/commit/5673fb88bdc3feeb2b9dc820743620095160bf9f))
+* **cms:** address a cited object's author only when it is on the object's own origin ([8050d15](https://github.com/geekitycom/cms/commit/8050d15482a581cb6ee792d221022527afc4e87c))
+* **cms:** address resend and retry by post path instead of slug ([27ac37c](https://github.com/geekitycom/cms/commit/27ac37c9b5cd9d26399c67d5f890db8de559aa41))
+* **cms:** announce a post saved live once, not again when the scheduler releases it ([bb18c87](https://github.com/geekitycom/cms/commit/bb18c87b04594daa496281c4920471cb3c596ff7))
+* **cms:** bound delivery waits, prune superseded delivery rows and date edits so peers apply them ([8f94a38](https://github.com/geekitycom/cms/commit/8f94a382680871940094a25f1924efa44d53e28b))
+* **cms:** count each shared inbox once in the resend and retry reports ([36ab3a5](https://github.com/geekitycom/cms/commit/36ab3a51089755f95444ce40a73a9c4026fe1dd9))
+* **cms:** decide relay subscription changes inside the subscription queue ([a474981](https://github.com/geekitycom/cms/commit/a4749815c1490339bc2234fb23c5e3e50b1f77f0))
+* **cms:** index delivery rows by actor and post for failure and retry lookups ([05a0d13](https://github.com/geekitycom/cms/commit/05a0d1303af000ee670577628e03761e9593db7c))
+* **cms:** keep a moved post's row until unindexed files on disk have been read ([596f937](https://github.com/geekitycom/cms/commit/596f9373ccbf3c3d222d6b5548d7da9b3a56b143))
+* **cms:** keep a relay removed in dev mode until its undo can be sent ([a49fe0f](https://github.com/geekitycom/cms/commit/a49fe0f677a77f500ebdf12a9d128ffd771bfc51))
+* **cms:** keep a retried delivery ahead of the same post's later activities to that inbox ([11ae8bb](https://github.com/geekitycom/cms/commit/11ae8bbc06f109f31e5d4151e24119424b498d07))
+* **cms:** keep an unreachable cited object from changing which activity is sent ([4d4cf7f](https://github.com/geekitycom/cms/commit/4d4cf7f9bc1f23988a18c71b0b6a3f756419e1ae))
+* **cms:** keep offering a failed create after a later update reached the follower ([83759bd](https://github.com/geekitycom/cms/commit/83759bdaad7d81deb7bb6763a34fc87af1cd22c1))
+* **cms:** log remote error text on one line with control characters escaped ([fb7ed26](https://github.com/geekitycom/cms/commit/fb7ed26af123f19919aa64358ce1aa2c5379e8da))
+* **cms:** mark forgotten deliveries with one lookup of the waiting messages ([fa5d2e9](https://github.com/geekitycom/cms/commit/fa5d2e930259f767d9436850c5eef8ba1ce2718e))
+* **cms:** name a trashed post's own object id when resending its delete ([c932edf](https://github.com/geekitycom/cms/commit/c932edf81ed452875ac11e4624a14df5cf403c27))
+* **cms:** release ordering locks a stopped worker left before the queue starts ([2937d93](https://github.com/geekitycom/cms/commit/2937d9374c6b5224445f5af016e1be904183ab0b))
+* **cms:** resend the smoke test's post by its path ([94a1132](https://github.com/geekitycom/cms/commit/94a1132c6470bcf85a21e6462703c021cbec4ebf))
+* **cms:** retry a failed pin change by sending the pin change ([4e82d6f](https://github.com/geekitycom/cms/commit/4e82d6fd2ac8db8aabd9979ee33ff42d26729385))
+* **cms:** send a create for the first edit of a post no follower was told about ([73be155](https://github.com/geekitycom/cms/commit/73be1557f9537d95cc9094a06a8ed348eff4180c))
+* **cms:** send a post as a new object when its author changes ([86cce2e](https://github.com/geekitycom/cms/commit/86cce2e915a759c21fb7092b8a84679d467f8d36))
+* **cms:** send a post's update and delete to everyone who received it ([e0445b9](https://github.com/geekitycom/cms/commit/e0445b919f542262c75ea869f713eae1e0bdc9c6))
+* **cms:** settle delivery rows the queue drops or can no longer deliver ([4c6c4e7](https://github.com/geekitycom/cms/commit/4c6c4e767bfe391bb74210e4f53d9ccc891f419f))
+* **cms:** settle ownership, account deletion, queued keys and cross-process writes in delivery ([f33e445](https://github.com/geekitycom/cms/commit/f33e44574ce1604608fb5771a0d1d17473f8c080))
+* **cms:** stamp a post as announced only once its create is queued ([9c5eaf6](https://github.com/geekitycom/cms/commit/9c5eaf63f2e0a39d3a9c4aa23a18164cc7170360))
+* **cms:** stamp a post only while its file still holds the indexed version ([a01a311](https://github.com/geekitycom/cms/commit/a01a31125b1e3f82cb6837fa0ca8615ca12807fb))
+* **cms:** tighten relay answers, handle lookups and relay subscription start ([0ff2691](https://github.com/geekitycom/cms/commit/0ff269100a92ee1cc179ef3aa433a1169753e759))
+* **cms:** treat a post file moved on disk with its permalink unchanged as an edit ([7f37d5a](https://github.com/geekitycom/cms/commit/7f37d5adac99e4e51b45b5b9e92bc5a9c8ea4aa5))
+* **cms:** word the bad follower record error plainly ([68fff13](https://github.com/geekitycom/cms/commit/68fff1324b17013f470adee467c7c4bf3ea7be58))
+
 ## [0.52.0](https://github.com/geekitycom/cms/compare/v0.51.0...v0.52.0) (2026-11-11)
 
 
