@@ -161,6 +161,11 @@ async function lookupCited(
   if (object === null || isActor(object) || object.id === null) {
     return { kind: 'answered', object: undefined };
   }
+  // A server speaks only for its own accounts: an author it names on another
+  // host would have the post mention and notify whoever it chose.
+  if (object.attributionId?.origin !== object.id.origin) {
+    return { kind: 'answered', object: { id: object.id, author: undefined } };
+  }
 
   try {
     const attributed = await object.getAttribution(loaders);

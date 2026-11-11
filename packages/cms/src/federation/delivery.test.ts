@@ -63,6 +63,10 @@ const BROKEN_ORIGIN = 'https://broken.example';
 const BROKEN_ACTOR = `${BROKEN_ORIGIN}/users/nobody`;
 const BROKEN_INBOX = `${BROKEN_ORIGIN}/users/nobody/inbox`;
 
+/** A host that serves a note it says carol, on another host, wrote. */
+const STRANGER_ORIGIN = 'https://stranger.example';
+const STRANGER_NOTE = `${STRANGER_ORIGIN}/notes/1`;
+
 /**
  * A fediverse author nobody here follows, and the status of theirs a post
  * likes or reposts (TASK-169). The status is served at its id and at the URL
@@ -114,6 +118,7 @@ let statusDocument: unknown;
 let sharedInboxAuthorDocument: unknown;
 let sharedInboxAuthorStatusDocument: unknown;
 let erinDocument: unknown;
+let strangerNoteDocument: unknown;
 const webfingerLookups: string[] = [];
 let restoreFetch: () => void;
 let slowPage: Promise<void> = Promise.resolve();
@@ -156,6 +161,12 @@ before(async () => {
     preferredUsername: 'erin',
     url: new URL(ERIN_PROFILE),
     inbox: new URL(ERIN_INBOX),
+  }).toJsonLd();
+  strangerNoteDocument = await new Note({
+    id: new URL(STRANGER_NOTE),
+    url: new URL(STRANGER_NOTE),
+    attribution: new URL(CAROL_ACTOR),
+    content: 'Something carol did not write.',
   }).toJsonLd();
   restoreFetch = routeRemoteHost();
 });
@@ -213,6 +224,12 @@ function routeRemoteHost(): () => void {
       return new Response('This instance is having a bad day.', { status: 500 });
     }
     if (url.origin === BASE_URL) ownFetches.push(url.href);
+    if (url.origin === STRANGER_ORIGIN) {
+      if (url.href !== STRANGER_NOTE) return new Response('Not found.', { status: 404 });
+      return new Response(JSON.stringify(strangerNoteDocument), {
+        headers: { 'content-type': 'application/activity+json' },
+      });
+    }
     if (url.origin !== REMOTE_ORIGIN) return await original(input, init);
 
     const request = new Request(input, init);
@@ -382,7 +399,11 @@ async function site(
           ? { allowPrivateAddress: true }
           : { queue: null, allowPrivateAddress: true },
     hostLookup: (host) =>
-      Promise.resolve(host === new URL(REMOTE_ORIGIN).hostname ? ['203.0.113.7'] : []),
+      Promise.resolve(
+        [REMOTE_ORIGIN, STRANGER_ORIGIN].some((origin) => new URL(origin).hostname === host)
+          ? ['203.0.113.7']
+          : [],
+      ),
     ...(options.now === undefined ? {} : { now: options.now }),
   });
   started.push(cms);
@@ -1613,6 +1634,23 @@ describe('a reply to a fediverse status (TASK-240)', () => {
     assert.ok(updates.length > 0, JSON.stringify(deliveries.map((one) => one.body['type'])));
     for (const update of updates) assert.equal(objectOf(update)['inReplyTo'], STATUS_ID);
     assert.equal((await served(cms))['inReplyTo'], STATUS_ID);
+  });
+
+  it('neither mentions, copies nor delivers to an author on another host than the status', async () => {
+    await reply(STRANGER_NOTE);
+
+    const creates = delivered('Create');
+    assert.deepEqual(
+      creates.map((one) => one.url),
+      [REMOTE_SHARED_INBOX],
+      'to the followers only',
+    );
+    const create = creates[0] as Delivery;
+    assert.equal(create.body['cc'], FOLLOWERS);
+    const note = objectOf(create);
+    assert.equal(note['inReplyTo'], STRANGER_NOTE);
+    assert.equal(note['cc'], FOLLOWERS);
+    assert.deepEqual(mentions(note), []);
   });
 
   it('federates a reply to a page that is no fediverse object with no inReplyTo', async () => {

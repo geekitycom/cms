@@ -199,6 +199,12 @@ still get it. With no answer kept, the delivery fails and its error is logged.
 Nothing is sent and the post is not stamped, so the next save of the post or a
 resend announces it.
 
+A reply, a like or a repost is addressed to the author of the object it cites,
+mentions them, and is delivered to their inbox. The author counts only when
+their actor is on the same origin as the object. When the object's
+`attributedTo` names an actor on another origin, the post goes out without an
+author, as it does when the object names none.
+
 The object is a `Note` or an `Article`, depending on the post's discovered
 type. A post with no title, or whose text opens with its title, is a `Note`.
 Any other post is an `Article`. Mastodon shows the two differently:
