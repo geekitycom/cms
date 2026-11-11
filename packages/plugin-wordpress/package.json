@@ -46,7 +46,7 @@
   "dependencies": {
     "@fedify/fedify": "^2.4.5",
     "@fedify/vocab": "^2.4.5",
-    "entities": "^8.1.0",
+    "entities": "^9.0.0",
     "sax": "^1.6.1",
     "turndown": "^7.2.4"
   },
