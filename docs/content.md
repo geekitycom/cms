@@ -303,9 +303,10 @@ time. It debounces changes by 100 ms, so a burst of writes causes one re-parse.
   reports a file that changes path but keeps its permalink as one `updated`
   event for the new path, with the old document as `previous`, not as a
   `deleted` and a `created`. A federated post therefore keeps its object id,
-  and followers get at most an `Update`. While other changes are still
-  arriving, the watcher waits to drop the row of a file that is gone. This
-  lets the new file take the row over, whichever path the watcher reads first.
+  and followers get at most an `Update`. Before the watcher drops the row of
+  a file that is gone, it reads every document on disk that is not indexed
+  yet. A moved file therefore takes the row over, however late the watcher
+  reports its new path.
 
 Each change emits an event that a site can act on. See
 [Hooks](plugins.md#hooks).
