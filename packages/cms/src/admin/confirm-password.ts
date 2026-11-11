@@ -13,12 +13,12 @@ export type Confirmation =
 
 export type Refusal = Exclude<Confirmation, { kind: 'confirmed' }>;
 
-export type ConfirmPassword = (c: Context<GeekityEnv>, password: string) => Confirmation;
+export type ConfirmPassword = (c: Context<GeekityEnv>, password: string) => Promise<Confirmation>;
 
 export function createConfirmPassword(
   throttle: (config: ResolvedConfig) => SignInThrottle,
 ): ConfirmPassword {
-  return (c, password) => {
+  return async (c, password) => {
     const { config } = c.var;
     const userId = c.var.session?.userId;
     const user = userId == null ? undefined : findUserById(config.dataDir, userId);
@@ -34,8 +34,8 @@ export function createConfirmPassword(
     if (wait !== undefined) return { kind: 'locked', wait };
     if (password === '') return { kind: 'wrong' };
 
-    if (verifyUserPassword(config.dataDir, user.username, password) === undefined) {
-      throttled.fail(keys);
+    throttled.fail(keys);
+    if ((await verifyUserPassword(config.dataDir, user.username, password)) === undefined) {
       return { kind: 'wrong' };
     }
     throttled.succeed(keys);

@@ -40,7 +40,8 @@ export function pluginSite(options: { admin: AdminStore; config: ResolvedConfig 
         ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
       })),
 
-    setActorId: (username, actorId) => setUserActorId({ dataDir, username, actorId }),
+    setActorId: (username, actorId) =>
+      setUserActorId({ dataDir, baseUrl: config.baseUrl, username, actorId }),
 
     actorKey(username, algorithm) {
       const file = actorKeyFile(dataDir, username, algorithm);

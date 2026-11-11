@@ -20,6 +20,7 @@ The generated `sync` script calls it the third way.
 | `geekity export`                          | Write `content/` and the files in `data/` that the site cannot rebuild to a `.tar.gz`, with a manifest. It runs while the site serves. See [Exporting a site](#exporting-a-site).                                  |
 | `geekity import <file>`                   | Restore a site from an archive that `geekity export` wrote, with the site stopped. It installs the folder plugins the archive names from the npm registry. See [Importing a site](#importing-a-site).              |
 | `geekity user add <name>`                 | Create an admin account. Use it to give a site its first login without the setup screen.                                                                                                                           |
+| `geekity user password <name>`            | Set an existing account's password and end its sessions, reset links and connected apps. See [Setting a password](#setting-a-password-from-the-command-line).                                                      |
 | `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete a disabled one. A running `geekity serve` reloads with the change.                              |
 | `geekity --help`, `-h`                    | Print this table on the terminal.                                                                                                                                                                                  |
 | `geekity --version`                       | Print the installed version.                                                                                                                                                                                       |
@@ -30,7 +31,7 @@ this includes a plugin in the plugins folder. [Plugins and hooks](plugins.md)
 describes `geekity plugin add` and how to write a plugin.
 
 These commands take `--config <file>`: `serve`, `sync`, `rebuild`, `resend`,
-`maintenance`, `dev-mode`, `gemini`, `settings`, `strip-metadata`, `export`, `import`, `user add`, `plugin` and every
+`maintenance`, `dev-mode`, `gemini`, `settings`, `strip-metadata`, `export`, `import`, `user add`, `user password`, `plugin` and every
 plugin command. Without the option, they look in the working directory for
 `geekity.config.ts`, then `geekity.config.js`, then `geekity.config.mjs`. If
 none exists, they run on defaults.
@@ -408,9 +409,10 @@ docker compose cp geekity:/tmp/site.tar.gz ./site.tar.gz
 
 `geekity user add <username>` writes a user directly into `data/users.json`.
 Use it to create the first login on a site that cannot reach `/admin/setup`
-from a browser, such as a headless deploy or a server behind a bastion. It is
-also the way back into a site that has locked out every user and cannot send
-email. It applies the same rules as the setup form:
+from a browser, such as a headless deploy or a server behind a bastion. To get
+an existing account back, use
+[`geekity user password`](#setting-a-password-from-the-command-line) instead.
+It applies the same rules as the setup form:
 
 - The username is 1 to 64 letters, digits, dots, dashes or underscores.
 - The username does not match an existing username when case is ignored and
@@ -434,7 +436,8 @@ printf '%s\n' "$ADMIN_PASSWORD" | geekity user add ada
 
 `--password <pw>` passes the password inline. This is the least private of the
 three ways. A password on the command line is visible in the process list and
-is saved in shell history.
+is saved in shell history, so the command prints a warning on standard error
+when the flag is used.
 
 `--email <address>` sets an address on the new user. The address is optional.
 [Password recovery](security.md#forgotten-passwords) sends mail to it:
@@ -448,6 +451,31 @@ Created admin user ada (ada@example.com). Sign in at /admin/login.
 The command refuses a name that is already taken, an illegal username, a short
 password and an invalid address. It writes nothing, prints the reason and exits
 `1`.
+
+## Setting a password from the command line
+
+`geekity user password <username>` sets a new password on an existing account.
+Use it when a user cannot sign in and the site cannot send them a reset link:
+the site has no mail provider, it is in dev mode, or the account has no email
+address. The account keeps its profile, followers, email address and
+preferences.
+
+```sh
+$ geekity user password ada
+Password for ada:
+Set a new password for ada. Ended 1 session and disconnected 0 apps. Sign in at /admin/login.
+```
+
+The password is read as `geekity user add` reads it: from a prompt that does
+not echo, or as one line from standard input. `--password <pw>` also works and
+prints the same warning. The password is at least 8 characters.
+
+The command ends every session the user had, deletes their outstanding reset
+links and disconnects every app connected to the account, as a reset through
+the forgot-password form does. A server that is running sees the change on its
+next request; it does not need a restart. The command refuses a username that
+does not exist and a short password. It writes nothing, prints the reason and
+exits `1`.
 
 After the first user can sign in, use the
 [`/admin/users` screen](admin.md#users) instead. It adds users, generates

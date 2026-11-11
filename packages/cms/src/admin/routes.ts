@@ -294,9 +294,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       });
     }
 
-    const user = verifyUserPassword(c.var.config.dataDir, username, password);
+    throttle.fail(keys);
+    const user = await verifyUserPassword(c.var.config.dataDir, username, password);
     if (user === undefined) {
-      throttle.fail(keys);
       console.warn(`Failed sign-in for ${attempted}`);
       // One message for both failures, so the form cannot be used to find out
       // which usernames exist.
@@ -319,8 +319,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const session = c.var.session;
     if (session !== undefined) c.var.admin.deleteSession(session.id);
     clearSessionCookie(c, c.var.config);
-    // A shared computer keeps what the admin cached and stored after the
-    // cookie is gone. This asks the browser to forget all of it for the site.
+    // Only the cache: the `cookies` directive clears the whole registrable
+    // domain, sibling sites included.
     c.header('Clear-Site-Data', CLEAR_ON_LOGOUT);
     return c.redirect(LOGIN_PATH, 303);
   });
@@ -464,8 +464,7 @@ function shortened(text: string): string {
   return JSON.stringify(cut) + (cut.length < text.length ? '…' : '');
 }
 
-/** `Clear-Site-Data` on logout: every kind of data a browser keeps for the site. */
-const CLEAR_ON_LOGOUT = '"cache", "cookies", "storage"';
+const CLEAR_ON_LOGOUT = '"cache"';
 
 /** What somebody signed in under the pre-`__Host-` cookie reads on the login form. */
 const RENAMED_COOKIE_NOTICE =

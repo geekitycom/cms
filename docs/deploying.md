@@ -106,9 +106,10 @@ port published on every interface is reachable from the internet even when the
 firewall is closed. A client that connects to it directly can put any address
 in `X-Forwarded-For`.
 
-The proxy forwards to `http://127.0.0.1:3000`. Geekity CMS reads the **first**
-address in `X-Forwarded-For`. The proxy must replace that header with the
-address it saw. It must not append to a header the client sent. For nginx:
+The proxy forwards to `http://127.0.0.1:3000`. Geekity CMS reads the **last**
+address in `X-Forwarded-For`, the one the proxy in front of it added. Set the
+proxy to replace that header with the address it saw, so the header holds one
+address. For nginx:
 
 ```nginx
 location / {
@@ -786,8 +787,9 @@ while the mode was on counts as announced, so its next edit goes out as an
 `Update`. A relay added while the mode was on stays pending. Press Retry on the
 Federation screen after the site is live.
 
-The site also holds password recovery mail, so in dev mode, reset a password
-from the shell. A peer that followed while the mode was on never got its
+The site also holds password recovery mail, so in dev mode the forgot-password
+page offers no form; set a password from the shell with
+[`geekity user password`](cli.md#setting-a-password-from-the-command-line). A peer that followed while the mode was on never got its
 `Accept`, and must follow again.
 
 ### Dev mode on Docker

@@ -20,6 +20,7 @@ export {
   setUserProfile,
   setUserActorId,
   ConflictingActorIdError,
+  InvalidActorIdError,
   SetupClosedError,
   UnknownUserError,
   UserRemovalRefusedError,

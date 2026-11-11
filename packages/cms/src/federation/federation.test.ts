@@ -448,6 +448,24 @@ describe('a user actor', () => {
     assert.match(list[0]?.value ?? '', /href="https:\/\/example\.org\/ada"/);
   });
 
+  it('publishes a profile link given as a site path as an absolute URL', async () => {
+    const instance = await site({}, { links: [{ label: 'About', href: '/about/' }] });
+
+    const actor = (await (
+      await get(instance, `/author/${ADA}/`, 'application/activity+json')
+    ).json()) as Record<string, unknown>;
+
+    const attachment = actor['attachment'];
+    const [first] = (Array.isArray(attachment) ? attachment : [attachment]) as {
+      value?: string;
+    }[];
+    const absolute = new URL('/about/', BASE_URL).href;
+    assert.ok(
+      first?.value?.includes(`href="${absolute}"`),
+      `${first?.value ?? ''} does not link ${absolute}`,
+    );
+  });
+
   it('serves collections with no inline items: the outbox pages, the rest are empty', async () => {
     const instance = await sharedSite();
 

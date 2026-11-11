@@ -145,7 +145,7 @@ async function addUser(
 
   const password = generate ? generatePassword() : supplied;
   const problems = addUserProblems(username, password, generate, email);
-  const confirmation = confirmPassword(c, stringOrEmpty(body[USER_FIELDS.currentPassword]));
+  const confirmation = await confirmPassword(c, stringOrEmpty(body[USER_FIELDS.currentPassword]));
   if (confirmation.kind !== 'confirmed') {
     problems.currentPassword = `${WRONG_PASSWORD} nobody was added.`;
   }
@@ -197,7 +197,7 @@ async function changePassword(
   const next = stringOrEmpty(body[USER_FIELDS.newPassword]);
   const confirmation = stringOrEmpty(body[USER_FIELDS.newPasswordConfirmation]);
 
-  const confirmed = confirmPassword(c, current);
+  const confirmed = await confirmPassword(c, current);
   const problems = changePasswordProblems({
     correct: confirmed.kind === 'confirmed',
     next,
@@ -249,7 +249,7 @@ async function saveEmail(
   const { dataDir, body, target } = named;
   const email = stringOrEmpty(body[USER_FIELDS.email]).trim();
 
-  const confirmation = confirmPassword(c, stringOrEmpty(body[USER_FIELDS.currentPassword]));
+  const confirmation = await confirmPassword(c, stringOrEmpty(body[USER_FIELDS.currentPassword]));
   if (confirmation.kind !== 'confirmed') {
     const message =
       confirmation.kind === 'locked'
@@ -479,6 +479,7 @@ async function removeUser(c: Context<GeekityEnv>): Promise<Response> {
       userId: target.id,
       signedInAs: c.var.session?.userId ?? null,
       now: c.var.config.now(),
+      endSessions: (userId) => c.var.admin.deleteSessionsForUser(userId),
     });
   } catch (error) {
     if (!(error instanceof UserRemovalRefusedError)) throw error;
@@ -486,7 +487,6 @@ async function removeUser(c: Context<GeekityEnv>): Promise<Response> {
   }
   if (!deleted) return flashAndRedirect(c, 'error', GONE_USER, USERS_PATH);
 
-  c.var.admin.deleteSessionsForUser(target.id);
   return flashAndRedirect(c, 'notice', `Deleted ${target.username}.`, USERS_PATH);
 }
 
@@ -533,12 +533,17 @@ export async function deleteUser(input: {
   userId: number;
   signedInAs?: number | null | undefined;
   now: Date;
+  endSessions?: ((userId: number) => void) | undefined;
 }): Promise<boolean> {
-  const deleted = await removeUserRecord(input);
-  await revokeTokensForUser(input.dataDir, input.userId, input.now);
-  autosaveCopies(input.dataDir).discardUser(input.userId);
-  discardWritingLedger(input.dataDir, input.userId);
-  return deleted;
+  return await removeUserRecord({
+    ...input,
+    beforeRemoval: async (userId) => {
+      input.endSessions?.(userId);
+      await revokeTokensForUser(input.dataDir, userId, input.now);
+      autosaveCopies(input.dataDir).discardUser(userId);
+      discardWritingLedger(input.dataDir, userId);
+    },
+  });
 }
 
 export function deleteUserRefusal(input: {

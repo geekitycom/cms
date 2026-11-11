@@ -1,4 +1,5 @@
 import cluster from 'node:cluster';
+import { isIP } from 'node:net';
 
 import { loadResolvedConfig } from '../config-loader.ts';
 import { geminiHost } from '../gemini/site-certificate.ts';
@@ -60,6 +61,14 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
         'and recorded in data/dev-mode.jsonl. `geekity dev-mode off` takes the site live.\n';
     }
     announcement += `Geekity CMS is serving ${cms.config.baseUrl} on port ${String(port)}\n`;
+    if (isLoopbackUrl(cms.config.baseUrl)) {
+      announcement +=
+        `Warning: the base URL is ${cms.config.baseUrl}, but the server listens on every ` +
+        'network address. While the base URL is a localhost one, the session cookie is not ' +
+        'marked Secure, no HSTS header is sent and password reset links point at localhost. ' +
+        'Set GEEKITY_BASE_URL, or the base URL on Settings > General, to the https ' +
+        'address people use.\n';
+    }
     if (geminiPort !== undefined) {
       const host = geminiHost(cms.config, await cms.settings.values(SITE));
       announcement += `Gemini is on port ${String(geminiPort)} for ${host}\n`;
@@ -70,4 +79,13 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
     channel.send({ type: 'boot-failed', error: message }, () => process.exit(1));
   }
   return 0;
+}
+
+function isLoopbackUrl(baseUrl: string): boolean {
+  const host =
+    URL.parse(baseUrl)
+      ?.hostname.replace(/^\[|\]$/g, '')
+      .toLowerCase() ?? '';
+  if (host === 'localhost' || host.endsWith('.localhost') || host === '::1') return true;
+  return isIP(host) === 4 && host.startsWith('127.');
 }

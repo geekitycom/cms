@@ -48,7 +48,7 @@
     fediverse actor are one identity — decision-14 makes their archive URL the
     actor id. -#}
 {% set sameAs = [] %}
-{% for link in siteAuthor.links %}{% set _ = sameAs.push(link.href) %}{% endfor %}
+{% for link in siteAuthor.links %}{% set _ = sameAs.push(link.href | absoluteUrl) %}{% endfor %}
 {% if personUrl %}{% set _ = sameAs.push(personUrl) %}{% endif %}
 {% set address = { "@type": "PostalAddress", "addressLocality": siteAuthor.location } if siteAuthor.location else "" %}
 {% set entryType = "BlogPosting" if type == "post" else "Article" %}

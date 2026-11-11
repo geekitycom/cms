@@ -46,9 +46,8 @@ export function usernameProblem(username: string): string | undefined {
   );
 }
 
-/** What is wrong with a password, or `undefined` when nothing is. */
 export function passwordProblem(password: string): string | undefined {
-  if (password.length >= MINIMUM_PASSWORD_LENGTH) return undefined;
+  if ([...password.normalize('NFC')].length >= MINIMUM_PASSWORD_LENGTH) return undefined;
   return `A password is at least ${String(MINIMUM_PASSWORD_LENGTH)} characters.`;
 }
 

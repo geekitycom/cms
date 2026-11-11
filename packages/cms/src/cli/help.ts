@@ -7,10 +7,11 @@ import type { FoundCommand } from './plugin-commands.ts';
 const OPTIONS_HELP = `Options:
   --config <file>  Config file to load. Defaults to the first of
                    ${CONFIG_FILENAMES.join(', ')} found in the working directory.
-  --password <pw>  The new user's password. Left off, it is asked for without
-                   echo, or read as one line when standard input is a pipe.
-                   A password on the command line is visible in the process
-                   list and in shell history, so prefer being asked.
+  --password <pw>  With user add or user password: the password. Left off,
+                   it is asked for without echo, or read as one line when
+                   standard input is a pipe. A password on the command line
+                   is visible in the process list and in shell history, so
+                   the command warns; prefer being asked.
   --email <addr>   The new user's email address. Optional; it is what a
                    forgotten password is recovered through.
   --until <time>   With maintenance on: when the site should be back, as an

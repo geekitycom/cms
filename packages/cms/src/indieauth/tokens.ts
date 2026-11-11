@@ -343,7 +343,7 @@ async function update(
       const live = tokens.filter((token) => Date.parse(lapsesAt(token)) > now.getTime());
       return `${JSON.stringify({ tokens: change(live) } satisfies TokensFile, null, 2)}\n`;
     },
-    { mode: TOKENS_FILE_MODE },
+    { mode: TOKENS_FILE_MODE, durable: true },
   );
 }
 

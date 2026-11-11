@@ -183,6 +183,45 @@ export function parseHtml(source: string): HtmlElement {
   return root;
 }
 
+/**
+ * Elements a browser reads as text up to their closing tag, so a tag written
+ * inside one is not a tag. Wider than RAW_TEXT because a browser that runs
+ * scripts reads `<noscript>` this way too.
+ */
+const UNPARSED: ReadonlySet<string> = new Set([...RAW_TEXT, 'noscript', 'textarea', 'title']);
+
+export function findStartTag(
+  source: string,
+  name: string,
+): { start: number; end: number } | undefined {
+  let at = 0;
+  for (;;) {
+    const next = source.indexOf('<', at);
+    if (next < 0) return undefined;
+    at = next;
+
+    if (source.startsWith('<!--', at)) {
+      at = after(source, '-->', at);
+      continue;
+    }
+    if (source.startsWith('<!', at) || source.startsWith('<?', at)) {
+      at = after(source, '>', at);
+      continue;
+    }
+
+    const tag = readTag(source, at);
+    if (tag === undefined) {
+      at += 1;
+      continue;
+    }
+    if (!tag.closing && tag.name === name) {
+      return source[tag.end - 1] === '>' ? { start: at, end: tag.end } : undefined;
+    }
+    at = tag.end;
+    if (!tag.closing && UNPARSED.has(tag.name)) at = afterElement(source, tag.name, at);
+  }
+}
+
 /** Every element under `root`, itself excluded, in document order. */
 export function* elementsIn(root: HtmlElement): Generator<HtmlElement> {
   for (const child of root.children) {

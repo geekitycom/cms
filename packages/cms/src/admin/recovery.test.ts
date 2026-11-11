@@ -208,10 +208,13 @@ describe('the reset link (AC #3)', () => {
 
     // The new password is the real one, and the old one is not.
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', 'a brand new password') !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', 'a brand new password')) !== undefined,
       'the new password was stored',
     );
-    assert.equal(verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password), undefined);
+    assert.equal(
+      await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password),
+      undefined,
+    );
 
     // Every browser she was signed in on is signed out.
     const other = await elsewhere.get('/admin');
@@ -313,9 +316,10 @@ describe('the reset link (AC #3)', () => {
     );
 
     assert.deepEqual(responses.map((response) => response.status).sort(), [303, 400]);
-    const working = passwords.filter(
-      (password) => verifyUserPassword(cms.config.dataDir, 'ada', password) !== undefined,
+    const verified = await Promise.all(
+      passwords.map((password) => verifyUserPassword(cms.config.dataDir, 'ada', password)),
     );
+    const working = verified.filter((user) => user !== undefined);
     assert.equal(working.length, 1);
   });
 
@@ -337,7 +341,7 @@ describe('the reset link (AC #3)', () => {
     assert.equal(stale.status, 400);
     assert.match(await stale.text(), /no longer valid|expired/i);
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
       'nothing was changed',
     );
   });
@@ -363,7 +367,7 @@ describe('the reset link (AC #3)', () => {
 
     assert.equal(response.status, 400);
     assert.match(await response.text(), /no longer valid|expired/i);
-    assert.equal(verifyUserPassword(dataDir, 'grace', 'a brand new password'), undefined);
+    assert.equal(await verifyUserPassword(dataDir, 'grace', 'a brand new password'), undefined);
   });
 
   it('holds the new password to the rules the rest of the admin uses', async () => {
@@ -397,7 +401,7 @@ describe('the reset link (AC #3)', () => {
 
     // Neither refusal spent the link.
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
       'the old password still works',
     );
     const stillGood = await agent.get(`${RESET_PATH}?token=${token}`);
@@ -420,7 +424,9 @@ describe('the reset link (AC #3)', () => {
     });
 
     assert.equal(response.status, 403);
-    assert.ok(verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined);
+    assert.ok(
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
+    );
   });
 });
 
@@ -553,9 +559,73 @@ describe('a link from before a password change', () => {
 
     assert.equal(response.status, 400, 'the restored link was refused');
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', 'the password she chose') !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', 'the password she chose')) !== undefined,
       'the password set after the link was asked for is still the one',
     );
+  });
+});
+
+describe('a request while the database refuses writes', () => {
+  it('answers a known name exactly as it answers an unknown one', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+
+    async function formFor(): Promise<{ agent: Browser; token: string }> {
+      const agent = browser(cms);
+      const token = csrfField(await (await agent.get(FORGOT_PATH)).text());
+      assert.ok(token !== undefined);
+      return { agent, token };
+    }
+    const known = await formFor();
+    const unknown = await formFor();
+
+    cms.admin.setReadOnly(true);
+    try {
+      const knownAnswer = await known.agent.post(FORGOT_PATH, {
+        csrf_token: known.token,
+        identifier: 'ada',
+      });
+      const unknownAnswer = await unknown.agent.post(FORGOT_PATH, {
+        csrf_token: unknown.token,
+        identifier: 'nobody-at-all',
+      });
+
+      assert.equal(knownAnswer.status, 200);
+      assert.equal(unknownAnswer.status, 200);
+      assert.equal(bodyText(await knownAnswer.text()), bodyText(await unknownAnswer.text()));
+    } finally {
+      cms.admin.setReadOnly(false);
+    }
+    await cms.mail.settled();
+    assert.equal(provider.sent.length, 0);
+  });
+});
+
+describe('a site in dev mode', () => {
+  it('shows the shell instructions instead of the form, and sends nothing when posted', async () => {
+    const { cms, provider } = await site({ email: 'ada@example.com' });
+    await cms.settings.set('dev_mode', new Map([['on', true]]), 'cli');
+
+    const agent = browser(cms);
+    const html = await (await agent.get(FORGOT_PATH)).text();
+
+    assert.match(html, /dev mode/i);
+    assert.match(html, /geekity user password/);
+    assert.doesNotMatch(html, /name="identifier"/);
+
+    const token = csrfField(await (await agent.get('/admin/login')).text());
+    assert.ok(token !== undefined);
+    const response = await agent.post(FORGOT_PATH, { csrf_token: token, identifier: 'ada' });
+    assert.equal(response.status, 200);
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 0);
+    const read = new DatabaseSync(cms.admin.file);
+    try {
+      const row = read.prepare('SELECT COUNT(*) AS n FROM password_resets').get();
+      assert.equal(row?.['n'], 0);
+    } finally {
+      read.close();
+    }
   });
 });
 
@@ -567,7 +637,7 @@ describe('a site that sends no email (AC #5)', () => {
     const html = await (await agent.get(FORGOT_PATH)).text();
 
     assert.match(html, /cannot send email|is not available|no email/i);
-    assert.match(html, /geekity user add/);
+    assert.match(html, /geekity user password/);
     // With nothing to send, there is no form to fill in.
     assert.doesNotMatch(html, /name="identifier"/);
   });

@@ -1,3 +1,5 @@
+import { isIPv4, isIPv6 } from 'node:net';
+
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
 
@@ -203,8 +205,9 @@ export function createRequestLimit(options: RequestLimitOptions): RequestLimit {
  * `X-Forwarded-For` is only believed when the site says it is behind a proxy,
  * because anybody may send it: on a site reached directly, trusting it would
  * let one attacker put every guess on a different make-believe address and
- * never be locked out by address at all. The leftmost entry is the client the
- * first proxy saw. Otherwise it is the socket's own address, which is
+ * never be locked out by address at all. The rightmost entry is the one the
+ * proxy in front of the site added itself; anything to its left came with the
+ * request and may be made up. Otherwise it is the socket's own address, which is
  * unavailable when the app is being driven in process rather than served — a
  * test, or an embedding — and `undefined` is the honest answer there.
  */
@@ -214,8 +217,8 @@ export function clientAddress(
 ): string | undefined {
   if (config.trustProxy) {
     const forwarded = c.req.header('x-forwarded-for');
-    const first = forwarded?.split(',')[0]?.trim();
-    if (first !== undefined && first !== '') return first;
+    const nearest = forwarded?.split(',').at(-1)?.trim();
+    if (nearest !== undefined && nearest !== '') return nearest;
   }
 
   try {
@@ -277,12 +280,47 @@ export function createSignInThrottle(options: LoginThrottleOptions): SignInThrot
 
 export function signInKeys(attempt: SignInAttempt): { strict: string[]; wide: string[] } {
   const name = keyPart(attempt.identifier);
-  const address =
-    attempt.address === undefined ? undefined : attempt.address.slice(0, KEY_PART_LENGTH);
+  const address = attempt.address === undefined ? undefined : addressKey(attempt.address);
   const strict = [pairKey(name, address ?? '')];
   if (address !== undefined) strict.push(`addr:${address}`);
   if (attempt.confirming === true) strict.push(confirmingKey(name));
   return { strict, wide: [identifierKey(name)] };
+}
+
+/**
+ * The address as a throttle counts it. An IPv6 client is usually handed a
+ * whole /64, so counting each address in it separately would give one client
+ * more addresses than it could ever be locked out of.
+ */
+function addressKey(address: string): string {
+  if (isIPv4(address)) return address;
+  const groups = ipv6Groups(address);
+  if (groups === undefined) return address.slice(0, KEY_PART_LENGTH);
+  if (groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff) {
+    const [high = 0, low = 0] = groups.slice(6);
+    return [high >> 8, high & 0xff, low >> 8, low & 0xff].join('.');
+  }
+  return `${groups
+    .slice(0, 4)
+    .map((group) => group.toString(16))
+    .join(':')}::/64`;
+}
+
+function ipv6Groups(address: string): number[] | undefined {
+  let text = address.split('%')[0] ?? '';
+  if (!isIPv6(text)) return undefined;
+  const embedded = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(text);
+  if (embedded !== null) {
+    const [a, b, c, d] = embedded.slice(1).map(Number) as [number, number, number, number];
+    text = `${text.slice(0, embedded.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const hex = (part: string): number[] =>
+    part === '' ? [] : part.split(':').map((group) => Number.parseInt(group, 16));
+  const [head = '', tail] = text.split('::');
+  if (tail === undefined) return hex(head);
+  const before = hex(head);
+  const after = hex(tail);
+  return [...before, ...Array<number>(8 - before.length - after.length).fill(0), ...after];
 }
 
 function keyPart(identifier: string): string {

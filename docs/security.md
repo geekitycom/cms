@@ -63,9 +63,10 @@ and the address is the socket's own. Any client can send `X-Forwarded-For`. On
 a site reached directly, trusting it would let one attacker give each guess a
 different fake address and never be locked out by address. Turn `trustProxy`
 on only when a reverse proxy in front of the site sets that header. The server
-then uses the leftmost entry. When neither address is available, as when the
-app runs in process instead of behind a server, the username is counted with
-an empty address.
+then uses the rightmost entry, the one the proxy added. The throttle counts an
+IPv6 address together with the rest of its /64. When neither address is
+available, as when the app runs in process instead of behind a server, the
+username is counted with an empty address.
 
 ## Request size
 
@@ -102,6 +103,10 @@ subdomain cannot set or overwrite it to plant a session. The prefix requires
 whose `baseUrl` is `http://localhost:3000` therefore keeps the name
 `geekity_session`, and local development works as before.
 
+Because these protections follow the base URL, `geekity serve` warns at boot
+when the base URL is a localhost one. See
+[The base URL](configuration.md#the-base-url).
+
 **The upgrade signs people out once.** A session created before this change
 lives in a cookie named `geekity_session`. Under https the server never accepts
 that name as a login again. Accepting it would reopen the sibling-subdomain
@@ -136,13 +141,26 @@ act on no session:
 - a comment from a visitor who is not signed in
 - the one-click moderate and unsubscribe links in an email
 
-**Logout clears the site's data in the browser.** The logout response sends
-`Clear-Site-Data: "cache", "cookies", "storage"`. A shared computer keeps no
-admin pages in its cache and nothing the site stored. Browsers honour the
-header only on a secure origin, which includes `http://localhost`. The
-`cookies` directive clears cookies for the whole registrable domain. Signing
-out of `blog.example.com` also signs the browser out of other sites under
-`example.com`.
+**Logout clears the site's cache in the browser.** The logout response sends
+`Clear-Site-Data: "cache"`, so a shared computer keeps no admin pages in its
+cache. Browsers honour the header only on a secure origin, which includes
+`http://localhost`. The header does not clear cookies: the deleted session row
+and the cleared session cookie already end the sign-in, and the `cookies`
+directive would also clear cookies of other sites under the same registrable
+domain. It does not clear storage either, so the editor's copies of unsaved
+work in localStorage stay in the browser that made them, under a key that
+names the user. Somebody else who uses the same browser profile can read them.
+
+**The public site and the admin share one origin.** The session cookie has
+`Path=/`, and a page drawn for a signed-in reader carries the admin bar with
+that reader's CSRF token. A script that runs on a public page while an admin
+reads it can therefore send requests to `/admin` as that admin. This includes
+a theme's scripts, a plugin's page tags, and anything they load from another
+host. Load only scripts you trust from a theme or plugin. The CMS passes
+`signedIn` to every plugin's page tags, so a plugin can leave its tags off the
+pages a signed-in reader sees. The Umami plugin does this unless **Count
+signed-in visits** is on. Serving the admin from an origin of its own would
+separate the two. The CMS does not do that yet.
 
 ## Forgotten passwords
 
@@ -194,11 +212,12 @@ expire. A `geekity rebuild` or a deleted `data/geekity.db` ends every
 outstanding link, and the user then has to click Forgot password again.
 
 With no mail provider or credential, `/admin/forgot` shows no form. It says the
-site cannot send email and links to
-[`geekity user add`](cli.md#creating-an-admin-from-the-command-line). Use that
-command from a shell to create a fresh admin on a site nobody can sign in to.
-Saving a credential under [Settings → Email](email.md) turns the form on for
-the next visitor, with no restart.
+site cannot send email and names
+[`geekity user password`](cli.md#setting-a-password-from-the-command-line). Use
+that command from a shell to set a new password on the account. Saving a
+credential under [Settings → Email](email.md) turns the form on for the next
+visitor, with no restart. In [dev mode](deploying.md#dev-mode), which holds every
+outgoing message, the page shows the same text and creates no reset link.
 
 ## Security headers
 

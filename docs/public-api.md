@@ -162,7 +162,7 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `createUser`         | function | Hash the password and add the user to the file.                                                             |
 | `listUsers`          | function | Every user, by name, without password hashes.                                                               |
 | `SITE`               | constant | The `site` settings namespace, for `cms.settings.values(SITE)` and `cms.settings.get(SITE.title)`.          |
-| `setUserProfile`     | function | Write a user's profile, replacing whatever was there.                                                       |
+| `setUserProfile`     | function | Write a user's profile, replacing whatever was there. Returns whether the stored profile changed.           |
 | `ChallengeAttempt`   | type     | One submission's answer to a `FormChallenge`, and what is known about who sent it.                          |
 | `ChallengeVerdict`   | type     | What a form challenge can say: `pass`, `fail` (filed as spam) or `unknown`.                                 |
 | `ChallengeWidget`    | type     | What a theme draws a form challenge from: the provider, the site key, the script URL and the field.         |

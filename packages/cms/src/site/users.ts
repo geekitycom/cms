@@ -17,7 +17,9 @@ import {
 import { systemClock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
 import { isLinkUrl, relText } from './navigation.ts';
-import { hashPassword, verifyPasswordHash } from './passwords.ts';
+import { authorHref } from '../content/authors.ts';
+import { absoluteUrl } from '../util/url.ts';
+import { hashPassword, passwordHashIsCurrent, verifyPasswordHash } from './passwords.ts';
 import { USERS, dataPath, fileToken } from '../files/data-files.ts';
 
 /**
@@ -346,7 +348,7 @@ export class SetupClosedError extends Error {
  * second one reads the first one's work and is refused.
  */
 export async function createUser(input: CreateUserInput): Promise<User> {
-  const hash = hashPassword(input.password);
+  const hash = await hashPassword(input.password);
   const email = (input.email ?? '').trim();
   let created: StoredUser | undefined;
 
@@ -413,7 +415,7 @@ export async function setUserPassword(input: {
 }): Promise<boolean> {
   // Hashed before the write rather than inside it, so a hash that throws
   // leaves the stored one alone.
-  const hash = hashPassword(input.password);
+  const hash = await hashPassword(input.password);
   const sessionsValidAfter = input.now.toISOString();
   return updateUser(input.dataDir, input.userId, () => ({
     passwordHash: hash,
@@ -451,8 +453,9 @@ export async function setUserEmail(input: {
  * what the form on the users screen submits: four boxes and a Save, and a
  * field somebody cleared is a field they no longer want. {@link cleanProfile}
  * drops the empties, so a profile with nothing left in it leaves the user with
- * no `profile` key rather than with an empty object. Returns `false` when
- * there is no such user.
+ * no `profile` key rather than with an empty object. Returns whether the
+ * stored profile changed, so `false` both when there is no such user and when
+ * the save left it as it was.
  */
 export async function setUserProfile(input: {
   /** Which site's users file to write. */
@@ -463,7 +466,12 @@ export async function setUserProfile(input: {
   profile: UserProfile;
 }): Promise<boolean> {
   const profile = cleanProfile(input.profile);
-  return updateUser(input.dataDir, input.userId, () => ({ profile }));
+  let changed = false;
+  await updateUser(input.dataDir, input.userId, (user) => {
+    changed = !isDeepStrictEqual(user.profile, profile);
+    return { profile };
+  });
+  return changed;
 }
 
 /**
@@ -617,6 +625,14 @@ export class ConflictingActorIdError extends Error {
   }
 }
 
+export class InvalidActorIdError extends Error {
+  override readonly name = 'InvalidActorIdError';
+
+  constructor(actorId: string) {
+    super(`The actor id ${actorId} is not an absolute http(s) URL.`);
+  }
+}
+
 /**
  * Write the actor id a user was published under elsewhere.
  *
@@ -633,28 +649,35 @@ export class ConflictingActorIdError extends Error {
 export async function setUserActorId(input: {
   /** Which site's users file to write. */
   dataDir: string;
+  baseUrl: string;
   /** Whose record, by login name. */
   username: string;
   /** The id they were published under, query string and all. */
   actorId: string;
 }): Promise<boolean> {
+  const actorId = storedActorIdFrom(input.actorId);
+  if (actorId === undefined) throw new InvalidActorIdError(input.actorId);
   const mine = findUser(input.dataDir, input.username);
   if (mine === undefined) throw new UnknownUserError(input.username);
   let changed = false;
 
   const found = await updateUser(input.dataDir, mine.id, (user, everyone) => {
     const holder = everyone.find(
-      (other) => other.id !== user.id && other.actorId === input.actorId,
+      (other) => other.id !== user.id && answersTo(other, actorId, input.baseUrl),
     );
     if (holder !== undefined) {
-      throw new ConflictingActorIdError(holder.username, `The actor id ${input.actorId}`);
+      throw new ConflictingActorIdError(holder.username, `The actor id ${actorId}`);
     }
-    changed = user.actorId !== input.actorId;
-    return { actorId: input.actorId };
+    changed = user.actorId !== actorId;
+    return { actorId };
   });
   if (!found) throw new UnknownUserError(input.username);
 
   return changed;
+}
+
+function answersTo(user: StoredUser, actorId: string, baseUrl: string): boolean {
+  return user.actorId === actorId || absoluteUrl(authorHref(user.username), baseUrl) === actorId;
 }
 
 /** Thrown when a command names a user this site does not have. */
@@ -702,10 +725,11 @@ export async function removeUserRecord(input: {
   userId: number;
   /** The user asking for the removal, when it is a person. */
   signedInAs?: number | null | undefined;
+  beforeRemoval?: ((userId: number) => void | Promise<void>) | undefined;
 }): Promise<boolean> {
   let deleted = false;
 
-  await write(input.dataDir, (contents) => {
+  await write(input.dataDir, async (contents) => {
     const target = contents.users.find((user) => user.id === input.userId);
     deleted = target !== undefined;
     if (target === undefined) return contents;
@@ -715,6 +739,7 @@ export async function removeUserRecord(input: {
     if (target.id === input.signedInAs) {
       throw new UserRemovalRefusedError('own-account', target.username);
     }
+    await input.beforeRemoval?.(target.id);
     return { ...contents, users: contents.users.filter((user) => user.id !== input.userId) };
   });
 
@@ -725,20 +750,32 @@ export async function removeUserRecord(input: {
  * The user, when the password is theirs; `undefined` when it is not, or when
  * there is no such user. The two failures are deliberately indistinguishable.
  */
-export function verifyUserPassword(
+export async function verifyUserPassword(
   dataDir: string,
   username: string,
   password: string,
-): User | undefined {
+): Promise<User | undefined> {
   const user = findUser(dataDir, username);
   if (user === undefined) {
     // Hash anyway, so a missing user and a wrong password take the same time
     // and the login form does not become a user enumerator.
-    verifyPasswordHash(dummyPasswordHash(), password);
+    await verifyPasswordHash(await dummyPasswordHash(), password);
     return undefined;
   }
-  if (!verifyPasswordHash(user.passwordHash, password)) return undefined;
+  if (!(await verifyPasswordHash(user.passwordHash, password))) return undefined;
+  if (!passwordHashIsCurrent(user.passwordHash)) await rehash(dataDir, user, password);
   return withoutHash(user);
+}
+
+async function rehash(dataDir: string, user: StoredUser, password: string): Promise<void> {
+  const passwordHash = await hashPassword(password);
+  try {
+    await updateUser(dataDir, user.id, (current) =>
+      current.passwordHash === user.passwordHash ? { passwordHash } : {},
+    );
+  } catch (error) {
+    console.warn(`Could not store a new password hash for ${user.username}:`, error);
+  }
 }
 
 /** A user as a screen may render it: everything but the hash. */
@@ -766,9 +803,9 @@ function withoutHash(user: StoredUser): User {
  * A hash of a password no user has, so a login attempt for an unknown
  * username costs the same as one for a known name with the wrong password.
  */
-let dummyHash: string | undefined;
+let dummyHash: Promise<string> | undefined;
 
-function dummyPasswordHash(): string {
+function dummyPasswordHash(): Promise<string> {
   dummyHash ??= hashPassword(
     'a password no user has, hashed once so that verification is constant time',
   );
@@ -995,7 +1032,7 @@ function storedActorIdFrom(value: unknown): string | undefined {
 
   try {
     const url = new URL(wanted);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? wanted : undefined;
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : undefined;
   } catch {
     return undefined;
   }
@@ -1067,18 +1104,18 @@ function unusableUsersFile(file: string, cause: unknown): Error {
 /** Read the file, decide what it should say next, and write it, as one step. */
 function write(
   dataDir: string,
-  produce: (contents: UsersFileContents) => UsersFileContents,
+  produce: (contents: UsersFileContents) => UsersFileContents | Promise<UsersFileContents>,
 ): Promise<void> {
   const file = usersFile(dataDir);
   return updateFileAtomically(
     file,
-    (current) => {
+    async (current) => {
       const read = parseUsersFile(current, file);
-      const next = produce(read);
+      const next = await produce(read);
       if (current === undefined) return usersJsonText(next);
       return `${JSON.stringify(keepingUnreadFields(JSON.parse(current) as Record<string, unknown>, read, next), null, 2)}\n`;
     },
-    { mode: USERS_FILE_MODE },
+    { mode: USERS_FILE_MODE, durable: true },
   );
 }
 

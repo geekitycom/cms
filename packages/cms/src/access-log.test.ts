@@ -97,7 +97,7 @@ describe('the access log', () => {
       headers: { 'x-forwarded-for': '203.0.113.9, 70.41.3.18' },
     });
 
-    assert.match(believed.lines[0] ?? '', /^GET \/ 200 \d+(\.\d+)?ms 203\.0\.113\.9$/);
+    assert.match(believed.lines[0] ?? '', /^GET \/ 200 \d+(\.\d+)?ms 70\.41\.3\.18$/);
 
     const disbelieved = recorder();
     const reachedDirectly = await box.site({

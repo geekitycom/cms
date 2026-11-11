@@ -848,6 +848,19 @@ describe('the login throttle', () => {
     );
   });
 
+  it('counts concurrent wrong sign-ins before any of them is checked', async () => {
+    const cms = await site({ loginAttempts: 3, loginLockout: 120 });
+    addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });
+
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, (_, i) => attempt(browser(cms), 'ada', `guess ${String(i)}`)),
+    );
+
+    const statuses = responses.map((response) => response.status);
+    assert.equal(statuses.filter((status) => status === 401).length, 3, statuses.join(' '));
+    assert.equal(statuses.filter((status) => status === 429).length, 7, statuses.join(' '));
+  });
+
   it('lets the right password in from another address while one is locked out', async () => {
     const cms = await site({ trustProxy: true, loginAttempts: 3, loginLockout: 120 });
     addUser({ dataDir: cms.config.dataDir, ...FIRST_ADMIN });

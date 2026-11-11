@@ -141,6 +141,12 @@ sets a value, the site uses the stored setting instead of the
 `http://localhost:<port>` fallback.
 [The base URL setting](settings.md#the-base-url-setting) has the full rule.
 
+`geekity serve` listens on every network address. When the base URL it ends
+up with is a localhost one, it prints a warning at boot: until the base URL is
+the https address people use, the session cookie is not marked `Secure`, no
+HSTS header is sent, and password reset links point at localhost. Local
+development can ignore the warning.
+
 ## The Gemini certificate
 
 Gemini is off until `site.gemini` is on. Turn it on with **Serve over
@@ -435,7 +441,7 @@ The address is off by default. An address is personal data, and a self-hosted
 blog keeps it with no retention policy unless the site owner sets one.
 `trustProxy` decides which address is logged:
 
-- When `trustProxy` is on and the proxy sets `X-Forwarded-For`, the leftmost
+- When `trustProxy` is on and the proxy sets `X-Forwarded-For`, the rightmost
   entry of that header. For a Gemini request, the address in the PROXY
   protocol header the connection opened with.
 - Otherwise, the socket's own address.

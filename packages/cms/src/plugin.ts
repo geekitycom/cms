@@ -129,8 +129,9 @@ export interface PluginSite {
   users(): readonly PluginUser[];
   /**
    * Set the id a user was published under elsewhere. Returns whether anything
-   * changed. Throws for a user the site does not have, or an id another user
-   * already carries.
+   * changed. Throws for a user the site does not have, an id that is not an
+   * absolute http(s) URL, or an id another user already carries or answers to
+   * at their author URL.
    */
   setActorId(username: string, actorId: string): Promise<boolean>;
   actorKey(username: string, algorithm: PluginKeyAlgorithm): PluginActorKey;

@@ -59,10 +59,10 @@ export async function readPassword(options: ReadPasswordOptions = {}): Promise<s
     input.pause();
   }
 
-  if (cancelled) throw new Error('Cancelled; no user was created.');
+  if (cancelled) throw new Error('Cancelled; nothing was changed.');
 
   throw new Error(
-    'No password was given: standard input ended before a line arrived. Pass --password, or ' +
-      'pipe the password in as a single line.',
+    'No password was given: standard input ended before a line arrived. Pipe the password in ' +
+      'as a single line.',
   );
 }

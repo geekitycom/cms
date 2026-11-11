@@ -270,7 +270,7 @@ export function mountPluginsScreen(
     const name = stringOrEmpty(body[PACKAGE_FIELD]).trim();
     const version = stringOrEmpty(body[VERSION_FIELD]).trim();
     const typed = { package: name, version };
-    const confirmation = confirmPassword(c, stringOrEmpty(body[PASSWORD_FIELD]));
+    const confirmation = await confirmPassword(c, stringOrEmpty(body[PASSWORD_FIELD]));
     if (confirmation.kind !== 'confirmed') {
       const password = answerRefusal(c, confirmation, `${WRONG_PASSWORD} installed.`);
       return drawAddPage(c, { ...typed, problems: { password } });
@@ -339,7 +339,7 @@ export function mountPluginsScreen(
     if (installer.state !== 'on') return refuse(c, INSTALLER_REFUSALS[installer.state]);
     const body = await c.req.parseBody();
     const name = stringOrEmpty(body[PLUGIN_FIELD]);
-    const confirmation = confirmPassword(c, stringOrEmpty(body[PASSWORD_FIELD]));
+    const confirmation = await confirmPassword(c, stringOrEmpty(body[PASSWORD_FIELD]));
     if (confirmation.kind !== 'confirmed') {
       const verb = action === 'remove' ? 'removed' : 'updated';
       const error = answerRefusal(c, confirmation, `${WRONG_PASSWORD} ${verb}.`);

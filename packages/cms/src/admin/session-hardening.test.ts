@@ -199,7 +199,7 @@ describe('public endpoints that take cross-site POSTs by design', () => {
 });
 
 describe('logout', () => {
-  it('tells the browser to clear cookies, cache and storage for the site', async () => {
+  it("clears the browser cache but keeps other sites' cookies and the editor's local copies", async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
     const token = csrfField(await (await agent.get('/admin')).text());
@@ -208,7 +208,7 @@ describe('logout', () => {
     const response = await agent.post('/admin/logout', { csrf_token: token });
 
     assert.equal(response.status, 303);
-    assert.equal(response.headers.get('clear-site-data'), '"cache", "cookies", "storage"');
+    assert.equal(response.headers.get('clear-site-data'), '"cache"');
   });
 
   it('sends it only on logout', async () => {

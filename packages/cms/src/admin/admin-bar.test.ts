@@ -139,8 +139,19 @@ const SPECULATIVE_THEME: Record<string, string> = {
   ),
 };
 
+const BODY_IN_HEAD_THEME: Record<string, string> = {
+  ...BARE_THEME,
+  'layouts/base.njk': BARE_BASE.replace(
+    '</head>',
+    '<!-- <body class="comment"> -->\n' +
+      '<script>window.drawn = "<body class=script>";</script>\n' +
+      '<noscript><body class="noscript"></noscript>\n' +
+      '</head>',
+  ),
+};
+
 interface SiteOptions {
-  theme?: 'bare' | 'broken' | 'classed' | 'speculative' | undefined;
+  theme?: 'bare' | 'broken' | 'classed' | 'speculative' | 'body-in-head' | undefined;
   homepage?: string | undefined;
 }
 
@@ -154,6 +165,7 @@ async function site(options: SiteOptions = {}): Promise<Cms> {
   await writeTree(path.join(themesDir, 'broken'), BROKEN_THEME);
   await writeTree(path.join(themesDir, 'classed'), CLASSED_THEME);
   await writeTree(path.join(themesDir, 'speculative'), SPECULATIVE_THEME);
+  await writeTree(path.join(themesDir, 'body-in-head'), BODY_IN_HEAD_THEME);
   await writeTree(contentDir, {
     ...CONTENT,
     '_data/site.json': JSON.stringify({
@@ -408,6 +420,17 @@ describe('the admin bar for a signed-in user', () => {
       `<html lang="en" class='dark'>`,
       "an anonymous reader gets the theme's tag untouched",
     );
+  });
+
+  it('goes after the body tag itself, not text in the head that reads like one', async () => {
+    const cms = await site({ theme: 'body-in-head' });
+    const agent = await signedInTo(cms);
+    const html = await (await agent.get(POST_URL)).text();
+
+    const bar = html.indexOf('<geekity-admin-bar');
+    assert.ok(bar > html.indexOf('<body class="bare">'), 'the bar is before the body tag');
+    assert.ok(html.indexOf('</head>') < bar, 'the bar is in the head');
+    assert.equal(withoutBar(html), await (await cms.app.request(POST_URL)).text());
   });
 
   it('goes on the 500 too, which stays unstored', async () => {

@@ -301,7 +301,24 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
     replyTo: MailRecipient | undefined,
     build: (site: SiteData) => { subject: string; text: string; html?: string | undefined },
   ): Promise<MailResult> {
-    return messages.run(() => send(addressesOf(to), replyTo, build));
+    const recipients = addressesOf(to);
+    return messages.run(() =>
+      send(recipients, replyTo, build).catch((thrown: unknown): MailResult => {
+        const error = messageOf(thrown);
+        const addresses = recipients.map((recipient) => recipient.address);
+        logger.warn(`Could not send a message to ${addresses.join(', ')}: ${error}`);
+        return {
+          ok: false,
+          skipped: false,
+          held: false,
+          provider: 'none',
+          to: addresses,
+          subject: '',
+          attempts: 0,
+          error,
+        };
+      }),
+    );
   }
 
   async function send(

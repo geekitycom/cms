@@ -8,10 +8,11 @@ import { after, describe, it } from 'node:test';
 import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { actorKeyFile } from '../federation/keys.ts';
-import { hashPassword } from './passwords.ts';
+import { hashPassword, passwordHashIsCurrent } from './passwords.ts';
 import {
   cleanProfile,
   ConflictingActorIdError,
+  InvalidActorIdError,
   countUsers,
   createUser,
   DuplicateUsernameError,
@@ -240,7 +241,7 @@ describe('a name that is taken', () => {
 
     assert.equal(countUsers(dataDir), 1, 'and nothing was written');
     assert.equal(
-      verifyUserPassword(dataDir, 'ada', 'correct horse')?.username,
+      (await verifyUserPassword(dataDir, 'ada', 'correct horse'))?.username,
       'ada',
       'the first password still works',
     );
@@ -609,10 +610,13 @@ describe('setting a stored actor id', () => {
     const dataDir = await temporaryDir();
     await createUser({ dataDir, username: 'ada', password: 'correct horse' });
 
-    assert.equal(await setUserActorId({ dataDir, username: 'ada', actorId: STORED }), true);
+    assert.equal(
+      await setUserActorId({ dataDir, baseUrl: BASE, username: 'ada', actorId: STORED }),
+      true,
+    );
     assert.equal(findUser(dataDir, 'ada')?.actorId, STORED);
     assert.equal(
-      await setUserActorId({ dataDir, username: 'ada', actorId: STORED }),
+      await setUserActorId({ dataDir, baseUrl: BASE, username: 'ada', actorId: STORED }),
       false,
       'the same id again changes nothing',
     );
@@ -622,19 +626,95 @@ describe('setting a stored actor id', () => {
     const dataDir = await temporaryDir();
     await createUser({ dataDir, username: 'ada', password: 'correct horse' });
     await createUser({ dataDir, username: 'grace', password: 'correct horse' });
-    await setUserActorId({ dataDir, username: 'ada', actorId: STORED });
+    await setUserActorId({ dataDir, baseUrl: BASE, username: 'ada', actorId: STORED });
 
     await assert.rejects(
-      setUserActorId({ dataDir, username: 'nobody', actorId: STORED }),
+      setUserActorId({ dataDir, baseUrl: BASE, username: 'nobody', actorId: STORED }),
       UnknownUserError,
     );
     await assert.rejects(
-      setUserActorId({ dataDir, username: 'grace', actorId: STORED }),
+      setUserActorId({ dataDir, baseUrl: BASE, username: 'grace', actorId: STORED }),
       (error: unknown) => error instanceof ConflictingActorIdError && error.username === 'ada',
     );
     assert.equal(findUser(dataDir, 'grace')?.actorId, undefined);
   });
 });
+
+describe('the stored actor id check', () => {
+  async function adaAndGrace(): Promise<string> {
+    const dataDir = await temporaryDir();
+    await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    await createUser({ dataDir, username: 'grace', password: 'correct horse' });
+    await setUserActorId({ dataDir, baseUrl: BASE, username: 'ada', actorId: STORED });
+    return dataDir;
+  }
+
+  it('treats spellings of one URL as the same id', async () => {
+    const dataDir = await adaAndGrace();
+
+    for (const spelling of [` ${STORED} `, 'HTTPS://OLD.EXAMPLE/?author=2']) {
+      await assert.rejects(
+        setUserActorId({ dataDir, baseUrl: BASE, username: 'grace', actorId: spelling }),
+        (error: unknown) => error instanceof ConflictingActorIdError && error.username === 'ada',
+        spelling,
+      );
+    }
+    assert.equal(findUser(dataDir, 'grace')?.actorId, undefined);
+  });
+
+  it('stores the id in its normal form and reports a respelling as no change', async () => {
+    const dataDir = await adaAndGrace();
+
+    assert.equal(
+      await setUserActorId({
+        dataDir,
+        baseUrl: BASE,
+        username: 'ada',
+        actorId: ' HTTPS://Old.Example/?author=2 ',
+      }),
+      false,
+    );
+    assert.equal(findUser(dataDir, 'ada')?.actorId, STORED);
+  });
+
+  it('refuses an id that is not an http(s) URL', async () => {
+    const dataDir = await adaAndGrace();
+
+    for (const actorId of ['not a url', '/author/grace/', 'ftp://old.example/grace']) {
+      await assert.rejects(
+        setUserActorId({ dataDir, baseUrl: BASE, username: 'grace', actorId }),
+        InvalidActorIdError,
+        actorId,
+      );
+    }
+    assert.equal(findUser(dataDir, 'grace')?.actorId, undefined);
+  });
+
+  it("refuses another user's author URL on this site, and allows a user's own", async () => {
+    const dataDir = await adaAndGrace();
+
+    await assert.rejects(
+      setUserActorId({
+        dataDir,
+        baseUrl: BASE,
+        username: 'ada',
+        actorId: `${BASE}/author/grace/`,
+      }),
+      (error: unknown) => error instanceof ConflictingActorIdError && error.username === 'grace',
+    );
+    assert.equal(
+      await setUserActorId({
+        dataDir,
+        baseUrl: BASE,
+        username: 'grace',
+        actorId: `${BASE}/author/grace/`,
+      }),
+      true,
+    );
+  });
+});
+
+const BASE = 'https://site.example';
 
 /** An id somebody was published under before this site. */
 const STORED = 'https://old.example/?author=2';
@@ -644,9 +724,29 @@ describe('verifying a password (AC #2)', () => {
     const dataDir = await temporaryDir();
     const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
 
-    assert.deepEqual(verifyUserPassword(dataDir, 'ada', 'correct horse'), ada);
-    assert.equal(verifyUserPassword(dataDir, 'ada', 'Correct horse'), undefined);
-    assert.equal(verifyUserPassword(dataDir, 'nobody', 'correct horse'), undefined);
+    assert.deepEqual(await verifyUserPassword(dataDir, 'ada', 'correct horse'), ada);
+    assert.equal(await verifyUserPassword(dataDir, 'ada', 'Correct horse'), undefined);
+    assert.equal(await verifyUserPassword(dataDir, 'nobody', 'correct horse'), undefined);
+  });
+
+  it('hashes a password stored at other costs again at the current ones once it is given right', async () => {
+    const dataDir = await temporaryDir();
+    writeUsers(dataDir, [{ username: 'ada', password: 'correct horse' }]);
+    const before = findUser(dataDir, 'ada')?.passwordHash ?? '';
+    assert.equal(passwordHashIsCurrent(before), false);
+
+    assert.equal(await verifyUserPassword(dataDir, 'ada', 'wrong horse'), undefined);
+    assert.equal(
+      findUser(dataDir, 'ada')?.passwordHash,
+      before,
+      'a wrong password changes nothing',
+    );
+
+    assert.ok((await verifyUserPassword(dataDir, 'ada', 'correct horse')) !== undefined);
+    const after = findUser(dataDir, 'ada')?.passwordHash ?? '';
+    assert.equal(passwordHashIsCurrent(after), true);
+    assert.ok((await verifyUserPassword(dataDir, 'ada', 'correct horse')) !== undefined);
+    assert.equal(findUser(dataDir, 'ada')?.sessionsValidAfter, undefined, 'sessions stay valid');
   });
 
   it('hashes the same password differently for two users', async () => {
@@ -674,8 +774,8 @@ describe('changing a password', () => {
       true,
     );
 
-    assert.equal(verifyUserPassword(dataDir, 'ada', 'correct horse'), undefined);
-    assert.deepEqual(verifyUserPassword(dataDir, 'ada', 'a new one'), {
+    assert.equal(await verifyUserPassword(dataDir, 'ada', 'correct horse'), undefined);
+    assert.deepEqual(await verifyUserPassword(dataDir, 'ada', 'a new one'), {
       ...ada,
       sessionsValidAfter: now.toISOString(),
     });
@@ -826,7 +926,10 @@ describe('a users file that will not parse', () => {
 
     assert.throws(() => countUsers(dataDir), /could not be read/);
     assert.throws(() => listUsers(dataDir), /Restore the file from a backup/);
-    assert.throws(() => verifyUserPassword(dataDir, 'ada', 'correct horse'), /could not be read/);
+    await assert.rejects(
+      () => verifyUserPassword(dataDir, 'ada', 'correct horse'),
+      /could not be read/,
+    );
   });
 });
 
@@ -881,7 +984,7 @@ describe('a database whose users are still rows', () => {
   }
 
   it('writes the rows into users.json on the first boot and drops the table (AC #3)', async () => {
-    const dataDir = await legacyDatabase(hashPassword('a password from before'));
+    const dataDir = await legacyDatabase(await hashPassword('a password from before'));
 
     const cms = await box.site({ dataDir });
 

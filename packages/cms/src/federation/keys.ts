@@ -66,7 +66,10 @@ export function writeActorKeyFile(
 ): string {
   const file = actorKeyFile(dataDir, identifier, algorithm);
   ensureKeysDir(dataDir);
-  writeFileAtomicallySync(file, `${privateJwk.trimEnd()}\n`, { mode: KEY_FILE_MODE });
+  writeFileAtomicallySync(file, `${privateJwk.trimEnd()}\n`, {
+    mode: KEY_FILE_MODE,
+    durable: true,
+  });
   return file;
 }
 
@@ -195,7 +198,7 @@ async function loadPair(
       jwk = `${JSON.stringify(await exportJwk(pair.privateKey), undefined, 2)}\n`;
       return jwk;
     },
-    { mode: KEY_FILE_MODE },
+    { mode: KEY_FILE_MODE, durable: true },
   );
 
   return await importPair(file, jwk);

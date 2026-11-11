@@ -21,7 +21,7 @@ import {
   verifyUserPassword,
 } from '../site/users.ts';
 import type { UsersFileContents } from '../site/users.ts';
-import { createToken, findAccessToken } from '../indieauth/tokens.ts';
+import { createToken, findAccessToken, tokensFile } from '../indieauth/tokens.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import { addUser, writeUsers } from './__testing__/users.ts';
 import {
@@ -1187,7 +1187,9 @@ describe('a bad add form', () => {
     assert.match(await response.text(), /already exists/);
     assert.equal(countUsers(cms.config.dataDir), 1);
     // The name was not quietly given the new password either.
-    assert.ok(verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined);
+    assert.ok(
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
+    );
   });
 });
 
@@ -1470,7 +1472,7 @@ describe('a bad password form', () => {
     assert.match(html, /not your current password/);
     assert.doesNotMatch(html, /a brand new password/, 'no password is echoed back into the HTML');
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
       'the old password still works',
     );
   });
@@ -1495,9 +1497,30 @@ describe('a bad password form', () => {
     assert.equal(response.headers.get('retry-after'), '900');
     assert.match(await response.text(), /Too many wrong passwords\. Try again in 15 minutes\./);
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
       'the old password still works',
     );
+  });
+
+  it('counts concurrent wrong current passwords before any of them is checked', async () => {
+    const cms = await box.site({ loginAttempts: 3, loginLockout: 900 });
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        agent.post('/admin/users/password', {
+          csrf_token: token,
+          current_password: `guess ${String(i)}`,
+          new_password: 'a brand new password',
+          new_password_confirmation: 'a brand new password',
+        }),
+      ),
+    );
+
+    const statuses = responses.map((response) => response.status);
+    assert.equal(statuses.filter((status) => status === 400).length, 3, statuses.join(' '));
+    assert.equal(statuses.filter((status) => status === 429).length, 7, statuses.join(' '));
   });
 
   it('counts wrong current passwords on the add-user form against the same limit', async () => {
@@ -1546,7 +1569,7 @@ describe('a bad password form', () => {
     assert.match(await short.text(), /A password is at least 8 characters/);
 
     assert.ok(
-      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
+      (await verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password)) !== undefined,
       'neither refusal changed anything',
     );
   });
@@ -1640,6 +1663,35 @@ describe('deleting a user', () => {
     const after = await (await agent.get('/admin/users')).text();
     assert.match(after, /Deleted grace\./, 'the screen says what happened');
     assert.doesNotMatch(after, /href="\/author\/grace\/"/, 'and she is no longer in the table');
+  });
+
+  it('keeps the user when a later step of the deletion fails, so it can be tried again', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const grace = addUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    });
+    const tokens = tokensFile(cms.config.dataDir);
+    writeFileSync(tokens, '{ not json');
+
+    const failed = await agent.post('/admin/users/delete', {
+      csrf_token: (await usersScreen(agent)).token,
+      user_id: String(grace.id),
+    });
+
+    assert.equal(failed.status, 500);
+    assert.equal(findUser(cms.config.dataDir, 'grace')?.id, grace.id, 'grace is still listed');
+
+    writeFileSync(tokens, '{"tokens":[]}\n');
+    const retried = await agent.post('/admin/users/delete', {
+      csrf_token: (await usersScreen(agent)).token,
+      user_id: String(grace.id),
+    });
+
+    assert.equal(retried.status, 303);
+    assert.equal(findUser(cms.config.dataDir, 'grace'), undefined);
   });
 
   it('refuses to delete you, even when somebody else is left', async () => {

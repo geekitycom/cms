@@ -4,6 +4,8 @@ import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { revokeTokensForUser } from '../indieauth/tokens.ts';
 import { findUserByIdentifier, setUserPassword, userIssuedTo } from '../site/users.ts';
+import type { User } from '../site/users.ts';
+import { messageOf } from '../util/errors.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { passwordProblem } from './credentials.ts';
@@ -141,31 +143,12 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
 
     const user = identifier === '' ? undefined : findUserByIdentifier(config.dataDir, identifier);
 
-    if (user?.email !== undefined && c.var.mailConfigured) {
-      // A good moment to sweep: resets are rare, and this is the one handler
-      // that writes a row to the table.
-      c.var.admin.prunePasswordResets();
-      c.var.admin.deletePasswordResetsForUser(user.id);
-      const reset = c.var.admin.createPasswordReset({
-        userId: user.id,
-        userUid: user.uid,
-        lifetimeSeconds: RESET_TOKEN_LIFETIME_SECONDS,
-      });
-
-      // Dropped rather than awaited, for two reasons: the answer is the same
-      // whatever the provider says, and waiting for a provider on one path and
-      // not the other is how the page's timing would start telling people
-      // which usernames exist.
-      void c.var.mail.send({
-        to: user.email,
-        template: RESET_TEMPLATE,
-        data: {
-          username: user.username,
-          resetUrl: resetLink(config.baseUrl, reset.token),
-          expiresAt: reset.expiresAt,
-          expiresInHours: RESET_TOKEN_LIFETIME_SECONDS / 3600,
-        },
-      });
+    if (user?.email !== undefined && canSendRecovery(c)) {
+      try {
+        sendResetLink(c, user.email, user);
+      } catch (error) {
+        console.warn(`Could not create a password reset link: ${messageOf(error)}`);
+      }
     }
 
     anonymousSession(c);
@@ -239,6 +222,33 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
     return c.redirect(LOGIN_REDIRECT, 303);
   });
 
+  function sendResetLink(c: Context<GeekityEnv>, email: string, user: User): void {
+    // A good moment to sweep: resets are rare, and this is the one handler
+    // that writes a row to the table.
+    c.var.admin.prunePasswordResets();
+    c.var.admin.deletePasswordResetsForUser(user.id);
+    const reset = c.var.admin.createPasswordReset({
+      userId: user.id,
+      userUid: user.uid,
+      lifetimeSeconds: RESET_TOKEN_LIFETIME_SECONDS,
+    });
+
+    // Dropped rather than awaited, for two reasons: the answer is the same
+    // whatever the provider says, and waiting for a provider on one path and
+    // not the other is how the page's timing would start telling people
+    // which usernames exist.
+    void c.var.mail.send({
+      to: email,
+      template: RESET_TEMPLATE,
+      data: {
+        username: user.username,
+        resetUrl: resetLink(c.var.config.baseUrl, reset.token),
+        expiresAt: reset.expiresAt,
+        expiresInHours: RESET_TOKEN_LIFETIME_SECONDS / 3600,
+      },
+    });
+  }
+
   /** What both handlers say to a token that buys nothing. */
   function refuseToken(c: Context<GeekityEnv>): Response {
     anonymousSession(c);
@@ -263,12 +273,17 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
       // Read per request, exactly as the mail service reads it: a credential
       // pasted into the settings screen turns recovery on for the next visitor
       // without a restart.
-      configured: c.var.mailConfigured,
+      configured: canSendRecovery(c),
+      devMode: c.var.devMode,
       answer: RECOVERY_ANSWER,
       sent: false,
       ...extra,
     };
   }
+}
+
+function canSendRecovery(c: Context<GeekityEnv>): boolean {
+  return c.var.mailConfigured && !c.var.devMode;
 }
 
 /** Where a finished reset sends the browser. Spelled here to avoid a cycle. */

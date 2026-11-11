@@ -55,6 +55,12 @@ describe('passwordProblem', () => {
   it('refuses an empty password', () => {
     assert.notEqual(passwordProblem(''), undefined);
   });
+
+  it('counts characters, not UTF-16 units', () => {
+    assert.notEqual(passwordProblem('\u{1F600}'.repeat(MINIMUM_PASSWORD_LENGTH / 2)), undefined);
+    assert.notEqual(passwordProblem('e\u0301'.repeat(MINIMUM_PASSWORD_LENGTH / 2)), undefined);
+    assert.equal(passwordProblem('\u{1F600}'.repeat(MINIMUM_PASSWORD_LENGTH)), undefined);
+  });
 });
 
 describe('emailProblem', () => {

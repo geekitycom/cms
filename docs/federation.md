@@ -588,8 +588,8 @@ already an absolute URL, the site leaves it unchanged. Use that to serve a
 profile picture from a CDN.
 
 Saving a profile delivers an `Update` of that user's actor to their followers.
-The followers' servers then refresh their cached copy of the profile. Saving
-the settings screen sends nothing, because the site is not an actor.
+The followers' servers then refresh their cached copy of the profile. A save
+that leaves the stored profile as it was sends nothing. Saving the settings screen sends nothing, because the site is not an actor.
 `cms.delivery.updateActor(user)` sends an actor `Update` from code. Its outcome
 is recorded like every other activity's, with the actor's id as its object and
 no slug. It is therefore not a row in the federation screen's per-post delivery
@@ -644,7 +644,11 @@ still the archive's children, because a peer refetches those.
 The CMS never creates an `actorId`, and no screen writes one. It comes from a
 plugin's import, such as the WordPress plugin's, or you type it into the file
 by hand. `/admin/users/<id>` shows it read-only beside the account. The site
-ignores a value that is not an absolute URL.
+ignores a value that is not an absolute `http` or `https` URL, and reads the
+URL in its normal form, so `HTTPS://Example.com/?author=2` is the same id as
+`https://example.com/?author=2`. An import refuses an id that is not such a
+URL, one that another user already carries, and another user's author URL on
+this site.
 
 ## Moving a site from the WordPress ActivityPub plugin
 

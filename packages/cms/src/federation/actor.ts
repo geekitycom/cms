@@ -243,13 +243,13 @@ export async function userActor(
     ),
     // Somewhere else this person is, as the property attachments every
     // fediverse client renders under a profile.
-    attachments: (profile.links ?? []).map(
-      (link) =>
-        new PropertyValue({
-          name: link.label,
-          value: `<a href="${escapeAttribute(link.href)}" rel="me nofollow noopener">${escapeText(link.href)}</a>`,
-        }),
-    ),
+    attachments: (profile.links ?? []).map((link) => {
+      const href = absoluteUrl(link.href, baseUrl);
+      return new PropertyValue({
+        name: link.label,
+        value: `<a href="${escapeAttribute(href)}" rel="me nofollow noopener">${escapeText(href)}</a>`,
+      });
+    }),
     // A blog's author accepts every follower, and says so, rather than leaving
     // a client to guess whether a follow will ever be answered.
     manuallyApprovesFollowers: false,
