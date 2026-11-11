@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
 import type { Clock } from '../util/clock.ts';
 import { decodeEntities } from '../util/html.ts';
@@ -103,12 +103,17 @@ export interface DeliverySearch {
   readonly actorId?: string | undefined;
 }
 
-const DELIVERY_SEARCH = `
-  WHERE (:objectIds IS NULL OR object_id IN (SELECT value FROM json_each(:objectIds)))
-    AND (:activityId IS NULL OR activity_id = :activityId)
-    AND (:statuses IS NULL OR status IN (SELECT value FROM json_each(:statuses)))
-    AND (:inboxId IS NULL OR inbox_id = :inboxId)
-    AND (:actorId IS NULL OR actor_id = :actorId)`;
+// Only the given filters go into the statement: SQLite cannot use an index
+// for a column test written as `:param IS NULL OR column = :param`.
+const DELIVERY_SEARCH_FILTERS = {
+  objectIds: 'object_id IN (SELECT value FROM json_each(:objectIds))',
+  activityId: 'activity_id = :activityId',
+  statuses: 'status IN (SELECT value FROM json_each(:statuses))',
+  inboxId: 'inbox_id = :inboxId',
+  actorId: 'actor_id = :actorId',
+} as const satisfies Record<keyof DeliverySearch, string>;
+
+type DeliverySearchStatements = { readonly items: StatementSync; readonly count: StatementSync };
 
 export interface DeliveryStore {
   /**
@@ -216,7 +221,7 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
         AND NOT EXISTS (
           SELECT 1 FROM ap_deliveries AS later
           WHERE later.actor_id = failure.actor_id
-            AND COALESCE(later.slug, later.object_id) = COALESCE(failure.slug, failure.object_id)
+            AND later.object_id = failure.object_id
             AND (later.attempted_at, later.rowid) > (failure.attempted_at, failure.rowid)
         )
       ORDER BY attempted_at DESC, rowid DESC
@@ -235,15 +240,28 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
       GROUP BY activity_id
       ORDER BY last_attempted_at DESC, activity_id
     `),
-    searchDeliveries: db.prepare(`
-      SELECT * FROM ap_deliveries ${DELIVERY_SEARCH}
-      ORDER BY attempted_at DESC, rowid DESC
-      LIMIT :limit OFFSET :offset
-    `),
-    countDeliverySearch: db.prepare(
-      `SELECT COUNT(*) AS count FROM ap_deliveries ${DELIVERY_SEARCH}`,
-    ),
   };
+  const searchStatements = new Map<string, DeliverySearchStatements>();
+  function searchStatementsFor(filters: readonly (keyof DeliverySearch)[]) {
+    const key = filters.join(',');
+    let prepared = searchStatements.get(key);
+    if (prepared === undefined) {
+      const where =
+        filters.length === 0
+          ? ''
+          : `WHERE ${filters.map((filter) => DELIVERY_SEARCH_FILTERS[filter]).join(' AND ')}`;
+      prepared = {
+        items: db.prepare(`
+          SELECT * FROM ap_deliveries ${where}
+          ORDER BY attempted_at DESC, rowid DESC
+          LIMIT :limit OFFSET :offset
+        `),
+        count: db.prepare(`SELECT COUNT(*) AS count FROM ap_deliveries ${where}`),
+      };
+      searchStatements.set(key, prepared);
+    }
+    return prepared;
+  }
   return {
     recordDelivery(delivery) {
       const recorded = getRow(
@@ -315,16 +333,21 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
 
     searchDeliveries(search, page = {}) {
       const filter = {
-        objectIds: search.objectIds === undefined ? null : JSON.stringify(search.objectIds),
-        activityId: search.activityId ?? null,
-        statuses: search.statuses === undefined ? null : JSON.stringify(search.statuses),
-        inboxId: search.inboxId ?? null,
-        actorId: search.actorId ?? null,
+        objectIds: search.objectIds === undefined ? undefined : JSON.stringify(search.objectIds),
+        activityId: search.activityId,
+        statuses: search.statuses === undefined ? undefined : JSON.stringify(search.statuses),
+        inboxId: search.inboxId,
+        actorId: search.actorId,
       };
+      const given = Object.entries(filter).filter(
+        (entry): entry is [keyof DeliverySearch, string] => entry[1] !== undefined,
+      );
+      const prepared = searchStatementsFor(given.map(([name]) => name));
+      const params = Object.fromEntries(given);
       return {
-        total: Number(statements.countDeliverySearch.get(filter)?.['count'] ?? 0),
-        items: statements.searchDeliveries
-          .all({ ...filter, limit: page.limit ?? NO_LIMIT, offset: page.offset ?? 0 })
+        total: Number(prepared.count.get(params)?.['count'] ?? 0),
+        items: prepared.items
+          .all({ ...params, limit: page.limit ?? NO_LIMIT, offset: page.offset ?? 0 })
           .map(toDelivery),
       };
     },

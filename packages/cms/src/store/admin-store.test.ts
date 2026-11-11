@@ -1197,6 +1197,79 @@ describe('the delivery outcome cache', () => {
     });
   });
 
+  describe('standing failures', () => {
+    const SINCE = '2026-03-01T00:00:00.000Z';
+
+    it('stay standing when a later delivery about another post with the same slug succeeds', async () => {
+      const admin = await store();
+      admin.recordDelivery(
+        outcome({ status: 'failed', error: '502', attemptedAt: '2026-03-04T10:00:00.000Z' }),
+      );
+      const otherHello = 'https://blog.example/2025/01/hello/';
+      admin.recordDelivery(
+        outcome({
+          activityId: `${otherHello}#create`,
+          objectId: otherHello,
+          attemptedAt: '2026-03-05T10:00:00.000Z',
+        }),
+      );
+
+      assert.deepEqual(
+        admin.listStandingFailuresSince(SINCE).map((failure) => failure.objectId),
+        [OBJECT_ID],
+      );
+    });
+
+    it('go once a later delivery about the same post reaches that actor', async () => {
+      const admin = await store();
+      admin.recordDelivery(
+        outcome({ status: 'failed', error: '502', attemptedAt: '2026-03-04T10:00:00.000Z' }),
+      );
+      admin.recordDelivery(
+        outcome({
+          activityId: `${OBJECT_ID}#update/2026-03-05T10:00:00.000Z`,
+          activityType: 'Update',
+          attemptedAt: '2026-03-05T10:00:00.000Z',
+        }),
+      );
+
+      assert.deepEqual(admin.listStandingFailuresSince(SINCE), []);
+    });
+
+    it('are listed for 20,000 failed rows over 1,000 actors and 20 posts in under a second', async () => {
+      const admin = await store();
+      const db = new DatabaseSync(admin.file);
+      const insert = db.prepare(`
+        INSERT INTO ap_deliveries (
+          activity_id, activity_type, object_id, slug, actor_id, inbox_id, status, error, attempted_at
+        ) VALUES (?, 'Create', ?, ?, ?, 'https://remote.example/inbox', 'failed', '500', ?)
+      `);
+      db.exec('BEGIN');
+      for (let post = 0; post < 20; post += 1) {
+        const objectId = `https://blog.example/2026/03/post-${post}/`;
+        const attemptedAt = new Date(Date.UTC(2026, 2, 4, 0, post)).toISOString();
+        for (let actor = 0; actor < 1000; actor += 1) {
+          insert.run(
+            `${objectId}#create`,
+            objectId,
+            `post-${post}`,
+            `https://remote.example/users/u${actor}`,
+            attemptedAt,
+          );
+        }
+      }
+      db.exec('COMMIT');
+      db.close();
+
+      const started = performance.now();
+      const failures = admin.listStandingFailuresSince(SINCE);
+      const elapsed = performance.now() - started;
+
+      assert.equal(failures.length, 20_000);
+      assert.ok(elapsed < 1000, `listing them took ${Math.round(elapsed)} ms`);
+    });
+  });
+
   describe('rows the queue no longer holds', () => {
     const BEFORE = '2026-06-01T00:00:00.000Z';
     const WAITING_INBOX = 'https://waiting.example/inbox';

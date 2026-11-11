@@ -845,10 +845,11 @@ federated post with no outcome recorded, and Resend works on any of them.
 ### Failed deliveries
 
 The Failed deliveries panel lists each delivery from the last 7 days that
-failed and is still the newest delivery of its post to that recipient. Each row
-shows the post, the activity, when it was sent, the inbox and the error. A
-failure leaves the list when the same post is delivered to the same recipient
-again, whatever activity it carries, or when it is 7 days old. If that later
+failed and is still the newest delivery of its object to that recipient. Each
+row shows the post, the activity, when it was sent, the inbox and the error. A
+failure leaves the list when the same object id is delivered to the same
+recipient again, whatever activity it carries, or when it is 7 days old. A
+delivery about another post that shares the slug does not count. If that later
 delivery fails too, it takes the earlier one's place. The
 dashboard's Needs attention card counts the same failures and links to this
 panel.
