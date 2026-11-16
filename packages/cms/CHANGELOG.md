@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.54.0](https://github.com/geekitycom/cms/compare/v0.53.0...v0.54.0) (2026-11-16)
+
+
+### Features
+
+* **cms:** replace a media file in place and send the change to followers ([9a1dd2e](https://github.com/geekitycom/cms/commit/9a1dd2e5478e4bb9378d902c510c7f3f61a54971))
+* **cms:** set a document's updated without rewriting its front matter ([368abbb](https://github.com/geekitycom/cms/commit/368abbbfb2352b291dd5b198caf6d9aa92e58ba4))
+* **cms:** version federated image attachment URLs by their bytes ([0ca85ef](https://github.com/geekitycom/cms/commit/0ca85efdbd7f07e902d602a0674fa743e3fb51a0))
+
+
+### Bug Fixes
+
+* **cms:** give a dashboard card loaded by the browser up to 20 seconds ([5973095](https://github.com/geekitycom/cms/commit/5973095af7249d9053acfaf8edce8de6f51bdad0))
+
 ## [0.53.0](https://github.com/geekitycom/cms/compare/v0.52.1...v0.53.0) (2026-11-16)
 
 
