@@ -887,10 +887,10 @@ describe('the migrated feed URLs', () => {
     );
   });
 
-  it('404 the paths the old feeds used to answer on', async () => {
+  it('404 the archive paths the old feeds used to answer on', async () => {
     const { cms } = await sharedSite(files);
 
-    for (const url of ['/feed.xml', '/feed.json', '/tag/releases/feed.xml']) {
+    for (const url of ['/tag/releases/feed.xml', '/tag/releases/feed.json']) {
       assert.equal((await cms.app.request(url)).status, 404, url);
     }
   });

@@ -3,8 +3,17 @@ import type { Hono } from 'hono';
 import { LOGIN_PATH, editUserPath } from '../site/admin-paths.ts';
 import { signedInAccount } from './signed-in.ts';
 import type { GeekityEnv } from './env.ts';
+import { CONTENT_TYPES } from './negotiate.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
+import {
+  ABOUT_MD_PATH,
+  aboutMarkdown,
+  CONTACT_VCF_PATH,
+  contactVcard,
+  profileFileResponse,
+  siteProfileOf,
+} from './social-profile.ts';
 
 /** RFC 9116's location for a site's vulnerability disclosure contacts. */
 export const SECURITY_TXT_PATH = '/.well-known/security.txt';
@@ -46,7 +55,6 @@ export function securityTxt(input: {
   return `${lines.join('\n')}\n`;
 }
 
-/** Mount `/.well-known/security.txt` and `/.well-known/change-password`. */
 export function mountWellKnown(app: Hono<GeekityEnv>): void {
   app.get(SECURITY_TXT_PATH, (c) => {
     const config = c.var.config;
@@ -59,6 +67,13 @@ export function mountWellKnown(app: Hono<GeekityEnv>): void {
     if (body === undefined) return c.notFound();
     return c.body(body, 200, { 'content-type': 'text/plain; charset=utf-8' });
   });
+
+  app.get(ABOUT_MD_PATH, (c) =>
+    profileFileResponse(c, aboutMarkdown(siteProfileOf(c)), CONTENT_TYPES.markdown),
+  );
+  app.get(CONTACT_VCF_PATH, (c) =>
+    profileFileResponse(c, contactVcard(siteProfileOf(c)), 'text/vcard; charset=utf-8'),
+  );
 
   // Where it lands depends on the cookie, so no cache may keep one answer.
   app.get(CHANGE_PASSWORD_WELL_KNOWN_PATH, (c) => {
