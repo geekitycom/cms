@@ -18,12 +18,13 @@ post's followers are that user's followers.
 Fedify's stores have defaults for a single process. Set `federation` to
 replace them when a site outgrows them:
 
-| Field                 | Default                                     | Meaning                                                                                                                                                                                     |
-| --------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kv`                  | `MemoryKvStore`                             | Fedify's cache and idempotence store. Nothing that has to survive a restart lives in it.                                                                                                    |
-| `queue`               | `SqliteMessageQueue` in `data/queue.sqlite` | The delivery and inbox queue. `null` means no queue: activities are handled and delivered inside the request that carried them, with no retry. See [The message queue](#the-message-queue). |
-| `allowPrivateAddress` | `false`                                     | Whether Fedify may fetch private and loopback addresses. Leave it off: turning it on removes an SSRF guard. It exists for tests.                                                            |
-| `deliveryTimeoutMs`   | `30000`                                     | How long one delivery POST is waited for before it is recorded as `failed`.                                                                                                                 |
+| Field                 | Default                                     | Meaning                                                                                                                                                                                                           |
+| --------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kv`                  | `MemoryKvStore`                             | Fedify's cache and idempotence store. Nothing that has to survive a restart lives in it.                                                                                                                          |
+| `queue`               | `SqliteMessageQueue` in `data/queue.sqlite` | The delivery and inbox queue. `null` means no queue: activities are handled and delivered inside the request that carried them, with no retry. See [The message queue](#the-message-queue).                       |
+| `allowPrivateAddress` | `false`                                     | Whether Fedify may fetch private and loopback addresses. Leave it off: turning it on removes an SSRF guard. It exists for tests.                                                                                  |
+| `deliveryTimeoutMs`   | `30000`                                     | How long one delivery POST is waited for before it is recorded as `failed`.                                                                                                                                       |
+| `citedReadWaitMs`     | `30000`                                     | How long a new post's `Create` waits for a page it cites that is still being read, so it goes out with the page's name. After that it goes out with the host form, and an `Update` follows once the page is read. |
 
 The CMS owns the followers and the inbox log. Both are files the site
 publishes (decision-9):
