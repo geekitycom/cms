@@ -25,6 +25,7 @@ import {
   DASHBOARD_PERIODS,
   dashboardPeriod,
   dashboardWidgets,
+  PAGE_WAIT_MS,
   WIDGET_TIME_LIMIT_MS,
   widgetKey,
 } from './widgets.ts';
@@ -179,7 +180,7 @@ async function waitedSlots(
   entries: readonly WidgetLoad[],
   now: Clock,
 ): Promise<Map<string, WidgetSlot>> {
-  const loaded = await board.load(entries, now);
+  const loaded = await board.load(entries, now, PAGE_WAIT_MS);
   return new Map(loaded.map((widget) => [widget.key, { widget, fetchInBrowser: false }]));
 }
 

@@ -140,9 +140,10 @@ The page answers without waiting for any widget. A card with a result kept
 from an earlier load shows it at once. A card with no kept result shows a
 placeholder. The browser loads each card that has no result, or whose result
 is past its refresh time, from `/admin/dashboard/widget?key=<card key>&period=<days>`
-and puts the content in place. That endpoint answers 204 for a widget with
+and puts the content in place. That endpoint gives a widget up to 20 seconds. That endpoint answers 204 for a widget with
 nothing to show, and the browser removes its card. Without JavaScript, the
-page links to `/admin?wait=1`, which loads every widget before it answers.
+page links to `/admin?wait=1`, which waits up to 3 seconds for each widget
+before it answers.
 
 The arrangement is stored on the user in `data/users.json` as
 `dashboardLayout`, next to the admin theme, so it follows the user to other
