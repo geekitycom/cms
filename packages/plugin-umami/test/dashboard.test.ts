@@ -44,7 +44,7 @@ async function dashboard(options: SiteOptions) {
   const cms = await umamiSite(umami, options);
   const admin = await signIn(cms);
   return async (query = '') => {
-    const response = await admin.get(`/admin${query}`);
+    const response = await admin.get(`/admin${query === '' ? '?' : `${query}&`}wait=1`);
     assert.equal(response.status, 200);
     return response.text();
   };
