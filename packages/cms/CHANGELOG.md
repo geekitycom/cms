@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.53.0](https://github.com/geekitycom/cms/compare/v0.52.1...v0.53.0) (2026-11-16)
+
+
+### Features
+
+* **cms:** draw the dashboard at once and load its widgets in the browser ([3b6bce7](https://github.com/geekitycom/cms/commit/3b6bce755eea363554f08cd061b8b8b0816af42e))
+* **cms:** forget stored reply contexts no post cites ([6fd9924](https://github.com/geekitycom/cms/commit/6fd99243fb4a79463b3d52f7ff8604963f9e8e07))
+* **cms:** read a cited page when its address is entered in the editor ([1dbfbb8](https://github.com/geekitycom/cms/commit/1dbfbb8e18e3ea736596178886f2ebd5b5e39c04))
+
+
+### Bug Fixes
+
+* **cms:** hold a citing post's Create until its cited page is read ([94626e8](https://github.com/geekitycom/cms/commit/94626e8bd3362b0fde707fab56d9a23972fef8c8))
+* **cms:** keep the cited card templates with the components ([a433c94](https://github.com/geekitycom/cms/commit/a433c948a97526fd24fc3d0441de6b66d1c967a8))
+* **cms:** send a repeated sign-in on instead of refusing it as stale ([8064188](https://github.com/geekitycom/cms/commit/80641888d27b9e7d33e68774280af8381b997433))
+
 ## [0.52.1](https://github.com/geekitycom/cms/compare/v0.52.0...v0.52.1) (2026-11-11)
 
 
