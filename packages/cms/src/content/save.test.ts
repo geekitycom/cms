@@ -6,7 +6,13 @@ import { after, describe, it } from 'node:test';
 
 import type { DocumentContent } from './document.ts';
 import { parseDocument } from './parser.ts';
-import { addPublishedStamp, contentFilePath, freeSlug, saveDocument } from './save.ts';
+import {
+  addPublishedStamp,
+  contentFilePath,
+  freeSlug,
+  saveDocument,
+  setUpdatedStamp,
+} from './save.ts';
 import { openContentStore } from './sqlite/open.ts';
 import type { ContentStore } from './store.ts';
 
@@ -304,6 +310,60 @@ describe('addPublishedStamp', () => {
 
     assert.equal(result, undefined);
     await assert.rejects(readFile(path.join(contentDir, FILE), 'utf8'));
+  });
+});
+
+describe('setUpdatedStamp', () => {
+  const FILE = 'posts/2026-09-02-hello-world.md';
+  const UPDATED = '2026-11-16T12:00:00.000Z';
+
+  async function dated(source: string): Promise<{ text: string; indexed: string | undefined }> {
+    const { contentDir, store } = await scratch();
+    await mkdir(path.join(contentDir, 'posts'), { recursive: true });
+    await writeFile(path.join(contentDir, FILE), source, 'utf8');
+    await setUpdatedStamp({ contentDir, store, path: FILE, updated: UPDATED });
+    return {
+      text: await readFile(path.join(contentDir, FILE), 'utf8'),
+      indexed: store.getByPath(FILE)?.updated,
+    };
+  }
+
+  it('adds the line after the date, leaving the rest of a hand-written file alone', async () => {
+    const { text, indexed } = await dated(
+      '---\ntitle: Hello # mine\ndate: 2026-09-02 10:00\ntags: [a, b]\nmood: sunny\n---\n\nBody.\n',
+    );
+    assert.equal(
+      text,
+      "---\ntitle: Hello # mine\ndate: 2026-09-02 10:00\nupdated: '2026-11-16T12:00:00.000Z'\ntags: [a, b]\nmood: sunny\n---\n\nBody.\n",
+    );
+    assert.equal(indexed, UPDATED);
+  });
+
+  it('replaces an updated written by hand, however its value was spread over lines', async () => {
+    const { text } = await dated(
+      '---\r\ntitle: Hello\r\nupdated: >-\r\n  2026-09-03\r\npermalink: /hello/\r\n---\r\n',
+    );
+    assert.equal(
+      text,
+      "---\r\ntitle: Hello\r\nupdated: '2026-11-16T12:00:00.000Z'\r\npermalink: /hello/\r\n---\r\n",
+    );
+  });
+
+  it('answers the document before and after, and nothing when the file is gone', async () => {
+    const { contentDir, store } = await scratch();
+    await mkdir(path.join(contentDir, 'posts'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, FILE),
+      '---\ntitle: Hello\npermalink: /hello/\n---\n',
+      'utf8',
+    );
+
+    const result = await setUpdatedStamp({ contentDir, store, path: FILE, updated: UPDATED });
+    assert.equal(result?.previous.updated, undefined);
+    assert.equal(result?.next.updated, UPDATED);
+
+    const gone = { contentDir, store, path: 'posts/gone.md', updated: UPDATED };
+    assert.equal(await setUpdatedStamp(gone), undefined);
   });
 });
 

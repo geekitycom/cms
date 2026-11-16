@@ -228,6 +228,81 @@ function withPublishedLine(source: string, published: string, path: string): str
   return lines.join(eol);
 }
 
+/** What {@link setUpdatedStamp} writes, and where. */
+export interface SetUpdatedStampOptions {
+  contentDir: string;
+  store: IndexWriter;
+  /** The file's path relative to {@link SetUpdatedStampOptions.contentDir}. */
+  path: string;
+  /** The new `updated`, an ISO 8601 instant. */
+  updated: string;
+}
+
+/**
+ * Set a document's `updated` by rewriting that one line of its file, or adding
+ * it after `date`, then update the index from the bytes written. Like
+ * {@link addPublishedStamp}, the rest of a hand-written file stays as it was.
+ *
+ * Answers the document as the file read before and after, so the caller can
+ * announce the change, or `undefined` when the file is gone.
+ */
+export async function setUpdatedStamp(
+  options: SetUpdatedStampOptions,
+): Promise<{ previous: Document; next: Document } | undefined> {
+  const relative = options.path.replace(/\\/g, '/');
+  const file = path.join(options.contentDir, ...relative.split('/'));
+  const written = await readFile(file, 'utf8').catch((error: unknown) => {
+    if (isNotFound(error)) return undefined;
+    throw error;
+  });
+  if (written === undefined) return undefined;
+
+  const handles = handleDirectory(options.contentDir);
+  const previous = parseDocument(written, { path: relative, handles });
+  const source = withUpdatedLine(written, options.updated, relative);
+  const next = parseDocument(source, { path: relative, handles });
+  if (next.updated !== options.updated) {
+    throw new TypeError(`${relative} has an updated value the new date cannot replace.`);
+  }
+
+  await writeFileAtomically(file, source);
+
+  options.store.upsert(next);
+  return { previous, next };
+}
+
+/**
+ * The file's text with its top-level `updated:` key, and any lines that
+ * continue its value, replaced by one line, or with that line added after
+ * `date`, where {@link serializeDocument} puts it.
+ */
+function withUpdatedLine(source: string, updated: string, path: string): string {
+  const eol = source.includes('\r\n') ? '\r\n' : '\n';
+  const lines = source.split(eol);
+  const end = lines.findIndex((line, index) => index > 0 && /^---\s*$/.test(line));
+  if (lines[0] !== '---' || end === -1) {
+    throw new TypeError(`${path} has no YAML front matter to date.`);
+  }
+
+  const line = `updated: ${dump(updated).trimEnd()}`;
+  const keyAt = (key: string): number =>
+    lines.findIndex((text, index) => index < end && new RegExp(`^${key}:(\\s|$)`).test(text));
+  const valueEnd = (at: number): number => {
+    let next = at + 1;
+    while (next < end && /^[ \t-]/.test(lines[next] ?? '')) next += 1;
+    return next;
+  };
+
+  const existing = keyAt('updated');
+  if (existing !== -1) {
+    lines.splice(existing, valueEnd(existing) - existing, line);
+    return lines.join(eol);
+  }
+  const date = keyAt('date');
+  lines.splice(date === -1 ? end : valueEnd(date), 0, line);
+  return lines.join(eol);
+}
+
 function isUnmodelledKey(line: string): boolean {
   const key = /^([^\s#'"-][^:]*):(\s|$)/.exec(line)?.[1];
   return key !== undefined && !(KNOWN_FRONT_MATTER_KEYS as readonly string[]).includes(key);
