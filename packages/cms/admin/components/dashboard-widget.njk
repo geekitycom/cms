@@ -1,0 +1,28 @@
+{% from "components/badge.njk" import badge %}
+{% from "components/blocks.njk" import block %}
+{% from "components/card.njk" import card %}
+
+{% macro widgetBody(widget) -%}
+  {% if widget.status == 'stale' %}
+    <p class="text-sm">{{ badge('Stale', color='warning') }} The latest load failed. These figures are from {{ widget.loadedAt }}.</p>
+  {% elif widget.status == 'unavailable' %}
+    <p>These stats are unavailable right now.</p>
+  {% endif %}
+  {% for data in widget.blocks %}{{ block(data) }}{% endfor %}
+{%- endmacro %}
+
+{% macro alertCard(widget) -%}
+  {% call card(title=widget.title, tone='warning') %}
+    {{ widgetBody(widget) }}
+  {% endcall %}
+{%- endmacro %}
+
+{% macro widgetSkeleton() -%}
+  <div class="flex flex-col gap-3">
+    <div class="skeleton h-4 w-2/3"></div>
+    <div class="skeleton h-4 w-full"></div>
+    <div class="skeleton h-4 w-5/6"></div>
+    <div class="skeleton h-24 w-full"></div>
+  </div>
+  <span class="sr-only">Loading</span>
+{%- endmacro %}

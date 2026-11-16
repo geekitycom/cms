@@ -4,7 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { TEN_AM_20_OCTOBER_IN_CHICAGO } from './__testing__/chicago-clock.ts';
-import { sandbox, signedIn } from './__testing__/harness.ts';
+import { sandbox, signedIn, waitedDashboardUrl } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 
@@ -41,7 +41,7 @@ async function site(posts: readonly Post[]): Promise<Browser> {
 }
 
 async function dashboard(agent: Browser): Promise<string> {
-  const response = await agent.get('/admin');
+  const response = await agent.get(waitedDashboardUrl());
   assert.equal(response.status, 200);
   return screenOf(await response.text());
 }

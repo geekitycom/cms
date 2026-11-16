@@ -1,27 +1,16 @@
 {% extends "layouts/shell.njk" %}
 {% from "components/stat.njk" import stats, stat %}
-{% from "components/card.njk" import card %}
-{% from "components/badge.njk" import badge %}
-{% from "components/blocks.njk" import block %}
+{% from "components/dashboard-widget.njk" import widgetBody, alertCard, widgetSkeleton %}
 {% from "components/tabs.njk" import tabs %}
 {% from "components/button.njk" import button %}
 {% from "components/dropdown.njk" import dropdown %}
 
 {% block title %}Dashboard{% endblock %}
 
-{% macro widgetBody(widget) -%}
-  {% if widget.status == 'stale' %}
-    <p class="text-sm">{{ badge('Stale', color='warning') }} The latest load failed. These figures are from {{ widget.loadedAt }}.</p>
-  {% elif widget.status == 'unavailable' %}
-    <p>These stats are unavailable right now.</p>
-  {% endif %}
-  {% for data in widget.blocks %}{{ block(data) }}{% endfor %}
-{%- endmacro %}
-
-{% macro widgetCard(widget, tone=none) -%}
-  {% call card(title=widget.title, tone=tone) %}
-    {{ widgetBody(widget) }}
-  {% endcall %}
+{% macro widgetSlot(widget) -%}
+  <div class="contents"{% if widget.loadUrl %} data-widget-url="{{ widget.loadUrl }}" aria-busy="true"{% endif %}>
+    {% if widget.loading %}{{ widgetSkeleton() }}{% else %}{{ widgetBody(widget) }}{% endif %}
+  </div>
 {%- endmacro %}
 
 {% macro arrangedCard(widget) -%}
@@ -33,6 +22,7 @@
           <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
           <input type="hidden" name="widget" value="{{ widget.key }}" />
           {% if period %}<input type="hidden" name="period" value="{{ period }}" />{% endif %}
+          {% if wait %}<input type="hidden" name="wait" value="1" />{% endif %}
           {% for key in widget.shown %}<input type="hidden" name="shown" value="{{ key }}" />{% endfor %}
           {{ button('↑', type='submit', name='action', value='earlier', style='ghost', size='xs', shape='square', ariaLabel='Move ' + widget.title + ' earlier', disabled=widget.first) }}
           {{ button('↓', type='submit', name='action', value='later', style='ghost', size='xs', shape='square', ariaLabel='Move ' + widget.title + ' later', disabled=widget.last) }}
@@ -47,7 +37,7 @@
         </form>
       </div>
       {% if not widget.collapsed %}
-        {{ widgetBody(widget) }}
+        {{ widgetSlot(widget) }}
       {% endif %}
     </div>
   </div>
@@ -55,6 +45,11 @@
 
 {% block content %}
   <h1 class="mb-6 text-2xl font-bold">Dashboard</h1>
+  {% if waitUrl %}
+    <noscript>
+      <p class="mb-6">Some cards load once the page is open, which needs JavaScript. <a class="link" href="{{ waitUrl }}">Show the dashboard with every card loaded</a>.</p>
+    </noscript>
+  {% endif %}
 
   {% set glance = [
     { label: 'Published posts', value: counts.posts },
@@ -76,7 +71,9 @@
   </section>
 
   {% for widget in alerts %}
-    <section class="mb-8">{{ widgetCard(widget, tone='warning') }}</section>
+    <section class="mb-8"{% if widget.loadUrl %} data-widget-url="{{ widget.loadUrl }}"{% endif %}{% if widget.loading %} hidden{% endif %}>
+      {% if not widget.loading %}{{ alertCard(widget) }}{% endif %}
+    </section>
   {% endfor %}
 
   {% if arrangeable %}
@@ -96,6 +93,7 @@
                         <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
                         <input type="hidden" name="widget" value="{{ card.key }}" />
                         {% if period %}<input type="hidden" name="period" value="{{ period }}" />{% endif %}
+                        {% if wait %}<input type="hidden" name="wait" value="1" />{% endif %}
                         <span class="min-w-0 text-sm">{{ card.title }}</span>
                         {{ button('Add back', type='submit', name='action', value='restore', size='xs', ariaLabel='Add back ' + card.title) }}
                       </form>
@@ -121,6 +119,6 @@
         {% endfor %}
       </div>
     </div>
-    <script defer src="{{ adminAsset('dashboard.js') }}"></script>
   {% endif %}
+  <script defer src="{{ adminAsset('dashboard.js') }}"></script>
 {% endblock %}

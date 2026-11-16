@@ -10,7 +10,7 @@ import {
   ELEVEN_PM_19_OCTOBER_IN_CHICAGO,
   TEN_AM_20_OCTOBER_IN_CHICAGO,
 } from './__testing__/chicago-clock.ts';
-import { sandbox, signedIn } from './__testing__/harness.ts';
+import { sandbox, signedIn, waitedDashboardUrl } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 
@@ -56,7 +56,7 @@ async function seed(cms: Cms): Promise<void> {
 }
 
 async function card(agent: Browser, query = ''): Promise<string> {
-  const response = await agent.get(`/admin${query}`);
+  const response = await agent.get(waitedDashboardUrl(query));
   assert.equal(response.status, 200);
   const [, html = ''] = screenOf(await response.text()).split(
     '<h2 class="card-title">Followers</h2>',

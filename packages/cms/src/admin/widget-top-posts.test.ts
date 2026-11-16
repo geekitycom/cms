@@ -10,7 +10,7 @@ import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin, PostEngagement } from '../plugin.ts';
 import type { NewInboxActivity } from '../store/admin-store.ts';
 import { TEN_AM_20_OCTOBER_IN_CHICAGO } from './__testing__/chicago-clock.ts';
-import { sandbox, signedIn } from './__testing__/harness.ts';
+import { sandbox, signedIn, waitedDashboardUrl } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 
@@ -114,7 +114,7 @@ function likes(cms: Cms, title: string, count: number): void {
 }
 
 async function card(agent: Browser, query = ''): Promise<string> {
-  const response = await agent.get(`/admin${query}`);
+  const response = await agent.get(waitedDashboardUrl(query));
   assert.equal(response.status, 200);
   const [, html = ''] = screenOf(await response.text()).split(
     '<h2 class="card-title">Top posts</h2>',
@@ -229,7 +229,7 @@ describe('the engagement core service (TASK-448)', () => {
     cms.admin.logInboxActivity(reply('Bravo', '2026-09-20T12:00:00.000Z'));
     await comment(cms, 'Charlie');
 
-    const response = await agent.get('/admin');
+    const response = await agent.get(waitedDashboardUrl());
     const words = text(screenOf(await response.text()));
 
     assert.match(words, /Views and engagement/);

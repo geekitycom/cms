@@ -1,0 +1,2 @@
+{% from "components/dashboard-widget.njk" import widgetBody, alertCard %}
+{% if widget.placement == 'alerts' %}{{ alertCard(widget) }}{% else %}{{ widgetBody(widget) }}{% endif %}

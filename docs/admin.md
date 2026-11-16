@@ -136,6 +136,14 @@ each with an Add back button. When no card is removed, it says so.
 A collapsed or removed card's widget is not loaded, so it costs nothing on
 each visit. The stat tiles and the Needs attention card are not arrangeable.
 
+The page answers without waiting for any widget. A card with a result kept
+from an earlier load shows it at once. A card with no kept result shows a
+placeholder. The browser loads each card that has no result, or whose result
+is past its refresh time, from `/admin/dashboard/widget?key=<card key>&period=<days>`
+and puts the content in place. That endpoint answers 204 for a widget with
+nothing to show, and the browser removes its card. Without JavaScript, the
+page links to `/admin?wait=1`, which loads every widget before it answers.
+
 The arrangement is stored on the user in `data/users.json` as
 `dashboardLayout`, next to the admin theme, so it follows the user to other
 browsers. It holds `columns`, a list of card keys for the left column and one

@@ -1,5 +1,6 @@
 (function () {
   var grid = document.querySelector('[data-dashboard-cards]');
+  Array.prototype.forEach.call(document.querySelectorAll('[data-widget-url]'), loadWidget);
   if (!grid) return;
   var url = grid.getAttribute('data-layout-url');
 
@@ -120,6 +121,49 @@
       .catch(function () {
         window.location.reload();
       });
+  }
+
+  function loadWidget(slot) {
+    fetch(slot.getAttribute('data-widget-url'), {
+      credentials: 'same-origin',
+      redirect: 'manual',
+    })
+      .then(function (response) {
+        if (response.status === 204) return '';
+        if (!response.ok) throw new Error(String(response.status));
+        return response.text();
+      })
+      .then(function (html) {
+        if (html === '') {
+          dropWidget(slot);
+          return;
+        }
+        slot.innerHTML = html;
+        slot.hidden = false;
+        slot.removeAttribute('aria-busy');
+      })
+      .catch(function () {
+        slot.removeAttribute('aria-busy');
+        if (slot.hidden) {
+          slot.remove();
+        } else if (slot.querySelector('.skeleton')) {
+          slot.innerHTML = '<p>These stats are unavailable right now.</p>';
+        }
+      });
+  }
+
+  function dropWidget(slot) {
+    var card = slot.closest('[data-dashboard-card]');
+    if (!card) {
+      slot.remove();
+      return;
+    }
+    var key = card.getAttribute('data-dashboard-card');
+    card.remove();
+    Array.prototype.forEach.call(grid.querySelectorAll('input[name="shown"]'), function (input) {
+      if (input.value === key) input.remove();
+    });
+    moveButtons();
   }
 
   function moveButtons() {
