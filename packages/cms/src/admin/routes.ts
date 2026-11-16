@@ -531,6 +531,10 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
     if (session === undefined && (isSetup || isAnonymous) && typeof token === 'string') {
       return expiredForm(c, pathname, form);
     }
+    const signInRepeatedAfterSuccess = pathname === LOGIN_PATH && session?.userId != null;
+    if (signInRepeatedAfterSuccess) {
+      return c.redirect(returnPath(await form.field(RETURN_TO_FIELD)) ?? ADMIN_PREFIX, 303);
+    }
     if (session === undefined || !csrfTokenMatches(session.csrfToken, token)) {
       return c.text('That form was stale or came from somewhere else. Reload and try again.', 403);
     }

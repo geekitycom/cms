@@ -388,6 +388,28 @@ describe('the anonymous session behind the sign-in forms', () => {
     assert.ok(!ids.includes('expired-anonymous'), 'the expired row is still there');
   });
 
+  it('sends a sign-in form submitted twice on to where the first one went', async () => {
+    const { cms } = await siteAt('2026-11-10T12:00:00Z');
+    const agent = browser(cms);
+    const page = await (await agent.get('/admin/login?return_to=%2Fadmin%2Fposts')).text();
+    const fields = {
+      csrf_token: csrfField(page) ?? '',
+      username: FIRST_ADMIN.username,
+      password: FIRST_ADMIN.password,
+      return_to: '/admin/posts',
+    };
+
+    const first = await agent.post('/admin/login', fields);
+    assert.equal(first.status, 303);
+    const signedInAs = sessionRows(cms);
+
+    const second = await agent.post('/admin/login', { ...fields, password: 'not checked' });
+    assert.equal(second.status, 303);
+    assert.equal(second.headers.get('location'), '/admin/posts');
+    assert.deepEqual(sessionRows(cms), signedInAs, 'the session is left as the first made it');
+    assert.equal((await agent.get('/admin')).status, 200);
+  });
+
   it('turns a sign-in form left open past it into a message to try again', async () => {
     const { cms, advance } = await siteAt('2026-11-10T12:00:00Z');
     const agent = browser(cms);
