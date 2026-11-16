@@ -225,9 +225,9 @@ describe('content change subscribers', () => {
 
     assert.deepEqual(heard, [
       'scheduler',
+      'replyContexts',
       'delivery',
       'webmentions',
-      'replyContexts',
       'notifier',
       'indexNow',
       'site',

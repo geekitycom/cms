@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import type { Context } from '@fedify/fedify';
 import { Activity, Delete, getTypeId, PUBLIC_COLLECTION } from '@fedify/vocab';
@@ -6,6 +7,7 @@ import type { Object as ActivityObject } from '@fedify/vocab';
 
 import type { AdminStore, Delivery, DeliveryStatus } from '../store/admin-store.ts';
 import { NO_LIMIT } from '../store/rows.ts';
+import { DEFAULT_CITED_READ_WAIT_MS } from '../config.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
@@ -106,6 +108,8 @@ export interface CreateDeliveryServiceOptions {
   actorProfiles: FederationContextData['actorProfiles'];
   /** What the federation context carries for the post objects. */
   cited: (site: ConversationSite) => CitedPageReader;
+  /** Resolves once the pages a post cites that are still being read are read or given up on. */
+  citedPagesRead: (document: Document) => Promise<void>;
   /** Where failures are reported. Defaults to `console`. */
   logger?: DeliveryLogger | undefined;
 }
@@ -403,6 +407,18 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     );
   }
 
+  /**
+   * A peer keeps the name a `Create` gave a cited page and may never apply the
+   * `Update` that corrects it, so the first one waits for a read in progress.
+   */
+  async function citedPagesRead(document: Document): Promise<void> {
+    const waitMs = config.federation.citedReadWaitMs ?? DEFAULT_CITED_READ_WAIT_MS;
+    await Promise.race([
+      options.citedPagesRead(document),
+      delay(waitMs, undefined, { ref: false }),
+    ]);
+  }
+
   function wasDeleted(objectId: string): boolean {
     return readObjectIds(config.contentDir).deleted.includes(objectId);
   }
@@ -586,8 +602,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       const sameId = delivery.before !== undefined && sameObject(context, delivery.before, after);
       queue(async () => {
         const before = delivery.before ?? announcedSince(change.previous, after);
+        if (before === undefined) {
+          await citedPagesRead(after);
+          return await announce(context, after, await shapeOf(context, after));
+        }
         const is = await shapeOf(context, after);
-        if (before === undefined) return await announce(context, after, is);
         const was = await shapeOf(context, before);
         const step = revisionStep(was, is);
         if (step.kind === 'none') return undefined;

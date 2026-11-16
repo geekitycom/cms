@@ -77,10 +77,23 @@ export interface FederationOverrides {
    * has no way to cancel the request, so this bounds the wait, not the socket.
    */
   deliveryTimeoutMs?: number | undefined;
+  /**
+   * How long a new post's `Create` waits for a page it cites that is still
+   * being read, in milliseconds, so the post goes out with the page's name.
+   * Defaults to {@link DEFAULT_CITED_READ_WAIT_MS}.
+   */
+  citedReadWaitMs?: number | undefined;
 }
 
 /** How long a delivery POST is waited for when the config names no limit. */
 export const DEFAULT_DELIVERY_TIMEOUT_MS = 30_000;
+
+/**
+ * Long enough for a cited page, its picture and its author's photo to be read
+ * at their own limits, and short enough that a hung peer holds the delivery
+ * queue for no longer than one slow inbox would.
+ */
+export const DEFAULT_CITED_READ_WAIT_MS = 30_000;
 
 /**
  * The admin job queue's two swap points, and the jobs a site

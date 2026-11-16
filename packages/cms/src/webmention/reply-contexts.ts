@@ -100,6 +100,11 @@ export interface ReplyContextService {
   read(target: string, site: ConversationSite): ReplyContext | undefined;
   /** The context the file holds for a target, leaving out the replies this site holds. */
   stored(target: string): ReplyContext | undefined;
+  /**
+   * Resolve once each read queued or running for a page the document cites,
+   * and that has nothing stored yet, has stored a context or given up.
+   */
+  whenRead(document: Document): Promise<void>;
   /** Resolve once everything queued has finished, however it finished. */
   settled(): Promise<void>;
 }
@@ -217,10 +222,18 @@ export function createReplyContextService(
   const describedForSave = new Set<string>();
 
   const work = createSerialQueue();
-  function enqueue(task: () => Promise<void>): void {
-    work.run(task).catch((thrown: unknown) => {
+  function enqueue(task: () => Promise<void>): Promise<void> {
+    return work.run(task).catch((thrown: unknown) => {
       logger.warn(`A reply context failed: ${messageOf(thrown)}`);
     });
+  }
+
+  const reading = new Map<string, Promise<void>>();
+  function queueRead(target: string): void {
+    const read = enqueue(() => refresh(target)).finally(() => {
+      if (reading.get(target) === read) reading.delete(target);
+    });
+    reading.set(target, read);
   }
 
   return {
@@ -235,10 +248,10 @@ export function createReplyContextService(
       for (const target of after) {
         const changed = !before.includes(target) && change.origin !== 'scan';
         if (describedForSave.delete(target) && target in stored) continue;
-        if (!(target in stored) || changed) enqueue(() => refresh(target));
+        if (!(target in stored) || changed) queueRead(target);
       }
       for (const target of before) {
-        if (!after.includes(target)) enqueue(() => forget(target));
+        if (!after.includes(target)) void enqueue(() => forget(target));
       }
     },
 
@@ -250,8 +263,8 @@ export function createReplyContextService(
           if (!(target in stored)) missing.add(target);
         }
       }
-      for (const target of missing) enqueue(() => refresh(target));
-      enqueue(sweep);
+      for (const target of missing) queueRead(target);
+      void enqueue(sweep);
     },
 
     async describe(target) {
@@ -280,7 +293,7 @@ export function createReplyContextService(
       await write(target, fetched.context);
       describedForSave.add(target);
       if (picture !== undefined || fetched.authorPhoto !== undefined) {
-        enqueue(() => attachImages(target, fetched));
+        void enqueue(() => attachImages(target, fetched));
       }
       return fetched.context;
     },
@@ -291,6 +304,15 @@ export function createReplyContextService(
 
     stored(target) {
       return readAll()[target];
+    },
+
+    async whenRead(document) {
+      const stored = readAll();
+      const pending = targetsOf(document).flatMap((target) => {
+        const read = target in stored ? undefined : reading.get(target);
+        return read === undefined ? [] : [read];
+      });
+      await Promise.all(pending);
     },
 
     settled() {
