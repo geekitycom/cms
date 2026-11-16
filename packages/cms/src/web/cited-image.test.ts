@@ -231,7 +231,7 @@ describe('a cited URL that is an image', () => {
     const contexts = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'replyContexts.json'), 'utf8'),
     ) as Record<string, Record<string, unknown>>;
-    assert.deepEqual(Object.keys(contexts[IMAGE] ?? {}).sort(), ['picture', 'url']);
+    assert.deepEqual(Object.keys(contexts[IMAGE] ?? {}).sort(), ['picture', 'storedAt', 'url']);
     assert.equal((contexts[IMAGE]?.['picture'] as { kind: string }).kind, 'photo');
     assert.equal(contexts[BIG_IMAGE], undefined);
     assert.equal(contexts[GONE], undefined);

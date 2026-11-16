@@ -284,11 +284,13 @@ describe('a like, a repost or a bookmark names what it cites', () => {
     const contexts = await stored(contentDir);
 
     assert.deepEqual(Object.keys(contexts).sort(), [ENTRY, HOSTILE, OG, TITLED, VIDEO].sort());
-    assert.deepEqual(contexts[VIDEO], {
+    const { storedAt, ...video } = (contexts[VIDEO] ?? {}) as Record<string, unknown>;
+    assert.deepEqual(video, {
       url: VIDEO,
       name: 'How to grow beans',
       author: { name: 'Sam Video', url: 'https://video.example/@sam' },
     });
+    assert.ok(!Number.isNaN(Date.parse(String(storedAt))), 'stamped with when it was read');
   });
 
   it('serves every citation without a fetch', async () => {

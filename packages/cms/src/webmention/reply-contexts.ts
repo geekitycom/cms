@@ -5,7 +5,7 @@ import type { ConversationSite } from '../comments/conversation.ts';
 import type { Document } from '../content/document.ts';
 import { citationsOf } from '../content/citation.ts';
 import { replyTarget } from '../content/post-type.ts';
-import type { CatalogReader } from '../content/store.ts';
+import type { CatalogReader, IndexClock } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { updateFileAtomically } from '../files/atomic.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
@@ -34,6 +34,15 @@ export const REPLY_CONTEXTS_FILE = '_data/replyContexts.json';
 
 export const CITED_SLUG_TIMEOUT_MS = 3_000;
 
+/**
+ * How long a stored context no post cites is kept: long enough for a page
+ * read from the editor to wait on a draft that has not been saved yet.
+ */
+export const UNCITED_CONTEXT_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** The key each entry in the file carries the time it was stored under. */
+const STORED_AT = 'storedAt';
+
 /** Where the service reports a target it could not read. */
 export interface ReplyContextLogger {
   warn(message: string): void;
@@ -41,8 +50,8 @@ export interface ReplyContextLogger {
 
 /** What {@link createReplyContextService} needs. */
 export interface CreateReplyContextServiceOptions {
-  /** The index, asked which targets are still cited. */
-  readonly store: CatalogReader;
+  /** The index, asked which targets are still cited, and the clock entries are stamped by. */
+  readonly store: CatalogReader & IndexClock;
   /** Where the file and the copied pictures live, and the limit a picture is held to. */
   readonly config: CitedPictureConfig;
   /** How host names are resolved before a target is fetched. */
@@ -151,10 +160,14 @@ export function createReplyContextService(
     let previous: ReplyContext | undefined;
     await updateFileAtomically(file, (current) => {
       const all = current === undefined ? {} : parseContexts(current);
+      const times = current === undefined ? {} : storedTimes(current);
       previous = all[target];
       if (context === undefined) delete all[target];
-      else all[target] = context;
-      return `${JSON.stringify(all, null, 2)}\n`;
+      else {
+        all[target] = context;
+        times[target] = store.now().toISOString();
+      }
+      return serialize(all, times);
     });
     if (context !== undefined) options.onStored?.(target, previous);
   }
@@ -183,7 +196,33 @@ export function createReplyContextService(
     };
   }
 
+  /**
+   * Drop the entries no post cites, drafts and trash included, once they are
+   * older than {@link UNCITED_CONTEXT_GRACE_MS}. An entry with no time was
+   * stored before entries carried one, and is old enough.
+   */
+  async function forgetUncited(): Promise<void> {
+    const cited = new Set(store.listAll().flatMap(targetsOf));
+    const cutoff = store.now().getTime() - UNCITED_CONTEXT_GRACE_MS;
+    const stale = (target: string, times: Record<string, string>): boolean => {
+      const storedAt = times[target];
+      return !cited.has(target) && (storedAt === undefined || Date.parse(storedAt) <= cutoff);
+    };
+    const contexts = readAll();
+    const times = cachedText === undefined ? {} : storedTimes(cachedText);
+    if (!Object.keys(contexts).some((target) => stale(target, times))) return;
+    await updateFileAtomically(file, (current) => {
+      const all = current === undefined ? {} : parseContexts(current);
+      const latest = current === undefined ? {} : storedTimes(current);
+      for (const target of Object.keys(all)) {
+        if (stale(target, latest)) delete all[target];
+      }
+      return serialize(all, latest);
+    });
+  }
+
   async function sweep(): Promise<void> {
+    await forgetUncited();
     const kept = new Set<string>();
     for (const context of Object.values(readAll())) {
       if (context.picture !== undefined) kept.add(context.picture.src);
@@ -414,6 +453,33 @@ function parseContexts(text: string): Record<string, ReplyContext> {
     };
   }
   return contexts;
+}
+
+/** When each entry was stored, by target, for the entries that say. */
+function storedTimes(text: string): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return {};
+  }
+  if (!isRecord(parsed)) return {};
+  const times: Record<string, string> = {};
+  for (const [target, value] of Object.entries(parsed)) {
+    const storedAt = isRecord(value) ? stringOf(value[STORED_AT]) : undefined;
+    if (storedAt !== undefined && !Number.isNaN(Date.parse(storedAt))) times[target] = storedAt;
+  }
+  return times;
+}
+
+function serialize(contexts: Record<string, ReplyContext>, times: Record<string, string>): string {
+  const entries = Object.fromEntries(
+    Object.entries(contexts).map(([target, context]) => [
+      target,
+      times[target] === undefined ? context : { ...context, [STORED_AT]: times[target] },
+    ]),
+  );
+  return `${JSON.stringify(entries, null, 2)}\n`;
 }
 
 function stringOf(value: unknown): string | undefined {
