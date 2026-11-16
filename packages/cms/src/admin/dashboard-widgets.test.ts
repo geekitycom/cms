@@ -232,30 +232,6 @@ describe('the dashboard drawn before its widgets load', () => {
     assert.match(anonymous.headers.get('location') ?? '', /\/admin\/login/);
   });
 
-  it('gives a card the browser loads longer than the waiting page gives it', async () => {
-    const slow = widgetPlugin('@test/plugin-slow', [
-      {
-        ...VISITS,
-        load: ({ signal }) =>
-          new Promise((resolve, reject) => {
-            const timer = setTimeout(() => resolve([{ paragraph: ['Slow but there.'] }]), 3300);
-            signal?.addEventListener('abort', () => {
-              clearTimeout(timer);
-              reject(new Error('stopped'));
-            });
-          }),
-      },
-    ]);
-    const { agent } = await site([slow]);
-    const url = widgetUrlIn(cardOf(await page(agent), '@test/plugin-slow:visits')) ?? '';
-
-    const [waited, card] = await Promise.all([dashboard(agent), agent.get(url)]);
-
-    assert.match(text(waited), /Visits ↑ ↓ ← → − ✕ These stats are unavailable right now\./);
-    assert.equal(card.status, 200);
-    assert.equal(text(await card.text()), 'Slow but there.');
-  });
-
   it('answers 204 for a widget with nothing to show, so the browser drops its card', async () => {
     const empty = widgetPlugin('@test/plugin-empty', [{ ...VISITS, load: () => [] }]);
     const { agent } = await site([empty]);

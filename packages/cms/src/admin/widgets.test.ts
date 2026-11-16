@@ -99,6 +99,36 @@ describe('the widget board', () => {
     );
   });
 
+  it('stops waiting when a caller waits less, and keeps the load running and its result', async () => {
+    const board = createWidgetBoard({ timeLimitMs: 10_000 });
+    const clock = clockAt('2026-10-20T12:00:00Z');
+    let release: () => void = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    let aborted = false;
+    const slow: WidgetLoad = {
+      ...widget('slow', () => STATS),
+      load: async (signal) => {
+        calls += 1;
+        await released;
+        aborted = signal.aborted;
+        return STATS;
+      },
+    };
+
+    const [gaveUp] = await board.load([slow], clock.now, 20);
+    assert.equal(gaveUp?.status, 'unavailable');
+
+    release();
+    const [drawn] = await board.load([slow], clock.now);
+    assert.equal(drawn?.status, 'fresh');
+    assert.deepEqual(drawn.blocks, STATS);
+    assert.equal(calls, 1, 'the second request used the load the first one gave up on');
+    assert.equal(aborted, false, 'giving up did not abort the load');
+  });
+
   it('loads every widget at once', async () => {
     const board = createWidgetBoard({ timeLimitMs: 500 });
     let releaseFirst: () => void = () => {};
