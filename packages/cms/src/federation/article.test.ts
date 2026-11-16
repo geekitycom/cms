@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -451,6 +452,46 @@ describe('image attachments (TASK-141 AC #5)', () => {
         url: `${BASE_URL}/uploads/2026/09/undescribed.webp`,
       },
     ]);
+  });
+
+  it('versions an upload’s attachment URL by its bytes, so new bytes are a new URL', async () => {
+    const instance = await site({
+      'uploads/2026/10/dune.jpg': 'the dark cover',
+      'uploads/2026/10/popcorn.png': 'a tub of popcorn',
+      'posts/2026-10-19-dune.md': rawPost(
+        [
+          "date: '2026-10-19T09:00:00Z'",
+          'permalink: /2026/10/dune/',
+          'rating: 4',
+          'item:',
+          '  kind: movie',
+          '  name: Dune',
+          '  photo:',
+          '    url: /uploads/2026/10/dune.jpg',
+          'photo: /uploads/2026/10/popcorn.png',
+        ],
+        'Loud. ![A sandworm](/uploads/2026/10/worm.webp)',
+      ),
+    });
+    const urls = async (): Promise<unknown[]> => {
+      const object = await articleAt(instance, '/2026/10/dune/');
+      return (object['attachment'] as Record<string, unknown>[]).map((image) => image['url']);
+    };
+
+    assert.deepEqual(await urls(), [
+      `${BASE_URL}/uploads/2026/10/dune.jpg?v=${contentVersion('the dark cover')}`,
+      `${BASE_URL}/uploads/2026/10/popcorn.png?v=${contentVersion('a tub of popcorn')}`,
+      `${BASE_URL}/uploads/2026/10/worm.webp`,
+    ]);
+
+    await writeFile(
+      path.join(instance.config.contentDir, 'uploads/2026/10/dune.jpg'),
+      'a better, brighter cover',
+    );
+    assert.equal(
+      (await urls())[0],
+      `${BASE_URL}/uploads/2026/10/dune.jpg?v=${contentVersion('a better, brighter cover')}`,
+    );
   });
 
   it('attaches nothing to a post with no images', async () => {
@@ -915,6 +956,11 @@ describe('the post summary', () => {
 });
 
 /** A post file written out whole, for the shapes {@link post} cannot spell. */
+/** What a versioned URL carries for these bytes: the first twelve hex digits of their SHA-256. */
+function contentVersion(bytes: string): string {
+  return createHash('sha256').update(bytes).digest('hex').slice(0, 12);
+}
+
 function rawPost(frontMatter: string[], body: string): string {
   return `---\n${[...frontMatter, `author: ${ADA}`].join('\n')}\n---\n\n${body}\n`;
 }
