@@ -67,7 +67,7 @@
     <div class="grid gap-6 overflow-hidden rounded-box border border-base-300 bg-base-100 lg:grid-cols-[3fr_2fr]">
       <div class="flex min-h-64 items-center justify-center bg-base-200 p-4">
         {% if file.kind == 'image' %}
-          <a href="{{ file.url }}"><img class="max-h-[70vh] rounded-box object-contain" src="{{ file.url }}" alt=""{% if file.width %} width="{{ file.width }}" height="{{ file.height }}"{% endif %} /></a>
+          <a href="{{ previewUrl }}"><img class="max-h-[70vh] rounded-box object-contain" src="{{ previewUrl }}" alt=""{% if file.width %} width="{{ file.width }}" height="{{ file.height }}"{% endif %} /></a>
         {% elif file.kind == 'audio' %}
           <audio class="w-full" controls preload="none" src="{{ file.url }}"></audio>
         {% elif file.kind == 'video' %}
@@ -128,6 +128,21 @@
             <p class="text-sm">Nothing uses it.</p>
           {% endif %}
         </div>
+
+        <form class="border-t border-base-300 pt-4" method="post" action="{{ replaceUrl }}" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          <input type="hidden" name="{{ fields.path }}" value="{{ file.path }}" />
+          <input type="hidden" name="{{ fields.from }}" value="{{ from }}" />
+          <div class="fieldset">
+            <label class="fieldset-legend" for="media-replace">Replace file</label>
+            <input id="media-replace" name="{{ fields.file }}" type="file" accept="{{ replaceAccepts }}" required aria-describedby="media-replace-help" class="file-input file-input-sm w-full" />
+            <p id="media-replace-help" class="label block whitespace-normal">
+              New bytes in the same format, at the same address, keeping the name and alt text.
+              Published posts that attach it are sent to their followers again.
+            </p>
+          </div>
+          <div class="mt-2">{{ button('Replace', type='submit') }}</div>
+        </form>
 
         <form class="border-t border-base-300 pt-4 text-right" method="post" action="{{ deleteUrl }}">
           <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />

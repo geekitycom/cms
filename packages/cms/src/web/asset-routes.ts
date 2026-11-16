@@ -100,8 +100,8 @@ export async function favicon(c: Context<GeekityEnv>): Promise<Response> {
  * Uploads are not documents — the index never sees them — so they are served
  * as files, with the same validators and the same traversal check the theme's
  * assets get. The cache lifetime is longer than a theme asset's because an
- * upload's URL names one set of bytes: the upload endpoint never overwrites,
- * it suffixes.
+ * upload rarely changes, and a day rather than a year because the media
+ * library can replace one in place.
  *
  * A path with no file behind it is not answered here: it goes on to the
  * not-found handler, so an upload that moved can be led on by `redirect_from`

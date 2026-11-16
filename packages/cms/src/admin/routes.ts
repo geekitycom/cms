@@ -41,7 +41,7 @@ import { mountFederationScreen } from './federation.ts';
 import { takeClearedAutosaves, takeFlash } from './flash.ts';
 import { adminSecurityHeaders } from './headers.ts';
 import { mountCommentsScreen } from './comments.ts';
-import { MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
+import { MEDIA_REPLACE_PATH, MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
 import { adminMenu } from './menu.ts';
 import { mountMessagesScreen } from './messages.ts';
 import { mountNavigationScreen } from './navigation.ts';
@@ -578,7 +578,11 @@ const ANONYMOUS_FORM_MAX_BYTES = 64 * 1024;
 
 const SIGNED_IN_FORM_MAX_BYTES = 8 * 1024 * 1024;
 
-const UPLOAD_PATHS: ReadonlySet<string> = new Set([UPLOADS_PATH, MEDIA_UPLOAD_PATH]);
+const UPLOAD_PATHS: ReadonlySet<string> = new Set([
+  UPLOADS_PATH,
+  MEDIA_UPLOAD_PATH,
+  MEDIA_REPLACE_PATH,
+]);
 
 /** A request body already cut to its limit, so reading its fields cannot buffer more. */
 interface BoundedForm {

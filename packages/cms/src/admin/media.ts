@@ -7,6 +7,8 @@
 import type { Context, Hono } from 'hono';
 
 import { postLabel } from '../content/post-type.ts';
+import { setUpdatedStamp, withDocumentWrites } from '../content/save.ts';
+import { isFederatedDocument } from '../content/served.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { Document } from '../content/document.ts';
 import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
@@ -14,7 +16,10 @@ import type { GeekityEnv } from '../web/env.ts';
 import { writeAltText } from '../content/alt-text.ts';
 import { STRIP_METADATA_JOB } from '../content/metadata/strip-job.ts';
 import type { AltText } from '../content/alt-text.ts';
+import { canonicalType, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import type { UploadKind } from '../files/upload-types.ts';
+import { uploadsAttachedTo } from '../federation/article.ts';
+import { sourceVersion, versioned } from '../images/paths.ts';
 import { describeImage, removeImageVariants, thumbnailUrl } from '../images/variants.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import {
@@ -25,7 +30,7 @@ import {
   usesUpload,
 } from '../media/library.ts';
 import type { MediaFile, RemoveDerived } from '../media/library.ts';
-import { refusedUpload, storeUpload } from '../media/uploads.ts';
+import { refusedUpload, replaceUpload, storeUpload } from '../media/uploads.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import { SITE } from '../site/settings.ts';
 import { listUsers } from '../site/users.ts';
@@ -56,6 +61,9 @@ export const MEDIA_FILE_PATH = `${MEDIA_PATH}/file`;
 /** Where the screen's upload form posts. */
 export const MEDIA_UPLOAD_PATH = `${MEDIA_PATH}/upload`;
 
+/** Where a file's Replace form posts. */
+export const MEDIA_REPLACE_PATH = `${MEDIA_PATH}/replace`;
+
 /** Where a file's Delete button posts. */
 export const MEDIA_DELETE_PATH = `${MEDIA_PATH}/delete`;
 
@@ -67,7 +75,7 @@ export const MEDIA_PER_PAGE = 24;
 
 /** The fields the forms on the media screens submit. */
 export const MEDIA_FIELDS = {
-  /** The file being added, on the upload form. */
+  /** The file being added, on the upload form, or the new bytes on the replace form. */
   file: 'file',
   /** The upload being deleted or described, as a path under `content/uploads/`. */
   path: 'path',
@@ -355,6 +363,28 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
     return c.redirect(MEDIA_PATH, 303);
   });
 
+  app.post(MEDIA_REPLACE_PATH, async (c) => {
+    const body = await c.req.parseBody();
+    const view = postedView(body);
+    const relative = stringOrEmpty(body[MEDIA_FIELDS.path]).trim();
+    const file = relative === '' ? undefined : resolveUpload(c.var.config.contentDir, relative);
+
+    if (file === undefined || !(await isFile(file))) {
+      flash(c, 'error', 'That is not a file in this site’s uploads.');
+      return c.redirect(mediaLibraryUrl(view), 303);
+    }
+
+    const outcome = await replaceUpload(body[MEDIA_FIELDS.file], relative, c.var.config);
+    if (refusedUpload(outcome)) {
+      flash(c, 'error', `${outcome.error} The file was not replaced.`);
+      return c.redirect(mediaFileUrl(relative, view), 303);
+    }
+
+    const redated = await redatePostsAttaching(c, relative);
+    flash(c, 'notice', replacedMessage(`${UPLOAD_ASSET_PREFIX}${relative}`, redated));
+    return c.redirect(mediaFileUrl(relative, view), 303);
+  });
+
   app.post(MEDIA_ALT_PATH, async (c) => {
     const body = await c.req.parseBody();
     const view = postedView(body);
@@ -526,6 +556,13 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
       fields: MEDIA_FIELDS,
       from: mediaViewQuery(view),
       altUrl: MEDIA_ALT_PATH,
+      replaceUrl: MEDIA_REPLACE_PATH,
+      replaceAccepts: sameFormatExtensions(c.var.config.uploadTypes, file.extension),
+      // The original is cached for a day, so a preview of new bytes names them.
+      previewUrl:
+        file.kind === 'image'
+          ? versioned(file.url, sourceVersion(c.var.config, file.path))
+          : file.url,
       deleteUrl: MEDIA_DELETE_PATH,
       libraryUrl: mediaLibraryUrl(viewAroundFile),
       selfUrl: mediaFileUrl(file.path, view),
@@ -535,6 +572,62 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
       count: around.length,
     };
   }
+}
+
+/**
+ * Give each published post whose federated object attaches the upload a new
+ * `updated`, and announce it as the editor's save would, so its followers are
+ * sent an `Update` carrying the attachment's new URL. A draft is left alone:
+ * nobody holds a copy of it. Answers how many posts were dated.
+ */
+async function redatePostsAttaching(c: Context<GeekityEnv>, relative: string): Promise<number> {
+  const { contentDir } = c.var.config;
+  const { store } = c.var;
+  const now = store.now();
+  const attaching = store
+    .listFederated()
+    .filter(
+      (post) => isFederatedDocument(post, now) && uploadsAttachedTo(post, contentDir).has(relative),
+    );
+
+  let redated = 0;
+  for (const post of attaching) {
+    const written = await withDocumentWrites(contentDir, () =>
+      setUpdatedStamp({ contentDir, store, path: post.path, updated: now.toISOString() }),
+    );
+    if (written === undefined) continue;
+    redated += 1;
+    await c.var.announce({
+      type: 'updated',
+      path: post.path,
+      previous: written.previous,
+      next: written.next,
+      origin: 'admin',
+    });
+  }
+  return redated;
+}
+
+/** What the flash says once a file has been replaced. */
+function replacedMessage(url: string, redated: number): string {
+  if (redated === 0) return `Replaced ${url}. No published post attaches it, so none was updated.`;
+  const posts =
+    redated === 1
+      ? '1 published post that attaches it'
+      : `${String(redated)} published posts that attach it`;
+  return `Replaced ${url}. ${posts} got a new updated time and went to followers again.`;
+}
+
+/** The allowed extensions a replacement could have: `.jpg` and `.jpeg` alike. */
+function sameFormatExtensions(allowed: readonly string[], extension: string): string {
+  const media = UPLOAD_MEDIA_TYPES.get(extension);
+  if (media === undefined) return extension;
+  return allowed
+    .filter((candidate) => {
+      const other = UPLOAD_MEDIA_TYPES.get(candidate);
+      return other !== undefined && canonicalType(other) === canonicalType(media);
+    })
+    .join(',');
 }
 
 function viewOf(url: string): MediaView {
