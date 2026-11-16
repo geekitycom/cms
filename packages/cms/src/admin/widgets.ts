@@ -9,7 +9,9 @@ import type { Clock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
 import type { GeekityEnv } from '../web/env.ts';
 
-export const WIDGET_TIME_LIMIT_MS = 3000;
+export const WIDGET_TIME_LIMIT_MS = 20_000;
+
+export const PAGE_WAIT_MS = 3000;
 
 export const DASHBOARD_PERIODS: readonly DashboardPeriod[] = [7, 30];
 
@@ -65,7 +67,7 @@ export interface KeptWidget {
 }
 
 export interface WidgetBoard {
-  load(widgets: readonly WidgetLoad[], now: Clock): Promise<LoadedWidget[]>;
+  load(widgets: readonly WidgetLoad[], now: Clock, waitMs?: number): Promise<LoadedWidget[]>;
   kept(entry: WidgetLoad, now: Clock): KeptWidget | undefined;
 }
 
@@ -98,12 +100,12 @@ export function createWidgetBoard(options: { timeLimitMs: number }): WidgetBoard
     return loading;
   }
 
-  async function loadOne(entry: WidgetLoad, now: Clock): Promise<LoadedWidget> {
+  async function loadOne(entry: WidgetLoad, now: Clock, waitMs: number): Promise<LoadedWidget> {
     const key = keptKey(entry);
     const last = kept.get(key);
     if (last !== undefined && !isDue(entry, last, now)) return drawn(entry, 'fresh', last);
     try {
-      return drawn(entry, 'fresh', await withinTimeLimit(started(key, entry, now), timeLimitMs));
+      return drawn(entry, 'fresh', await withinTimeLimit(started(key, entry, now), waitMs));
     } catch (error) {
       console.warn(
         `The ${entry.owner} widget ${entry.widget.id} did not load: ${messageOf(error)}`,
@@ -115,8 +117,8 @@ export function createWidgetBoard(options: { timeLimitMs: number }): WidgetBoard
   }
 
   return {
-    async load(widgets, now) {
-      const loaded = await Promise.all(widgets.map((entry) => loadOne(entry, now)));
+    async load(widgets, now, waitMs = timeLimitMs) {
+      const loaded = await Promise.all(widgets.map((entry) => loadOne(entry, now, waitMs)));
       return loaded.filter((entry) => entry.status === 'unavailable' || entry.blocks.length > 0);
     },
     kept(entry, now) {
