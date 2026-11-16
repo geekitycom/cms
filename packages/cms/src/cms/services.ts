@@ -475,17 +475,15 @@ export function createServices({
       await followMovedComments(commentRecords, store, change.next);
       followMovedWebmentions(admin, store, resolved.baseUrl);
     },
-    // Before delivery, so a new post's Create finds the read of the page it
-    // cites already queued and can wait for it.
-    (change) => {
-      replyContexts.handle(change);
-    },
     (change) => delivery.handle(change),
     (change) => {
       replyNotices.handle(change);
     },
     (change) => {
       webmentions.handle(change);
+    },
+    (change) => {
+      replyContexts.handle(change);
     },
     (change) => {
       notifier.handle(change);

@@ -14,7 +14,6 @@ export const CITED_PREVIEW_PATH = `${ADMIN_PREFIX}/cited-preview`;
 
 const CITING_PROPERTIES: readonly string[] = ['in-reply-to', ...CITATION_PROPERTIES];
 
-/** What the editor shows under one cited address. */
 export type CitedCardView =
   | {
       readonly name: string;
@@ -43,10 +42,6 @@ export function citedCardView(
   };
 }
 
-/**
- * Read a page an address field in the editor names, before any save, and
- * answer with the card the editor draws under that field.
- */
 export function mountCitedPreview(
   app: Hono<GeekityEnv>,
   { render }: { render: AdminRender },

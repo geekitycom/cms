@@ -3687,7 +3687,6 @@ describe('a cited page in a delivered note (TASK-262)', () => {
 
 const line = (name: string): string =>
   `<p>Bookmarked <a href="${SLOW_PAGE}">${name}</a></p>\n<p>Worth keeping</p>`;
-/** A wait for a cited page that gives up before a held page is let through. */
 const GIVE_UP_MS = 20;
 
 function holdSlowPage(): () => void {

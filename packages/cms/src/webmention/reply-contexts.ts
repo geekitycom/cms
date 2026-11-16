@@ -40,7 +40,8 @@ export const CITED_SLUG_TIMEOUT_MS = 3_000;
  */
 export const UNCITED_CONTEXT_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** The key each entry in the file carries the time it was stored under. */
+const STORED_BEFORE_STAMPS_MS = 0;
+
 const STORED_AT = 'storedAt';
 
 /** Where the service reports a target it could not read. */
@@ -116,8 +117,9 @@ export interface ReplyContextService {
   /** The context the file holds for a target, leaving out the replies this site holds. */
   stored(target: string): ReplyContext | undefined;
   /**
-   * Resolve once each read queued or running for a page the document cites,
-   * and that has nothing stored yet, has stored a context or given up.
+   * Resolve once each page the document cites that has nothing stored yet
+   * has been read, queuing the read when none is queued, and stored a
+   * context or given up.
    */
   whenRead(document: Document): Promise<void>;
   /** Resolve once everything queued has finished, however it finished. */
@@ -196,17 +198,13 @@ export function createReplyContextService(
     };
   }
 
-  /**
-   * Drop the entries no post cites, drafts and trash included, once they are
-   * older than {@link UNCITED_CONTEXT_GRACE_MS}. An entry with no time was
-   * stored before entries carried one, and is old enough.
-   */
   async function forgetUncited(): Promise<void> {
     const cited = new Set(store.listAll().flatMap(targetsOf));
     const cutoff = store.now().getTime() - UNCITED_CONTEXT_GRACE_MS;
     const stale = (target: string, times: Record<string, string>): boolean => {
       const storedAt = times[target];
-      return !cited.has(target) && (storedAt === undefined || Date.parse(storedAt) <= cutoff);
+      const storedMs = storedAt === undefined ? STORED_BEFORE_STAMPS_MS : Date.parse(storedAt);
+      return !cited.has(target) && storedMs <= cutoff;
     };
     const contexts = readAll();
     const times = cachedText === undefined ? {} : storedTimes(cachedText);
@@ -275,6 +273,7 @@ export function createReplyContextService(
 
   const reading = new Map<string, Promise<void>>();
   function queueRead(target: string): void {
+    if (reading.has(target)) return;
     const read = enqueue(() => refresh(target)).finally(() => {
       if (reading.get(target) === read) reading.delete(target);
     });
@@ -345,7 +344,7 @@ export function createReplyContextService(
 
     async readNow(target) {
       if (!(target in readAll())) {
-        if (!reading.has(target)) queueRead(target);
+        queueRead(target);
         await reading.get(target);
       }
       const context = readAll()[target];
@@ -363,11 +362,9 @@ export function createReplyContextService(
 
     async whenRead(document) {
       const stored = readAll();
-      const pending = targetsOf(document).flatMap((target) => {
-        const read = target in stored ? undefined : reading.get(target);
-        return read === undefined ? [] : [read];
-      });
-      await Promise.all(pending);
+      const unstored = targetsOf(document).filter((target) => !(target in stored));
+      for (const target of unstored) queueRead(target);
+      await Promise.all(unstored.flatMap((target) => reading.get(target) ?? []));
     },
 
     settled() {
@@ -455,7 +452,6 @@ function parseContexts(text: string): Record<string, ReplyContext> {
   return contexts;
 }
 
-/** When each entry was stored, by target, for the entries that say. */
 function storedTimes(text: string): Record<string, string> {
   let parsed: unknown;
   try {

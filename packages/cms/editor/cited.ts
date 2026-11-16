@@ -2,11 +2,6 @@ import { LOOK } from './look.ts';
 
 const LINK_FIELD = 'link-url';
 
-/**
- * Read the page an address field names once the address is entered or
- * pasted, and draw the server's card for it under the field, so the post is
- * saved with the page's name already known.
- */
 export function citedPreviews(form: HTMLFormElement, endpoint: string): void {
   if (endpoint === '') return;
   for (const slot of form.querySelectorAll<HTMLElement>('[data-cited-for]')) {
@@ -66,7 +61,6 @@ function watch(
   }
 }
 
-/** The property the field cites under: the Link form's chosen verb, or the field's own name. */
 function propertyOf(form: HTMLFormElement, slot: HTMLElement, input: HTMLInputElement): string {
   if (input.name !== LINK_FIELD) return slot.dataset['citedProperty'] ?? input.name;
   const verb = form.querySelector<HTMLInputElement>('input[name="link-verb"]:checked');

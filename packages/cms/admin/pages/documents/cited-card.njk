@@ -1,7 +1,3 @@
-{# What the editor shows of a page a post cites, under its address: the
-   stored name, author and picture, or that the page could not be read. The
-   editor draws it on load and /admin/cited-preview draws it after an address
-   is entered, so both come from here. #}
 {% import "components/fields.njk" as field %}
 {% from "components/card.njk" import card %}
 
@@ -31,8 +27,6 @@
 {% endif %}
 {% endmacro %}
 
-{# The card's place under one address field, which the editor script fills
-   again when the address changes. #}
 {% macro citedSlot(fieldId, property) %}
 <div data-cited-for="{{ fieldId }}" data-cited-property="{{ property }}" aria-live="polite">{{ citedCard(property) }}</div>
 {% endmacro %}
