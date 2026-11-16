@@ -28,6 +28,9 @@ Booting mounts the public site on the app. The routes are:
 | `/{key}.txt`                            | The IndexNow key, while the site has IndexNow on. See [IndexNow](#indexnow).                                                             |
 | `/.well-known/security.txt`             | Where to report a vulnerability; a 404 until a security contact is set. See [security.txt](security.md#securitytxt-and-change-password). |
 | `/.well-known/change-password`          | A redirect to the signed-in user's change-password form, or to the login form.                                                           |
+| `/.well-known/about.md`                 | The site author's profile as Markdown. See [SocialSpec profile](#socialspec-profile).                                                    |
+| `/.well-known/contact.vcf`              | The same profile as a vCard 4.0, with no email address in it.                                                                            |
+| `/feed.xml`, `/feed.json`               | A 301 to `/feed/` and to `/feed/json/`, the feed addresses SocialSpec suggests.                                                          |
 | `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                                                                |
 | `/_geekity/contact`                     | `POST` only. Where the contact form on a page submits.                                                                                   |
 | `/_geekity/webmention`                  | `POST` only. Where a webmention is sent; advertised on every document.                                                                   |
@@ -856,6 +859,40 @@ as written, in place of the generated one, dated by the file. To serve
 no file at all, clear **Serve /llms.txt** under Settings → Reading. This
 writes `"llmsTxt": false` to `site.json`. `/llms.txt` then answers 404, even
 when `content/llms.txt` exists, and the home page stops advertising it.
+
+## SocialSpec profile
+
+[SocialSpec](https://socialspec.org) builds a social profile from files at
+fixed paths. The site serves two of them, generated from the site author's
+profile on each request:
+
+- `/.well-known/about.md` follows [AboutSpec](https://aboutspec.org). It is
+  `text/markdown; charset=utf-8`, with the site's tagline as the `summary`
+  front matter, a `### About {name}` heading, the avatar as an image, the job
+  title and location, the bio, and a list of links. The links are the site,
+  each profile link and, when a page has the contact form on, that page.
+- `/.well-known/contact.vcf` follows [ContactSpec](https://contactspec.org).
+  It is a vCard 4.0 as `text/vcard; charset=utf-8`, with `FN`, `TITLE`, `NOTE`
+  (the bio as plain text), `PHOTO`, the site as `URL;PREF=1`, each profile
+  link as another `URL`, and the contact page as `CONTACT-URI` (RFC 8605).
+
+The site author is the user the [Site author](settings.md#site-author) setting
+names, the same person as the h-card and the JSON-LD `Person`. Every URL in
+both files is absolute. Neither file has an email address in it: the contact
+form is the way to reach the author, and it keeps the address private.
+
+A site whose author names no user is described as itself. The files carry
+the site title, the site avatar if there is one, the site URL and the contact
+page. The vCard is then `KIND:org`, as the JSON-LD describes such a site as
+an `Organization`.
+
+Both files send `Access-Control-Allow-Origin: *`, so a reader in a browser
+can fetch them. Each has an ETag over its body, and a request with a matching
+`If-None-Match` gets `304 Not Modified`.
+
+SocialSpec also suggests a feed at `/feed.xml` or `/feed.json`. Both redirect
+with `301` to the feeds the site already serves, `/feed/` (RSS 2.0) and
+`/feed/json/` (JSON Feed). The site has no `following.opml`.
 
 ## IndexNow
 

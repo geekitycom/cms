@@ -21,6 +21,8 @@ feeds move with the archives.
 WordPress's older spellings redirect with `301`, not 404:
 
 - `/feed/rss/` redirects to `/feed/`.
+- `/feed.xml` redirects to `/feed/`, and `/feed.json` to `/feed/json/`: the
+  addresses [SocialSpec](public-site.md#socialspec-profile) suggests.
 - `?feed=rss2`, `?feed=rss`, `?feed=atom` and `?feed=json` on any listing
   redirect to that listing's feed.
 - `?feed=rss2` or `?feed=rss` on a post's permalink redirects to that post's

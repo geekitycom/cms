@@ -135,8 +135,6 @@ export function createApp(
   // so no permalink can ever shadow it.
   mountHealth(app);
 
-  // The two well-known files a site answers for itself, before the
-  // public site can claim either path as a permalink.
   mountWellKnown(app);
 
   mountIndieAuthDiscovery(app);

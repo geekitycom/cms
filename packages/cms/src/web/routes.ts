@@ -143,6 +143,10 @@ export function mountPublicSite(
     app.get(feedPathUnder('/', format), (c) => feed(c, format, SITE_POSTS));
   }
 
+  // SocialSpec's suggested feed addresses.
+  app.get('/feed.xml', (c) => c.redirect(feedPathUnder('/', 'rss'), 301));
+  app.get('/feed.json', (c) => c.redirect(feedPathUnder('/', 'json'), 301));
+
   // The site-wide comments feed, for the same reason and at WordPress's URL.
   app.get(commentsFeedHref(undefined), (c) => comments(c, undefined));
 
