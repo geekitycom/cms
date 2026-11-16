@@ -955,12 +955,12 @@ describe('the post summary', () => {
   });
 });
 
-/** A post file written out whole, for the shapes {@link post} cannot spell. */
 /** What a versioned URL carries for these bytes: the first twelve hex digits of their SHA-256. */
 function contentVersion(bytes: string): string {
   return createHash('sha256').update(bytes).digest('hex').slice(0, 12);
 }
 
+/** A post file written out whole, for the shapes {@link post} cannot spell. */
 function rawPost(frontMatter: string[], body: string): string {
   return `---\n${[...frontMatter, `author: ${ADA}`].join('\n')}\n---\n\n${body}\n`;
 }

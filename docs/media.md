@@ -119,13 +119,13 @@ original with `?v=` on it, so it shows the new picture at once.
 A federated post's image attachments also carry `?v=` (see
 [Delivery](federation.md#delivery)). Mastodon keeps its own copy of each
 attachment and matches it by URL, so followers see the new picture only when
-they are sent an `Update` that carries the new URL. After a replace, every
-published post whose federated object attaches the file gets `updated` set to
-now, and the post is announced as an editor save is. The server changes only
-the `updated` line of the front matter, and adds one after `date` when there is
-none. A hand-written `updated` is overwritten. Drafts, trashed posts and posts
-that only link the file are left alone. The flash message says how many posts
-were updated.
+they are sent an `Update` that carries the new URL. After a replace, the server
+looks for posts that are published, were sent to followers, and attach the
+file. Each one gets `updated` set to now and is announced as an editor save is.
+The server changes only the `updated` line of the front matter, and adds one
+after `date` when there is none. A hand-written `updated` is overwritten.
+Drafts, trashed posts, posts never sent to followers, and posts that only link
+the file are left alone. The flash message says how many posts were updated.
 
 ### Delete a file
 

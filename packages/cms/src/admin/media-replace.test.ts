@@ -132,7 +132,6 @@ async function bytesAt(contentDir: string, relative: string): Promise<Uint8Array
   return new Uint8Array(await readFile(path.join(contentDir, 'uploads', ...relative.split('/'))));
 }
 
-/** What the site posted to other servers, as parsed activities. */
 const delivered: Record<string, unknown>[] = [];
 const realFetch = globalThis.fetch;
 before(() => {

@@ -558,11 +558,7 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
       altUrl: MEDIA_ALT_PATH,
       replaceUrl: MEDIA_REPLACE_PATH,
       replaceAccepts: sameFormatExtensions(c.var.config.uploadTypes, file.extension),
-      // The original is cached for a day, so a preview of new bytes names them.
-      previewUrl:
-        file.kind === 'image'
-          ? versioned(file.url, sourceVersion(c.var.config, file.path))
-          : file.url,
+      previewUrl: cacheBustedPreviewUrl(c.var.config, file),
       deleteUrl: MEDIA_DELETE_PATH,
       libraryUrl: mediaLibraryUrl(viewAroundFile),
       selfUrl: mediaFileUrl(file.path, view),
@@ -608,9 +604,20 @@ async function redatePostsAttaching(c: Context<GeekityEnv>, relative: string): P
   return redated;
 }
 
+/**
+ * A picture's URL with its bytes' version on it, so a browser holding the
+ * original from before a replace shows the new one. Audio, video and documents
+ * are not hashed, since reading a whole recording on every visit costs too much.
+ */
+function cacheBustedPreviewUrl(config: ImageConfig, file: MediaFile): string {
+  return file.kind === 'image' ? versioned(file.url, sourceVersion(config, file.path)) : file.url;
+}
+
 /** What the flash says once a file has been replaced. */
 function replacedMessage(url: string, redated: number): string {
-  if (redated === 0) return `Replaced ${url}. No published post attaches it, so none was updated.`;
+  if (redated === 0) {
+    return `Replaced ${url}. No published post that followers were sent attaches it, so none was updated.`;
+  }
   const posts =
     redated === 1
       ? '1 published post that attaches it'

@@ -135,7 +135,7 @@ export async function storeUpload(
  * to be the same format as the one it replaces: posts, feeds and the media
  * type the site serves it with all name the file by its extension. The path,
  * and so the alt text the library keeps under it, stays. The derived sizes
- * follow on their own, since they are keyed to the bytes.
+ * are made again from the new bytes.
  */
 export async function replaceUpload(
   file: unknown,
@@ -233,14 +233,7 @@ export function acceptUpload(
   }
 }
 
-/**
- * Derived immediately rather than on first sight in a page, so the encoding
- * is paid for by whoever uploaded the file and not by whoever reads the
- * post. A format with nothing to derive — a GIF, a PDF, a text file — comes
- * straight back, and a failure is reported and swallowed: a
- * stored file with no variants is a site that serves the original, which is
- * what it did before this feature existed.
- */
+/** Make the upload's derived sizes now, logging a failure rather than throwing it. */
 async function deriveVariants(config: UploadConfig, relative: string): Promise<void> {
   try {
     await generateImageVariants(config, relative);
