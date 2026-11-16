@@ -261,6 +261,14 @@ the photos. A review's `content` opens with what it reviews and the rating, as
 the page and the feeds say them. A text image is attached only when it is an
 upload the library does not mark decorative. One from another site is left out. See [Alt text](media.md#alt-text).
 
+An attached upload's URL carries a hash of its bytes, `?v=`, as its derived
+sizes do. Mastodon keeps its own copy of an attachment and matches it by URL,
+so a file replaced in the media library reaches a follower only under a new
+URL, in an `Update` that the replace sends. See
+[Replace a file](media.md#replace-a-file). The hash is part of the object a
+peer fetches, but the server never compares objects across a restart, so the
+first boot with versioned URLs sends nothing.
+
 To choose the type for one post, set it in the front matter:
 
 ```yaml

@@ -34,6 +34,7 @@ shows:
 - the public URL and the ready-made Markdown
 - what uses the file: documents, settings and user profiles, each linked to
   where it is changed
+- **Replace file** (see [Replace a file](#replace-a-file))
 - **Delete**
 
 **Previous** and **Next** step through the view the screen was opened from. The
@@ -94,6 +95,37 @@ The upload form calls `storeUpload`, the same function behind
 `POST /admin/uploads`. Both share one allowlist, one signature check, one
 `{yyyy}/{mm}/{slug}{ext}` naming rule, and one set of refusals. The library
 shows a refusal as a flash message on the next page, not as the editor's JSON.
+
+### Replace a file
+
+**Replace file** on a file's details screen writes new bytes over the same
+path. The name, the URL, the alt text in `media.json` and every document that
+uses the file stay as they are. Pages, feeds and derived sizes show the new
+bytes without an edit to any post.
+
+The form posts to `POST /admin/media/replace` with the file's `path`. The
+server runs the same checks an upload gets: the extension allowlist, the size
+limit for the file's kind, the declared media type, the signature check and the
+metadata strip. Then the new file must have the same media type as the file it
+replaces. A `.jpeg` can replace a `.jpg`, but a PNG cannot replace a JPEG. A
+refusal says why in a flash message and writes nothing. The new bytes are
+written atomically, and the derived sizes are made again from them.
+
+Each derived URL carries a hash of the original's bytes (`?v=`), so new bytes
+get new derived URLs. The original's own URL does not change, and a browser
+may keep its cached copy for up to a day. The details screen previews the
+original with `?v=` on it, so it shows the new picture at once.
+
+A federated post's image attachments also carry `?v=` (see
+[Delivery](federation.md#delivery)). Mastodon keeps its own copy of each
+attachment and matches it by URL, so followers see the new picture only when
+they are sent an `Update` that carries the new URL. After a replace, every
+published post whose federated object attaches the file gets `updated` set to
+now, and the post is announced as an editor save is. The server changes only
+the `updated` line of the front matter, and adds one after `date` when there is
+none. A hand-written `updated` is overwritten. Drafts, trashed posts and posts
+that only link the file are left alone. The flash message says how many posts
+were updated.
 
 ### Delete a file
 
