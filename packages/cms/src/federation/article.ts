@@ -27,13 +27,13 @@ import path from 'node:path';
 import { CITATION_VERBS, citationsOf, citedPageName } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { reviewHtml, reviewOf } from '../content/review.ts';
-import type { Review } from '../content/review.ts';
 import { RSVP_PHRASES, rsvpOf } from '../content/rsvp.ts';
 import type { Document } from '../content/document.ts';
 import { eventOf } from '../content/event.ts';
 import type { PostEvent } from '../content/event.ts';
 import { enclosureOf, isUploadUrl, playsAsVideo } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
+import type { Photo } from '../content/photo.ts';
 import { placeWordList, shareLocation } from '../content/location.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { postLocations } from '../content/locations.ts';
@@ -41,6 +41,8 @@ import { canonicalType, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import { readAltTexts } from '../content/alt-text.ts';
 import type { AltTextLibrary } from '../content/alt-text.ts';
 import { imagesIn, uploadPath } from '../content/image-tags.ts';
+import { sourceVersion, versioned } from '../images/paths.ts';
+import type { ImageConfig } from '../images/paths.ts';
 import type { DocumentLookup, IndexClock } from '../content/store.ts';
 import { isFederatedDocument } from '../content/served.ts';
 import type { ResolvedConfig } from '../config.ts';
@@ -340,9 +342,9 @@ export function postObject(
     interactionPolicy: QUOTABLE_BY_ANYONE,
     attachments: [
       ...recordingAttachment(document, baseUrl, context.data.cited),
-      ...itemAttachment(review, baseUrl, altTexts),
-      ...photoAttachments(document, context.data.config.baseUrl, altTexts),
-      ...imageAttachments(document, context.data.config.baseUrl, altTexts),
+      ...attachedImages(document, altTexts).map((image) =>
+        attachment(image, context.data.config, baseUrl),
+      ),
     ],
     location: place(
       shareLocation(
@@ -456,93 +458,91 @@ function recordingAttachment(
 }
 
 /**
- * Each of the post's photos, as an `Image` whose `name` is its alt
- * text, the media library's when the post gives none.
+ * One image a post attaches, before it is an ActivityStreams `Image`: the
+ * review's item picture, then each photo, then each upload the body shows.
  *
- * They go after the recording and before the body's images, because they are
- * what a photo post is. A photo from another site is attached without a media
- * type, which this site cannot check.
+ * The photos go after the recording and before the body's images, because
+ * they are what a photo post is. A photo from another site is attached without
+ * a media type, which this site cannot check. A body image is attached only
+ * when it is one of the site's own uploads and not decorative: Mastodon strips
+ * `<img>` out of `content` and shows attachments instead, so this is how a
+ * post's pictures reach a timeline, and `name` is where it reads their
+ * description from.
  */
-function photoAttachments(
-  document: Document,
-  baseUrl: string,
-  altTexts: () => AltTextLibrary,
-): Image[] {
-  return photosOf(document.extra).map((photo) => {
-    const media = isUploadUrl(photo.url)
-      ? UPLOAD_MEDIA_TYPES.get(path.extname(photo.url).toLowerCase())
-      : undefined;
-    const alt = photoAlt(photo, altTexts()) ?? '';
-    return new Image({
-      url: new URL(absoluteUrl(photo.url, baseUrl)),
-      mediaType: media?.kind === 'image' ? canonicalType(media) : null,
-      name: alt === '' ? null : alt,
-    });
-  });
+interface AttachedImage {
+  /** As the post writes it. */
+  url: string;
+  /** Its path under `content/uploads/`, when it is one of the site's uploads. */
+  upload: string | undefined;
+  mediaType: string | null;
+  name: string | null;
 }
 
-function itemAttachment(
-  review: Review | undefined,
-  baseUrl: string,
-  altTexts: () => AltTextLibrary,
-): Image[] {
-  const picture = review?.item.photo;
-  if (picture === undefined) return [];
-  const media = isUploadUrl(picture.url)
-    ? UPLOAD_MEDIA_TYPES.get(path.extname(picture.url).toLowerCase())
-    : undefined;
-  const alt = photoAlt(picture, altTexts()) ?? '';
+function attachedImages(document: Document, altTexts: () => AltTextLibrary): AttachedImage[] {
+  const picture = reviewOf(document.extra)?.item.photo;
+  const photos = photosOf(document.extra);
+  const attached = new Set(photos.map((photo) => photo.url));
   return [
-    new Image({
-      url: new URL(absoluteUrl(picture.url, baseUrl)),
-      mediaType: media?.kind === 'image' ? canonicalType(media) : null,
-      name: alt === '' ? null : alt,
-    }),
+    ...(picture === undefined ? [] : [photoImage(picture, altTexts)]),
+    ...photos.map((photo) => photoImage(photo, altTexts)),
+    ...imagesIn(document.html)
+      .filter((image) => !attached.has(image.src))
+      .flatMap((image) => uploadedImage(image.src, image.alt, altTexts)),
   ];
 }
 
 /**
- * Each image the post shows from the site's own uploads, as an `Image` whose
- * `name` is its alt text.
- *
- * Mastodon strips `<img>` out of `content` and shows attachments instead, so
- * this is how a post's pictures reach a timeline, and `name` is where it reads
- * their description from.
+ * The uploads a post's federated object attaches, as paths under
+ * `content/uploads/`. New bytes in one of them are a new attachment URL, which
+ * the post's followers only see when they are sent an `Update`.
  */
-function imageAttachments(
-  document: Document,
-  baseUrl: string,
-  altTexts: () => AltTextLibrary,
-): Image[] {
-  const attached = new Set(photosOf(document.extra).map((photo) => photo.url));
-  return imagesIn(document.html)
-    .filter((image) => !attached.has(image.src))
-    .flatMap((image) => uploadedImage(image.src, image.alt, baseUrl, altTexts));
+export function uploadsAttachedTo(document: Document, contentDir: string): Set<string> {
+  let library: AltTextLibrary | undefined;
+  const altTexts = (): AltTextLibrary => (library ??= readAltTexts(contentDir));
+  return new Set(
+    attachedImages(document, altTexts).flatMap((image) =>
+      image.upload === undefined ? [] : [image.upload],
+    ),
+  );
 }
 
-/**
- * A decorative image is left out: it is not part of what the post says. An
- * image from another site is left out too, since its media type is a guess
- * this site cannot check.
- */
+function photoImage(photo: Photo, altTexts: () => AltTextLibrary): AttachedImage {
+  const own = isUploadUrl(photo.url);
+  const media = own ? UPLOAD_MEDIA_TYPES.get(path.extname(photo.url).toLowerCase()) : undefined;
+  const alt = photoAlt(photo, altTexts()) ?? '';
+  return {
+    url: photo.url,
+    upload: own ? uploadPath(photo.url) : undefined,
+    mediaType: media?.kind === 'image' ? canonicalType(media) : null,
+    name: alt === '' ? null : alt,
+  };
+}
+
 function uploadedImage(
   src: string,
   alt: string | undefined,
-  baseUrl: string,
   altTexts: () => AltTextLibrary,
-): Image[] {
-  const source = uploadPath(src);
-  if (source === undefined || altTexts().get(source)?.kind === 'decorative') return [];
-  const media = UPLOAD_MEDIA_TYPES.get(path.extname(source).toLowerCase());
+): AttachedImage[] {
+  const upload = uploadPath(src);
+  if (upload === undefined || altTexts().get(upload)?.kind === 'decorative') return [];
+  const media = UPLOAD_MEDIA_TYPES.get(path.extname(upload).toLowerCase());
   if (media?.kind !== 'image') return [];
   const name = alt?.trim() ?? '';
-  return [
-    new Image({
-      url: new URL(absoluteUrl(src, baseUrl)),
-      mediaType: canonicalType(media),
-      name: name === '' ? null : name,
-    }),
-  ];
+  return [{ url: src, upload, mediaType: canonicalType(media), name: name === '' ? null : name }];
+}
+
+/**
+ * The `Image`, its URL carrying the version of the upload's bytes as a derived
+ * size's does. Mastodon keeps its own copy of an attachment and matches it by
+ * URL, so a file replaced in place reaches a timeline only under a new one.
+ */
+function attachment(image: AttachedImage, config: ImageConfig, baseUrl: string): Image {
+  const version = image.upload === undefined ? undefined : sourceVersion(config, image.upload);
+  return new Image({
+    url: new URL(absoluteUrl(versioned(image.url, version), baseUrl)),
+    mediaType: image.mediaType,
+    name: image.name,
+  });
 }
 
 const QUOTABLE_BY_ANYONE = new InteractionPolicy({

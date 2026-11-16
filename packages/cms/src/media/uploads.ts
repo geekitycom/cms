@@ -2,12 +2,14 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
-import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
+import { writeFileAtomically } from '../files/atomic.ts';
+import { canonicalType, matchesSignature, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import type { UploadMediaType } from '../files/upload-types.ts';
 import { stripMetadata, UnreadableMetadataError } from '../content/metadata/index.ts';
 import { slugify } from '../content/slug.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
 import type { AltText } from '../content/alt-text.ts';
+import { sourceFile } from '../images/paths.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import { messageOf } from '../util/errors.ts';
@@ -116,24 +118,58 @@ export async function storeUpload(
   const stem = slugify(original.slice(0, original.length - extension.length)) || 'upload';
   const name = await writeWithoutOverwriting(directory, stem, extension, clean);
 
-  // Derived immediately rather than on first sight in a page, so the encoding
-  // is paid for by whoever uploaded the file and not by whoever reads the
-  // post. A format with nothing to derive — a GIF, a PDF, a text file — comes
-  // straight back, and a failure is reported and swallowed: a
-  // stored file with no variants is a site that serves the original, which is
-  // what it did before this feature existed.
-  try {
-    await generateImageVariants(config, `${month}/${name}`);
-  } catch (error) {
-    const message = messageOf(error);
-    console.warn(`Stored ${month}/${name} but could not derive its variants: ${message}`);
-  }
+  await deriveVariants(config, `${month}/${name}`);
 
   return {
     url: `${UPLOAD_ASSET_PREFIX}${month}/${name}`,
     media,
     label: original.slice(0, original.length - extension.length).trim() || name,
   };
+}
+
+/**
+ * Write a submitted file over an upload already in the library, or say why it
+ * cannot be.
+ *
+ * The file goes through every rule {@link storeUpload} applies, and then has
+ * to be the same format as the one it replaces: posts, feeds and the media
+ * type the site serves it with all name the file by its extension. The path,
+ * and so the alt text the library keeps under it, stays. The derived sizes
+ * are made again from the new bytes.
+ */
+export async function replaceUpload(
+  file: unknown,
+  relative: string,
+  config: UploadConfig,
+): Promise<{ media: UploadMediaType } | UploadRefusal> {
+  const target = sourceFile(config, relative);
+  const current = UPLOAD_MEDIA_TYPES.get(path.extname(relative).toLowerCase());
+  if (target === undefined || current === undefined) {
+    return { status: 415, error: `${relative} is not a kind of file this site can replace.` };
+  }
+  if (!(file instanceof File)) {
+    return { status: 400, error: 'That upload carried no file.' };
+  }
+
+  const accepted = acceptUpload(
+    baseName(file.name),
+    declaredType(file.type),
+    new Uint8Array(await file.arrayBuffer()),
+    config,
+  );
+  if (refusedUpload(accepted)) return accepted;
+  if (canonicalType(accepted.media) !== canonicalType(current)) {
+    return {
+      status: 415,
+      error:
+        `That file is ${canonicalType(accepted.media)} and this one is ${canonicalType(current)}. ` +
+        'A replacement has to be the same format, because everything that uses the file names it by its extension.',
+    };
+  }
+
+  await writeFileAtomically(target, accepted.bytes);
+  await deriveVariants(config, relative);
+  return { media: accepted.media };
 }
 
 export interface AcceptedUpload {
@@ -194,6 +230,16 @@ export function acceptUpload(
       status: 415,
       error: `${error.message} Its location and camera details could not be removed, so it was not stored.`,
     };
+  }
+}
+
+/** Make the upload's derived sizes now, logging a failure rather than throwing it. */
+async function deriveVariants(config: UploadConfig, relative: string): Promise<void> {
+  try {
+    await generateImageVariants(config, relative);
+  } catch (error) {
+    const message = messageOf(error);
+    console.warn(`Stored ${relative} but could not derive its variants: ${message}`);
   }
 }
 
