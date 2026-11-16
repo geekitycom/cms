@@ -103,7 +103,8 @@ describe('an RSVP in the default theme', () => {
     const stored = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'replyContexts.json'), 'utf8'),
     ) as Record<string, Record<string, unknown>>;
-    assert.deepEqual(stored[CAMP], {
+    const { storedAt: _, ...camp } = stored[CAMP] ?? {};
+    assert.deepEqual(camp, {
       url: CAMP,
       name: 'IndieWeb Camp Chicago',
       start: '2026-10-10T14:00:00.000Z',

@@ -50,7 +50,7 @@ export const ADMIN_TEMPLATES = {
   documentChooser: 'pages/documents/chooser.njk',
   documentEditor: 'pages/documents/editor.njk',
   documentConflict: 'pages/documents/conflict.njk',
-  citedPreview: 'pages/documents/cited-preview.njk',
+  citedPreview: 'components/cited-preview.njk',
   taxonomy: 'pages/documents/taxonomy.njk',
   syndication: 'pages/documents/syndication.njk',
   navigation: 'pages/navigation/menus.njk',
