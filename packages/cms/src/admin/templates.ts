@@ -45,6 +45,7 @@ export const ADMIN_TEMPLATES = {
   forgot: 'pages/account/forgot.njk',
   reset: 'pages/account/reset.njk',
   dashboard: 'pages/dashboard/home.njk',
+  dashboardWidget: 'components/dashboard-widget-fill.njk',
   placeholder: 'pages/placeholder.njk',
   documentList: 'pages/documents/list.njk',
   documentChooser: 'pages/documents/chooser.njk',

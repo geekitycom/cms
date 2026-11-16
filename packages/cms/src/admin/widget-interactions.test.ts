@@ -8,7 +8,7 @@ import type { NewComment } from '../comments/records.ts';
 import type { Cms } from '../index.ts';
 import type { NewInboxActivity } from '../store/admin-store.ts';
 import { TEN_AM_20_OCTOBER_IN_CHICAGO } from './__testing__/chicago-clock.ts';
-import { sandbox, signedIn } from './__testing__/harness.ts';
+import { sandbox, signedIn, waitedDashboardUrl } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 
@@ -119,7 +119,7 @@ function follower(cms: Cms, name: string, followedAt: string): void {
 }
 
 async function card(agent: Browser): Promise<string> {
-  const response = await agent.get('/admin');
+  const response = await agent.get(waitedDashboardUrl());
   assert.equal(response.status, 200);
   const [, html = ''] = screenOf(await response.text()).split(
     '<h2 class="card-title">Recent interactions</h2>',

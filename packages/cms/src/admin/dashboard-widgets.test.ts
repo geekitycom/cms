@@ -6,7 +6,7 @@ import { after, afterEach, beforeEach, describe, it, mock } from 'node:test';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin, PluginWidget } from '../plugin.ts';
 import type { Cms } from '../index.ts';
-import { sandbox, signedIn } from './__testing__/harness.ts';
+import { browser, sandbox, signedIn, waitedDashboardUrl } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 
@@ -41,17 +41,23 @@ function siteJson(enabled: readonly string[]): string {
 async function site(
   plugins: Plugin[],
   enabled: readonly string[] = plugins.map((plugin) => plugin.name),
+  now?: () => Date,
 ): Promise<{ cms: Cms; agent: Browser; contentDir: string }> {
   const contentDir = await box.dir('geekity-widgets-content-');
   const dataDir = await box.dir('geekity-widgets-data-');
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
   await writeFile(path.join(contentDir, '_data', 'site.json'), siteJson(enabled), 'utf8');
-  const cms = await box.open({ contentDir, dataDir, plugins });
+  const cms = await box.open({
+    contentDir,
+    dataDir,
+    plugins,
+    ...(now === undefined ? {} : { now }),
+  });
   return { cms, agent: await signedIn(cms), contentDir };
 }
 
 async function dashboard(agent: Browser): Promise<string> {
-  const response = await agent.get('/admin');
+  const response = await agent.get(waitedDashboardUrl());
   assert.equal(response.status, 200);
   return screenOf(await response.text());
 }
@@ -148,5 +154,191 @@ describe('dashboard widgets (TASK-444)', () => {
 
     await writeFile(siteFile, siteJson([]), 'utf8');
     assert.doesNotMatch(text(await dashboard(agent)), /Visits/);
+  });
+});
+
+async function page(agent: Browser): Promise<string> {
+  const response = await agent.get('/admin');
+  assert.equal(response.status, 200);
+  return await response.text();
+}
+
+function cardOf(html: string, key: string): string {
+  const [, card = ''] = html.split(`data-dashboard-card="${key}"`);
+  return card.split('data-dashboard-card=')[0] ?? '';
+}
+
+function widgetUrlIn(html: string): string | undefined {
+  return /data-widget-url="([^"]+)"/.exec(html)?.[1]?.replaceAll('&amp;', '&');
+}
+
+describe('the dashboard drawn before its widgets load', () => {
+  it('answers while a widget is still loading, with a placeholder the browser fills in', async () => {
+    let calls = 0;
+    const hanging = widgetPlugin('@test/plugin-hanging', [
+      {
+        ...VISITS,
+        load: () => {
+          calls += 1;
+          return new Promise<never>(() => {});
+        },
+      },
+    ]);
+    const { agent } = await site([hanging]);
+
+    const html = await page(agent);
+
+    assert.equal(calls, 0, 'the page did not start the load');
+    const card = cardOf(html, '@test/plugin-hanging:visits');
+    assert.match(card, /<h2 class="card-title">Visits<\/h2>/);
+    assert.match(card, /class="skeleton/);
+    assert.equal(
+      widgetUrlIn(card),
+      '/admin/dashboard/widget?key=%40test%2Fplugin-hanging%3Avisits&period=7',
+    );
+    assert.match(
+      html,
+      /<noscript>[\s\S]*<a class="link" href="\/admin\?wait=1">Show the dashboard with every card loaded<\/a>/,
+    );
+  });
+
+  it('serves one widget’s card body by key and period, behind the sign-in', async () => {
+    const seen: number[] = [];
+    const plugin = widgetPlugin('@test/plugin-period', [
+      {
+        ...VISITS,
+        load: ({ period }) => {
+          seen.push(period);
+          return [{ paragraph: [`Over ${String(period)} days.`] }];
+        },
+      },
+    ]);
+    const { cms, agent } = await site([plugin]);
+    const url = '/admin/dashboard/widget?key=%40test%2Fplugin-period%3Avisits&period=30';
+
+    const response = await agent.get(url);
+
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    assert.equal(text(body), 'Over 30 days.');
+    assert.doesNotMatch(body, /<html|card-title/);
+    assert.deepEqual(seen, [30]);
+
+    const unknown = await agent.get('/admin/dashboard/widget?key=%40test%2Fnone%3Avisits');
+    assert.equal(unknown.status, 404);
+
+    const anonymous = await browser(cms).get(url);
+    assert.equal(anonymous.status, 302);
+    assert.match(anonymous.headers.get('location') ?? '', /\/admin\/login/);
+  });
+
+  it('answers 204 for a widget with nothing to show, so the browser drops its card', async () => {
+    const empty = widgetPlugin('@test/plugin-empty', [{ ...VISITS, load: () => [] }]);
+    const { agent } = await site([empty]);
+
+    const response = await agent.get(
+      widgetUrlIn(cardOf(await page(agent), '@test/plugin-empty:visits')) ?? '',
+    );
+
+    assert.equal(response.status, 204);
+    assert.equal(await response.text(), '');
+  });
+
+  it('draws a kept result with the page, and reloads it in the browser once it is due', async () => {
+    let now = new Date('2026-10-20T15:00:00.000Z');
+    let calls = 0;
+    const counted = widgetPlugin('@test/plugin-kept', [
+      {
+        ...VISITS,
+        refreshSeconds: 60,
+        load: () => {
+          calls += 1;
+          return [{ paragraph: [`Load ${String(calls)}.`] }];
+        },
+      },
+    ]);
+    const { agent } = await site([counted], undefined, () => now);
+    const key = '@test/plugin-kept:visits';
+    await agent.get(widgetUrlIn(cardOf(await page(agent), key)) ?? '');
+
+    const fresh = cardOf(await page(agent), key);
+    assert.match(text(fresh), /Load 1\./);
+    assert.equal(widgetUrlIn(fresh), undefined);
+    assert.doesNotMatch(fresh, /skeleton/);
+
+    now = new Date(now.getTime() + 61_000);
+    const due = cardOf(await page(agent), key);
+    assert.match(text(due), /Load 1\./);
+    assert.ok(widgetUrlIn(due) !== undefined, 'the browser is asked to load it again');
+    assert.equal(calls, 1);
+  });
+
+  it('shows a failed reload as stale and a widget with no result as unavailable', async () => {
+    let now = new Date('2026-10-20T15:00:00.000Z');
+    let failing = false;
+    const flaky = widgetPlugin('@test/plugin-flaky', [
+      {
+        ...VISITS,
+        refreshSeconds: 60,
+        load: () => {
+          if (failing) throw new Error('the API said 500');
+          return [{ paragraph: ['Figures.'] }];
+        },
+      },
+      { ...TOP_PAGES, load: () => Promise.reject(new Error('the API said 500')) },
+    ]);
+    const { agent } = await site([flaky], undefined, () => now);
+    const html = await page(agent);
+    const visits = widgetUrlIn(cardOf(html, '@test/plugin-flaky:visits')) ?? '';
+    const topPages = widgetUrlIn(cardOf(html, '@test/plugin-flaky:top-pages')) ?? '';
+    await agent.get(visits);
+
+    failing = true;
+    now = new Date(now.getTime() + 61_000);
+    const stale = text(await (await agent.get(visits)).text());
+    const unavailable = text(await (await agent.get(topPages)).text());
+
+    assert.match(stale, /^Stale The latest load failed\. These figures are from .+\. Figures\.$/);
+    assert.equal(unavailable, 'These stats are unavailable right now.');
+  });
+
+  it('leaves an alert out of the page until the browser finds it has something to say', async () => {
+    const { agent } = await site([]);
+
+    const html = await page(agent);
+
+    assert.match(
+      html,
+      /<section class="mb-8" data-widget-url="\/admin\/dashboard\/widget\?key=core%3Ahealth&amp;period=7" hidden>\s*<\/section>/,
+    );
+    const response = await agent.get('/admin/dashboard/widget?key=core%3Ahealth');
+    assert.equal(response.status, 204);
+  });
+
+  it('loads nothing for a collapsed card', async () => {
+    let calls = 0;
+    const plugin = widgetPlugin('@test/plugin-folded', [
+      {
+        ...VISITS,
+        load: () => {
+          calls += 1;
+          return [{ paragraph: ['Loaded.'] }];
+        },
+      },
+    ]);
+    const { agent } = await site([plugin]);
+    const html = await page(agent);
+    const token = /name="csrf_token" value="([^"]+)"/.exec(html)?.[1] ?? '';
+    await agent.post('/admin/dashboard/layout', {
+      csrf_token: token,
+      action: 'collapse',
+      widget: '@test/plugin-folded:visits',
+    });
+
+    const card = cardOf(await page(agent), '@test/plugin-folded:visits');
+
+    assert.equal(widgetUrlIn(card), undefined);
+    assert.doesNotMatch(card, /skeleton/);
+    assert.equal(calls, 0);
   });
 });

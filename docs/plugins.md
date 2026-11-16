@@ -556,9 +556,13 @@ arrangement by the plugin's name and the widget's `id`, so changing a widget's
 `id` puts it back in its default place for everybody. See
 [The dashboard](admin.md#the-dashboard).
 
-The dashboard loads every widget at the same time and waits at most 3 seconds
-for each. A good result is kept in memory for `refreshSeconds`, so a dashboard
-request in that time does not call `load`. While a load is still running,
+The dashboard page does not wait for widgets. It draws a card with a result
+kept from an earlier load, and a placeholder for a card with none. The browser
+then loads each card that has no result, or whose result is older than
+`refreshSeconds`, and puts the new content in place. Each load waits at most 3
+seconds. A good result is kept in memory for `refreshSeconds`, so a request in
+that time does not call `load`. Without JavaScript, the page links to a form
+of the dashboard that waits for every widget before it answers. While a load is still running,
 another request waits for that load and does not start a second one. The time
 limit counts from the start of the load, and `signal` aborts when it runs out.
 When a load ignores `signal` and finishes after the time limit, its result is

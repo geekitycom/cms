@@ -6,7 +6,7 @@ import { after, describe, it } from 'node:test';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin, PostAtPath, PublishedPost } from '../plugin.ts';
 import { TEN_AM_20_OCTOBER_IN_CHICAGO } from './__testing__/chicago-clock.ts';
-import { sandbox, signedIn } from './__testing__/harness.ts';
+import { sandbox, signedIn, waitedDashboardUrl } from './__testing__/harness.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -69,7 +69,7 @@ async function postsAt(paths: readonly string[], baseUrl = 'https://blog.example
     now: () => TEN_AM_20_OCTOBER_IN_CHICAGO,
     plugins: [plugin],
   });
-  const response = await (await signedIn(cms)).get('/admin');
+  const response = await (await signedIn(cms)).get(waitedDashboardUrl());
   assert.equal(response.status, 200);
   const [posts] = reached;
   assert.ok(posts !== undefined, 'the widget asked for the posts');
@@ -169,7 +169,7 @@ async function publishedSince(since: string) {
     now: () => TEN_AM_20_OCTOBER_IN_CHICAGO,
     plugins: [plugin],
   });
-  assert.equal((await (await signedIn(cms)).get('/admin')).status, 200);
+  assert.equal((await (await signedIn(cms)).get(waitedDashboardUrl())).status, 200);
   const [posts] = reached;
   assert.ok(posts !== undefined, 'the widget asked for the posts');
   return posts;

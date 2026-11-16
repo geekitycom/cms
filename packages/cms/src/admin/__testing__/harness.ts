@@ -227,6 +227,12 @@ export function browser(cms: Cms): Browser {
   };
 }
 
+export function waitedDashboardUrl(query = ''): string {
+  const search = new URLSearchParams(query);
+  search.set('wait', '1');
+  return `/admin?${search.toString()}`;
+}
+
 /** The credentials {@link setUpFirstAdmin} uses when a test does not care. */
 export const FIRST_ADMIN = { username: 'ada', password: 'correct horse battery' };
 

@@ -7,7 +7,7 @@ import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin, PluginWidget } from '../plugin.ts';
 import type { Cms } from '../index.ts';
 import { addUser } from './__testing__/users.ts';
-import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
+import { csrfField, sandbox, signedIn, signIn, waitedDashboardUrl } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 
@@ -91,7 +91,7 @@ async function removeCoreCards(agent: Browser): Promise<void> {
 }
 
 async function dashboard(agent: Browser): Promise<{ html: string; words: string }> {
-  const response = await agent.get('/admin');
+  const response = await agent.get(waitedDashboardUrl());
   assert.equal(response.status, 200);
   const html = await response.text();
   return { html, words: text(screenOf(html)) };
@@ -165,7 +165,7 @@ describe('arranging the dashboard (TASK-469, TASK-479)', () => {
 
     const response = await press(agent, 'alpha', 'later');
     assert.equal(response.status, 303);
-    assert.equal(response.headers.get('location'), '/admin');
+    assert.equal(response.headers.get('location'), waitedDashboardUrl());
     assert.deepEqual(await columns(agent), [
       ['gamma', 'alpha'],
       ['beta', 'delta'],

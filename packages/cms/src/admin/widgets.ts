@@ -59,8 +59,14 @@ export interface LoadedWidget {
   readonly loadedAt: Date | undefined;
 }
 
+export interface KeptWidget {
+  readonly widget: LoadedWidget;
+  readonly due: boolean;
+}
+
 export interface WidgetBoard {
   load(widgets: readonly WidgetLoad[], now: Clock): Promise<LoadedWidget[]>;
+  kept(entry: WidgetLoad, now: Clock): KeptWidget | undefined;
 }
 
 interface Result {
@@ -93,30 +99,18 @@ export function createWidgetBoard(options: { timeLimitMs: number }): WidgetBoard
   }
 
   async function loadOne(entry: WidgetLoad, now: Clock): Promise<LoadedWidget> {
-    const { widget } = entry;
-    const key = [entry.owner, widget.id, entry.period, entry.viewer ?? ''].join('\u0000');
+    const key = keptKey(entry);
     const last = kept.get(key);
-    const drawn = (status: LoadedWidget['status'], result: Result | undefined): LoadedWidget => ({
-      key: widgetKey(entry.owner, widget.id),
-      title: widget.title,
-      width: widget.width,
-      placement: entry.placement,
-      status,
-      blocks: result?.blocks ?? [],
-      loadedAt: result?.loadedAt,
-    });
-
-    if (
-      last !== undefined &&
-      now().getTime() - last.loadedAt.getTime() < widget.refreshSeconds * 1000
-    ) {
-      return drawn('fresh', last);
-    }
+    if (last !== undefined && !isDue(entry, last, now)) return drawn(entry, 'fresh', last);
     try {
-      return drawn('fresh', await withinTimeLimit(started(key, entry, now), timeLimitMs));
+      return drawn(entry, 'fresh', await withinTimeLimit(started(key, entry, now), timeLimitMs));
     } catch (error) {
-      console.warn(`The ${entry.owner} widget ${widget.id} did not load: ${messageOf(error)}`);
-      return last === undefined ? drawn('unavailable', undefined) : drawn('stale', last);
+      console.warn(
+        `The ${entry.owner} widget ${entry.widget.id} did not load: ${messageOf(error)}`,
+      );
+      return last === undefined
+        ? drawn(entry, 'unavailable', undefined)
+        : drawn(entry, 'stale', last);
     }
   }
 
@@ -125,6 +119,35 @@ export function createWidgetBoard(options: { timeLimitMs: number }): WidgetBoard
       const loaded = await Promise.all(widgets.map((entry) => loadOne(entry, now)));
       return loaded.filter((entry) => entry.status === 'unavailable' || entry.blocks.length > 0);
     },
+    kept(entry, now) {
+      const last = kept.get(keptKey(entry));
+      if (last === undefined) return undefined;
+      return { widget: drawn(entry, 'fresh', last), due: isDue(entry, last, now) };
+    },
+  };
+}
+
+function keptKey(entry: WidgetLoad): string {
+  return [entry.owner, entry.widget.id, entry.period, entry.viewer ?? ''].join('\u0000');
+}
+
+function isDue(entry: WidgetLoad, result: Result, now: Clock): boolean {
+  return now().getTime() - result.loadedAt.getTime() >= entry.widget.refreshSeconds * 1000;
+}
+
+function drawn(
+  entry: WidgetLoad,
+  status: LoadedWidget['status'],
+  result: Result | undefined,
+): LoadedWidget {
+  return {
+    key: widgetKey(entry.owner, entry.widget.id),
+    title: entry.widget.title,
+    width: entry.widget.width,
+    placement: entry.placement,
+    status,
+    blocks: result?.blocks ?? [],
+    loadedAt: result?.loadedAt,
   };
 }
 

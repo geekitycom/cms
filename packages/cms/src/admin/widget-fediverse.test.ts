@@ -9,7 +9,7 @@ import {
   ELEVEN_PM_19_OCTOBER_IN_CHICAGO,
   TEN_AM_20_OCTOBER_IN_CHICAGO,
 } from './__testing__/chicago-clock.ts';
-import { sandbox, signedIn } from './__testing__/harness.ts';
+import { sandbox, signedIn, waitedDashboardUrl } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 
@@ -92,7 +92,7 @@ function seed(cms: Cms): void {
 }
 
 async function dashboard(agent: Browser, query = ''): Promise<string> {
-  const response = await agent.get(`/admin${query}`);
+  const response = await agent.get(waitedDashboardUrl(query));
   assert.equal(response.status, 200);
   return await response.text();
 }
@@ -146,7 +146,7 @@ describe('the fediverse widget (TASK-445)', () => {
   it('offers 7 and 30 days as links, marking the one shown', async () => {
     const { agent } = await site();
 
-    const html = screenOf(await dashboard(agent, '?period=30'));
+    const html = screenOf(await (await agent.get('/admin?period=30')).text());
 
     assert.match(html, /<a[^>]*href="\/admin"[^>]*>7 days<\/a>/);
     assert.match(

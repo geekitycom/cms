@@ -4,7 +4,14 @@ import path from 'node:path';
 import { after, afterEach, beforeEach, describe, it, mock } from 'node:test';
 
 import { TEN_AM_20_OCTOBER_IN_CHICAGO } from './__testing__/chicago-clock.ts';
-import { csrfField, FIRST_ADMIN, sandbox, signedIn, signIn } from './__testing__/harness.ts';
+import {
+  csrfField,
+  FIRST_ADMIN,
+  sandbox,
+  signedIn,
+  signIn,
+  waitedDashboardUrl,
+} from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 import type { Cms } from '../index.ts';
@@ -82,7 +89,7 @@ async function ledger(cms: Cms, username: string, contents: unknown): Promise<vo
 }
 
 async function dashboard(agent: Browser): Promise<string> {
-  const response = await agent.get('/admin');
+  const response = await agent.get(waitedDashboardUrl());
   const html = await response.text();
   assert.equal(response.status, 200, html);
   return html;
