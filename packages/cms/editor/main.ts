@@ -26,6 +26,7 @@ import { ownParagraph } from '../src/admin/own-paragraph.ts';
 import type { Autosave } from '../src/admin/autosave-client.ts';
 import { videoOf } from '../src/content/video.ts';
 import { startAutosave } from './autosave.ts';
+import { citedPreviews } from './cited.ts';
 import { focusMode } from './focus.ts';
 import { LOOK } from './look.ts';
 import { wikiLinkMarks, wikiSlugsOf } from './wiki-links.ts';
@@ -136,6 +137,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   tools.insertAdjacentElement('afterbegin', tabs.element);
   tools.append(uploadControl(), videoControl(), status);
   autosave = startAutosave(form, tools, (body, today) => words?.credited(body, today));
+  citedPreviews(form, tools.dataset['citedPreviewUrl'] ?? '');
   const focus = focusMode({ view, form, surface, words: words?.element, write: tabs.write, say });
   if (focus !== undefined) tabs.element.after(focus);
 

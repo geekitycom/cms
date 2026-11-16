@@ -15,14 +15,33 @@ const box = sandbox();
 const GIPHY = 'https://giphy.com/gifs/theinnernette-happy-dance-3o7TKSjRrfIPjeiVyM';
 const GIF = 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif';
 const WORDS = 'https://words.example/post';
+const ARTICLE = 'https://essays.example/the-idea/';
+const INTRANET = 'https://intranet.example/secret/';
+
+let articleTitle = 'The Idea of Slop';
+const pagesFetched: string[] = [];
 
 let gif: Uint8Array;
 
-const lookup: HostLookup = () => Promise.resolve(['203.0.113.7']);
+const lookup: HostLookup = (host) =>
+  Promise.resolve(host === new URL(INTRANET).hostname ? ['10.0.0.7'] : ['203.0.113.7']);
 
 const original = globalThis.fetch;
 globalThis.fetch = ((input: string | URL | Request) => {
   const url = new URL(new Request(input).url);
+  pagesFetched.push(url.href);
+  if (url.href === ARTICLE) {
+    return Promise.resolve(
+      new Response(`<title>${articleTitle}</title><meta name="author" content="Ann Essayist">`, {
+        headers: { 'content-type': 'text/html' },
+      }),
+    );
+  }
+  if (url.href === INTRANET) {
+    return Promise.resolve(
+      new Response('<title>Internal</title>', { headers: { 'content-type': 'text/html' } }),
+    );
+  }
   if (url.origin + url.pathname === 'https://giphy.com/services/oembed') {
     return Promise.resolve(
       new Response(
@@ -182,9 +201,10 @@ describe('the editor’s preview of a cited page', () => {
     );
   });
 
-  it('shows no card for a cited page with no picture', async () => {
+  it('shows the name of a cited page with no picture, and no preview toggle', async () => {
     const group = respondingGroup(await (await agent.get('/admin/posts/words')).text());
 
+    assert.match(group, /<p class="[^"]*">Only words<\/p>/);
     assert.equal(citedCard(group), undefined);
     assert.doesNotMatch(group, /name="preview"/);
   });
@@ -246,5 +266,103 @@ describe('a new post that reposts a GIF', () => {
     assert.equal((await readdir(path.join(contentDir, 'uploads', 'cited'))).length, 1);
     const editor = await (await agent.get(`/admin/posts/${slug}`)).text();
     assert.notEqual(citedCard(respondingGroup(editor)), undefined);
+  });
+});
+
+describe('reading a cited page from the editor before a save', () => {
+  let cms: Cms;
+  let contentDir: string;
+  let agent: Browser;
+  let csrf: string;
+
+  before(async () => {
+    ({ cms, contentDir } = await site({}));
+    agent = await signedIn(cms);
+    csrf = csrfField(await (await agent.get('/admin/posts/new?kind=link')).text()) ?? '';
+    assert.notEqual(csrf, '');
+  });
+
+  async function previewOf(url: string, property: string): Promise<Response> {
+    return agent.post('/admin/cited-preview', { csrf_token: csrf, url, property });
+  }
+
+  it('answers with the card the editor shows: name, author and picture', async () => {
+    const response = await previewOf(GIPHY, 'repost-of');
+
+    assert.equal(response.status, 200);
+    const card = await response.text();
+    assert.match(card, /Happy Dance GIF/);
+    assert.match(card, /By Nette/);
+    assert.match(card, /<img\b[^>]*\bsrc="\/uploads\/cited\/[0-9a-f]{16}\.gif"/);
+    assert.match(card, /<input\b[^>]*\bid="editor-preview-repost-of"[^>]*\bname="preview"/);
+    assert.doesNotMatch(card, /<html|<nav/, 'the card alone, with no admin chrome');
+  });
+
+  it('says so when the page cannot be read', async () => {
+    const card = await (await previewOf('https://gone.example/page', 'like-of')).text();
+
+    assert.match(card, /could not be read\. The post will call it a page on gone\.example\./);
+  });
+
+  it('reads no page on a private address', async () => {
+    const card = await (await previewOf(INTRANET, 'bookmark-of')).text();
+
+    assert.match(card, /could not be read/);
+    assert.ok(!pagesFetched.includes(INTRANET), 'the private page was never requested');
+  });
+
+  it('refuses an address that is no web address, or a field that cites nothing', async () => {
+    assert.equal((await previewOf('javascript:alert(1)', 'like-of')).status, 400);
+    assert.equal((await previewOf(WORDS, 'title')).status, 400);
+  });
+
+  it('refuses a post with no CSRF token', async () => {
+    const response = await agent.post('/admin/cited-preview', { url: WORDS, property: 'like-of' });
+
+    assert.equal(response.status, 403);
+  });
+
+  it('refuses a visitor who is not signed in', async () => {
+    const response = await cms.app.request('/admin/cited-preview', {
+      method: 'POST',
+      body: new URLSearchParams({ url: WORDS, property: 'like-of' }),
+    });
+
+    assert.equal(response.status, 302);
+    assert.match(response.headers.get('location') ?? '', /\/admin\/login/);
+  });
+
+  it('names a post saved after the read after the page, with no second read', async () => {
+    assert.match(await (await previewOf(ARTICLE, 'bookmark-of')).text(), /The Idea of Slop/);
+    articleTitle = 'Retitled since';
+
+    const response = await agent.post('/admin/posts/new', {
+      csrf_token: csrf,
+      action: 'publish',
+      kind: 'link',
+      'link-verb': 'bookmark-of',
+      'link-url': ARTICLE,
+    });
+    assert.equal(response.status, 303, await response.clone().text());
+    await cms.replyContexts.settled();
+
+    const slug = (response.headers.get('location') ?? '').replace('/admin/posts/', '');
+    assert.equal(slug, 'bookmarked-the-idea-of-slop');
+    assert.equal(cms.replyContexts.stored(ARTICLE)?.name, 'The Idea of Slop', 'not read again');
+    const feed = await (await cms.app.request('/feed/json/')).text();
+    assert.match(feed, /Bookmarked .*The Idea of Slop/);
+    const [file] = (await readdir(path.join(contentDir, 'posts'))).filter((name) =>
+      name.endsWith(`${slug}.md`),
+    );
+    assert.ok(file !== undefined, 'the post was written');
+    const permalink = /^permalink: (\S+)$/m.exec(
+      await readFile(path.join(contentDir, 'posts', file), 'utf8'),
+    )?.[1];
+    const object = (await (
+      await cms.app.request(permalink ?? '', {
+        headers: { accept: 'application/activity+json' },
+      })
+    ).json()) as { content?: string };
+    assert.match(object.content ?? '', />The Idea of Slop<\/a>/);
   });
 });

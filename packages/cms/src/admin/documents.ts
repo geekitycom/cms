@@ -7,7 +7,7 @@ import {
   mintAutosaveId,
 } from '../autosave/index.ts';
 import type { AutosaveCopy } from '../autosave/index.ts';
-import { CITATION_PROPERTIES, citedHost, citesAnImage, shownInFull } from '../content/citation.ts';
+import { CITATION_PROPERTIES } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { commentPolicyOf } from '../comments/policy.ts';
 import type { CommentPolicy } from '../comments/policy.ts';
@@ -64,9 +64,10 @@ import { stringOrEmpty, trimmedField } from '../util/forms.ts';
 import { userForAuthor } from '../content/authors.ts';
 import { isServed } from '../content/served.ts';
 import { SEARCH_KINDS } from '../item-lookup/lookup.ts';
-import type { CitedPicture } from '../webmention/cited-picture.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
 import { creditWriting } from '../writing/ledger.ts';
+import { citedCardView, CITED_PREVIEW_PATH } from './cited-preview.ts';
+import type { CitedCardView } from './cited-preview.ts';
 import { editorActionViews } from './editor-actions.ts';
 import { editorWordCounter } from './editor-word-counter.ts';
 import {
@@ -1097,6 +1098,7 @@ async function editorModel(
     saveUrl: document === undefined ? newEditorPath(kind) : documentEditorPath(kind, document),
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
+    citedPreviewUrl: CITED_PREVIEW_PATH,
     autosaveUrl: AUTOSAVE_PATH,
     autosaveKey,
     autosaveDiscardUrl: AUTOSAVE_DISCARD_JSON_PATH,
@@ -1235,7 +1237,8 @@ function citedPreviews(
   c: Context<GeekityEnv>,
   form: EditorForm,
 ): {
-  citedPreviews: Record<string, { name: string; picture: CitedPicture; described: boolean }>;
+  citedPreviews: Record<string, CitedCardView>;
+  previewToggled: boolean;
   describesCitedImage: boolean;
 } {
   const cited: [string, string][] = [
@@ -1245,24 +1248,17 @@ function citedPreviews(
       form[CITATION_FIELDS[property]],
     ]),
   ];
-  const cards: Record<string, { name: string; picture: CitedPicture; described: boolean }> = {};
+  const cards: Record<string, CitedCardView> = {};
   for (const [property, url] of cited) {
     if (url === '') continue;
     const context = c.var.replyContexts.read(url, c.var.siteAtRequestStart);
-    if (context?.picture === undefined) continue;
-    const image = citesAnImage(context);
-    cards[property] = {
-      name:
-        context.name ??
-        context.author?.name ??
-        `${image ? 'An image from' : 'A page on'} ${citedHost(url)}`,
-      picture: context.picture,
-      described: image && shownInFull(property, context.picture),
-    };
+    if (context !== undefined) cards[property] = citedCardView(property, url, context);
   }
+  const shown = Object.values(cards).flatMap((card) => ('unread' in card ? [] : [card]));
   return {
     citedPreviews: cards,
-    describesCitedImage: Object.values(cards).some((card) => card.described),
+    previewToggled: shown.some((card) => card.picture !== undefined),
+    describesCitedImage: shown.some((card) => card.described),
   };
 }
 

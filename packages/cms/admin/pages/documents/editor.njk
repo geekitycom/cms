@@ -14,6 +14,7 @@
 {% from "components/collapse.njk" import collapse %}
 {% from "components/dropdown.njk" import dropdown %}
 {% from "components/upload.njk" import uploadControl %}
+{% import "pages/documents/cited-card.njk" as cited with context %}
 
 {% set ACTION_COLORS = { 'publish': 'primary', 'update': 'primary', 'trash': 'error' } %}
 {% set ACTION_STYLES = { 'trash': 'ghost' } %}
@@ -62,22 +63,6 @@
 {% endif %}
 {% endmacro %}
 
-{% macro citedCard(property) %}
-{% set cited = citedPreviews[property] %}
-{% if cited %}
-{% call card(size='sm', style='border') %}
-  {# First: Tailwind's `peer-*` variants reach later siblings only. #}
-  <input class="peer sr-only" type="checkbox" id="editor-preview-{{ property }}" name="preview" value="hide"{% if form.previewHidden %} checked{% endif %}>
-  <label class="btn btn-circle btn-xs absolute end-2 top-2 peer-checked:btn-neutral peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-base-content" for="editor-preview-{{ property }}"><span aria-hidden="true">×</span><span class="sr-only">Remove the preview of {{ cited.name }}</span></label>
-  <img class="h-auto max-h-32 w-full rounded-box object-cover peer-checked:opacity-40" src="{{ cited.picture.src }}" alt="" width="{{ cited.picture.width }}" height="{{ cited.picture.height }}" loading="lazy">
-  <p class="break-words pe-8 peer-checked:opacity-40">{{ cited.name }}</p>
-  <p class="label hidden whitespace-normal peer-checked:block">Removed. The post shows the plain citation until you select the X again.</p>
-  {% if cited.described %}
-  {{ field.text('editor-cited-alt', 'cited-alt', 'Alt text of the reposted image', value=(form.citedAlt or form.title), error=(error if errorField == 'editor-cited-alt' else ''), hint='What the image shows, for readers who cannot see it. It starts as the post’s title.', hintId='editor-cited-alt-hint') }}
-  {% endif %}
-{% endcall %}
-{% endif %}
-{% endmacro %}
 
 {% macro pluginActions(fieldId, buttons) %}
 {% if buttons %}
@@ -192,15 +177,15 @@
     </div>
   </fieldset>
   {{ field.text('editor-' + link.chosen, 'link-url', 'Address', value=link.url, type='url', error=(error if errorField == ('editor-' + link.chosen) else ''), hint='The page is fetched for its title and picture, and sent a webmention when you publish. Leave it empty for a post that cites nothing.') }}
-  {{ citedCard(link.chosen) }}
+  {{ cited.citedSlot('editor-' + link.chosen, link.chosen) }}
   {% for other in link.others %}
     {{ field.text('editor-' + other.property, other.property, other.also, value=other.url, type='url', error=(error if errorField == ('editor-' + other.property) else ''), hint='Empty it to take it out.') }}
-    {{ citedCard(other.property) }}
+    {{ cited.citedSlot('editor-' + other.property, other.property) }}
   {% endfor %}
 
 {% elif name == 'rsvp' %}
   {{ field.text('editor-in-reply-to', 'in-reply-to', 'Event address', value=form.inReplyTo, type='url', error=(error if errorField == 'editor-in-reply-to' else ''), hint='The event’s page. It is sent a webmention when you publish.') }}
-  {{ citedCard('in-reply-to') }}
+  {{ cited.citedSlot('editor-in-reply-to', 'in-reply-to') }}
   <fieldset class="fieldset">
     <legend class="fieldset-legend">Going?</legend>
     <div class="join flex-wrap">
@@ -513,6 +498,7 @@
           class="flex flex-wrap items-center gap-2"
           id="editor-enhance"
           data-preview-url="{{ previewUrl }}"
+          data-cited-preview-url="{{ citedPreviewUrl }}"
           data-upload-url="{{ uploadsUrl }}"
           data-kind="{{ kind.type }}"
           data-wiki-slugs="{{ wikiSlugs | dump }}"
@@ -543,7 +529,7 @@
             <option value="{{ url }}"></option>
           {% endfor %}
         </datalist>
-        {% if form.previewHidden and not (citedPreviews | length) %}
+        {% if form.previewHidden and not previewToggled %}
           <input type="hidden" name="preview" value="hide">
         {% endif %}
         {% if form.citedAlt and not describesCitedImage %}

@@ -94,6 +94,12 @@ export interface ReplyContextService {
    */
   describe(target: string): Promise<ReplyContext | undefined>;
   /**
+   * The stored context for a target, or the one a read queued now stores,
+   * as the editor asks before a save. The save that follows does not read it
+   * again. `undefined` when the page could not be read.
+   */
+  readNow(target: string): Promise<ReplyContext | undefined>;
+  /**
    * The stored context for a target, from the file, or the reply this site
    * holds there, named with `site`. Never touches the network.
    */
@@ -296,6 +302,16 @@ export function createReplyContextService(
         void enqueue(() => attachImages(target, fetched));
       }
       return fetched.context;
+    },
+
+    async readNow(target) {
+      if (!(target in readAll())) {
+        if (!reading.has(target)) queueRead(target);
+        await reading.get(target);
+      }
+      const context = readAll()[target];
+      if (context !== undefined) describedForSave.add(target);
+      return context;
     },
 
     read(target, site) {
