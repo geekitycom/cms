@@ -70,6 +70,7 @@ import { mountExportScreen } from './export.ts';
 import { mountMaintenanceScreen } from './maintenance.ts';
 import { mountPersonalDataScreen } from './personal-data.ts';
 import { mountEditorActions } from './editor-actions.ts';
+import { mountCitedPreview } from './cited-preview.ts';
 import { mountItemLookup, mountItemSearch } from './item-lookup.ts';
 import { mountPluginsScreen, pluginScreens } from './plugins.ts';
 import type { SignInThrottle } from '../web/throttle.ts';
@@ -371,6 +372,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountEditorActions(app);
   mountItemLookup(app);
   mountItemSearch(app);
+  mountCitedPreview(app, { render });
   mountPluginsScreen(app, { render, confirmPassword });
 
   // The jobs a site runs rather than the things it sets: reading every file

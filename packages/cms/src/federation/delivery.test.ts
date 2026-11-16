@@ -393,6 +393,7 @@ async function site(
     /** The config a site that names no `allowPrivateAddress` runs with. */
     defaultAddressGuard?: boolean;
     deliveryTimeoutMs?: number;
+    citedReadWaitMs?: number;
   } = {},
 ): Promise<Site> {
   slowPage = Promise.resolve();
@@ -444,6 +445,9 @@ async function site(
       ...(options.deliveryTimeoutMs === undefined
         ? {}
         : { deliveryTimeoutMs: options.deliveryTimeoutMs }),
+      ...(options.citedReadWaitMs === undefined
+        ? {}
+        : { citedReadWaitMs: options.citedReadWaitMs }),
     },
     hostLookup: (host) =>
       Promise.resolve(
@@ -3681,44 +3685,133 @@ describe('a cited page in a delivered note (TASK-262)', () => {
   });
 });
 
-describe('a cited page whose context is stored after the Create (TASK-263)', () => {
-  const line = (name: string): string =>
-    `<p>Bookmarked <a href="${SLOW_PAGE}">${name}</a></p>\n<p>Worth keeping</p>`;
+const line = (name: string): string =>
+  `<p>Bookmarked <a href="${SLOW_PAGE}">${name}</a></p>\n<p>Worth keeping</p>`;
+const GIVE_UP_MS = 20;
 
-  function holdSlowPage(): () => void {
-    let open = (): void => undefined;
-    slowPage = new Promise<void>((resolve) => {
-      open = resolve;
-    });
-    return open;
-  }
+function holdSlowPage(): () => void {
+  let open = (): void => undefined;
+  slowPage = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return open;
+}
 
-  function holdInboxes(): () => void {
-    let open = (): void => undefined;
-    inboxes = new Promise<void>((resolve) => {
-      open = resolve;
-    });
-    return open;
-  }
+function holdInboxes(): () => void {
+  let open = (): void => undefined;
+  inboxes = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return open;
+}
 
-  async function bookmarkSlowPage(agent: Browser): Promise<void> {
+async function bookmarkSlowPage(agent: Browser): Promise<void> {
+  const response = await publishNewPost(agent, {
+    title: 'Worth keeping',
+    slug: 'cited',
+    body: '',
+    'bookmark-of': SLOW_PAGE,
+  });
+  assert.equal(response.status, 303, await response.text());
+}
+
+async function storeContext(cms: Cms, open: () => void): Promise<void> {
+  open();
+  await cms.replyContexts.settled();
+  await cms.delivery.settled();
+}
+
+describe('a new post citing a page still being read', () => {
+  it('waits for the read, and names the page in the Create with no Update after', async () => {
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    const open = holdSlowPage();
+    await bookmarkSlowPage(agent);
+    await storeContext(cms, open);
+
+    const creates = delivered('Create');
+    assert.equal(creates.length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(contentOf(creates[0]), line('A slow page'));
+    assert.deepEqual(delivered('Update'), [], `saw ${JSON.stringify(deliveries)}`);
+  });
+
+  it('sends the Create with the host form when the page cannot be read', async (t) => {
+    t.mock.method(console, 'warn', () => undefined);
+    const { cms } = await site();
+    const agent = signedInAs(cms, ADA);
+    const missing = `${REMOTE_ORIGIN}/blog/gone/`;
     const response = await publishNewPost(agent, {
       title: 'Worth keeping',
       slug: 'cited',
       body: '',
-      'bookmark-of': SLOW_PAGE,
+      'bookmark-of': missing,
     });
     assert.equal(response.status, 303, await response.text());
-  }
-
-  async function storeContext(cms: Cms, open: () => void): Promise<void> {
-    open();
     await cms.replyContexts.settled();
     await cms.delivery.settled();
-  }
 
+    assert.equal(
+      contentOf(delivered('Create')[0]),
+      `<p>Bookmarked <a href="${missing}">a page on remote.example</a></p>\n<p>Worth keeping</p>`,
+    );
+  });
+
+  it('gives up on a page that has not answered by the time the wait runs out', async () => {
+    const { cms } = await site({ citedReadWaitMs: GIVE_UP_MS });
+    const agent = signedInAs(cms, ADA);
+    const open = holdSlowPage();
+    await bookmarkSlowPage(agent);
+    await cms.delivery.settled();
+
+    assert.equal(contentOf(delivered('Create')[0]), line('a page on remote.example'));
+    await storeContext(cms, open);
+  });
+
+  it(
+    'does not wait for a page already stored while it is read again',
+    { timeout: 10_000 },
+    async () => {
+      const contexts = { [SLOW_PAGE]: { url: SLOW_PAGE, name: 'A stored name' } };
+      const { cms } = await site({
+        files: { '_data/replyContexts.json': JSON.stringify(contexts) },
+      });
+      const agent = signedInAs(cms, ADA);
+      const open = holdSlowPage();
+      await bookmarkSlowPage(agent);
+      await cms.delivery.settled();
+
+      assert.equal(contentOf(delivered('Create')[0]), line('A stored name'));
+      await storeContext(cms, open);
+    },
+  );
+
+  it(
+    'does not hold a post citing nothing behind another post’s read',
+    { timeout: 10_000 },
+    async () => {
+      const { cms } = await site();
+      const agent = signedInAs(cms, ADA);
+      const open = holdSlowPage();
+      const draft = await publishNewPost(agent, {
+        title: 'Not yet',
+        slug: 'cited',
+        body: '',
+        'bookmark-of': SLOW_PAGE,
+        action: 'save-draft',
+      });
+      assert.equal(draft.status, 303, await draft.text());
+      await publishNewPost(agent, { title: 'Plain', slug: 'plain', body: 'Nothing cited.' });
+      await cms.delivery.settled();
+
+      assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+      await storeContext(cms, open);
+    },
+  );
+});
+
+describe('a cited page whose context is stored after the Create (TASK-263)', () => {
   it('sends an Update naming the page to the inbox the host-form Create went to (AC #1)', async () => {
-    const { cms } = await site();
+    const { cms } = await site({ citedReadWaitMs: GIVE_UP_MS });
     const agent = signedInAs(cms, ADA);
     const open = holdSlowPage();
     await bookmarkSlowPage(agent);
@@ -3823,7 +3916,7 @@ bookmark-of: ${SLOW_PAGE}
     ['a post re-dated into the future', { date: '2999-01-01T00:00:00.000Z' }],
   ] as const) {
     it(`sends nothing to ${hidden} (AC #3)`, async () => {
-      const { cms } = await site();
+      const { cms } = await site({ citedReadWaitMs: GIVE_UP_MS });
       const agent = signedInAs(cms, ADA);
       const open = holdSlowPage();
       await bookmarkSlowPage(agent);

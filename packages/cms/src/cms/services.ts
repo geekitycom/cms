@@ -359,7 +359,11 @@ export function createServices({
 
   // Federation listens to the index rather than to the admin, so a post edited
   // on disk federates exactly as one saved through the editor does.
-  const delivery = createDeliveryService({ ...federated, federation });
+  const delivery = createDeliveryService({
+    ...federated,
+    federation,
+    citedPagesRead: (document) => replyContexts.whenRead(document),
+  });
 
   // Who hears about a comment. It reads the users file and the mail
   // settings per message rather than at boot, so an address added on the users

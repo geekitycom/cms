@@ -1,0 +1,32 @@
+{% import "components/fields.njk" as field %}
+{% from "components/card.njk" import card %}
+
+{% macro citedCard(property) %}
+{% set found = citedPreviews[property] %}
+{% if found and found.unread %}
+<p class="label whitespace-normal">This page could not be read. The post will call it {{ found.name }}.</p>
+{% elif found %}
+{% call card(size='sm', style='border') %}
+  {% if found.picture %}
+  {# First: Tailwind's `peer-*` variants reach later siblings only. #}
+  <input class="peer sr-only" type="checkbox" id="editor-preview-{{ property }}" name="preview" value="hide"{% if form.previewHidden %} checked{% endif %}>
+  <label class="btn btn-circle btn-xs absolute end-2 top-2 peer-checked:btn-neutral peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-base-content" for="editor-preview-{{ property }}"><span aria-hidden="true">×</span><span class="sr-only">Remove the preview of {{ found.name }}</span></label>
+  <img class="h-auto max-h-32 w-full rounded-box object-cover peer-checked:opacity-40" src="{{ found.picture.src }}" alt="" width="{{ found.picture.width }}" height="{{ found.picture.height }}" loading="lazy">
+  {% endif %}
+  <p class="break-words pe-8 peer-checked:opacity-40">{{ found.name }}</p>
+  {% if found.author %}
+  <p class="text-sm text-base-content/70 peer-checked:opacity-40">By {{ found.author }}</p>
+  {% endif %}
+  {% if found.picture %}
+  <p class="label hidden whitespace-normal peer-checked:block">Removed. The post shows the plain citation until you select the X again.</p>
+  {% endif %}
+  {% if found.described %}
+  {{ field.text('editor-cited-alt', 'cited-alt', 'Alt text of the reposted image', value=(form.citedAlt or form.title), error=(error if errorField == 'editor-cited-alt' else ''), hint='What the image shows, for readers who cannot see it. It starts as the post’s title.', hintId='editor-cited-alt-hint') }}
+  {% endif %}
+{% endcall %}
+{% endif %}
+{% endmacro %}
+
+{% macro citedSlot(fieldId, property) %}
+<div data-cited-for="{{ fieldId }}" data-cited-property="{{ property }}" aria-live="polite">{{ citedCard(property) }}</div>
+{% endmacro %}
