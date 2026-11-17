@@ -190,7 +190,6 @@ export function contactVcard(profile: SiteProfile, photo?: ContactPhoto): string
     'VERSION:3.0',
     `N:${vcardName(profile)}`,
     `FN:${vcardText(profile.name)}`,
-    `NICKNAME:${vcardText(`@${bareHost(new URL(profile.url))}`)}`,
     ...(profile.kind === 'org' ? [`ORG:${vcardText(profile.name)}`, 'X-ABShowAs:COMPANY'] : []),
     ...(profile.jobTitle === undefined ? [] : [`TITLE:${vcardText(profile.jobTitle)}`]),
     ...(profile.bioPlainText === undefined ? [] : [`NOTE:${vcardText(profile.bioPlainText)}`]),
@@ -215,8 +214,9 @@ export function contactVcard(profile: SiteProfile, photo?: ContactPhoto): string
 }
 
 /**
- * `Family;Given;Additional;Prefix;Suffix`. Apple Contacts heads a card whose
- * `N` is empty with its `NICKNAME`.
+ * `Family;Given;Additional;Prefix;Suffix`. Apple Contacts heads a card with
+ * its `NICKNAME` when it has one, so the card carries none and is headed by
+ * this name.
  */
 function vcardName(profile: SiteProfile): string {
   const { given, family } = nameParts(profile);

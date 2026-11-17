@@ -173,7 +173,7 @@ describe('/.well-known/contact.vcf', () => {
     assert.deepEqual(card.at(-1), property('END', 'VCARD'));
     assert.deepEqual(values(card, 'N'), ['Lovelace;Ada;;;']);
     assert.deepEqual(values(card, 'FN'), ['Ada Lovelace']);
-    assert.deepEqual(values(card, 'NICKNAME'), ['@blog.example']);
+    assert.deepEqual(values(card, 'NICKNAME'), [], 'Contacts would head the card with it');
     assert.deepEqual(values(card, 'TITLE'), ['Analyst']);
     assert.deepEqual(values(card, 'NOTE'), ['Writes about engines, numbers; and poetry.']);
     assert.deepEqual(values(card, 'PHOTO'), [], 'no photo when the avatar file is not there');
@@ -383,7 +383,7 @@ describe('/.well-known/contact.vcf', () => {
     assert.deepEqual(values(card, 'FN'), ['Engines']);
     assert.deepEqual(values(card, 'ORG'), ['Engines']);
     assert.deepEqual(values(card, 'X-ABShowAs'), ['COMPANY']);
-    assert.deepEqual(values(card, 'NICKNAME'), ['@blog.example']);
+    assert.deepEqual(values(card, 'NICKNAME'), [], 'Contacts would head the card with it');
     assert.deepEqual(values(card, 'URL'), ['https://blog.example/']);
     assert.deepEqual(values(card, 'PHOTO'), []);
     assert.deepEqual(labelledUrls(card), []);
