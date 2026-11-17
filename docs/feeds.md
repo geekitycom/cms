@@ -31,6 +31,10 @@ WordPress's older spellings redirect with `301`, not 404:
 A feed URL without its trailing slash redirects to the canonical one in a
 single hop.
 
+Every feed, and the `/feed.xml` and `/feed.json` redirects, answers
+`Access-Control-Allow-Origin: *`, on a `304` as well, so an app running in a
+browser, such as a SocialSpec reader, can read it.
+
 A feed holds the newest published posts, newest first. Drafts, documents in the
 trash, pages and wiki pages are never in a feed. A term that no published post carries
 answers 404, not an empty feed. `feedSize` in `content/_data/site.json` sets

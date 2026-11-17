@@ -165,10 +165,15 @@ export function commentsFeedResponse(
  *
  * They are built in one place, and before the conditional is decided, because
  * a poller mostly gets the 304 — and a 304 that dropped the hub would hide the
- * one thing that stops it polling.
+ * one thing that stops it polling. Any origin may read a feed: SocialSpec
+ * readers fetch it from the browser.
  */
 function feedHeaders(source: FeedIdentity, etag: string, lastModified: Date | undefined): Headers {
-  const headers = new Headers({ etag, 'cache-control': 'no-cache' });
+  const headers = new Headers({
+    etag,
+    'cache-control': 'no-cache',
+    'access-control-allow-origin': '*',
+  });
   if (lastModified !== undefined) headers.set('last-modified', lastModified.toUTCString());
 
   const link = feedLinkHeader(source);

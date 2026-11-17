@@ -235,6 +235,7 @@ describe('SocialSpec feed addresses', () => {
       const { response } = await get(cms, pathname);
 
       assert.equal(response.status, 301);
+      assert.equal(response.headers.get('access-control-allow-origin'), '*');
       assert.equal(
         new URL(response.headers.get('location') ?? '', 'https://blog.example').pathname,
         target,

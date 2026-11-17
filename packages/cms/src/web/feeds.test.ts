@@ -729,6 +729,20 @@ describe('the three formats over one post', () => {
       assert.equal(second, first, `${url} keeps it while nothing changes`);
     }
   });
+
+  it('let any origin read them, on a 304 too', async () => {
+    const { cms } = await sharedSite(files);
+
+    for (const url of ['/feed/', '/feed/atom/', '/feed/json/', '/comments/feed/']) {
+      const response = await cms.app.request(url);
+      assert.equal(response.headers.get('access-control-allow-origin'), '*', url);
+
+      const etag = response.headers.get('etag') ?? '';
+      const repeat = await cms.app.request(url, { headers: { 'if-none-match': etag } });
+      assert.equal(repeat.status, 304, `${url} answers a repeat poll with a 304`);
+      assert.equal(repeat.headers.get('access-control-allow-origin'), '*', `${url} on a 304`);
+    }
+  });
 });
 
 describe('a post in another language (TASK-154 AC #3)', () => {
