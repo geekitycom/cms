@@ -27,6 +27,7 @@ import {
   normalizeRelayInbox,
   normalizeSecurityContact,
   normalizeSecurityPolicy,
+  normalizeWebAddress,
   relayLines,
   relayList,
   securityContactList,
@@ -371,6 +372,15 @@ const SETTING_ROWS: SettingRows = {
     check: (form) =>
       form.notify_server.trim() !== '' && normalizeBaseUrl(form.notify_server) === undefined
         ? 'A notify server is an absolute http:// or https:// URL, or empty for none.'
+        : undefined,
+  },
+
+  following_opml: {
+    ...text('following_opml', 'following_opml'),
+    submitted: (form) => normalizeWebAddress(form.following_opml) ?? '',
+    check: (form) =>
+      form.following_opml.trim() !== '' && normalizeWebAddress(form.following_opml) === undefined
+        ? 'A subscription list is an absolute http:// or https:// URL, or empty for none.'
         : undefined,
   },
 

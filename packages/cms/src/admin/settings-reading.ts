@@ -13,6 +13,7 @@ import type { Context } from 'hono';
 
 import { postLabel } from '../content/post-type.ts';
 import { isServed } from '../content/served.ts';
+import { followingStatus } from '../following/list.ts';
 import { readGeminiCertificate } from '../gemini/certificate.ts';
 import { geminiHost } from '../gemini/site-certificate.ts';
 import type { GeekityEnv } from '../web/env.ts';
@@ -59,6 +60,7 @@ export const READING_SETTINGS: SettingsPage = {
     'posts_page',
     'posts_per_page',
     'notify_server',
+    'following_opml',
     'feed_update_period',
     'feed_update_frequency',
     'ai_crawlers',
@@ -80,6 +82,7 @@ export const READING_SETTINGS: SettingsPage = {
       pageChoices: choices,
       homepageMissing: missing(settings.homepage),
       postsPageMissing: missing(settings.posts_page),
+      following: followingStatus(c.var.config.dataDir, settings.following_opml),
       geminiCertificate: settings.gemini
         ? await readGeminiCertificate(c.var.config, geminiHost(c.var.config, settings))
         : undefined,

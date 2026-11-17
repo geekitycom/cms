@@ -84,6 +84,7 @@ describe('the core declarations', () => {
       'follower-history.jsonl': 'kept',
       'indieauth-activity.json': 'rebuildable',
       'notification-digests.json': 'rebuildable',
+      'following.json': 'rebuildable',
       'micropub-media.json': 'rebuildable',
       'geekity.db': 'rebuildable',
       'geekity.db-wal': 'rebuildable',

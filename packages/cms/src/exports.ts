@@ -198,6 +198,7 @@ export type {
   Progress,
 } from './jobs/types.ts';
 export type { RetentionReport, RetentionService } from './privacy/retention.ts';
+export type { FollowingService } from './following/list.ts';
 export type {
   InboxRefusalReason,
   JsonLdDocument,

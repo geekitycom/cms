@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<opml xmlns:frss="https://freshrss.org/opml" version="2.0">
+	<head>
+		<title>FreshRSS</title>
+		<dateCreated>Mon, 16 Nov 2026 18:00:00 +0000</dateCreated>
+	</head>
+	<body>
+		<outline text="Indieweb">
+			<outline text="Aaron Parecki" type="rss" xmlUrl="https://aaronparecki.com/feed.xml" htmlUrl="https://aaronparecki.com/" description="Aaron Parecki&#39;s notes &amp; articles" frss:ttl="0"/>
+			<outline text="Tantek" type="rss" xmlUrl="https://tantek.com/updates.atom" htmlUrl="https://tantek.com/" frss:ttl="3600"/>
+		</outline>
+		<outline text="Software">
+			<outline text="Node.js Blog" type="rss" xmlUrl="https://nodejs.org/en/feed/blog.xml" htmlUrl="https://nodejs.org/en/blog" description="News from the Node.js project" frss:ttl="0"/>
+		</outline>
+	</body>
+</opml>

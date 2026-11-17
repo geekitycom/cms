@@ -39,6 +39,7 @@ const FONT_FILE = 'https://fonts.gstatic.com/s/atkinsonhyperlegible/v11/bold.wof
 const LLM = '@geekity/plugin-llm';
 const TAGS = '@geekity/plugin-tag-suggest';
 const GONE = '@acme/plugin-gone';
+const FOLLOWING = 'https://reader.example/subscriptions.opml';
 
 const dirs: string[] = [];
 let provider: FakeProvider;
@@ -59,6 +60,11 @@ before(async () => {
       new Response(
         `@font-face { font-family: 'Atkinson Hyperlegible'; font-style: normal; font-weight: 700; src: url(${FONT_FILE}) format('woff2'); }`,
         { headers: { 'content-type': 'text/css' } },
+      ),
+    [FOLLOWING]: () =>
+      new Response(
+        '<opml version="2.0"><body><outline text="One" xmlUrl="https://one.example/feed"/></body></opml>',
+        { headers: { 'content-type': 'text/x-opml' } },
       ),
     [FONT_FILE]: () =>
       new Response(Buffer.from('wOF2 bold'), { headers: { 'content-type': 'font/woff2' } }),
@@ -544,6 +550,12 @@ async function settings(cms: Cms): Promise<void> {
     'admin',
   );
   await cms.settings.set('site', new Map([['gemini', true]]), 'admin');
+  await cms.settings.set('site', new Map([['following_opml', FOLLOWING]]), 'admin');
+  assert.equal(
+    (await cms.following.refresh())?.list?.feeds.length,
+    1,
+    'the following list was fetched',
+  );
   await cms.settings.set('maintenance', new Map([['on', true]]), 'admin');
   await cms.settings.set('dev_mode', new Map([['on', true]]), 'admin');
 }

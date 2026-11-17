@@ -305,6 +305,12 @@ export const NOTIFICATION_DIGESTS = declareDataFile({
   lost: 'When each user last had a digest, so one digest may come a window early.',
 });
 
+export const FOLLOWING_LIST = declareDataFile({
+  pattern: 'following.json',
+  dataClass: REBUILDABLE,
+  lost: 'The last subscription list fetched for /.well-known/following.opml, fetched again on the next refresh.',
+});
+
 export const MICROPUB_MEDIA = declareDataFile({
   pattern: 'micropub-media.json',
   dataClass: REBUILDABLE,
@@ -387,6 +393,7 @@ export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   INDIEAUTH_ACTIVITY,
   MCP_ACTIVITY,
   NOTIFICATION_DIGESTS,
+  FOLLOWING_LIST,
   MICROPUB_MEDIA,
   DATABASE,
   DATABASE_LOG,

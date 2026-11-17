@@ -42,6 +42,7 @@ const STABLE_SITE_JSON_KEYS = [
   'webmentionsSend',
   'webmentionsReceive',
   'notifyServer',
+  'followingOpml',
   'feedUpdatePeriod',
   'feedUpdateFrequency',
   'aiCrawlers',

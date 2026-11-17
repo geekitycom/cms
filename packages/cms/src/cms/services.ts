@@ -9,6 +9,8 @@ import type { ConversationWrite } from '../store/admin-store.ts';
 import { dropMessagesSignedByRetiredKeys, releaseOrderingLocks } from '../store/queue-database.ts';
 import { createAvatarService } from '../avatars/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
+import { createFollowingService } from '../following/list.ts';
+import type { FollowingService } from '../following/list.ts';
 import { createFontStore, createPageFonts, fontFetchJob, queueFontFetch } from '../fonts/index.ts';
 import type { FontStore } from '../fonts/index.ts';
 import { warnAboutGeminiCertificate } from '../gemini/site-certificate.ts';
@@ -132,6 +134,7 @@ export interface Services {
   readonly indexNow: IndexNowNotifier;
   readonly notifications: CommentNotifier;
   readonly digests: CommentDigest;
+  readonly following: FollowingService;
   readonly scheduler: Scheduler;
   readonly learnHandles: HandleLearner;
   readonly siteRecords: SiteRecords;
@@ -440,6 +443,11 @@ export function createServices({
   settings.watch(SITE.relays, startRelaySync);
   settings.watch(DEV_MODE.on, sendRelayUndosHeldByDevMode);
   settings.watch(SITE.wiki_base, rescanOnWikiBaseChange(content));
+
+  const following = createFollowingService({ config: resolved, settings });
+  settings.watch(SITE.following_opml, () => {
+    following.settingChanged();
+  });
   settings.watch(SITE.gemini, async ({ next }) => {
     if (next) await warnAboutGeminiCertificate(resolved, settings);
   });
@@ -593,6 +601,7 @@ export function createServices({
     sweeping('reply backfill', replyBackfill),
     sweeping('the retention sweep', retention),
     sweeping('digests', digests),
+    sweeping('the following list', following),
     { name: 'feed pings', settled: () => notifier.settled() },
     {
       name: 'IndexNow',
@@ -639,6 +648,7 @@ export function createServices({
     indexNow,
     notifications,
     digests,
+    following,
     scheduler,
     learnHandles,
     siteRecords: siteRecords(resolved),

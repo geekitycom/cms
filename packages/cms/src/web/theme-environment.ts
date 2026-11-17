@@ -17,6 +17,9 @@ import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { findThemeFile } from '../theme/themes.ts';
 import type { ChosenTheme } from '../theme/themes.ts';
 import type { PhotoContext } from './context.ts';
+import { servedFollowing } from '../following/list.ts';
+import { absoluteUrl } from '../util/url.ts';
+import { FOLLOWING_OPML_PATH, followingTitle } from './following-opml.ts';
 import { LLMS_TXT_PATH } from './llms.ts';
 import type { RenderDeps } from './render.ts';
 import { pluginTagsContext, requestDevMode, requestSignedIn } from './render-scope.ts';
@@ -52,6 +55,7 @@ export function createThemeEnvironment(deps: RenderDeps): ThemeEnvironment {
       ...shareImageContext(config, site, context, siteOwner),
       ...context,
       ...licenseContext(site, context),
+      ...followingContext(config, site, context),
       devMode: requestDevMode(),
       signedIn: requestSignedIn(),
       pluginTags: pluginTagsContext(),
@@ -148,6 +152,22 @@ function svgElseTouchIconHref(icons: readonly SiteIcon[]): string | undefined {
     icons.find((icon) => icon.type === 'image/svg+xml') ??
     icons.find((icon) => icon.rel === 'apple-touch-icon')
   )?.href;
+}
+
+function followingContext(
+  config: ResolvedConfig,
+  site: SiteData,
+  context: Record<string, unknown>,
+): Record<string, unknown> {
+  const source = site['followingOpml'];
+  if (currentUrl(context) !== '/' || typeof source !== 'string') return {};
+  if (servedFollowing(config.dataDir, source) === undefined) return {};
+  return {
+    following: {
+      href: absoluteUrl(FOLLOWING_OPML_PATH, config.baseUrl),
+      title: followingTitle(site.title),
+    },
+  };
 }
 
 function currentUrl(context: Record<string, unknown>): string {

@@ -120,6 +120,16 @@ export function normalizeRelayInbox(value: string): string | undefined {
   return parsed.href;
 }
 
+export function normalizeWebAddress(value: string): string | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    return undefined;
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : undefined;
+}
+
 /** A security contact textarea as its URIs, in order, repeats dropped. */
 export function securityContactList(value: string): string[] {
   const contacts: string[] = [];

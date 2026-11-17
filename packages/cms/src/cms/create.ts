@@ -28,6 +28,7 @@ import type { DataFileDeclaration } from '../files/data-files.ts';
 import type { IndexNowNotifier } from '../indexnow.ts';
 import type { JobQueue } from '../jobs/types.ts';
 import type { MailService, CommentDigest, CommentNotifier } from '../notifications/index.ts';
+import type { FollowingService } from '../following/list.ts';
 import type { FeedNotifier, NotifyReport } from '../notify.ts';
 import { siteDataFiles } from '../plugins/data.ts';
 import type { InstalledPlugin } from '../plugins/registry.ts';
@@ -206,6 +207,12 @@ export interface Cms {
    * which is also what a test does.
    */
   readonly digests: CommentDigest;
+  /**
+   * What keeps `/.well-known/following.opml` in step with the subscription
+   * list the Reading settings name. Started by {@link Cms.serve}; a site or a
+   * test calls `refresh()` to fetch it now.
+   */
+  readonly following: FollowingService;
   /**
    * The publisher of scheduled posts: what holds a future-dated post back and
    * releases it when its date arrives.
@@ -423,6 +430,7 @@ export function createCms(
     mail: services.mail,
     notifications: services.notifications,
     digests: services.digests,
+    following: services.following,
     scheduler: services.scheduler,
     events: content.events,
 

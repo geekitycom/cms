@@ -516,3 +516,66 @@ describe('whether the site serves Gemini (TASK-483)', () => {
     assert.ok(html.includes(missing), 'the problem names the file');
   });
 });
+
+describe('the feeds the site follows', () => {
+  const SOURCE = 'https://public.example/index.opml';
+
+  it('stores an http or https address and refuses anything else', async () => {
+    const contentDir = await box.dir('geekity-settings-following-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    assert.equal((await siteSettingsIn(contentDir)).following_opml, '', 'empty by default');
+    const refused = await saveSettings(agent, 'reading', {
+      following_opml: 'ftp://public.example/',
+    });
+    assert.equal(refused.status, 400);
+    assert.match(await refused.text(), /A subscription list is an absolute http/);
+
+    const saved = await saveSettings(agent, 'reading', { following_opml: ` ${SOURCE} ` });
+    assert.equal(saved.status, 303);
+    assert.equal((await siteJson(contentDir))['followingOpml'], SOURCE);
+  });
+
+  it('shows when the list was last fetched, how many feeds it holds, and the last error', async () => {
+    const contentDir = await box.dir('geekity-settings-following-');
+    const dataDir = await box.dir('geekity-settings-following-data-');
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({ followingOpml: SOURCE }),
+      'utf8',
+    );
+    const agent = await signedIn(await box.site({ contentDir, dataDir }));
+
+    const unfetched = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(unfetched, /Not fetched yet\./);
+
+    await writeFile(
+      path.join(dataDir, 'following.json'),
+      JSON.stringify({
+        source: SOURCE,
+        list: {
+          feeds: [
+            { text: 'One', xmlUrl: 'https://one.example/feed' },
+            { text: 'Two', xmlUrl: 'https://two.example/feed' },
+          ],
+          fetchedAt: '2026-11-16T20:00:00.000Z',
+          changedAt: '2026-11-16T20:00:00.000Z',
+          opmlUrl: SOURCE,
+        },
+        failure: { at: '2026-11-16T22:00:00.000Z', reason: `${SOURCE} answered 503` },
+      }),
+      'utf8',
+    );
+    const html = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(
+      html,
+      /Last fetched <time datetime="2026-11-16T20:00:00.000Z">[^<]+<\/time>,\s+2 feeds\./,
+    );
+    assert.match(
+      html,
+      /Last error, <time datetime="2026-11-16T22:00:00.000Z">[^<]+<\/time>: https:\/\/public\.example\/index\.opml answered 503/,
+    );
+  });
+});
