@@ -1110,12 +1110,16 @@ A theme with no schemes prints the manifest's `colorScheme` and its two
   is the site's title on the front page and on a page with no title.
 - `og:site_name` is always the site's.
 - `og:type` is `article` on a rendered post or page, and `website` everywhere
-  else, including a listing that carries a page's front matter.
+  else, including a listing that carries a page's front matter and a static
+  page standing as the front page.
 - `og:url` is the canonical URL: the page's own, or the `original` that a post
   first published elsewhere names.
 - An article also carries `article:published_time`, `article:modified_time`
   (the `updated` date, else the publish date), `article:author` (the author's
   profile URL on this site, else their name) and one `article:tag` per tag.
+- `<meta name="author">` names the same person `fediverse:creator` does, in
+  plain words: the user a post or page is by, and the site's author on the
+  front page of a solo-author site.
 
 **The picture** is the first of these that the page has, on the context as
 `shareImage`:
