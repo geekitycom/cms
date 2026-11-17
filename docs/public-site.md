@@ -876,7 +876,12 @@ profile on each request:
   It is a vCard 3.0 as `text/vcard; charset=utf-8`, the version Apple
   Contacts imports best. It has `N`, `FN`, `NICKNAME` (`@` and the site's
   host), `TITLE`, `NOTE` (the bio as plain text) and the site as
-  `URL;type=pref`. The avatar is embedded as
+  `URL;type=pref`. `N` is `family;given;;;` from the profile's Given name and
+  Family name. When the profile sets neither, the display name is split
+  instead: the last word is the family name and the words before it are the
+  given names, so `Andrew Shell` gives `N:Shell;Andrew;;;`. A one-word name is
+  a given name. Contacts heads a card with an empty `N` by its `NICKNAME`, so
+  a person's card always fills it. The avatar is embedded as
   `PHOTO;ENCODING=b;TYPE=JPEG` or `TYPE=PNG`: the narrowest derived JPEG or
   PNG copy at least 256 pixels wide, else the widest. The photo is left out
   when the avatar is not an upload of this site, has no such copy, or the
@@ -898,7 +903,7 @@ form is the way to reach the author, and it keeps the address private.
 
 A site whose author names no user is described as itself. The files carry
 the site title, the site avatar if there is one, the site URL and the contact
-page. The vCard then has `ORG` and `X-ABShowAs:COMPANY`, which Apple
+page. The vCard then has an empty `N`, `ORG` and `X-ABShowAs:COMPANY`, which Apple
 Contacts shows as a company card, as the JSON-LD describes such a site as
 an `Organization`.
 

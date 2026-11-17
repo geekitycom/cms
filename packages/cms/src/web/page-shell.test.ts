@@ -1296,6 +1296,8 @@ describe('the JSON-LD graph (TASK-81 AC #3)', () => {
     });
     await addProfiledUser(cms, 'ada', {
       displayName: 'Ada Lovelace',
+      givenName: 'Augusta Ada',
+      familyName: 'King',
       bio: 'Writes about engines.',
       avatar: '/uploads/2026/09/ada.png',
       jobTitle: 'Analyst',
@@ -1322,6 +1324,8 @@ describe('the JSON-LD graph (TASK-81 AC #3)', () => {
       assert.ok(person !== undefined, `${pathname} has no Person`);
       assert.equal(person['@id'], 'https://example.com/author/ada/#person');
       assert.equal(person['name'], 'Ada Lovelace');
+      assert.equal(person['givenName'], 'Augusta Ada');
+      assert.equal(person['familyName'], 'King');
       assert.equal(person['url'], 'https://example.com/author/ada/');
       assert.equal(person['image'], 'https://example.com/uploads/2026/09/ada.png');
       assert.equal(person['description'], 'Writes about engines.');
@@ -1351,6 +1355,16 @@ describe('the JSON-LD graph (TASK-81 AC #3)', () => {
       'https://example.com/about/',
       'https://example.com/author/ada/',
     ]);
+  });
+
+  it('leaves givenName and familyName off a Person whose profile does not split the name', async () => {
+    const cms = await siteWearingAnAvatar({ url: 'https://example.com', author: 'ada' });
+    await addProfiledUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+
+    const person = node(graph(await body(cms, '/')), 'Person');
+    assert.equal(person?.['name'], 'Ada Lovelace');
+    assert.equal(Object.hasOwn(person ?? {}, 'givenName'), false);
+    assert.equal(Object.hasOwn(person ?? {}, 'familyName'), false);
   });
 
   it('adds a ProfilePage on an author archive', async () => {

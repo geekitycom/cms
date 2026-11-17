@@ -19,6 +19,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { mf2 } from 'microformats-parser';
+
 import { sandbox } from '../admin/__testing__/harness.ts';
 import { setUserProfile } from '../site/users.ts';
 import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
@@ -257,6 +259,23 @@ describe('the bio (AC #2)', () => {
     );
   });
 
+  it('carries the given and family names the profile splits the name into', async () => {
+    const cms = await sharedSite(
+      {},
+      { displayName: 'Ada Lovelace', givenName: 'Augusta Ada', familyName: 'King' },
+    );
+    const html = await body(cms, '/2026/09/hello/');
+    const entry = mf2(html, { baseUrl: 'https://example.com/' }).items.find((item) =>
+      item.type?.includes('h-entry'),
+    );
+    const card = entry?.properties['author']?.[0];
+
+    assert.ok(typeof card === 'object' && 'properties' in card, 'the post has an author h-card');
+    assert.deepEqual(card.properties['name'], ['Ada Lovelace']);
+    assert.deepEqual(card.properties['given-name'], ['Augusta Ada']);
+    assert.deepEqual(card.properties['family-name'], ['King']);
+  });
+
   it('leaves out what the profile does not say', async () => {
     const cms = await sharedSite({}, { displayName: 'Ada Lovelace' });
     const inside = bio(await body(cms, '/2026/09/hello/'));
@@ -265,6 +284,7 @@ describe('the bio (AC #2)', () => {
     assert.doesNotMatch(inside, /bio-avatar/, 'a picture nobody uploaded');
     assert.doesNotMatch(inside, /p-job-title/, 'a job title nobody wrote');
     assert.doesNotMatch(inside, /p-locality/, 'a location nobody wrote');
+    assert.doesNotMatch(inside, /p-given-name|p-family-name/, 'a name nobody split');
   });
 
   it('credits the site’s author on a post whose front matter names nobody', async () => {

@@ -896,6 +896,13 @@ rows where neither applies:
 Both rules are checked against `data/users.json` as the deletion writes it, so
 two deletions sent at the same moment are judged one after the other.
 
+**Given name and Family name** are optional. They split the display name the
+way an address book wants it: the site author's
+[vCard](public-site.md#socialspec-profile) uses them for `N`, the h-card prints
+them as `p-given-name` and `p-family-name`, and the JSON-LD `Person` carries
+them as `givenName` and `familyName`. Leave both empty and the vCard splits
+the display name at its last word. Nothing else splits it.
+
 **A profile's links** go one per line, either `Label | URL` or a bare URL that
 is its own label. The URL is a path or an absolute `http(s)` URL with no
 spaces, the same rule as a menu item's URL. The line format is the same in both

@@ -58,6 +58,10 @@ export interface AuthorContext {
   name: string;
   /** Their archive, when the name resolved to a user. Absent when it did not. */
   url?: string | undefined;
+  /** Their given names, when their profile splits their name. */
+  givenName?: string | undefined;
+  /** Their family name, when their profile splits their name. */
+  familyName?: string | undefined;
   /** What they say about themselves, when they have said anything: Markdown, as written. */
   bio?: string | undefined;
   /** The bio as HTML, a `<p>` per paragraph, with any raw HTML in it escaped. */
@@ -111,6 +115,8 @@ export function profileContext(user: User): AuthorContext {
     username: user.username,
     name: profile?.displayName ?? user.username,
     url: authorHref(user.username),
+    ...(profile?.givenName === undefined ? {} : { givenName: profile.givenName }),
+    ...(profile?.familyName === undefined ? {} : { familyName: profile.familyName }),
     ...(profile?.bio === undefined
       ? {}
       : { bio: profile.bio, bioHtml: bioHtml(profile.bio), bioText: bioText(profile.bio) }),

@@ -96,6 +96,8 @@ export const USER_FIELDS = {
   on: 'on',
   mode: 'mode',
   displayName: 'display_name',
+  givenName: 'given_name',
+  familyName: 'family_name',
   bio: 'bio',
   avatar: 'avatar',
   jobTitle: 'job_title',
@@ -367,6 +369,8 @@ function sameProfile(submitted: UserProfile, target: User): boolean {
 function profileText(profile: UserProfile | undefined): string {
   return [
     `Display name: ${profile?.displayName ?? ''}`,
+    `Given name: ${profile?.givenName ?? ''}`,
+    `Family name: ${profile?.familyName ?? ''}`,
     `Bio: ${profile?.bio ?? ''}`,
     `Avatar: ${profile?.avatar ?? ''}`,
     `Job title: ${profile?.jobTitle ?? ''}`,
@@ -379,6 +383,8 @@ function profileText(profile: UserProfile | undefined): string {
 function typedProfile(body: Readonly<Record<string, unknown>>) {
   return {
     displayName: stringOrEmpty(body[USER_FIELDS.displayName]),
+    givenName: stringOrEmpty(body[USER_FIELDS.givenName]),
+    familyName: stringOrEmpty(body[USER_FIELDS.familyName]),
     bio: stringOrEmpty(body[USER_FIELDS.bio]),
     avatar: stringOrEmpty(body[USER_FIELDS.avatar]),
     jobTitle: stringOrEmpty(body[USER_FIELDS.jobTitle]),
@@ -782,6 +788,8 @@ function row(
     editUrl: editUserPath(user.id),
     profile: {
       displayName: user.profile?.displayName ?? '',
+      givenName: user.profile?.givenName ?? '',
+      familyName: user.profile?.familyName ?? '',
       bio: user.profile?.bio ?? '',
       avatar: user.profile?.avatar ?? '',
       jobTitle: user.profile?.jobTitle ?? '',

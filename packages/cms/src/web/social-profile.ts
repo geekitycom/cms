@@ -26,6 +26,8 @@ export const CONTACT_VCF_PATH = '/.well-known/contact.vcf';
 export interface SiteProfile {
   readonly kind: 'individual' | 'org';
   readonly name: string;
+  readonly givenName?: string | undefined;
+  readonly familyName?: string | undefined;
   readonly url: string;
   readonly summary?: string | undefined;
   readonly bioMarkdown?: string | undefined;
@@ -54,6 +56,8 @@ export function siteProfileOf(c: Context<GeekityEnv>): SiteProfile {
   return {
     kind: owner === undefined ? 'org' : 'individual',
     name: owner?.name ?? site.title,
+    givenName: owner?.givenName,
+    familyName: owner?.familyName,
     url: absolute('/'),
     summary: tagline === '' ? undefined : tagline,
     bioMarkdown:
@@ -184,7 +188,7 @@ export function contactVcard(profile: SiteProfile, photo?: ContactPhoto): string
   const lines = [
     'BEGIN:VCARD',
     'VERSION:3.0',
-    'N:;;;;',
+    `N:${vcardName(profile)}`,
     `FN:${vcardText(profile.name)}`,
     `NICKNAME:${vcardText(`@${bareHost(new URL(profile.url))}`)}`,
     ...(profile.kind === 'org' ? [`ORG:${vcardText(profile.name)}`, 'X-ABShowAs:COMPANY'] : []),
@@ -208,6 +212,25 @@ export function contactVcard(profile: SiteProfile, photo?: ContactPhoto): string
     'END:VCARD',
   ];
   return lines.map(foldVcardLine).join('');
+}
+
+/**
+ * `Family;Given;Additional;Prefix;Suffix`. Apple Contacts heads a card whose
+ * `N` is empty with its `NICKNAME`.
+ */
+function vcardName(profile: SiteProfile): string {
+  const { given, family } = nameParts(profile);
+  return `${vcardText(family)};${vcardText(given)};;;`;
+}
+
+function nameParts(profile: SiteProfile): { given: string; family: string } {
+  if (profile.kind === 'org') return { given: '', family: '' };
+  if (profile.givenName !== undefined || profile.familyName !== undefined) {
+    return { given: profile.givenName ?? '', family: profile.familyName ?? '' };
+  }
+  const words = profile.name.trim().split(/\s+/);
+  if (words.length === 1) return { given: words[0] ?? '', family: '' };
+  return { given: words.slice(0, -1).join(' '), family: words.at(-1) ?? '' };
 }
 
 /** The escaping of a TEXT value, the same in vCard 3.0 and 4.0. */

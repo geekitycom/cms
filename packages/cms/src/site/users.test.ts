@@ -440,6 +440,8 @@ describe('a user with a profile (TASK-67 AC #1)', () => {
         userId: ada.id,
         profile: {
           displayName: 'Ada Lovelace',
+          givenName: 'Augusta Ada',
+          familyName: 'King',
           bio: 'Wrote the first program.',
           avatar: '/uploads/2026/09/ada.jpg',
           jobTitle: 'Analyst',
@@ -452,6 +454,8 @@ describe('a user with a profile (TASK-67 AC #1)', () => {
 
     const stored = findUserById(dataDir, ada.id)?.profile;
     assert.equal(stored?.displayName, 'Ada Lovelace');
+    assert.equal(stored?.givenName, 'Augusta Ada');
+    assert.equal(stored?.familyName, 'King');
     assert.equal(stored?.bio, 'Wrote the first program.');
     assert.equal(stored?.avatar, '/uploads/2026/09/ada.jpg');
     assert.equal(stored?.jobTitle, 'Analyst');
@@ -503,6 +507,8 @@ describe('a user with a profile (TASK-67 AC #1)', () => {
             createdAt: '2026-01-01T00:00:00.000Z',
             profile: {
               displayName: 42,
+              givenName: '  Augusta Ada  ',
+              familyName: ['King'],
               bio: '  Spaced out.  ',
               jobTitle: '  Analyst  ',
               location: [],
@@ -516,6 +522,8 @@ describe('a user with a profile (TASK-67 AC #1)', () => {
 
     const stored = findUserById(dataDir, 1)?.profile;
     assert.equal(stored?.displayName, undefined, 'a display name that is not a string is dropped');
+    assert.equal(stored?.givenName, 'Augusta Ada');
+    assert.equal(stored?.familyName, undefined, 'a family name that is not a string is dropped');
     assert.equal(stored?.bio, 'Spaced out.');
     assert.equal(stored?.jobTitle, 'Analyst');
     assert.equal(stored?.location, undefined, 'a location that is not a string is dropped');

@@ -171,7 +171,7 @@ describe('/.well-known/contact.vcf', () => {
     assert.deepEqual(card[0], property('BEGIN', 'VCARD'));
     assert.deepEqual(card[1], property('VERSION', '3.0'));
     assert.deepEqual(card.at(-1), property('END', 'VCARD'));
-    assert.deepEqual(values(card, 'N'), [';;;;']);
+    assert.deepEqual(values(card, 'N'), ['Lovelace;Ada;;;']);
     assert.deepEqual(values(card, 'FN'), ['Ada Lovelace']);
     assert.deepEqual(values(card, 'NICKNAME'), ['@blog.example']);
     assert.deepEqual(values(card, 'TITLE'), ['Analyst']);
@@ -311,9 +311,66 @@ describe('/.well-known/contact.vcf', () => {
       assert.ok(Buffer.byteLength(line, 'utf8') <= 75, `${line} is over 75 octets`);
     }
     assert.match(body, /^FN:Ada\\, Countess\\; of Lovelace\r\n/m);
+    assert.match(body, /^N:Lovelace;Ada\\, Countess\\; of;;;\r\n/m);
     assert.match(body, /\r\n /, 'the long NOTE is folded');
     assert.deepEqual(values(card, 'FN'), ['Ada, Countess; of Lovelace']);
     assert.deepEqual(values(card, 'NOTE'), [bio]);
+  });
+
+  it('names the author from their given and family names when the profile has them', async () => {
+    const cms = await site({
+      siteJson: { title: 'Engines', author: 'ada' },
+      users: [
+        {
+          username: 'ada',
+          profile: {
+            displayName: 'Ada Lovelace',
+            givenName: 'Augusta Ada',
+            familyName: 'King; Countess',
+          },
+        },
+      ],
+    });
+
+    const { body } = await get(cms, '/.well-known/contact.vcf');
+
+    assert.match(body, /^N:King\\; Countess;Augusta Ada;;;\r\n/m);
+    assert.deepEqual(values(parseVcard(body), 'FN'), ['Ada Lovelace']);
+  });
+
+  it('leaves the other half of N empty when the profile has only one of the names', async () => {
+    const cms = await site({
+      siteJson: { title: 'Engines', author: 'ada' },
+      users: [{ username: 'ada', profile: { displayName: 'Ada Lovelace', givenName: 'Ada' } }],
+    });
+
+    const { body } = await get(cms, '/.well-known/contact.vcf');
+
+    assert.deepEqual(values(parseVcard(body), 'N'), [';Ada;;;']);
+  });
+
+  it('takes the display name’s last word as the family name when the profile has neither', async () => {
+    const cms = await site({
+      siteJson: { title: 'Engines', author: 'ada' },
+      users: [{ username: 'ada', profile: { displayName: 'Augusta  Ada\tKing' } }],
+    });
+
+    const { body } = await get(cms, '/.well-known/contact.vcf');
+
+    assert.deepEqual(values(parseVcard(body), 'N'), ['King;Augusta Ada;;;']);
+  });
+
+  it('gives a one-word name as the given name', async () => {
+    const cms = await site({
+      siteJson: { title: 'Engines', author: 'ada' },
+      users: [{ username: 'ada' }],
+    });
+
+    const { body } = await get(cms, '/.well-known/contact.vcf');
+    const card = parseVcard(body);
+
+    assert.deepEqual(values(card, 'FN'), ['ada']);
+    assert.deepEqual(values(card, 'N'), [';ada;;;']);
   });
 
   it('describes a site with no author as a company card with its name and address', async () => {
