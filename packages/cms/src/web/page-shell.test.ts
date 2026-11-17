@@ -649,6 +649,15 @@ describe('the description, Open Graph and Twitter card tags (TASK-81 AC #1)', ()
     assert.equal(metaContent(await body(cms, '/'), 'og:url'), 'https://example.com/');
   });
 
+  it('cards a static front page as a website, with no article tags', async () => {
+    const { cms } = await siteWithContent({ homepage: 'about' });
+
+    const html = await body(cms, '/');
+    assert.equal(metaContent(html, 'og:type'), 'website');
+    assert.deepEqual(metaContents(html, 'article:published_time'), []);
+    assert.deepEqual(metaContents(html, 'article:author'), []);
+  });
+
   it('prefers the entry’s own image to the site avatar', async () => {
     const cms = await sharedAvatarSite({ url: 'https://example.com' });
     const html = await body(cms, '/2026/09/photo/');
@@ -974,6 +983,15 @@ describe('the fediverse:creator tag (TASK-202)', () => {
     const several = await siteWithPostBy('ada');
     assert.deepEqual(metaContents(await body(several, '/'), 'fediverse:creator'), []);
     assert.deepEqual(metaContents(await body(several, '/about/'), 'fediverse:creator'), []);
+  });
+
+  it('names the same person as the author in plain words', async () => {
+    const solo = await siteWithPostBy('ada', { author: 'ada' });
+    assert.deepEqual(metaContents(await body(solo, '/2026/09/by/'), 'author'), ['Ada Lovelace']);
+    assert.deepEqual(metaContents(await body(solo, '/'), 'author'), ['Ada Lovelace']);
+
+    const several = await siteWithPostBy('ada');
+    assert.deepEqual(metaContents(await body(several, '/'), 'author'), []);
   });
 
   it('names nobody for a post by a name no user answers to', async () => {
