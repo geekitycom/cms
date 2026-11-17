@@ -10,6 +10,7 @@ import {
   ABOUT_MD_PATH,
   aboutMarkdown,
   CONTACT_VCF_PATH,
+  contactPhoto,
   contactVcard,
   profileFileResponse,
   siteProfileOf,
@@ -78,9 +79,11 @@ export function mountWellKnown(app: Hono<GeekityEnv>): void {
   app.get(ABOUT_MD_PATH, (c) =>
     profileFileResponse(c, aboutMarkdown(siteProfileOf(c)), CONTENT_TYPES.markdown),
   );
-  app.get(CONTACT_VCF_PATH, (c) =>
-    profileFileResponse(c, contactVcard(siteProfileOf(c)), 'text/vcard; charset=utf-8'),
-  );
+  app.get(CONTACT_VCF_PATH, async (c) => {
+    const profile = siteProfileOf(c);
+    const photo = await contactPhoto(c.var.config, profile.avatarPath);
+    return profileFileResponse(c, contactVcard(profile, photo), 'text/vcard; charset=utf-8');
+  });
 
   app.get(FOLLOWING_OPML_PATH, (c) => {
     const settings = c.var.siteAtRequestStart;
