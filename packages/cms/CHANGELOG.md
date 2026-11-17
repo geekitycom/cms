@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.1](https://github.com/geekitycom/cms/compare/v0.55.0...v0.55.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **cms:** let any origin read the feeds and the feed redirects ([8ba4cd3](https://github.com/geekitycom/cms/commit/8ba4cd317d7944d4ef83ffba1c878d87634b5950))
+
 ## [0.55.0](https://github.com/geekitycom/cms/compare/v0.54.0...v0.55.0) (2026-11-17)
 
 
