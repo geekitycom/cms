@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.55.2](https://github.com/geekitycom/cms/compare/v0.55.1...v0.55.2) (2026-11-17)
+
+
+### Bug Fixes
+
+* **cms:** card a static front page as a website and name its author ([f08d837](https://github.com/geekitycom/cms/commit/f08d837691ef17df121d345d48b407cf4626d345))
+* **cms:** shape contact.vcf as a vCard 3.0 that Apple Contacts imports whole ([3f13ef9](https://github.com/geekitycom/cms/commit/3f13ef9a4e4512b7998b6865ac18fbfb3545b620))
+
 ## [0.55.1](https://github.com/geekitycom/cms/compare/v0.55.0...v0.55.1) (2026-11-17)
 
 
