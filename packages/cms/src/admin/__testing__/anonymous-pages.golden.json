@@ -426,6 +426,7 @@
   "feed": {
     "status": 200,
     "headers": {
+      "access-control-allow-origin": "*",
       "cache-control": "no-cache",
       "content-security-policy": "frame-ancestors 'self'",
       "content-type": "application/rss+xml; charset=utf-8",
