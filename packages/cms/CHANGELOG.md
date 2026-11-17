@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.55.0](https://github.com/geekitycom/cms/compare/v0.54.0...v0.55.0) (2026-11-17)
+
+
+### Features
+
+* **cms:** serve FollowSpec following.opml from a subscription list ([1302fb8](https://github.com/geekitycom/cms/commit/1302fb8ff66ec179d7466f925ff66a150c5a1e02))
+* **cms:** serve SocialSpec about.md and contact.vcf ([60acc97](https://github.com/geekitycom/cms/commit/60acc976447ff3e68f5f2fbcb2da801a5310c32b))
+
 ## [0.54.0](https://github.com/geekitycom/cms/compare/v0.53.0...v0.54.0) (2026-11-16)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.13.0...plugin-wordpress-v0.14.0) (2026-11-17)
+
+
+### Features
+
+* **cms:** serve FollowSpec following.opml from a subscription list ([1302fb8](https://github.com/geekitycom/cms/commit/1302fb8ff66ec179d7466f925ff66a150c5a1e02))
+
 ## [0.13.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.12.0...plugin-wordpress-v0.13.0) (2026-10-30)
 
 
