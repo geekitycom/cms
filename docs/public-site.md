@@ -29,7 +29,7 @@ Booting mounts the public site on the app. The routes are:
 | `/.well-known/security.txt`             | Where to report a vulnerability; a 404 until a security contact is set. See [security.txt](security.md#securitytxt-and-change-password). |
 | `/.well-known/change-password`          | A redirect to the signed-in user's change-password form, or to the login form.                                                           |
 | `/.well-known/about.md`                 | The site author's profile as Markdown. See [SocialSpec profile](#socialspec-profile).                                                    |
-| `/.well-known/contact.vcf`              | The same profile as a vCard 4.0, with no email address in it.                                                                            |
+| `/.well-known/contact.vcf`              | The same profile as a vCard 3.0, with no email address in it.                                                                            |
 | `/.well-known/following.opml`           | The feeds the site follows, as flat OPML. See [FollowSpec following list](#followspec-following-list).                                   |
 | `/feed.xml`, `/feed.json`               | A 301 to `/feed/` and to `/feed/json/`, the feed addresses SocialSpec suggests.                                                          |
 | `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                                                                |
@@ -873,9 +873,23 @@ profile on each request:
   title and location, the bio, and a list of links. The links are the site,
   each profile link and, when a page has the contact form on, that page.
 - `/.well-known/contact.vcf` follows [ContactSpec](https://contactspec.org).
-  It is a vCard 4.0 as `text/vcard; charset=utf-8`, with `FN`, `TITLE`, `NOTE`
-  (the bio as plain text), `PHOTO`, the site as `URL;PREF=1`, each profile
-  link as another `URL`, and the contact page as `CONTACT-URI` (RFC 8605).
+  It is a vCard 3.0 as `text/vcard; charset=utf-8`, the version Apple
+  Contacts imports best. It has `N`, `FN`, `NICKNAME` (`@` and the site's
+  host), `TITLE`, `NOTE` (the bio as plain text) and the site as
+  `URL;type=pref`. The avatar is embedded as
+  `PHOTO;ENCODING=b;TYPE=JPEG` or `TYPE=PNG`: the narrowest derived JPEG or
+  PNG copy at least 256 pixels wide, else the widest. The photo is left out
+  when the avatar is not an upload of this site, has no such copy, or the
+  copy is over 1 MiB.
+
+  A profile link to an account becomes Apple's `X-SOCIALPROFILE`, with the
+  service as `type` and the username as `x-user`. The services are X and
+  Twitter (`twitter`), Facebook, LinkedIn, Flickr, GitHub, Instagram,
+  Threads, Bluesky, YouTube and TikTok. A `/@name` address on any other
+  host is a `Mastodon` account with the username `@name@host`. Every other
+  link, and the contact page, is a `URL` in an item group whose
+  `X-ABLabel` is the link's label, or `Contact form` for the contact page.
+  Without the label, Contacts calls every URL a homepage.
 
 The site author is the user the [Site author](settings.md#site-author) setting
 names, the same person as the h-card and the JSON-LD `Person`. Every URL in
@@ -884,7 +898,8 @@ form is the way to reach the author, and it keeps the address private.
 
 A site whose author names no user is described as itself. The files carry
 the site title, the site avatar if there is one, the site URL and the contact
-page. The vCard is then `KIND:org`, as the JSON-LD describes such a site as
+page. The vCard then has `ORG` and `X-ABShowAs:COMPANY`, which Apple
+Contacts shows as a company card, as the JSON-LD describes such a site as
 an `Organization`.
 
 Both files send `Access-Control-Allow-Origin: *`, so a reader in a browser

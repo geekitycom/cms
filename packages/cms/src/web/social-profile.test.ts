@@ -3,6 +3,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import sharp from 'sharp';
+
 import { sandbox } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { TestUser } from '../admin/__testing__/users.ts';
@@ -34,7 +36,7 @@ const CONTACT_PAGE =
 async function site(options: {
   siteJson: Record<string, unknown>;
   users?: readonly TestUser[];
-  files?: Record<string, string>;
+  files?: Record<string, string | Buffer>;
 }): Promise<Cms> {
   const contentDir = await box.dir('geekity-social-content-');
   const dataDir = await box.dir('geekity-social-data-');
@@ -44,9 +46,9 @@ async function site(options: {
     JSON.stringify(options.siteJson),
     'utf8',
   );
-  for (const [name, text] of Object.entries(options.files ?? {})) {
+  for (const [name, contents] of Object.entries(options.files ?? {})) {
     await mkdir(path.dirname(path.join(contentDir, name)), { recursive: true });
-    await writeFile(path.join(contentDir, name), text, 'utf8');
+    await writeFile(path.join(contentDir, name), contents);
   }
   if (options.users !== undefined) writeUsers(dataDir, options.users);
   return box.open({ contentDir, dataDir, baseUrl: 'https://blog.example' });
@@ -67,9 +69,14 @@ function siteOfNobody(): Promise<Cms> {
 }
 
 interface VcardProperty {
+  group: string;
   name: string;
-  params: string;
+  params: Record<string, string>;
   value: string;
+}
+
+function property(name: string, value: string, params: Record<string, string> = {}) {
+  return { group: '', name, params, value };
 }
 
 function parseVcard(text: string): VcardProperty[] {
@@ -78,19 +85,41 @@ function parseVcard(text: string): VcardProperty[] {
     .split('\r\n')
     .filter((line) => line !== '')
     .map((line) => {
-      const colon = line.indexOf(':');
-      const [name = '', ...params] = line.slice(0, colon).split(';');
+      const head = /^(?:([\w-]+)\.)?([\w-]+)((?:;[\w-]+=(?:"[^"]*"|[^;:"]*))*):/.exec(line);
+      assert.ok(head !== null, `${line} is a content line`);
+      const [whole, group = '', name = '', rawParams = ''] = head;
+      const params = Object.fromEntries(
+        [...rawParams.matchAll(/;([\w-]+)=("[^"]*"|[^;]*)/g)].map(([, key = '', raw = '']) => [
+          key,
+          raw.replace(/^"(.*)"$/, '$1'),
+        ]),
+      );
       const value = line
-        .slice(colon + 1)
+        .slice(whole.length)
         .replace(/\\([\\,;nN])/g, (_, escaped: string) =>
           escaped.toLowerCase() === 'n' ? '\n' : escaped,
         );
-      return { name, params: params.join(';'), value };
+      return { group, name, params, value };
     });
 }
 
 function values(properties: readonly VcardProperty[], name: string): string[] {
-  return properties.filter((property) => property.name === name).map((property) => property.value);
+  return properties.filter((line) => line.name === name).map((line) => line.value);
+}
+
+function socialProfiles(card: readonly VcardProperty[]) {
+  return card
+    .filter((line) => line.name === 'X-SOCIALPROFILE')
+    .map((line) => ({ type: line.params.type, user: line.params['x-user'], uri: line.value }));
+}
+
+function labelledUrls(card: readonly VcardProperty[]) {
+  return card
+    .filter((line) => line.name === 'URL' && line.group !== '')
+    .map((line) => ({
+      label: card.find((other) => other.group === line.group && other.name === 'X-ABLabel')?.value,
+      url: line.value,
+    }));
 }
 
 async function get(cms: Cms, pathname: string, headers: Record<string, string> = {}) {
@@ -133,31 +162,137 @@ describe('/.well-known/about.md', () => {
 });
 
 describe('/.well-known/contact.vcf', () => {
-  it('is a vCard 4.0 of the site author, with no email address', async () => {
+  it('is a vCard 3.0 of the site author for Apple Contacts, with no email address', async () => {
     const { response, body } = await get(await siteOfAda(), '/.well-known/contact.vcf');
     const card = parseVcard(body);
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'text/vcard; charset=utf-8');
-    assert.deepEqual(card[0], { name: 'BEGIN', params: '', value: 'VCARD' });
-    assert.deepEqual(card[1], { name: 'VERSION', params: '', value: '4.0' });
-    assert.deepEqual(card.at(-1), { name: 'END', params: '', value: 'VCARD' });
-    assert.deepEqual(values(card, 'KIND'), ['individual']);
+    assert.deepEqual(card[0], property('BEGIN', 'VCARD'));
+    assert.deepEqual(card[1], property('VERSION', '3.0'));
+    assert.deepEqual(card.at(-1), property('END', 'VCARD'));
+    assert.deepEqual(values(card, 'N'), [';;;;']);
     assert.deepEqual(values(card, 'FN'), ['Ada Lovelace']);
+    assert.deepEqual(values(card, 'NICKNAME'), ['@blog.example']);
     assert.deepEqual(values(card, 'TITLE'), ['Analyst']);
     assert.deepEqual(values(card, 'NOTE'), ['Writes about engines, numbers; and poetry.']);
-    assert.deepEqual(values(card, 'PHOTO'), ['https://blog.example/uploads/2026/09/ada.png']);
+    assert.deepEqual(values(card, 'PHOTO'), [], 'no photo when the avatar file is not there');
     assert.deepEqual(
-      card.filter((property) => property.name === 'URL'),
-      [
-        { name: 'URL', params: 'PREF=1', value: 'https://blog.example/' },
-        { name: 'URL', params: '', value: 'https://example.social/@ada' },
-        { name: 'URL', params: '', value: 'https://blog.example/notes/' },
-      ],
+      card.filter((line) => line.name === 'URL' && line.group === ''),
+      [property('URL', 'https://blog.example/', { type: 'pref' })],
     );
-    assert.deepEqual(values(card, 'CONTACT-URI'), ['https://blog.example/contact/']);
-    assert.deepEqual(values(card, 'EMAIL'), []);
+    assert.deepEqual(socialProfiles(card), [
+      { type: 'Mastodon', user: '@ada@example.social', uri: 'https://example.social/@ada' },
+    ]);
+    assert.deepEqual(labelledUrls(card), [
+      { label: 'Notes', url: 'https://blog.example/notes/' },
+      { label: 'Contact form', url: 'https://blog.example/contact/' },
+    ]);
+    for (const name of ['KIND', 'CONTACT-URI', 'EMAIL']) assert.deepEqual(values(card, name), []);
     assert.doesNotMatch(body, /ada@private\.example/);
+  });
+
+  it('lists accounts on services Apple knows as social profiles and labels the other links', async () => {
+    const cms = await site({
+      siteJson: { title: 'Andrew', author: 'andrew' },
+      users: [
+        {
+          username: 'andrew',
+          profile: {
+            displayName: 'Andrew',
+            links: [
+              { label: 'X', href: 'https://x.com/andrewshell' },
+              { label: 'Twitter', href: 'https://twitter.com/@ashell' },
+              { label: 'Mastodon', href: 'https://indieweb.social/@andrewshell' },
+              { label: 'GitHub', href: 'https://github.com/andrewshell' },
+              { label: 'LinkedIn', href: 'https://www.linkedin.com/in/andrew-shell/' },
+              { label: 'Bluesky', href: 'https://bsky.app/profile/andrewshell.org' },
+              { label: 'Gravatar', href: 'https://gravatar.com/andrewshell' },
+              { label: 'A repository', href: 'https://github.com/andrewshell/cms' },
+            ],
+          },
+        },
+      ],
+    });
+
+    const card = parseVcard((await get(cms, '/.well-known/contact.vcf')).body);
+
+    assert.deepEqual(socialProfiles(card), [
+      { type: 'twitter', user: 'andrewshell', uri: 'https://x.com/andrewshell' },
+      { type: 'twitter', user: 'ashell', uri: 'https://twitter.com/@ashell' },
+      {
+        type: 'Mastodon',
+        user: '@andrewshell@indieweb.social',
+        uri: 'https://indieweb.social/@andrewshell',
+      },
+      { type: 'GitHub', user: 'andrewshell', uri: 'https://github.com/andrewshell' },
+      {
+        type: 'linkedin',
+        user: 'andrew-shell',
+        uri: 'https://www.linkedin.com/in/andrew-shell/',
+      },
+      { type: 'Bluesky', user: 'andrewshell.org', uri: 'https://bsky.app/profile/andrewshell.org' },
+    ]);
+    assert.deepEqual(labelledUrls(card), [
+      { label: 'Gravatar', url: 'https://gravatar.com/andrewshell' },
+      { label: 'A repository', url: 'https://github.com/andrewshell/cms' },
+    ]);
+  });
+
+  it('embeds a derived copy of an uploaded JPEG avatar, a few hundred pixels wide', async () => {
+    const avatar = await sharp({
+      create: { width: 1000, height: 800, channels: 3, background: { r: 200, g: 90, b: 40 } },
+    })
+      .jpeg()
+      .toBuffer();
+    const cms = await site({
+      siteJson: { title: 'Engines', author: 'ada' },
+      users: [{ username: 'ada', profile: { displayName: 'Ada', avatar: '/uploads/ada.jpg' } }],
+      files: { 'uploads/ada.jpg': avatar },
+    });
+
+    const card = parseVcard((await get(cms, '/.well-known/contact.vcf')).body);
+    const [photo] = card.filter((line) => line.name === 'PHOTO');
+
+    assert.deepEqual(photo?.params, { ENCODING: 'b', TYPE: 'JPEG' });
+    const embedded = await sharp(Buffer.from(photo.value, 'base64')).metadata();
+    assert.equal(embedded.format, 'jpeg');
+    assert.equal(embedded.width, 320);
+  });
+
+  it('embeds a small PNG avatar as the PNG it is', async () => {
+    const avatar = await sharp({
+      create: { width: 120, height: 120, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .png()
+      .toBuffer();
+    const cms = await site({
+      siteJson: { title: 'Engines', author: 'ada' },
+      users: [{ username: 'ada', profile: { displayName: 'Ada', avatar: '/uploads/ada.png' } }],
+      files: { 'uploads/ada.png': avatar },
+    });
+
+    const card = parseVcard((await get(cms, '/.well-known/contact.vcf')).body);
+    const [photo] = card.filter((line) => line.name === 'PHOTO');
+
+    assert.deepEqual(photo?.params, { ENCODING: 'b', TYPE: 'PNG' });
+    assert.equal((await sharp(Buffer.from(photo.value, 'base64')).metadata()).width, 120);
+  });
+
+  it('leaves the photo out when the avatar is somewhere else', async () => {
+    const cms = await site({
+      siteJson: { title: 'Engines', author: 'ada' },
+      users: [
+        {
+          username: 'ada',
+          profile: { displayName: 'Ada', avatar: 'https://elsewhere.example/ada.jpg' },
+        },
+      ],
+    });
+
+    const card = parseVcard((await get(cms, '/.well-known/contact.vcf')).body);
+
+    assert.deepEqual(values(card, 'PHOTO'), []);
   });
 
   it('escapes TEXT values, ends every line with CRLF and folds at 75 octets', async () => {
@@ -181,16 +316,20 @@ describe('/.well-known/contact.vcf', () => {
     assert.deepEqual(values(card, 'NOTE'), [bio]);
   });
 
-  it('describes a site with no author by its name and address, and no contact page', async () => {
+  it('describes a site with no author as a company card with its name and address', async () => {
     const { response, body } = await get(await siteOfNobody(), '/.well-known/contact.vcf');
     const card = parseVcard(body);
 
     assert.equal(response.status, 200);
-    assert.deepEqual(values(card, 'KIND'), ['org']);
+    assert.deepEqual(values(card, 'VERSION'), ['3.0']);
+    assert.deepEqual(values(card, 'N'), [';;;;']);
     assert.deepEqual(values(card, 'FN'), ['Engines']);
+    assert.deepEqual(values(card, 'ORG'), ['Engines']);
+    assert.deepEqual(values(card, 'X-ABShowAs'), ['COMPANY']);
+    assert.deepEqual(values(card, 'NICKNAME'), ['@blog.example']);
     assert.deepEqual(values(card, 'URL'), ['https://blog.example/']);
     assert.deepEqual(values(card, 'PHOTO'), []);
-    assert.deepEqual(values(card, 'CONTACT-URI'), []);
+    assert.deepEqual(labelledUrls(card), []);
   });
 });
 
