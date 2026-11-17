@@ -36,6 +36,7 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     posts_page: '',
     posts_per_page: '10',
     notify_server: 'https://rpc.rsscloud.io',
+    following_opml: '',
     feed_update_period: 'hourly',
     feed_update_frequency: '1',
     ai_crawlers: 'allow',

@@ -229,6 +229,7 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `Enqueued`              | type | What `JobQueue.enqueueUnlessActive` did: the id it queued, or the job already active.                                             |
 | `FederationContextData` | type | What every Fedify dispatcher in the CMS is handed.                                                                                |
 | `FeedNotifier`          | type | Tells the site's notify server which feeds have changed.                                                                          |
+| `FollowingService`      | type | Keeps `/.well-known/following.opml` in step with the subscription list the settings name.                                         |
 | `HostLookup`            | type | The addresses a host name resolves to.                                                                                            |
 | `IndexNowNotifier`      | type | Tells the IndexNow engines which URLs changed.                                                                                    |
 | `JobContext`            | type | What a job's handler is handed: the stop signal, the attempt and `progress()`.                                                    |

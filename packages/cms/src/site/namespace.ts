@@ -55,6 +55,7 @@ import {
   normalizeBaseUrl,
   normalizeLanguageList,
   normalizeSecurityPolicy,
+  normalizeWebAddress,
   relayList,
   securityContactList,
 } from './setting-values.ts';
@@ -404,6 +405,17 @@ export const SITE = declareNamespace({
         value === '' || normalizeBaseUrl(value) !== undefined
           ? undefined
           : 'A notify server is an absolute http:// or https:// URL, or empty.',
+    },
+    following_opml: {
+      fileKey: 'followingOpml',
+      type: normalized(normalizeWebAddress),
+      default: '',
+      description:
+        'The OPML subscription list served flat at /.well-known/following.opml. Empty serves none.',
+      check: (value) =>
+        value === '' || normalizeWebAddress(value) !== undefined
+          ? undefined
+          : 'A subscription list is an absolute http:// or https:// URL, or empty.',
     },
     feed_update_period: {
       fileKey: 'feedUpdatePeriod',

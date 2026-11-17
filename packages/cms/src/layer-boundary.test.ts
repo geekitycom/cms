@@ -48,6 +48,7 @@ const LAYERS: readonly Layer[] = [
       'item-lookup/',
       'writing/',
       'gemini/',
+      'following/',
     ],
   },
   { name: 'plugins', units: ['plugins/'] },

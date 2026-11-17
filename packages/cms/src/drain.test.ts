@@ -209,8 +209,8 @@ describe('cms.drain()', () => {
     assert.equal(watchers.watching(), true, 'the content watcher runs');
     assert.equal(
       intervals.live(),
-      5,
-      'digests, retention, avatars, actor profiles and the reply backfill tick',
+      6,
+      'digests, retention, avatars, actor profiles, the reply backfill and the following list tick',
     );
     assert.notEqual(cms.scheduler.waitingFor(), undefined, 'the scheduler waits for the post');
     assert.deepEqual(log, ['start']);
@@ -231,7 +231,7 @@ describe('cms.drain()', () => {
 
     await cms.resume();
     assert.equal(watchers.watching(), true, 'the watcher is back');
-    assert.equal(intervals.live(), 5, 'the interval timers are back');
+    assert.equal(intervals.live(), 6, 'the interval timers are back');
     intervals.restore();
     assert.notEqual(cms.scheduler.waitingFor(), undefined, 'the scheduler is back');
     assert.deepEqual(log, ['start', 'stop', 'start'], 'the plugin is back');

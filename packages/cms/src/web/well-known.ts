@@ -14,6 +14,13 @@ import {
   profileFileResponse,
   siteProfileOf,
 } from './social-profile.ts';
+import { servedFollowing } from '../following/list.ts';
+import {
+  FOLLOWING_OPML_PATH,
+  FOLLOWING_OPML_TYPE,
+  followingOpml,
+  followingTitle,
+} from './following-opml.ts';
 
 /** RFC 9116's location for a site's vulnerability disclosure contacts. */
 export const SECURITY_TXT_PATH = '/.well-known/security.txt';
@@ -74,6 +81,18 @@ export function mountWellKnown(app: Hono<GeekityEnv>): void {
   app.get(CONTACT_VCF_PATH, (c) =>
     profileFileResponse(c, contactVcard(siteProfileOf(c)), 'text/vcard; charset=utf-8'),
   );
+
+  app.get(FOLLOWING_OPML_PATH, (c) => {
+    const settings = c.var.siteAtRequestStart;
+    const list = servedFollowing(c.var.config.dataDir, settings.following_opml);
+    if (list === undefined) return c.notFound();
+    const body = followingOpml({
+      title: followingTitle(settings.title),
+      changedAt: new Date(list.changedAt),
+      feeds: list.feeds,
+    });
+    return profileFileResponse(c, body, FOLLOWING_OPML_TYPE);
+  });
 
   // Where it lands depends on the cookie, so no cache may keep one answer.
   app.get(CHANGE_PASSWORD_WELL_KNOWN_PATH, (c) => {

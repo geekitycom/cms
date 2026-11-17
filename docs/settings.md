@@ -6,7 +6,7 @@ has six pages under the Settings menu:
 | Page           | What it holds                                                                                                                                                                                                                   |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **General**    | Title, tagline, author, base URL, time zone, language, the locale for dates and counts when it differs from the language, site icon, whether the header shows it, and license.                                                  |
-| **Reading**    | What the homepage displays, posts per page, and the notify server the feeds advertise.                                                                                                                                          |
+| **Reading**    | What the homepage displays, posts per page, the notify server the feeds advertise, and the OPML list of the feeds the site follows.                                                                                             |
 | **Permalinks** | The tag and category archive bases, the wiki base, and the archive redirects already recorded.                                                                                                                                  |
 | **Discussion** | Comments, which types take them by default, and when they close, webmentions sent and received, the Akismet key, the hCaptcha site key and secret, and how long commenter emails, address hashes and contact messages are kept. |
 | **Email**      | How the site sends mail, where a message written to the site goes, and the security contact.                                                                                                                                    |
@@ -68,6 +68,7 @@ The file holds these keys:
 - `comments`, `commentsOnPosts`, `commentsOnPages`, `commentsCloseAfterDays`
   (see [Comments](comments.md))
 - `notifyServer`, `feedUpdatePeriod`, `feedUpdateFrequency`
+- `followingOpml` (see [Following list](#following-list))
 - `webmentionsSend`, `webmentionsReceive`
 - `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`
 - `contactEmail`, `securityContacts`, `securityPolicy`, `securityLanguages`
@@ -192,6 +193,7 @@ Nothing is written until every field is valid. A form with a problem returns a
 | Wiki base      | The same, and not the same word as the tag base or the category base.                       |
 | Relays         | One relay inbox per line, each an absolute `http://` or `https://` URL.                     |
 | Notify server  | An absolute `http://` or `https://` URL, or empty for none. See below.                      |
+| Following list | An absolute `http://` or `https://` URL, or empty for none.                                 |
 | Mail provider  | `none`, `brevo` or `smtp`. See [Credentials](#credentials).                                 |
 | From address   | An email address, or empty for `no-reply@` at the site's host.                              |
 | Reply-to       | An email address, or empty to reply to the From address.                                    |
@@ -230,6 +232,20 @@ See [Relays][relays].
 [rsscloud]: https://rpc.rsscloud.io/docs
 [websub]: https://www.w3.org/TR/websub/
 [notify]: feeds.md#real-time-notification
+
+## Following list
+
+**Following list (OPML)** on the Reading page takes the address of an OPML
+subscription list, such as the one a feed reader publishes. It is empty by
+default. The site fetches the list when the setting is saved and every six
+hours after that, and serves a flat copy at `/.well-known/following.opml`. See
+[FollowSpec following list](public-site.md#followspec-following-list).
+
+Below the field, the page shows when the list was last fetched, how many feeds
+it holds, and the error from the last fetch that failed.
+
+A change made with `geekity settings set site.following_opml` runs in another
+process, so the site fetches the new list when it next starts.
 
 ## The archive bases
 

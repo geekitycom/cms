@@ -9,6 +9,7 @@
   {{ field.problem('settings-posts-page', problems.posts_page) }}
   {{ field.problem('settings-posts-per-page', problems.posts_per_page) }}
   {{ field.problem('settings-notify-server', problems.notify_server) }}
+  {{ field.problem('settings-following-opml', problems.following_opml) }}
   {{ field.problem('settings-feed-update-period', problems.feed_update_period) }}
   {{ field.problem('settings-feed-update-frequency', problems.feed_update_frequency) }}
   {{ field.problem('settings-ai-crawlers', problems.ai_crawlers) }}
@@ -75,6 +76,29 @@
   {% endset %}
   {{ field.text('settings-notify-server', fields.notify_server, 'Notify server', form.notify_server,
        error=problems.notify_server, hintHtml=notifyHint, inputmode='url') }}
+
+  {% set followingHint %}
+    The address of an OPML list of the feeds you follow, such as the one a feed
+    reader publishes. The site fetches it when you save and every six hours, and
+    serves it flat at
+    <a href="/.well-known/following.opml"><code>/.well-known/following.opml</code></a>.
+    Leave it empty for none.
+    {% if form.following_opml %}
+      <span class="block mt-1" id="settings-following-status">
+        {%- if following and following.fetchedAt -%}
+          Last fetched <time datetime="{{ following.fetchedAt }}">{{ following.fetchedAt | date('datetime') }}</time>,
+          {{ following.feedCount }} {{ 'feed' if following.feedCount == 1 else 'feeds' }}.
+        {%- else -%}
+          Not fetched yet.
+        {%- endif -%}
+        {%- if following and following.failure %}
+          <span class="block text-error">Last error, <time datetime="{{ following.failure.at }}">{{ following.failure.at | date('datetime') }}</time>: {{ following.failure.reason }}</span>
+        {%- endif -%}
+      </span>
+    {% endif %}
+  {% endset %}
+  {{ field.text('settings-following-opml', fields.following_opml, 'Following list (OPML)', form.following_opml,
+       error=problems.following_opml, hintHtml=followingHint, inputmode='url') }}
 
   {# TASK-152. The Syndication module's polling hint, which only RSS has an
      element for. #}

@@ -30,6 +30,7 @@ Booting mounts the public site on the app. The routes are:
 | `/.well-known/change-password`          | A redirect to the signed-in user's change-password form, or to the login form.                                                           |
 | `/.well-known/about.md`                 | The site author's profile as Markdown. See [SocialSpec profile](#socialspec-profile).                                                    |
 | `/.well-known/contact.vcf`              | The same profile as a vCard 4.0, with no email address in it.                                                                            |
+| `/.well-known/following.opml`           | The feeds the site follows, as flat OPML. See [FollowSpec following list](#followspec-following-list).                                   |
 | `/feed.xml`, `/feed.json`               | A 301 to `/feed/` and to `/feed/json/`, the feed addresses SocialSpec suggests.                                                          |
 | `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                                                                |
 | `/_geekity/contact`                     | `POST` only. Where the contact form on a page submits.                                                                                   |
@@ -892,7 +893,67 @@ can fetch them. Each has an ETag over its body, and a request with a matching
 
 SocialSpec also suggests a feed at `/feed.xml` or `/feed.json`. Both redirect
 with `301` to the feeds the site already serves, `/feed/` (RSS 2.0) and
-`/feed/json/` (JSON Feed). The site has no `following.opml`.
+`/feed/json/` (JSON Feed).
+
+## FollowSpec following list
+
+[FollowSpec](https://followspec.org) reads the feeds a person follows from
+`/.well-known/following.opml`. The site serves that file from the OPML list
+that **Following list (OPML)** names on the Reading settings page. See
+[Following list](settings.md#following-list).
+
+The site fetches the list when the setting is saved, and again every six
+hours:
+
+- The request asks for OPML with `Accept: text/x-opml, application/xml;q=0.9,
+text/xml;q=0.8, text/html;q=0.1`.
+- A web page in answer is read for its first
+  `<link rel="alternate" type="text/x-opml">`, and the site fetches that
+  address once. FreshRSS answers a browser this way.
+- Like every fetch the site makes, it reaches only public addresses, and
+  checks each redirect. An answer is read up to 2 MB, and the whole exchange
+  has 15 seconds.
+- The next fetch sends `If-None-Match` and `If-Modified-Since` from the last
+  one. A `304 Not Modified` keeps the stored list.
+- A fetch that fails, or an answer that is not OPML, keeps the last good list.
+  The settings page shows the error.
+
+The stored list is in `data/following.json`, so it survives a restart.
+
+A reader may read only the outlines at the top of the body, so the file is
+flat. It is OPML 2.0, `text/x-opml; charset=utf-8`:
+
+- The `<head>` has the title `Feeds {site title} follows`, a `dateModified` of
+  when the list last changed, and `docs`.
+- The `<body>` has one `type="rss"` outline for each feed, in the order of the
+  source list. Each has `text`, `xmlUrl`, and `htmlUrl` and `description` when
+  the source gives them.
+- A feed that was in a folder keeps the folder as its `category`: `/Indieweb`,
+  or `/Software/Tools` for a folder in a folder.
+- A feed listed twice is kept once. Every other attribute, such as FreshRSS's
+  `frss:ttl`, is dropped, and so is any feed whose address is not `http` or
+  `https`.
+
+The file sends `Access-Control-Allow-Origin: *` and an ETag, and a matching
+`If-None-Match` gets `304 Not Modified`. It is a 404 while no list is set, and
+while nothing has been fetched from the address set.
+
+While the file is served, the front page links it, which is how
+[HyperTexting](https://hypertexting.com/guide/profiles/) and other readers
+find it:
+
+```html
+<link
+  rel="following"
+  type="text/x-opml"
+  title="Feeds {site title} follows"
+  href="https://example.com/.well-known/following.opml"
+/>
+```
+
+The link comes from the default theme's `layouts/base.njk`, from the
+`following` value the CMS gives the front page, so a theme that replaces that
+layout draws it itself.
 
 ## IndexNow
 

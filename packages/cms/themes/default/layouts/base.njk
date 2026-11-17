@@ -192,6 +192,9 @@
     {% if llmsTxt and atRoot %}
     <link rel="describedby" type="text/markdown" href="{{ llmsTxt | url }}">
     {% endif %}
+    {% if following and atRoot %}
+    <link rel="following" type="text/x-opml" title="{{ following.title }}" href="{{ following.href }}">
+    {% endif %}
     {% if atRoot and soloAuthor %}
     {% if soloAuthor.url %}
     <link rel="me" href="{{ soloAuthor.url | url }}">
