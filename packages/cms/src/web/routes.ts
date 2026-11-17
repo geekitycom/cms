@@ -144,8 +144,15 @@ export function mountPublicSite(
   }
 
   // SocialSpec's suggested feed addresses.
-  app.get('/feed.xml', (c) => c.redirect(feedPathUnder('/', 'rss'), 301));
-  app.get('/feed.json', (c) => c.redirect(feedPathUnder('/', 'json'), 301));
+  for (const [path, format] of [
+    ['/feed.xml', 'rss'],
+    ['/feed.json', 'json'],
+  ] as const) {
+    app.get(path, (c) => {
+      c.header('access-control-allow-origin', '*');
+      return c.redirect(feedPathUnder('/', format), 301);
+    });
+  }
 
   // The site-wide comments feed, for the same reason and at WordPress's URL.
   app.get(commentsFeedHref(undefined), (c) => comments(c, undefined));
