@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.0](https://github.com/geekitycom/cms/compare/v0.55.2...v0.56.0) (2026-11-17)
+
+
+### Features
+
+* **cms:** add given and family names to a user profile for the vCard N ([e0de330](https://github.com/geekitycom/cms/commit/e0de330f02ab567bea3b89de31c2f93e5970fd9f))
+
 ## [0.55.2](https://github.com/geekitycom/cms/compare/v0.55.1...v0.55.2) (2026-11-17)
 
 
