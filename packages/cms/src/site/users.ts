@@ -170,6 +170,10 @@ export interface ProfileLink {
 export interface UserProfile {
   /** The name to print instead of the username, when they gave one. */
   readonly displayName?: string | undefined;
+  /** Their given names, when they split their name themselves. */
+  readonly givenName?: string | undefined;
+  /** Their family name, on the same terms as {@link givenName}. */
+  readonly familyName?: string | undefined;
   /** A few sentences about them. */
   readonly bio?: string | undefined;
   /** A picture, as the path or URL it is served at. */
@@ -500,6 +504,8 @@ export async function setUserProfile(input: {
  */
 export function cleanProfile(profile: UserProfile): UserProfile | undefined {
   const displayName = (profile.displayName ?? '').trim();
+  const givenName = (profile.givenName ?? '').trim();
+  const familyName = (profile.familyName ?? '').trim();
   const bio = (profile.bio ?? '').trim();
   const avatar = (profile.avatar ?? '').trim();
   const jobTitle = (profile.jobTitle ?? '').trim();
@@ -518,6 +524,8 @@ export function cleanProfile(profile: UserProfile): UserProfile | undefined {
 
   const cleaned: UserProfile = {
     ...(displayName === '' ? {} : { displayName }),
+    ...(givenName === '' ? {} : { givenName }),
+    ...(familyName === '' ? {} : { familyName }),
     ...(bio === '' ? {} : { bio }),
     ...(isAvatarUrl(avatar) ? { avatar } : {}),
     ...(jobTitle === '' ? {} : { jobTitle }),
@@ -1044,6 +1052,8 @@ function profileFrom(value: unknown): UserProfile | undefined {
 
   return cleanProfile({
     ...optionalText('displayName', record['displayName']),
+    ...optionalText('givenName', record['givenName']),
+    ...optionalText('familyName', record['familyName']),
     ...optionalText('bio', record['bio']),
     ...optionalText('avatar', record['avatar']),
     ...optionalText('jobTitle', record['jobTitle']),

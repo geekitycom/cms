@@ -4,18 +4,20 @@
 against the site's users. The fields come from the user's profile on **Users**
 in the admin. That screen is the only place where identity is written:
 
-| Key               | What it holds                                                                                                  |
-| ----------------- | -------------------------------------------------------------------------------------------------------------- |
-| `author.name`     | What to print: their display name, else their username, else the raw name the file gives.                      |
-| `author.url`      | Their archive, `/author/{username}/`. **Absent** when the name matches no user of the site.                    |
-| `author.username` | Their login. Absent for the same reason `url` is.                                                              |
-| `author.bio`      | What they wrote about themselves, as the Markdown they typed. Absent when they wrote none.                     |
-| `author.bioHtml`  | The bio as HTML, a `<p>` per paragraph. Raw HTML typed in the bio is escaped. Absent with `bio`.               |
-| `author.bioText`  | The bio's words with the Markdown removed, for structured data and other plain text. Absent with `bio`.        |
-| `author.avatar`   | Their picture, as a path or URL. Absent when they have none.                                                   |
-| `author.jobTitle` | What they do, when their profile says.                                                                         |
-| `author.location` | Where they are, as they wrote it.                                                                              |
-| `author.links`    | `{ label, href }` for each link on their profile, in the order they listed them. Absent when they listed none. |
+| Key                 | What it holds                                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `author.name`       | What to print: their display name, else their username, else the raw name the file gives.                      |
+| `author.url`        | Their archive, `/author/{username}/`. **Absent** when the name matches no user of the site.                    |
+| `author.username`   | Their login. Absent for the same reason `url` is.                                                              |
+| `author.bio`        | What they wrote about themselves, as the Markdown they typed. Absent when they wrote none.                     |
+| `author.bioHtml`    | The bio as HTML, a `<p>` per paragraph. Raw HTML typed in the bio is escaped. Absent with `bio`.               |
+| `author.bioText`    | The bio's words with the Markdown removed, for structured data and other plain text. Absent with `bio`.        |
+| `author.avatar`     | Their picture, as a path or URL. Absent when they have none.                                                   |
+| `author.givenName`  | Their given names, when their profile sets them. The display name is never split to fill it.                   |
+| `author.familyName` | Their family name, when their profile sets it.                                                                 |
+| `author.jobTitle`   | What they do, when their profile says.                                                                         |
+| `author.location`   | Where they are, as they wrote it.                                                                              |
+| `author.links`      | `{ label, href }` for each link on their profile, in the order they listed them. Absent when they listed none. |
 
 `author` is absent when the document names no author. Wrap anything that
 prints it in `{% if author %}`. Wrap the link in `{% if author.url %}`. A file

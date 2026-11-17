@@ -720,9 +720,10 @@ stored in `data/users.json`:
 
 The author archive is headed with the same profile, so a page and an actor
 always show the same details. `alsoKnownAs` lists every URL the user answers
-to: the actor id, the archive, and `/@{username}`. The profile has two more
-fields that the actor does not carry, a job title and a location. A theme can
-print them beside the name.
+to: the actor id, the archive, and `/@{username}`. The profile has more
+fields that the actor does not carry: a given name, a family name, a job title
+and a location. A theme can print them beside the name, and the site author's
+vCard uses the two names for its `N`.
 
 The bio is Markdown. The `summary` is that Markdown rendered as HTML, a `<p>`
 per paragraph, with every link to this site made absolute. Raw HTML typed in

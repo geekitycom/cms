@@ -108,6 +108,8 @@
       "@type": "Person"
       {{- member("@id", personId) }}
       {{- member("name", siteAuthor.name) }}
+      {{- member("givenName", siteAuthor.givenName) }}
+      {{- member("familyName", siteAuthor.familyName) }}
       {{- member("url", personUrl) }}
       {{- member("image", siteAuthor.avatar | absoluteUrl if siteAuthor.avatar else "") }}
       {{- member("description", siteAuthor.bioText) }}

@@ -124,6 +124,12 @@
          account.profile.displayName,
          hint='Printed instead of the login: it heads the archive and is the byline under their posts.') }}
 
+    {{ field.text('profile-given-name', fields.givenName, 'Given name', account.profile.givenName,
+         hint='Optional. The first part of their name in an address book. Left empty with Family name, the display name is split at its last word.') }}
+
+    {{ field.text('profile-family-name', fields.familyName, 'Family name', account.profile.familyName,
+         hint='Optional. The surname an address book sorts them by.') }}
+
     {{ field.textarea('profile-bio', fields.bio, 'Bio', account.profile.bio, rows='4',
          hint='A line or two about them, in Markdown: [words](url) makes a link. Shown under their posts and on their archive, and as their fediverse profile.') }}
 

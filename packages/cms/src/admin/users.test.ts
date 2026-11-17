@@ -876,6 +876,40 @@ describe('a user profile (TASK-67 AC #1)', () => {
     assert.equal(findUserById(cms.config.dataDir, grace.id)?.profile, undefined);
   });
 
+  it('keeps a given and family name, shows them on the screen and drops them when cleared', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { token } = await usersScreen(agent);
+    const save = (givenName: string, familyName: string) =>
+      agent.post('/admin/users/profile', {
+        csrf_token: token,
+        user_id: String(ada.id),
+        display_name: 'Ada Lovelace',
+        given_name: givenName,
+        family_name: familyName,
+        bio: '',
+        avatar: '',
+        links: '',
+      });
+
+    assert.equal((await save('  Augusta Ada ', 'King')).status, 303);
+    assert.deepEqual(findUserById(cms.config.dataDir, ada.id)?.profile, {
+      displayName: 'Ada Lovelace',
+      givenName: 'Augusta Ada',
+      familyName: 'King',
+    });
+    const { html } = await editScreen(agent, ada.id);
+    assert.match(html, /<input[^>]+name="given_name"[^>]+value="Augusta Ada"/);
+    assert.match(html, /<input[^>]+name="family_name"[^>]+value="King"/);
+
+    await save('', ' ');
+    assert.deepEqual(findUserById(cms.config.dataDir, ada.id)?.profile, {
+      displayName: 'Ada Lovelace',
+    });
+  });
+
   it('says so when the row is already gone', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);

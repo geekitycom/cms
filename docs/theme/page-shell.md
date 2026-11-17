@@ -626,6 +626,8 @@ The bio prints:
 - "Written by" and the person's name as a `p-name u-url`, linked
   `rel="author me"` to their archive.
 - `p-job-title` and `p-locality`, when the profile has them.
+- `p-given-name` and `p-family-name`, as `data` elements after the name, when
+  the profile sets them.
 - Their bio, `bioHtml`, in a `div.bio-note.p-note`. A link written in the bio
   is a link here.
 - Their `rel="me"` links, as a `ul.hlist.bio-links`. Each link's `rel` is
@@ -1231,6 +1233,8 @@ graph holds:
   and every entry.
 - `Person`, from `siteAuthor`. It has their name, archive URL, avatar, bio as text (`bioText`), job
   title and location, and a `sameAs` of their profile links and their actor id.
+  It has `givenName` and `familyName` only when the profile sets them. The
+  display name is never split to fill them.
   The `sameAs` asserts that the schema.org Person and the fediverse actor are
   one identity. Identity comes from a user profile. A site or a byline that
   names no one with an account here prints no Person, and the `author`
