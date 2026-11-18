@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.1](https://github.com/geekitycom/cms/compare/v0.56.0...v0.56.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **cms:** leave NICKNAME out of contact.vcf ([5f08d51](https://github.com/geekitycom/cms/commit/5f08d51e0a108c61b1da8adca0ddbd9461b17322))
+
 ## [0.56.0](https://github.com/geekitycom/cms/compare/v0.55.2...v0.56.0) (2026-11-17)
 
 
