@@ -5,6 +5,7 @@ import {
   classesOf,
   type HtmlElement,
   elementsIn,
+  findStartTag,
   hasRel,
   innerHtmlOf,
   isElement,
@@ -76,6 +77,91 @@ describe('parseHtml', () => {
     assert.equal(deepest, 512);
     assert.equal([...elementsIn(root)].length, 600);
     assert.equal(textOf(root), 'end');
+  });
+
+  it('keeps the first of two attributes with the same name', () => {
+    const [link] = [...elementsIn(parseHtml('<a HREF="/first" href="/second">x</a>'))];
+    assert.equal(link?.attributes['href'], '/first');
+  });
+
+  it('reads a title or a textarea as text with its references decoded', () => {
+    const root = parseHtml(
+      '<title>A &amp; <b>B</b></title><textarea>x <a href="/y">y</a></textarea><p>after</p>',
+    );
+    const elements = [...elementsIn(root)];
+    assert.deepEqual(
+      elements.map((element) => element.name),
+      ['title', 'textarea', 'p'],
+    );
+    assert.equal(rawTextOf(elements[0] as HtmlElement), 'A & <b>B</b>');
+    assert.equal(rawTextOf(elements[1] as HtmlElement), 'x <a href="/y">y</a>');
+  });
+
+  it('reads xmp, noembed, noframes and iframe as text exactly as written', () => {
+    for (const name of ['xmp', 'noembed', 'noframes', 'iframe']) {
+      const root = parseHtml(`<${name} src="/s"><a href="/y">&amp;</a></${name.toUpperCase()}><p>`);
+      const elements = [...elementsIn(root)];
+      assert.deepEqual(
+        elements.map((element) => element.name),
+        [name, 'p'],
+      );
+      assert.equal(rawTextOf(elements[0] as HtmlElement), '<a href="/y">&amp;</a>');
+    }
+  });
+
+  it('keeps a template but none of its contents, which are inert', () => {
+    const root = parseHtml(
+      '<template id="t"><a href="/y">y</a><template>z</template></template><p>after',
+    );
+    assert.deepEqual(
+      [...elementsIn(root)].map((element) => element.name),
+      ['template', 'p'],
+    );
+    assert.equal(textOf(root), 'after');
+  });
+
+  it('does not let a closing tag inside a template close an element outside it', () => {
+    const root = parseHtml(
+      '<div><template></div><a href="/y">y</a></template><p>in</p></div><p>out',
+    );
+    const [div] = root.children.filter(isElement);
+    assert.deepEqual(
+      div?.children.filter(isElement).map((element) => element.name),
+      ['template', 'p'],
+    );
+    assert.equal(textOf(root), 'inout');
+  });
+
+  it('still parses noscript, which a reader without scripts sees', () => {
+    const root = parseHtml('<noscript><a href="/y">y</a></noscript>');
+    assert.deepEqual(
+      [...elementsIn(root)].map((element) => element.name),
+      ['noscript', 'a'],
+    );
+  });
+});
+
+describe('findStartTag', () => {
+  it('finds the first start tag of a name', () => {
+    assert.deepEqual(findStartTag('<html><body class="x">', 'body'), { start: 6, end: 22 });
+  });
+
+  it('skips a tag written inside an element that holds only text', () => {
+    for (const name of [
+      'script',
+      'style',
+      'noscript',
+      'textarea',
+      'title',
+      'xmp',
+      'noembed',
+      'noframes',
+      'iframe',
+    ]) {
+      const page = `<${name}><body></${name}><body>`;
+      const prefix = `<${name}><body></${name}>`.length;
+      assert.deepEqual(findStartTag(page, 'body'), { start: prefix, end: prefix + 6 }, name);
+    }
   });
 });
 

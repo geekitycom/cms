@@ -42,6 +42,34 @@ describe('linksTo', () => {
   it('does not see the target inside a script', () => {
     assert.equal(linksTo(`<script>var a = "${TARGET}";</script>`, SOURCE, TARGET), false);
   });
+
+  it('reads the first of two href attributes, as a browser does', () => {
+    assert.equal(
+      linksTo(`<a href="https://elsewhere.example/" href="${TARGET}">x</a>`, SOURCE, TARGET),
+      false,
+    );
+    assert.equal(
+      linksTo(`<a href="${TARGET}" href="https://elsewhere.example/">x</a>`, SOURCE, TARGET),
+      true,
+    );
+  });
+
+  it('does not see a link written inside a textarea or the title, which are text', () => {
+    assert.equal(linksTo(`<textarea><a href="${TARGET}">x</a></textarea>`, SOURCE, TARGET), false);
+    assert.equal(
+      linksTo(`<html><head><title><a href="${TARGET}">x</a></title></head></html>`, SOURCE, TARGET),
+      false,
+    );
+  });
+
+  it('does not see a link inside a template, which is never shown', () => {
+    assert.equal(linksTo(`<template><a href="${TARGET}">x</a></template>`, SOURCE, TARGET), false);
+  });
+
+  it('sees a link after a textarea, a title or a template closes', () => {
+    const page = `<title>t</title><textarea>a</textarea><template><b>c</b></template><a href="${TARGET}">x</a>`;
+    assert.equal(linksTo(page, SOURCE, TARGET), true);
+  });
 });
 
 describe('sourceEntry', () => {

@@ -75,6 +75,20 @@ const VOID_ELEMENTS: ReadonlySet<string> = new Set([
 const RAW_TEXT: ReadonlySet<string> = new Set(['script', 'style']);
 
 /**
+ * Elements whose content is text up to the closing tag, so a link written
+ * inside one is a link nobody can follow. Those that decode character
+ * references map to true.
+ */
+const TEXT_ONLY: ReadonlyMap<string, boolean> = new Map([
+  ['title', true],
+  ['textarea', true],
+  ['xmp', false],
+  ['noembed', false],
+  ['noframes', false],
+  ['iframe', false],
+]);
+
+/**
  * Elements an opening tag of the same name implicitly closes.
  *
  * Without this, a page written as `<p>one<p>two` would nest, and an `h-entry`
@@ -120,7 +134,8 @@ interface Tag {
 export function parseHtml(source: string): HtmlElement {
   const root: HtmlElement = { name: '#document', attributes: {}, children: [] };
   const open: HtmlElement[] = [root];
-  const openByName = new Map<string, number>();
+  let openByName = new Map<string, number>();
+  const outsideTemplates: Map<string, number>[] = [];
   let at = 0;
 
   /** Where a node goes: inside the innermost element still open. */
@@ -166,21 +181,49 @@ export function parseHtml(source: string): HtmlElement {
     }
     at = tag.end;
 
+    if (tag.closing && tag.name === 'template') {
+      const outside = outsideTemplates.pop();
+      if (outside === undefined) continue;
+      while (open.length > 1 && open.pop()?.name !== 'template');
+      openByName = outside;
+      continue;
+    }
+
     if (tag.closing) {
       closeThrough(tag.name);
       continue;
     }
 
     if (RAW_TEXT.has(tag.name)) {
-      const start = at;
-      at = afterElement(source, tag.name, at);
+      const closing = closingTag(source, tag.name, at);
       if (
         tag.name === 'script' &&
         tag.attributes['type']?.trim().toLowerCase() === 'application/ld+json'
       ) {
-        const data = source.slice(start, at).replace(/<\/script\s*>$/i, '');
+        const data = source.slice(at, closing.start);
         current().children.push({ name: tag.name, attributes: tag.attributes, children: [], data });
       }
+      at = closing.end;
+      continue;
+    }
+
+    const decodes = TEXT_ONLY.get(tag.name);
+    if (decodes !== undefined) {
+      const closing = closingTag(source, tag.name, at);
+      const element: HtmlElement = { name: tag.name, attributes: tag.attributes, children: [] };
+      const text = source.slice(at, closing.start);
+      if (decodes) pushText(element, text);
+      else if (text !== '') element.children.push({ text });
+      current().children.push(element);
+      at = closing.end;
+      continue;
+    }
+
+    if (tag.name === 'template') {
+      current().children.push({ name: tag.name, attributes: tag.attributes, children: [] });
+      open.push({ name: tag.name, attributes: {}, children: [] });
+      outsideTemplates.push(openByName);
+      openByName = new Map();
       continue;
     }
 
@@ -199,10 +242,10 @@ export function parseHtml(source: string): HtmlElement {
 
 /**
  * Elements a browser reads as text up to their closing tag, so a tag written
- * inside one is not a tag. Wider than RAW_TEXT because a browser that runs
- * scripts reads `<noscript>` this way too.
+ * inside one is not a tag. Wider than what {@link parseHtml} reads as text
+ * because a browser that runs scripts reads `<noscript>` this way too.
  */
-const UNPARSED: ReadonlySet<string> = new Set([...RAW_TEXT, 'noscript', 'textarea', 'title']);
+const UNPARSED: ReadonlySet<string> = new Set([...RAW_TEXT, ...TEXT_ONLY.keys(), 'noscript']);
 
 export function findStartTag(
   source: string,
@@ -232,7 +275,7 @@ export function findStartTag(
       return source[tag.end - 1] === '>' ? { start: at, end: tag.end } : undefined;
     }
     at = tag.end;
-    if (!tag.closing && UNPARSED.has(tag.name)) at = afterElement(source, tag.name, at);
+    if (!tag.closing && UNPARSED.has(tag.name)) at = closingTag(source, tag.name, at).end;
   }
 }
 
@@ -360,11 +403,12 @@ function after(source: string, marker: string, at: number): number {
   return end < 0 ? source.length : end + marker.length;
 }
 
-/** Where the source continues after this element's closing tag, or its end. */
-function afterElement(source: string, name: string, at: number): number {
-  const closing = new RegExp(`</${name}\\s*>`, 'i');
-  const match = closing.exec(source.slice(at));
-  return match === null ? source.length : at + match.index + match[0].length;
+/** Where this element's closing tag starts and ends, or the source's end for both. */
+function closingTag(source: string, name: string, at: number): { start: number; end: number } {
+  const match = new RegExp(`</${name}\\s*>`, 'i').exec(source.slice(at));
+  if (match === null) return { start: source.length, end: source.length };
+  const start = at + match.index;
+  return { start, end: start + match[0].length };
 }
 
 /** The tag beginning at `at`, or `undefined` when nothing there is a tag. */
@@ -390,8 +434,10 @@ function readTag(source: string, at: number): Tag | undefined {
       return { name, closing, attributes, end: source.length };
     }
     const raw = attribute[3];
-    attributes[(attribute[1] ?? '').toLowerCase()] =
-      raw === undefined ? '' : decodeAttribute(unquote(raw));
+    const attributeName = (attribute[1] ?? '').toLowerCase();
+    if (!Object.hasOwn(attributes, attributeName)) {
+      attributes[attributeName] = raw === undefined ? '' : decodeAttribute(unquote(raw));
+    }
     cursor += attribute[0].length;
   }
 }
