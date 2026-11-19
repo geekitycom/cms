@@ -1,7 +1,7 @@
 import sax from 'sax';
 
 import { elementsIn, hasRel } from '../../util/html-tree.ts';
-import { fetchPublic, webUrl } from '../fetch-public.ts';
+import { decodeBody, fetchPublic, webUrl } from '../fetch-public.ts';
 import { canonicalLink } from './page.ts';
 import type { HtmlPage } from './page.ts';
 import { resolved, withoutDirectionControls } from './source.ts';
@@ -47,7 +47,7 @@ export async function answeredFeed(
       (url): url is string => url !== undefined,
     ),
   );
-  return feedHolding(new TextDecoder().decode(fetched.body), fetched.url, names);
+  return feedHolding(decodeBody(fetched.body, fetched.type), fetched.url, names);
 }
 
 function advertisedFeed(page: HtmlPage): string | undefined {

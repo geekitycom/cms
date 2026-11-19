@@ -9,7 +9,7 @@ import { nullable } from '../../util/json-schema.ts';
 import type { FromSchema } from '../../util/json-schema.ts';
 import type { HostLookup } from '../../util/public-address.ts';
 import { federationContextData } from '../../web/federation-routes.ts';
-import { readWithin, requestPublic, webUrl } from '../../webmention/fetch-public.ts';
+import { decodeBody, readWithin, requestPublic, webUrl } from '../../webmention/fetch-public.ts';
 import { defineTool } from '../tools.ts';
 import type { ToolSite } from '../tools.ts';
 import { ANY_OBJECT, READ_ONLY } from './schemas.ts';
@@ -168,7 +168,7 @@ async function exchange(
   try {
     const read = await readWithin(response, options.maxBytes, 'truncate');
     if (read === undefined) return { ok: false, reason: 'the body could not be read' };
-    const body = new TextDecoder().decode(read.body);
+    const body = decodeBody(read.body, response.headers.get('content-type') ?? '');
     const json = asObject(body);
     return {
       ok: true,

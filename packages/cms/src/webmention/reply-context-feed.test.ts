@@ -189,6 +189,23 @@ describe('fetchReplyContext and the feed a post is in', () => {
     assert.equal(await feedOf(TARGET), undefined);
   });
 
+  it('reads a feed in the encoding its XML declaration names', async () => {
+    const xml = rss('René Écrit', [`<item><link>${TARGET}</link></item>`]).replace(
+      'encoding="UTF-8"',
+      'encoding="windows-1252"',
+    );
+    web = {
+      [TARGET]: page(`<link rel="alternate" type="application/rss+xml" href="/users/rss.xml">`),
+      [SITE_FEED]: new Response(
+        Uint8Array.from(xml, (char) => char.charCodeAt(0)),
+        {
+          headers: { 'content-type': 'application/rss+xml' },
+        },
+      ),
+    };
+    assert.deepEqual(await feedOf(TARGET), { url: SITE_FEED, title: 'René Écrit' });
+  });
+
   it('never fetches a feed on a private host', async () => {
     const inside = 'https://inside.example/rss.xml';
     web = {

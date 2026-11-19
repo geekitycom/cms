@@ -72,8 +72,11 @@ answers:
 
 1. It fetches the source, up to its first megabyte. It decodes the source in
    the character encoding that its `Content-Type` names. When the header names
-   none, it uses the encoding that a `<meta>` element in the first kilobyte
-   names. Otherwise it uses UTF-8.
+   none, it uses the encoding that an XML declaration or a `<meta>` element in
+   the first kilobyte names. Otherwise it uses UTF-8. The site decodes every
+   other page that it fetches from another site in the same way: reply contexts
+   and their feeds, webmention endpoint discovery, IndieAuth client pages and
+   the following list.
 2. It checks that the source links to the target. Fragments do not count on
    either side, so a link to `POST#comments` verifies a webmention sent to
    `POST`, and a link to `POST` verifies one sent to `POST#comments`. A source

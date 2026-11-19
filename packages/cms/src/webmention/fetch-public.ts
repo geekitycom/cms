@@ -250,6 +250,26 @@ export async function readWithin(
   return { body: Buffer.concat(chunks), truncated: false };
 }
 
+/** How far into a body to look for a `<meta>` charset: the WHATWG prescan window. */
+const META_PRESCAN_BYTES = 1024;
+
+/**
+ * The body's text, in the charset its Content-Type, an XML declaration or a
+ * `<meta>` names, else UTF-8.
+ */
+export function decodeBody(body: Uint8Array, type: string): string {
+  const head = new TextDecoder('latin1').decode(body.subarray(0, META_PRESCAN_BYTES));
+  const label =
+    /;\s*charset\s*=\s*["']?([^"';\s]+)/i.exec(type)?.[1] ??
+    /^\s*<\?xml[^>]*\sencoding\s*=\s*["']([^"']+)/i.exec(head)?.[1] ??
+    /<meta[^>]+charset\s*=\s*["']?([^"'\s/>;]+)/i.exec(head)?.[1];
+  try {
+    return new TextDecoder(label).decode(body);
+  } catch {
+    return new TextDecoder().decode(body);
+  }
+}
+
 function refuse(reason: string): PublicRefusal {
   return { ok: false, reason };
 }

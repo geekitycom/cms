@@ -12,7 +12,7 @@ import { commentKeyAt } from '../comments/conversation.ts';
 import type { ConversationReader, ConversationSite } from '../comments/conversation.ts';
 import { sanitizeCommentHtml } from '../content/sanitize.ts';
 import { DISCOVERY_MAX_BYTES } from './discovery.ts';
-import { fetchPublic } from './fetch-public.ts';
+import { decodeBody, fetchPublic } from './fetch-public.ts';
 import { linksIn, linksTo, sourceEntry } from './microformats.ts';
 import type { NestedReply, SourceEntry } from './microformats.ts';
 import { handSyndicationOf, syndicationCopies } from './syndication.ts';
@@ -482,7 +482,7 @@ async function readSource(source: string, lookup: HostLookup): Promise<FetchedSo
 
   return {
     kind: 'read',
-    body: decode(fetched.body, fetched.type),
+    body: decodeBody(fetched.body, fetched.type),
     url: fetched.url,
     format: formatOf(fetched.type),
     truncated: fetched.truncated,
@@ -493,22 +493,6 @@ function formatOf(type: string): SourceFormat {
   if (/^\s*(text\/html|application\/xhtml\+xml)/i.test(type)) return 'html';
   if (/^\s*application\/([\w.-]+\+)?json\s*(;|$)/i.test(type)) return 'json';
   return 'text';
-}
-
-/** How far into a body to look for a `<meta>` charset: the WHATWG prescan window. */
-const META_PRESCAN_BYTES = 1024;
-
-/** The body's text, in the charset its Content-Type or a `<meta>` names, else UTF-8. */
-function decode(body: Uint8Array, type: string): string {
-  const head = new TextDecoder('latin1').decode(body.subarray(0, META_PRESCAN_BYTES));
-  const label =
-    /;\s*charset\s*=\s*["']?([^"';\s]+)/i.exec(type)?.[1] ??
-    /<meta[^>]+charset\s*=\s*["']?([^"'\s/>;]+)/i.exec(head)?.[1];
-  try {
-    return new TextDecoder(label).decode(body);
-  } catch {
-    return new TextDecoder().decode(body);
-  }
 }
 
 /**

@@ -5,7 +5,7 @@ import { after, before, describe, it } from 'node:test';
 import { Worker } from 'node:worker_threads';
 
 import { publicDispatcher } from '../util/public-address.ts';
-import { requestPublic } from './fetch-public.ts';
+import { decodeBody, requestPublic } from './fetch-public.ts';
 
 const OUTSIDE_OFFLINE_HARNESS = `
 const dns = require('node:dns');
@@ -108,5 +108,44 @@ describe('a redirect', () => {
 
     assert.equal(dispatchers.length, 2);
     assert.deepEqual(dispatchers, [publicDispatcher(lookup), publicDispatcher(lookup)]);
+  });
+});
+
+describe('decodeBody', () => {
+  const latin1 = (text: string): Uint8Array => Uint8Array.from(text, (char) => char.charCodeAt(0));
+
+  it('reads the charset its content type names', () => {
+    assert.equal(decodeBody(latin1('René'), 'text/html; charset=windows-1252'), 'René');
+  });
+
+  it('reads the charset a meta element names when the content type names none', () => {
+    assert.equal(
+      decodeBody(latin1('<meta charset="iso-8859-1">René'), 'text/html'),
+      '<meta charset="iso-8859-1">René',
+    );
+  });
+
+  it('reads the charset an http-equiv meta element names', () => {
+    const html = '<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">René';
+    assert.equal(decodeBody(latin1(html), 'text/html'), html);
+  });
+
+  it('reads the encoding an XML declaration names', () => {
+    const xml = '<?xml version="1.0" encoding="windows-1252"?><title>René</title>';
+    assert.equal(decodeBody(latin1(xml), 'application/rss+xml'), xml);
+  });
+
+  it('takes the content type over what the body says', () => {
+    const bytes = new TextEncoder().encode('<meta charset="windows-1252">René');
+    assert.equal(
+      decodeBody(bytes, 'text/html; charset=utf-8'),
+      '<meta charset="windows-1252">René',
+    );
+  });
+
+  it('reads UTF-8 when nothing names a charset or the one named is unknown', () => {
+    const bytes = new TextEncoder().encode('René');
+    assert.equal(decodeBody(bytes, 'text/html'), 'René');
+    assert.equal(decodeBody(bytes, 'text/html; charset=no-such-thing'), 'René');
   });
 });

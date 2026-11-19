@@ -212,6 +212,22 @@ describe('fetchReplyContext', () => {
     });
   });
 
+  it('reads a page in the character set it names', async () => {
+    const page = H_ENTRY.replace('Pat Them', 'René Thém');
+    answer = () =>
+      new Response(
+        Uint8Array.from(page, (char) => char.charCodeAt(0)),
+        {
+          headers: { 'content-type': 'text/html; charset=windows-1252' },
+        },
+      );
+
+    const fetched = await fetchReplyContext(TARGET, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.equal(fetched.context.author?.name, 'René Thém');
+  });
+
   it('gives up on a target it cannot reach', async () => {
     answer = () => Promise.reject(new TypeError('fetch failed'));
 
