@@ -159,7 +159,13 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
     return { kind: 'discarded', removed: true };
   }
 
-  const status = options.challenge === 'fail' ? 'spam' : statusFor(verdict, proposed.status, held);
+  // A reply's own page taking over the copy another page carried is new to
+  // the moderators: what was decided about the copy does not pass to it.
+  const handedOver = held?.via !== undefined && comment.via === undefined;
+  const status =
+    options.challenge === 'fail'
+      ? 'spam'
+      : statusFor(verdict, proposed.status, handedOver ? undefined : held);
 
   if (held !== undefined) {
     // Its id, its post and its source never move: that is what makes it the
@@ -175,9 +181,9 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
       rsvp: comment.rsvp ?? null,
       via: comment.via ?? null,
     });
-    return moved === undefined
-      ? { kind: 'gone' }
-      : { kind: 'stored', comment: moved, created: false };
+    if (moved === undefined) return { kind: 'gone' };
+    if (handedOver) announce(options.notices, moved);
+    return { kind: 'stored', comment: moved, created: false };
   }
 
   const stored = await addComment(records, {

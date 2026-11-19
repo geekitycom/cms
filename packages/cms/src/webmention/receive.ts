@@ -14,7 +14,7 @@ import { sanitizeCommentHtml } from '../content/sanitize.ts';
 import { DISCOVERY_MAX_BYTES } from './discovery.ts';
 import { fetchPublic } from './fetch-public.ts';
 import { linksIn, linksTo, sourceEntry } from './microformats.ts';
-import type { NestedReply } from './microformats.ts';
+import type { NestedReply, SourceEntry } from './microformats.ts';
 import { handSyndicationOf, syndicationCopies } from './syndication.ts';
 import { isPrivateHost } from '../util/public-address.ts';
 import type { HostLookup } from '../util/public-address.ts';
@@ -224,7 +224,8 @@ export async function verifyWebmention(
     }
     const why = fetched.kind === 'gone' ? 'gone' : 'unlinked';
     await dropCarried(records, incoming, new Set());
-    if (held === undefined) return { kind: 'ignored', why };
+    // Only the page that carries a reply can take it away.
+    if (held === undefined || held.via !== undefined) return { kind: 'ignored', why };
     await deleteComment(records, held.id);
     return { kind: 'deleted', why };
   }
@@ -235,6 +236,10 @@ export async function verifyWebmention(
       // microformats to read, so all that can be said about it is that it
       // links here.
       undefined;
+
+  if (held?.via !== undefined && !isOwnPage(incoming.source, fetched.url, entry)) {
+    return { kind: 'stored', comment: held, created: false };
+  }
 
   // The first of the things it answers that is a reply on this post. A source
   // answering one is a reply here even when it never names the post itself.
@@ -308,6 +313,15 @@ export async function verifyWebmention(
   return outcome.kind === 'discarded' && outcome.removed
     ? { kind: 'deleted', why: 'discarded' }
     : { kind: 'ignored', why: 'discarded' };
+}
+
+/**
+ * Whether the page read from `source` is the reply that lives there, which is
+ * what lets it take over a reply another page carried. A page holding the
+ * reply under a fragment, such as the carrier itself, is not.
+ */
+function isOwnPage(source: string, fetchedUrl: string, entry: SourceEntry | undefined): boolean {
+  return new URL(source).hash === '' && (fetchedUrl === source || entry?.url === source);
 }
 
 /**

@@ -121,10 +121,12 @@ function routeTheWeb(): () => void {
       Object.defineProperty(response, 'url', { value: UPSTREAM });
       return response;
     }
-    const page = pages.get(request.url);
+    const fetched = new URL(request.url);
+    fetched.hash = '';
+    const page = pages.get(fetched.href);
     if (page === undefined) return new Response('missing', { status: 404 });
     const response = html(page.body ?? '', page.status ?? 200);
-    Object.defineProperty(response, 'url', { value: request.url });
+    Object.defineProperty(response, 'url', { value: fetched.href });
     return response;
   }) as typeof fetch;
 
@@ -422,6 +424,73 @@ describe('a nested reply naming a webmention that is not a reply', () => {
     assert.equal(after?.rsvp, 'yes');
     assert.equal(after?.via, undefined);
     assert.equal(after?.author.name, 'Dan');
+  });
+});
+
+describe('a webmention from a carried reply’s own URL', () => {
+  it('leaves an approved carried reply with its carrier when its URL answers 404', async () => {
+    const cms = await site();
+    pages.set(SOURCE, { body: source(cite(CAROL, 'Carol', 'Carol answers.')) });
+    await sendAndSettle(cms, SOURCE);
+    await approveAll(cms);
+
+    await sendAndSettle(cms, CAROL);
+
+    const carol = byUrl(cms, CAROL);
+    assert.ok(carol !== undefined, 'the carried reply is still held');
+    assert.equal(carol.via, SOURCE);
+    assert.equal(carol.status, 'approved');
+  });
+
+  it('keeps a reply whose URL is a fragment on the carrier page as the carrier wrote it', async () => {
+    const cms = await site();
+    const fragment = `${SOURCE}#comment-5`;
+    pages.set(SOURCE, { body: source(cite(fragment, 'Carol', 'Carol answers.')) });
+    await sendAndSettle(cms, SOURCE);
+    await approveAll(cms);
+
+    await sendAndSettle(cms, fragment);
+
+    const carol = byUrl(cms, fragment);
+    assert.equal(carol?.author.name, 'Carol');
+    assert.equal(carol?.content.html, '<p>Carol answers.</p>');
+    assert.equal(carol?.via, SOURCE);
+  });
+
+  it('keeps it as the carrier wrote it when the carrier names no url of its own', async () => {
+    const cms = await site();
+    const fragment = `${SOURCE}#comment-5`;
+    const carrier = source(cite(fragment, 'Carol', 'Carol answers.'));
+    pages.set(SOURCE, {
+      body: carrier.replace(`<a class="u-url" href="${SOURCE}">permalink</a>`, ''),
+    });
+    await sendAndSettle(cms, SOURCE);
+    await approveAll(cms);
+
+    await sendAndSettle(cms, fragment);
+
+    const carol = byUrl(cms, fragment);
+    assert.equal(carol?.author.name, 'Carol');
+    assert.equal(carol?.via, SOURCE);
+  });
+
+  it('sends the reply’s own page to the moderators when a forged copy of it was filed as spam', async () => {
+    const cms = await site();
+    pages.set(SOURCE, { body: source(cite(CAROL, 'Carol', 'Forged Carol.')) });
+    await sendAndSettle(cms, SOURCE);
+    await updateComment(records(cms), byUrl(cms, CAROL)?.id ?? '', { status: 'spam' });
+
+    pages.set(CAROL, {
+      body: `<article class="h-entry"><a class="p-author h-card" href="https://carol.example/">Carol</a>
+        <a class="u-in-reply-to" href="${POST_URL}">re</a>
+        <div class="e-content"><p>Carol on her own.</p></div></article>`,
+    });
+    await sendAndSettle(cms, CAROL);
+
+    const carol = byUrl(cms, CAROL);
+    assert.equal(carol?.content.html, '<p>Carol on her own.</p>');
+    assert.equal(carol?.via, undefined);
+    assert.equal(carol?.status, 'pending');
   });
 });
 
