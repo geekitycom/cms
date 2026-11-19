@@ -1,6 +1,7 @@
 import { avatarHref } from '../avatars/avatars.ts';
 import { heldComment } from '../comments/conversation.ts';
 import type { Interaction, InteractionAuthor, InteractionKind } from '../comments/conversation.ts';
+import { isWebUrl } from '../content/enclosure.ts';
 import { repliesKey } from '../content/guids.ts';
 import { RSVP_LABELS } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
@@ -206,7 +207,7 @@ export function quotesOf(
         source: 'activitypub',
         kind: 'mention',
         author: naming(quote.actorId),
-        url: quote.url,
+        url: webAddress(quote.url),
         content: sanitizeCommentHtml(quote.html),
         published: quote.published,
         inReplyTo: null,
@@ -228,13 +229,17 @@ export function federatedInteraction(
     source: 'activitypub',
     kind: 'reply',
     author,
-    url: reply.url,
+    url: webAddress(reply.url),
     content: sanitizeCommentHtml(reply.html),
     published: reply.published,
     inReplyTo: reply.inReplyTo,
     status: 'published',
     replies: [],
   };
+}
+
+function webAddress(value: string): string | null {
+  return isWebUrl(value) ? value : null;
 }
 
 export function unstored(id: string): Pick<Interaction, 'id' | 'key' | 'guid' | 'migrated'> {
@@ -312,7 +317,7 @@ export function authorNaming(admin: AdminStore): (actorId: string) => Interactio
     const author: InteractionAuthor = {
       name: profile?.name ?? handle ?? guessedName(actorId),
       handle,
-      url: profile?.url ?? actorId,
+      url: webAddress(profile?.url ?? actorId),
       avatar: icon === null ? null : avatarHref(icon),
       actorId,
       feed: null,

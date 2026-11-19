@@ -236,6 +236,45 @@ describe('a post’s conversation', () => {
     });
   });
 
+  it('links neither an author nor a note whose address is not a web address', async () => {
+    const { admin, conversation: read } = await reader();
+    admin.putFollower({
+      username: 'ada',
+      actorId: 'https://remote.example/users/ada',
+      inboxId: 'https://remote.example/users/ada/inbox',
+      sharedInboxId: null,
+      handle: '@ada@remote.example',
+      name: 'Ada Lovelace',
+      iconUrl: null,
+      url: 'javascript:alert(document.domain)',
+    });
+    logReply(admin, {
+      inReplyTo: POST,
+      id: 'https://remote.example/notes/1',
+      url: 'javascript:alert(document.domain)',
+    });
+    logReply(admin, {
+      inReplyTo: POST,
+      id: 'https://remote.example/notes/2',
+      actor: 'https://remote.example/users/bob',
+      url: 'data:text/html,<script>alert(1)</script>',
+    });
+    logReaction(admin, 'Like', {
+      id: 'https://remote.example/likes/1',
+      actor: 'https://remote.example/users/ada',
+    });
+
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
+    const [first, second] = conversation.replies.map(visible);
+
+    assert.equal(first?.author.url, null);
+    assert.equal(first?.url, null);
+    assert.equal(second?.author.url, 'https://remote.example/users/bob');
+    assert.equal(second?.url, null);
+    assert.equal(conversation.likes[0]?.author.url, null);
+    assert.equal(conversation.likes[0]?.url, null);
+  });
+
   it('nests a reply under the reply it answers', async () => {
     const { admin, conversation: read } = await reader();
     logReply(admin, {
@@ -747,7 +786,13 @@ describe('a quote of a post (TASK-171)', () => {
   /** Log the quoting `Create` the way the inbox logs one. */
   function logQuote(
     admin: AdminStore,
-    options: { quoted?: string; spelling?: string; actor?: string; inReplyTo?: string } = {},
+    options: {
+      quoted?: string;
+      spelling?: string;
+      actor?: string;
+      inReplyTo?: string;
+      url?: string;
+    } = {},
   ): void {
     const actor = options.actor ?? QUOTER;
     admin.logInboxActivity({
@@ -764,7 +809,7 @@ describe('a quote of a post (TASK-171)', () => {
           id: QUOTE,
           type: 'Note',
           attributedTo: actor,
-          url: 'https://remote.example/@bea/q',
+          url: options.url ?? 'https://remote.example/@bea/q',
           content: '<p>Quoted<script>alert(1)</script></p>',
           published: '2026-09-03T10:00:00Z',
           inReplyTo: options.inReplyTo ?? null,
@@ -838,6 +883,16 @@ describe('a quote of a post (TASK-171)', () => {
       assert.equal(read.counts([hello()], DEFAULT_SITE_SETTINGS).get('/2026/09/hello/'), 0);
     });
   }
+
+  it('has no link when its address is not a web address', async () => {
+    const { admin, contentDir, conversation: read } = await reader();
+    await approve(contentDir);
+    logQuote(admin, { url: 'javascript:alert(document.domain)' });
+
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
+
+    assert.equal(conversation.mentions[0]?.url, null);
+  });
 
   it('is not shown when the note quotes something else', async () => {
     const { admin, contentDir, conversation: read } = await reader();

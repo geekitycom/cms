@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 
 import type { Document } from '../content/document.ts';
 import { isTrashedPath } from '../content/store.ts';
+import { isWebUrl } from '../content/enclosure.ts';
 import type { CatalogReader, DocumentLookup, IndexClock } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
@@ -830,7 +831,7 @@ export function followerRow(follower: Follower): FollowerRow {
     name: follower.name ?? follower.handle ?? follower.actorId,
     handle: follower.handle ?? follower.actorId,
     iconUrl: follower.iconUrl === null ? null : avatarHref(follower.iconUrl),
-    url: follower.url ?? follower.actorId,
+    url: follower.url !== null && isWebUrl(follower.url) ? follower.url : follower.actorId,
     followedAt: follower.followedAt,
   };
 }
