@@ -230,8 +230,9 @@ export async function verifyWebmention(
     return { kind: 'deleted', why };
   }
 
+  const isUrlOfPost = urlOfPost(options);
   const entry = fetched.html
-    ? sourceEntry(fetched.body, fetched.url, incoming.target)
+    ? sourceEntry(fetched.body, fetched.url, (url) => url === incoming.target || isUrlOfPost(url))
     : // A source that is not HTML — plain text, JSON, anything — has no
       // microformats to read, so all that can be said about it is that it
       // links here.
@@ -498,31 +499,40 @@ function namesThePost(
   const named = fetched.html
     ? linksIn(fetched.body, fetched.url)
     : (fetched.body.match(/https?:\/\/[^\s"'<>\\]+/g) ?? []);
-  return [...named].some((url) => isUrlOfPost(url, options));
+  return [...named].some(urlOfPost(options));
 }
 
-/** Whether a URL is the post's page, a former one, a comment page on it, or a syndicated copy. */
-function isUrlOfPost(href: string, options: VerifyWebmentionOptions): boolean {
-  const url = webUrl(href);
-  if (url === undefined) return false;
-  url.hash = '';
+/**
+ * Whether a URL is the post's page, a former one, a comment page on it, or a
+ * syndicated copy. The copies are read once, however many URLs are asked about.
+ */
+function urlOfPost(options: VerifyWebmentionOptions): (href: string) => boolean {
   const { document } = options.incoming;
+  const origin = new URL(options.baseUrl).origin;
+  let copies: string[] | undefined;
 
-  if (url.origin === new URL(options.baseUrl).origin) {
-    if (url.search !== '') return false;
-    const key = commentKeyAt(url.pathname);
-    if (key !== undefined) {
-      return options.conversation.comment(key, options.site)?.post.slug === document.slug;
+  return (href) => {
+    const url = webUrl(href);
+    if (url === undefined) return false;
+    url.hash = '';
+
+    if (url.origin === origin) {
+      if (url.search !== '') return false;
+      const key = commentKeyAt(url.pathname);
+      if (key !== undefined) {
+        return options.conversation.comment(key, options.site)?.post.slug === document.slug;
+      }
+      return (
+        url.pathname === document.permalink || (document.redirectFrom ?? []).includes(url.pathname)
+      );
     }
-    return (
-      url.pathname === document.permalink || (document.redirectFrom ?? []).includes(url.pathname)
-    );
-  }
 
-  const copies = syndicationCopies(options.records.contentDir).read(document.permalink);
-  return (
-    handSyndicationOf(document.extra).includes(url.href) || Object.values(copies).includes(url.href)
-  );
+    copies ??= [
+      ...handSyndicationOf(document.extra),
+      ...Object.values(syndicationCopies(options.records.contentDir).read(document.permalink)),
+    ];
+    return copies.includes(url.href);
+  };
 }
 
 /** A URL, when it is an http or https one, and `undefined` otherwise. */

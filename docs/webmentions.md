@@ -99,6 +99,10 @@ removes the entry. A source that does not link to the target but still links to
 another URL of the same post keeps its entry. Those URLs are the post's page, a
 former permalink, a comment page on the post, and a syndicated copy.
 
+The kind of a webmention is read against every one of those URLs, not only
+the target the sender named. A page that likes the post and links one of its
+comment pages is a like whichever of the two is sent as the target.
+
 An approved entry stays approved only while the page says the same thing. When
 its kind, author name, author link, author photo or words change, the site
 decides the entry again as if it were new: it goes back to the moderation queue

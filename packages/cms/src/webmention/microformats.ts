@@ -141,24 +141,29 @@ function linkedFrom(root: HtmlElement, base: string): Set<string> {
 /**
  * What a source page is, read out of its microformats.
  *
- * The entry chosen is the one that is actually about the target: the first
- * `h-entry` whose `in-reply-to`, `like-of` or `repost-of` names it, else the
- * first that links to it at all, else the first on the page. A page with no
- * `h-entry` is still a mention — plenty of pages have no microformats and
- * still link — and it is described from its `<title>` and its host.
+ * `isTarget` says whether a URL is the page being mentioned, which may answer
+ * to more than one URL. The entry chosen is the one that is actually about
+ * it: the first `h-entry` whose `in-reply-to`, `like-of` or `repost-of` names
+ * it, else the first that links to it at all, else the first on the page. A
+ * page with no `h-entry` is still a mention — plenty of pages have no
+ * microformats and still link — and it is described from its `<title>` and
+ * its host.
  */
-export function sourceEntry(html: string, sourceUrl: string, target: string): SourceEntry {
+export function sourceEntry(
+  html: string,
+  sourceUrl: string,
+  isTarget: (url: string) => boolean,
+): SourceEntry {
   const root = parseHtml(html);
   const base = baseOf(root, sourceUrl);
   const items = itemsIn(root, base);
   const entries = itemsOfType(items, 'h-entry');
-  const wanted = normalize(target, target);
 
-  const chosen = chooseEntry(entries, wanted, base);
+  const chosen = chooseEntry(entries, isTarget, base);
   const author = authorOf(chosen, items, sourceUrl);
   const content = contentOf(chosen, root);
 
-  const kind = chosen === undefined ? 'mention' : kindOf(chosen, wanted);
+  const kind = chosen === undefined ? 'mention' : kindOf(chosen, isTarget);
   const url = (chosen === undefined ? undefined : first(chosen, 'url')?.text) ?? sourceUrl;
   const rsvp =
     chosen === undefined || kind !== 'reply' ? undefined : rsvpValue(first(chosen, 'rsvp')?.text);
@@ -327,31 +332,28 @@ function valuesOf(item: MicroformatItem, property: string): string[] {
 /** The entry a webmention is about, or `undefined` when the page has none. */
 function chooseEntry(
   entries: readonly MicroformatItem[],
-  target: string | undefined,
+  isTarget: (url: string) => boolean,
   base: string,
 ): MicroformatItem | undefined {
-  if (target !== undefined) {
-    for (const entry of entries) {
-      if (kindOf(entry, target) !== 'mention') return entry;
-    }
-    for (const entry of entries) {
-      if (linkedFrom(entry.element, base).has(target)) return entry;
-    }
+  for (const entry of entries) {
+    if (kindOf(entry, isTarget) !== 'mention') return entry;
+  }
+  for (const entry of entries) {
+    if ([...linkedFrom(entry.element, base)].some(isTarget)) return entry;
   }
 
   return entries[0];
 }
 
 /** Which of the four an entry is, given what the target is. */
-function kindOf(entry: MicroformatItem, target: string | undefined): WebmentionKind {
-  if (target === undefined) return 'mention';
-
+function kindOf(entry: MicroformatItem, isTarget: (url: string) => boolean): WebmentionKind {
   for (const [property, kind] of Object.entries(KIND_PROPERTIES)) {
     for (const value of entry.properties[property] ?? []) {
-      if (value.text === target) return kind;
+      if (isTarget(value.text)) return kind;
       // A property written as a nested `h-cite` names the target with its own
       // `url` rather than with the value the property carries.
-      if (value.item !== undefined && first(value.item, 'url')?.text === target) return kind;
+      const cited = value.item === undefined ? undefined : first(value.item, 'url')?.text;
+      if (cited !== undefined && isTarget(cited)) return kind;
     }
   }
 

@@ -556,7 +556,7 @@ describe('sending a salmention (TASK-320)', () => {
     assert.deepEqual(sent, [TO_UPSTREAM], 'a reply came');
 
     const page = await (await cms.app.request('/2026/09/re-upstream/')).text();
-    const carried = sourceEntry(page, REPLY_POST_URL, UPSTREAM).replies;
+    const carried = sourceEntry(page, REPLY_POST_URL, (url) => url === UPSTREAM).replies;
     assert.deepEqual(
       carried.map((one) => one.url),
       [`${BASE_URL}/comment/${reply.id}/`],

@@ -646,9 +646,7 @@ describe('a webmention sent again to another URL of the same post', () => {
     assertKept(cms, like);
   });
 
-  it('keeps the like when the target is a comment page on the post', async () => {
-    const cms = await site();
-    const like = await approvedLike(cms);
+  async function commentPage(cms: Cms): Promise<string> {
     const note = await addComment(
       { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
       {
@@ -666,11 +664,57 @@ describe('a webmention sent again to another URL of the same post', () => {
         notify: false,
       },
     );
+    return `${BASE_URL}/comment/${note.id}/`;
+  }
 
-    const response = await sendAndSettle(cms, LIKE, `${BASE_URL}/comment/${note.id}/`);
+  it('keeps the like when the target is a comment page on the post', async () => {
+    const cms = await site();
+    const like = await approvedLike(cms);
+
+    const response = await sendAndSettle(cms, LIKE, await commentPage(cms));
 
     assert.equal(response.status, 202);
     assertKept(cms, like);
+  });
+
+  it('reads a like that also links a comment page as a like whichever is the target', async () => {
+    const cms = await site();
+    const comment = await commentPage(cms);
+    const page = reply(
+      `<a class="u-like-of" href="${POST_URL}">liked</a> <a href="${comment}">see Bob</a>`,
+    );
+
+    const kinds: string[] = [];
+    for (const target of [comment, POST_URL]) {
+      pages.set(LIKE, { body: page });
+      await sendAndSettle(cms, LIKE, target);
+      kinds.push(stored(cms).find((one) => one.url === LIKE)?.kind ?? 'none');
+    }
+
+    assert.deepEqual(kinds, ['like', 'like']);
+  });
+
+  it('keeps an approved like approved when it is sent again to a comment page it links', async () => {
+    const cms = await site();
+    const comment = await commentPage(cms);
+    pages.set(LIKE, {
+      body: reply(
+        `<a class="u-like-of" href="${POST_URL}">liked</a> <a href="${comment}">see Bob</a>`,
+      ),
+    });
+    await sendAndSettle(cms, LIKE);
+    const like = stored(cms).find((one) => one.url === LIKE);
+    assert.ok(like !== undefined);
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      like.id,
+      { status: 'approved' },
+    );
+
+    await sendAndSettle(cms, LIKE, comment);
+
+    assertKept(cms, like);
+    assert.equal(stored(cms).find((one) => one.url === LIKE)?.kind, 'like');
   });
 
   it('keeps the like when the target is a syndicated copy of the post', async () => {
