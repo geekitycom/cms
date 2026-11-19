@@ -87,6 +87,7 @@ import {
   themeName,
 } from '../web/index.ts';
 import { pageSources } from '../web/page-sources.ts';
+import { frontPages } from '../web/site-view.ts';
 import type { RedirectSource } from '../content/redirects.ts';
 import type { SiteRecords } from '../content/write.ts';
 import type { Renderer } from '../web/render.ts';
@@ -392,6 +393,8 @@ export function createServices({
   // door the post came in by.
   const webmentions = createWebmentionService({
     ...site,
+    redirects,
+    homePage: () => frontPages(store, renderer.frontPageSlugs()).home,
     notifications,
     originalOf: (url) => replyContexts.stored(url)?.original,
     conversation,

@@ -20,6 +20,8 @@ import { nextEvent } from '../__testing__/wait.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
 import { verifyWebmention } from './receive.ts';
+import type { SitePages } from './receive.ts';
+import { NO_REDIRECTS } from '../content/redirects.ts';
 import {
   addComment,
   commentsFile,
@@ -77,6 +79,17 @@ const EVENT_URL = `${BASE_URL}/2026/09/camp/`;
 
 /** The moment the site's clock is stopped at. */
 const NOW = new Date('2026-09-20T12:00:00.000Z');
+
+/** A site with no pages to look a URL up in, for a verification called directly. */
+const NO_PAGES: Pick<SitePages, 'store' | 'redirects' | 'home'> = {
+  store: {
+    getByPermalink: () => undefined,
+    getByFormerPermalink: () => undefined,
+    now: () => NOW,
+  } as unknown as SitePages['store'],
+  redirects: NO_REDIRECTS,
+  home: undefined,
+};
 
 /** What the make-believe web answers for one URL. */
 interface Page {
@@ -2221,6 +2234,7 @@ describe('a source that answers many things', () => {
         comment: () => undefined,
       },
       site: {} as ConversationSite,
+      ...NO_PAGES,
       now: NOW,
       lookup,
       logger: { warn: () => {} },
@@ -2282,6 +2296,7 @@ describe('a source that carries many replies', () => {
         comment: () => undefined,
       },
       site: {} as ConversationSite,
+      ...NO_PAGES,
       now: NOW,
       lookup,
       logger: { warn: () => {} },
@@ -2345,5 +2360,314 @@ describe('one address sending many webmentions', () => {
     assert.equal((await sendFrom(cms, '2001:db8:1:2::1', 'https://them.example/1')).status, 202);
     assert.equal((await sendFrom(cms, '2001:db8:1:2::9', 'https://them.example/2')).status, 429);
     await cms.webmentions.settled();
+  });
+});
+
+describe('a target the site answers by redirect', () => {
+  const NOTE = 'https://them.example/redirected';
+  const linkingTo = (target: string): Page => ({
+    body: reply(`<a class="u-in-reply-to" href="${target}">re</a>`),
+  });
+
+  async function declareRedirects(cms: Cms, entries: { from: string; to: string }[]) {
+    await mkdir(path.join(cms.config.contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(cms.config.contentDir, '_data', 'redirects.json'),
+      JSON.stringify(entries),
+      'utf8',
+    );
+  }
+
+  it('files one sent to the permalink without its trailing slash on the post', async () => {
+    const cms = await site();
+    const target = POST_URL.slice(0, -1);
+    pages.set(NOTE, linkingTo(target));
+
+    const response = await sendAndSettle(cms, NOTE, target);
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(
+      stored(cms).map((one) => one.url),
+      [NOTE],
+    );
+  });
+
+  it('files one sent to a former permalink the post names in redirect_from on the post', async () => {
+    const cms = await site();
+    await writeFile(
+      path.join(cms.config.contentDir, 'posts', '2026-09-19-hello-world.md'),
+      POST.replace('---\n\nWords.', 'redirect_from:\n  - /old/hello/\n---\n\nWords.'),
+      'utf8',
+    );
+    await cms.sync();
+    const target = `${BASE_URL}/old/hello/`;
+    pages.set(NOTE, linkingTo(target));
+
+    const response = await sendAndSettle(cms, NOTE, target);
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(
+      stored(cms).map((one) => one.url),
+      [NOTE],
+    );
+  });
+
+  it('files one sent to an imported address a declared redirect leads to the post', async () => {
+    const cms = await site();
+    await declareRedirects(cms, [{ from: '/?p=123', to: '/2026/09/hello-world/' }]);
+    const target = `${BASE_URL}/?p=123`;
+    pages.set(NOTE, linkingTo(target));
+
+    const response = await sendAndSettle(cms, NOTE, target);
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(
+      stored(cms).map((one) => one.url),
+      [NOTE],
+    );
+  });
+
+  it('files one sent to an old path a declared redirect leads to the post', async () => {
+    const cms = await site();
+    await declareRedirects(cms, [{ from: '/archives/123/', to: '/2026/09/hello-world/' }]);
+    const target = `${BASE_URL}/archives/123/`;
+    pages.set(NOTE, linkingTo(target));
+
+    const response = await sendAndSettle(cms, NOTE, target);
+
+    assert.equal(response.status, 202);
+    assert.equal(stored(cms).length, 1);
+  });
+
+  it('files one sent to / on the page the Reading setting makes the homepage', async () => {
+    const cms = await site();
+    const file = path.join(cms.config.contentDir, '_data', 'site.json');
+    const settings = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    await writeFile(file, JSON.stringify({ ...settings, homepage: 'about' }), 'utf8');
+    const target = `${BASE_URL}/`;
+    pages.set(NOTE, linkingTo(target));
+
+    const response = await sendAndSettle(cms, NOTE, target);
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(
+      cms.admin.listCommentsFor('about').map((one) => one.url),
+      [NOTE],
+    );
+  });
+
+  it('keeps one whose source now names the post only by an address a redirect leads to it', async () => {
+    const cms = await site();
+    await declareRedirects(cms, [{ from: '/?p=123', to: '/2026/09/hello-world/' }]);
+    pages.set(NOTE, linkingTo(POST_URL));
+    await sendAndSettle(cms, NOTE);
+    assert.equal(stored(cms).length, 1);
+
+    pages.set(NOTE, linkingTo(`${BASE_URL}/?p=123`));
+    await sendAndSettle(cms, NOTE);
+
+    assert.equal(stored(cms).length, 1, 'the old address still names the post');
+  });
+
+  it('still refuses a query the site has no redirect for on a permalink', async () => {
+    const cms = await site();
+    await declareRedirects(cms, [{ from: '/?p=123', to: '/2026/09/hello-world/' }]);
+
+    assert.equal((await send(cms, { source: NOTE, target: `${POST_URL}?p=123` })).status, 400);
+    assert.equal((await send(cms, { source: NOTE, target: `${BASE_URL}/?p=999` })).status, 400);
+  });
+
+  it('follows a post renamed between the 202 and the check to its new permalink', async () => {
+    const cms = await site();
+    const hang = gate();
+    pages.set('https://them.example/first', { ...linkingTo(POST_URL), gate: hang.promise });
+    pages.set(NOTE, linkingTo(POST_URL));
+
+    await send(cms, { source: 'https://them.example/first', target: POST_URL });
+    assert.equal((await send(cms, { source: NOTE, target: POST_URL })).status, 202);
+
+    await writeFile(
+      path.join(cms.config.contentDir, 'posts', '2026-09-19-hello-world.md'),
+      POST.replace(
+        'permalink: /2026/09/hello-world/',
+        'permalink: /2026/09/hello-again/\nredirect_from:\n  - /2026/09/hello-world/',
+      ),
+      'utf8',
+    );
+    await cms.sync();
+    hang.open();
+    await cms.webmentions.settled();
+
+    const renamed = cms.store.getByPermalink('/2026/09/hello-again/');
+    assert.ok(renamed !== undefined);
+    const filed = cms.admin.listCommentsFor(renamed.slug).find((one) => one.url === NOTE);
+    assert.ok(filed !== undefined, 'the post is followed to where it lives now');
+    assert.equal(filed.permalink, '/2026/09/hello-again/');
+  });
+});
+
+describe('the site’s own address spelled another way', () => {
+  it('takes a webmention sent to the post’s http:// address', async () => {
+    const cms = await site();
+    const target = POST_URL.replace('https://', 'http://');
+    pages.set('https://them.example/old-link', {
+      body: reply(`<a class="u-in-reply-to" href="${target}">re</a>`),
+    });
+
+    const response = await sendAndSettle(cms, 'https://them.example/old-link', target);
+
+    assert.equal(response.status, 202);
+    assert.equal(stored(cms).length, 1);
+  });
+
+  it('takes a webmention sent to the post’s www. address', async () => {
+    const cms = await site();
+    const target = POST_URL.replace('https://', 'https://www.');
+    pages.set('https://them.example/www-link', {
+      body: reply(`<a class="u-in-reply-to" href="${target}">re</a>`),
+    });
+
+    const response = await sendAndSettle(cms, 'https://them.example/www-link', target);
+
+    assert.equal(response.status, 202);
+    assert.equal(stored(cms).length, 1);
+  });
+
+  it('refuses a source on the site’s http:// address as a page of this site', async () => {
+    const cms = await site();
+
+    const response = await send(cms, {
+      source: `http://blog.example/2026/09/camp/`,
+      target: POST_URL,
+    });
+
+    assert.equal(response.status, 400);
+  });
+});
+
+describe('what a source says about its author, and how much of it', () => {
+  const LONG = 'https://them.example/long';
+
+  it('keeps a long author name to one line of a form’s length, and drops an overlong author URL', async () => {
+    const cms = await site();
+    const name = `Ada\r\nBcc: someone@example.com ${'x'.repeat(5000)}`;
+    pages.set(LONG, {
+      body: `<article class="h-entry">
+        <a class="p-author h-card" href="https://them.example/${'a'.repeat(600)}"><img class="p-name" alt="${name}" src="/me.jpg"></a>
+        <a class="u-in-reply-to" href="${POST_URL}">re</a>
+        <div class="e-content"><p>Words.</p></div></article>`,
+    });
+
+    await sendAndSettle(cms, LONG);
+
+    const [comment] = stored(cms);
+    assert.ok(comment !== undefined);
+    assert.ok(comment.author.name.length <= 80, `a name of ${String(comment.author.name.length)}`);
+    assert.doesNotMatch(comment.author.name, /[\r\n]/);
+    assert.match(comment.author.name, /^Ada Bcc: /);
+    assert.equal(comment.author.url, null);
+  });
+});
+
+describe('a webmention brought over from the old site', () => {
+  const OLD = 'https://them.example/long-gone';
+
+  it('is kept when its source has gone and somebody sends it again', async () => {
+    const cms = await site();
+    const records = {
+      admin: cms.admin,
+      contentDir: cms.config.contentDir,
+      dataDir: cms.config.dataDir,
+    };
+    const imported = await addComment(records, {
+      slug: 'hello-world',
+      permalink: '/2026/09/hello-world/',
+      source: 'webmention',
+      kind: 'mention',
+      status: 'approved',
+      author: { name: 'Them', url: null, email: null, avatar: null },
+      content: { markdown: 'Said in 2014.', html: '<p>Said in 2014.</p>' },
+      submitted: '2014-01-01T00:00:00.000Z',
+      addressHash: null,
+      inReplyTo: null,
+      url: OLD,
+      notify: false,
+      migrated: true,
+    });
+
+    pages.set(OLD, { status: 410 });
+    await sendAndSettle(cms, OLD);
+    pages.delete(OLD);
+    await sendAndSettle(cms, OLD);
+
+    const kept = stored(cms).find((one) => one.url === OLD);
+    assert.equal(kept?.id, imported.id);
+    assert.equal(kept?.status, 'approved');
+  });
+});
+
+describe('a re-send that meets the end of a running check', () => {
+  const RACE = 'https://them.example/race';
+
+  /** Turns of the event loop, which drain every promise already settled. */
+  async function turns(count = 5): Promise<void> {
+    for (let n = 0; n < count; n += 1) await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  /** Send one whose body says when the endpoint reads it. */
+  function sendRead(cms: Cms, fields: Record<string, string>) {
+    const body = new TextEncoder().encode(new URLSearchParams(fields).toString());
+    let read = (): void => {};
+    const bodyRead = new Promise<void>((resolve) => {
+      read = resolve;
+    });
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(body);
+        controller.close();
+        read();
+      },
+    });
+    const response = cms.app.request(
+      new Request(`${BASE_URL}${WEBMENTION_PATH}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: stream,
+        duplex: 'half',
+      } as RequestInit),
+    );
+    return { response: Promise.resolve(response), bodyRead };
+  }
+
+  it('keeps a record behind the check it asks for', async () => {
+    const cms = await site({ webmentions: { retryDelaysMs: [60_000] } });
+    const hang = gate();
+    pages.set(RACE, {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+      gate: hang.promise,
+    });
+
+    assert.equal((await send(cms, { source: RACE, target: POST_URL })).status, 202);
+    await fetched(RACE);
+
+    const lockFile = path.join(cms.config.dataDir, 'webmention-checks.json.lock');
+    await writeFile(lockFile, `${String(process.pid)} held-by-the-test`, 'utf8');
+    const again = sendRead(cms, { source: RACE, target: POST_URL });
+    await again.bodyRead;
+    await turns();
+    pages.set(RACE, { status: 503 });
+    hang.open();
+    await storedFrom(cms, RACE);
+    await turns();
+    await rm(lockFile);
+
+    assert.equal((await again.response).status, 202);
+    await cms.webmentions.settled();
+
+    assert.equal(
+      (await waitingChecks(cms)).length,
+      1,
+      'the second read could not reach the source, and waits in its record to try again',
+    );
   });
 });

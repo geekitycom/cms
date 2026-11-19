@@ -78,6 +78,7 @@ const pages = new Map<string, Page>();
 /** The site the upstream page sends its own webmention back to, as a salmention site would. */
 let echoTo: Cms | undefined;
 const sent: { source: string; target: string }[] = [];
+const requested: string[] = [];
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 
@@ -92,6 +93,7 @@ after(async () => {
 beforeEach(() => {
   pages.clear();
   sent.length = 0;
+  requested.length = 0;
   echoTo = undefined;
 });
 
@@ -100,6 +102,7 @@ function routeTheWeb(): () => void {
 
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(input, init);
+    requested.push(request.url);
     if (request.method === 'POST') {
       if (request.url !== UPSTREAM_ENDPOINT) return new Response('missing', { status: 404 });
       const body = new URLSearchParams(await request.text());
@@ -365,6 +368,109 @@ describe('receiving a salmention (TASK-320)', () => {
     pages.set(SOURCE, { body: source() });
     await sendAndSettle(cms, SOURCE);
     assert.ok(byUrl(cms, CAROL) !== undefined, 'so the source dropping her does not delete her');
+  });
+});
+
+describe('a nested reply two pages carry', () => {
+  const OTHER = 'https://eve.example/2026/09/also/';
+
+  function otherSource(...nested: string[]): string {
+    return `<html><body><article class="h-entry">
+      <a class="p-author h-card" href="https://eve.example/">Eve</a>
+      <a class="u-url" href="${OTHER}">permalink</a>
+      <a class="u-in-reply-to" href="${POST_URL}">re</a>
+      <div class="e-content"><p>Eve replies.</p></div>
+      ${nested.join('')}
+    </article></body></html>`;
+  }
+
+  it('passes to the other page when the first drops it, approval and all', async () => {
+    const cms = await site();
+    pages.set(SOURCE, { body: source(cite(CAROL, 'Carol', 'Carol answers.')) });
+    await sendAndSettle(cms, SOURCE);
+    pages.set(OTHER, { body: otherSource(cite(CAROL, 'Carol', 'Carol answers.')) });
+    await sendAndSettle(cms, OTHER);
+    await approveAll(cms);
+    const carol = byUrl(cms, CAROL);
+    assert.equal(carol?.via, SOURCE);
+
+    pages.set(SOURCE, { body: source() });
+    await sendAndSettle(cms, SOURCE);
+
+    const after = byUrl(cms, CAROL);
+    assert.equal(after?.id, carol?.id, 'the same Carol');
+    assert.equal(after?.status, 'approved');
+    assert.equal(after?.via, OTHER, 'carried by the page that still carries her');
+    assert.equal(after?.inReplyTo, byUrl(cms, OTHER)?.id, 'and threaded under it');
+  });
+
+  it('passes from what is stored, reading no other page, and through a rebuild', async () => {
+    const cms = await site();
+    pages.set(SOURCE, { body: source(cite(CAROL, 'Carol', 'Carol answers.')) });
+    await sendAndSettle(cms, SOURCE);
+    pages.set(OTHER, { body: otherSource(cite(CAROL, 'Carol', 'Carol answers.')) });
+    await sendAndSettle(cms, OTHER);
+    await approveAll(cms);
+    rebuildCommentIndexes(records(cms));
+
+    requested.length = 0;
+    pages.set(SOURCE, { body: source() });
+    await sendAndSettle(cms, SOURCE);
+
+    assert.deepEqual(
+      requested.filter((url) => url !== SOURCE),
+      [],
+      'only the source sent again is read',
+    );
+    assert.equal(byUrl(cms, CAROL)?.via, OTHER);
+    assert.equal(byUrl(cms, CAROL)?.status, 'approved');
+
+    pages.set(OTHER, { body: otherSource() });
+    await sendAndSettle(cms, OTHER);
+    assert.equal(byUrl(cms, CAROL), undefined, 'gone once the last page carrying her drops her');
+  });
+
+  it('stays with its first page when another that also carried it drops it', async () => {
+    const cms = await site();
+    pages.set(SOURCE, { body: source(cite(CAROL, 'Carol', 'Carol answers.')) });
+    await sendAndSettle(cms, SOURCE);
+    pages.set(OTHER, { body: otherSource(cite(CAROL, 'Carol', 'Carol answers.')) });
+    await sendAndSettle(cms, OTHER);
+
+    pages.set(OTHER, { body: otherSource() });
+    await sendAndSettle(cms, OTHER);
+    assert.equal(byUrl(cms, CAROL)?.via, SOURCE);
+
+    pages.set(SOURCE, { body: source() });
+    await sendAndSettle(cms, SOURCE);
+    assert.equal(byUrl(cms, CAROL), undefined, 'the page that dropped her no longer carries her');
+  });
+
+  it('is deleted when no other page held on the post carries it', async () => {
+    const cms = await site();
+    pages.set(SOURCE, { body: source(cite(CAROL, 'Carol', 'Carol answers.')) });
+    await sendAndSettle(cms, SOURCE);
+    pages.set(OTHER, { body: otherSource() });
+    await sendAndSettle(cms, OTHER);
+
+    pages.set(SOURCE, { body: source() });
+    await sendAndSettle(cms, SOURCE);
+
+    assert.equal(byUrl(cms, CAROL), undefined);
+  });
+});
+
+describe('a nested reply with a long name', () => {
+  it('keeps the name to one line of a form’s length', async () => {
+    const cms = await site();
+    const name = `Carol\nBcc: someone@example.com ${'x'.repeat(5000)}`;
+    pages.set(SOURCE, { body: source(cite(CAROL, name, 'Carol answers.')) });
+    await sendAndSettle(cms, SOURCE);
+
+    const carol = byUrl(cms, CAROL);
+    assert.ok(carol !== undefined);
+    assert.ok(carol.author.name.length <= 80, `a name of ${String(carol.author.name.length)}`);
+    assert.doesNotMatch(carol.author.name, /[\r\n]/);
   });
 });
 

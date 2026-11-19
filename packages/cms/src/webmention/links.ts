@@ -1,5 +1,6 @@
 import { linkTarget } from '../content/site-links.ts';
 import { elementsIn, parseHtml } from '../util/html-tree.ts';
+import { isOnSite } from '../util/url.ts';
 
 /**
  * Which pages a post talks about.
@@ -38,15 +39,7 @@ export function externalLinks(html: string, baseUrl: string): string[] {
 export function externalTarget(href: string | undefined, baseUrl: string): string | undefined {
   const target = linkTarget(href, baseUrl);
   if (target === undefined) return undefined;
-  const site = originOf(baseUrl);
-  return site !== undefined && originOf(target) === site ? undefined : target;
-}
-
-/** One URL's origin, or `undefined` when it is not a URL at all. */
-function originOf(value: string): string | undefined {
-  try {
-    return new URL(value).origin;
-  } catch {
-    return undefined;
-  }
+  const site = URL.parse(baseUrl);
+  const url = URL.parse(target);
+  return site !== null && url !== null && isOnSite(url, site) ? undefined : target;
 }

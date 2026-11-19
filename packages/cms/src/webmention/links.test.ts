@@ -19,6 +19,14 @@ describe('externalLinks', () => {
     assert.deepEqual(externalLinks(html, BASE), ['https://elsewhere.example/']);
   });
 
+  it('leaves out links to the site by its http:// or www. address', () => {
+    const html =
+      '<a href="http://blog.example/2014/old-post/">before https</a> ' +
+      '<a href="https://www.blog.example/2014/other/">with www</a> ' +
+      '<a href="http://elsewhere.example/">theirs</a>';
+    assert.deepEqual(externalLinks(html, BASE), ['http://elsewhere.example/']);
+  });
+
   it('names a target once however often the body links to it', () => {
     const html =
       '<a href="https://elsewhere.example/post">one</a>' +

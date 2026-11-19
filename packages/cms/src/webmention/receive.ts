@@ -1,11 +1,17 @@
-import { rsvpField } from '../store/admin-store.ts';
+import { carriersOf, rsvpField } from '../store/admin-store.ts';
 import type { PostComment } from '../store/admin-store.ts';
 import { heldWebmention, intakeComment } from '../comments/intake.ts';
 import type { CommentNotices, ProposedComment } from '../comments/intake.ts';
-import { deleteComment, isCarried } from '../comments/records.ts';
+import { deleteComment, isCarried, updateComment } from '../comments/records.ts';
 import type { CommentRecords } from '../comments/records.ts';
 import type { CommentChecker } from '../forms/checker.ts';
+import { MAXIMUM_NAME_LENGTH, MAXIMUM_URL_LENGTH } from '../comments/submission.ts';
 import type { Document } from '../content/document.ts';
+import { publicDocumentAt } from '../content/permalinks.ts';
+import { findQueryRedirect, sortedQuery } from '../content/redirects.ts';
+import type { RedirectTable } from '../content/redirects.ts';
+import { landing, siteLinkKey } from '../content/site-links.ts';
+import type { DocumentLookup, IndexClock } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import { escapeText } from '../util/html.ts';
 import { commentKeyAt } from '../comments/conversation.ts';
@@ -19,7 +25,7 @@ import type { NestedReply, SourceEntry } from './microformats.ts';
 import { handSyndicationOf, syndicationCopies } from './syndication.ts';
 import { isPrivateHost } from '../util/public-address.ts';
 import type { HostLookup } from '../util/public-address.ts';
-import { decodedPath } from '../util/url.ts';
+import { decodedPath, isOnSite } from '../util/url.ts';
 
 /**
  * Taking a webmention somebody sent this site.
@@ -79,13 +85,21 @@ export type WebmentionRequest =
 export type RequestProblem = 'source' | 'target' | 'elsewhere' | 'same';
 
 /** What {@link checkWebmentionRequest} needs to answer. */
-export interface CheckWebmentionOptions {
+export interface CheckWebmentionOptions extends SitePages {
   /** The site's public origin. */
   readonly baseUrl: string;
-  /** The public document one of this site's paths names, or `undefined`. */
-  readonly documentAt: (pathname: string) => Document | undefined;
   /** The public post a URL elsewhere is one of the syndicated copies of. */
   readonly syndicatedAt?: ((url: string) => Document | undefined) | undefined;
+}
+
+/** What a URL on this site is looked up in, as the public site looks it up. */
+export interface SitePages {
+  /** The content index. */
+  readonly store: DocumentLookup & IndexClock;
+  /** The site's declared redirects, which a URL is followed through. */
+  readonly redirects: RedirectTable;
+  /** The page the Reading setting serves at `/`, or `undefined` for the latest posts. */
+  readonly home: Document | undefined;
   /** What says which post a comment's own page is on. */
   readonly conversation: Pick<ConversationReader, 'comment'>;
   readonly site: ConversationSite;
@@ -123,10 +137,10 @@ export function checkWebmentionRequest(
   }
 
   const site = webUrl(options.baseUrl);
-  if (site !== undefined && isThisSite(from, site)) {
+  if (site !== undefined && isOnSite(from, site)) {
     return refuse('source', 'The source is a page on this site.');
   }
-  if (site === undefined || !isThisSite(to, site)) {
+  if (site === undefined || !isOnSite(to, site)) {
     const original = options.syndicatedAt?.(to.href);
     if (original !== undefined) {
       return { ok: true, source: from.href, target: to.href, document: original };
@@ -134,30 +148,61 @@ export function checkWebmentionRequest(
     return refuse('elsewhere', 'The target is not a page on this site.');
   }
 
-  if (to.search !== '') return refuse('target', 'There is no page here at that address.');
-
-  // A comment's page is a page here, and what is said to it is said on the
-  // post it is under.
-  const path = decodedPath(to.pathname);
-  const key = commentKeyAt(path);
-  const pathname =
-    key === undefined ? path : options.conversation.comment(key, options.site)?.post.permalink;
-  const document = pathname === undefined ? undefined : options.documentAt(pathname);
+  const document = documentLandedAt(to, options);
   if (document === undefined) return refuse('target', 'There is no page here at that address.');
 
   return { ok: true, source: from.href, target: to.href, document };
+}
+
+/**
+ * The post a URL on this site leads to once the site's own redirects are
+ * followed, as a request for it would follow them: the other spelling of its
+ * trailing slash, a former permalink, and a declared redirect, `/?p=123`
+ * included. A query names a post only through a redirect declared for it.
+ */
+function documentLandedAt(to: URL, options: SitePages): Document | undefined {
+  const { redirects } = options;
+  const path = siteLinkKey(decodedPath(to.pathname));
+  const query = sortedQuery(to.search);
+  if (
+    query !== '' &&
+    findQueryRedirect(redirects, path, to.search) === undefined &&
+    findQueryRedirect(redirects, `${path}/`, to.search) === undefined
+  ) {
+    return undefined;
+  }
+  const landed = landing(redirects, { path, query }, (at) => documentAt(at, options) !== undefined);
+  return landed === undefined ? undefined : documentAt(landed, options);
+}
+
+/**
+ * The post a path of this site is, was, or is a comment's page on: what is
+ * said to a comment's page is said on the post it is under.
+ */
+function documentAt(path: string, options: SitePages): Document | undefined {
+  if (path === '/' && options.home !== undefined) return options.home;
+  const spellings = path.endsWith('/') ? [path] : [path, `${path}/`];
+  for (const spelled of spellings) {
+    const key = commentKeyAt(spelled);
+    const permalink =
+      key === undefined ? spelled : options.conversation.comment(key, options.site)?.post.permalink;
+    const document =
+      permalink === undefined ? undefined : publicDocumentAt(options.store, permalink);
+    if (document !== undefined) return document;
+  }
+  for (const spelled of spellings) {
+    const moved = options.store.getByFormerPermalink(spelled);
+    if (moved !== undefined) return moved;
+  }
+  return undefined;
 }
 
 function onDefaultPort(url: URL): boolean {
   return url.port === '';
 }
 
-function isThisSite(url: URL, site: URL): boolean {
-  return url.origin === site.origin;
-}
-
 /** What {@link verifyWebmention} needs around it. */
-export interface VerifyWebmentionOptions {
+export interface VerifyWebmentionOptions extends SitePages {
   /** The webmention to check. */
   readonly incoming: IncomingWebmention;
   /** The comment files and the index over them. */
@@ -168,7 +213,6 @@ export interface VerifyWebmentionOptions {
   readonly baseUrl: string;
   /** What says which reply on the post a source answers, and which post a comment's page is on. */
   readonly conversation: Pick<ConversationReader, 'replyFinder' | 'comment'>;
-  readonly site: ConversationSite;
   /** The checker, when the site named one. */
   readonly checker?: CommentChecker | undefined;
   /**
@@ -259,7 +303,11 @@ async function verifyAndStore(options: VerifyWebmentionOptions): Promise<Webment
       return { kind: 'ignored', why: 'unlinked' };
     }
     const why = fetched.kind === 'gone' ? 'gone' : 'unlinked';
-    await dropCarried(records, incoming, new Set());
+    // A source that has gone says nothing about whether it was withdrawn,
+    // and whoever sends it again need not be its sender, so what was brought
+    // over from the old site is kept.
+    if (fetched.kind === 'gone' && held?.migrated === true) return { kind: 'ignored', why };
+    await dropCarried(options, new Set());
     if (held === undefined || isCarried(held)) return { kind: 'ignored', why };
     await deleteComment(records, held.id);
     return { kind: 'deleted', why };
@@ -287,15 +335,7 @@ async function verifyAndStore(options: VerifyWebmentionOptions): Promise<Webment
   // answering one is a reply here even when it never names the post itself.
   const inReplyTo = answered(options, entry?.inReplyTo ?? []);
   const kind = inReplyTo === null ? (entry?.kind ?? 'mention') : 'reply';
-  const author = {
-    name:
-      entry?.author.name !== undefined && entry.author.name !== ''
-        ? entry.author.name
-        : hostOf(incoming.source),
-    url: entry?.author.url ?? null,
-    email: null,
-    avatar: entry?.author.photo ?? null,
-  };
+  const author = authorOf(entry?.author, incoming.source);
   // A like and a repost say nothing: the page's title is a title, not a
   // comment, and printing it under a post as though somebody wrote it would be
   // putting words in their mouth.
@@ -346,7 +386,7 @@ async function verifyAndStore(options: VerifyWebmentionOptions): Promise<Webment
     await keepCarried(options, outcome.comment, entry?.replies ?? []);
     return { kind: 'stored', comment: outcome.comment, created: outcome.created };
   }
-  await dropCarried(records, incoming, new Set());
+  await dropCarried(options, new Set());
   // A source nobody was holding anything from leaves nothing behind, and one
   // whose entry went while this was deciding has already been dealt with.
   return outcome.kind === 'discarded' && outcome.removed
@@ -390,7 +430,7 @@ async function keepCarried(
   replies: readonly NestedReply[],
 ): Promise<void> {
   const { incoming, records } = options;
-  const site = new URL(options.baseUrl).origin;
+  const site = new URL(options.baseUrl);
   const kept = new Set<string>();
   const replyNamed = options.conversation.replyFinder(incoming.document, options.site);
   const verdict = carrier.status === 'spam' ? 'spam' : 'unknown';
@@ -398,10 +438,16 @@ async function keepCarried(
   const bring = async (nested: readonly NestedReply[], parent: string): Promise<void> => {
     for (const reply of nested) {
       const named = replyNamed(reply.url)?.id;
-      const theirs =
-        named !== undefined && records.admin.getComment(named)?.via === incoming.source;
+      const held = named === undefined ? undefined : records.admin.getComment(named);
+      const theirs = held?.via === incoming.source;
       let id = named;
-      if (new URL(reply.url).origin !== site && (named === undefined || theirs)) {
+      if (held !== undefined && isCarried(held) && !theirs) {
+        const carriers = carriersOf(held);
+        if (!carriers.includes(incoming.source)) {
+          await updateComment(records, held.id, { carriers: [...carriers, incoming.source] });
+        }
+        kept.add(held.id);
+      } else if (!isOnSite(new URL(reply.url), site) && (named === undefined || theirs)) {
         const outcome = await intakeComment({
           records,
           origin: 'webmention',
@@ -424,18 +470,37 @@ async function keepCarried(
   };
 
   await bring(replies, carrier.id);
-  await dropCarried(records, incoming, kept);
+  await dropCarried(options, kept);
 }
 
-/** Delete what a source carried, but for the ones in `kept`. */
+/**
+ * Take away what a source carried, but for the ones in `kept`. One that
+ * another page still carries stays: when the source was the page it is shown
+ * under, it passes to the next page carrying it, approval and all, and
+ * threads under that page's own entry.
+ */
 async function dropCarried(
-  records: CommentRecords,
-  incoming: IncomingWebmention,
+  options: VerifyWebmentionOptions,
   kept: ReadonlySet<string>,
 ): Promise<void> {
-  for (const comment of records.admin.listCommentsFor(incoming.document.slug)) {
-    if (comment.via === incoming.source && !kept.has(comment.id)) {
+  const { records, incoming } = options;
+  const slug = incoming.document.slug;
+  for (const comment of records.admin.listCommentsFor(slug)) {
+    const carriers = carriersOf(comment);
+    if (kept.has(comment.id) || !carriers.includes(incoming.source)) continue;
+    const others = carriers.filter((page) => page !== incoming.source);
+    const [heir] = others;
+    if (heir === undefined) {
       await deleteComment(records, comment.id);
+    } else if (comment.via === incoming.source) {
+      const parent = heldWebmention(records, slug, heir)?.id ?? comment.inReplyTo;
+      await updateComment(records, comment.id, {
+        via: heir,
+        carriers: others,
+        inReplyTo: parent,
+      });
+    } else {
+      await updateComment(records, comment.id, { carriers: others });
     }
   }
 }
@@ -452,12 +517,7 @@ function carriedComment(
     permalink: incoming.document.permalink,
     source: 'webmention',
     kind: 'reply',
-    author: {
-      name: reply.author.name === '' ? hostOf(reply.url) : reply.author.name,
-      url: reply.author.url,
-      email: null,
-      avatar: reply.author.photo,
-    },
+    author: authorOf(reply.author, reply.url),
     content: {
       markdown: reply.content.text,
       html:
@@ -596,9 +656,14 @@ function jsonStrings(body: string): string[] | undefined {
   return strings;
 }
 
+/**
+ * Whether a URL is one the site leads to the post (its page, a former one, a
+ * comment page on it, or a redirect to it), or a syndicated copy. The copies
+ * are read once, however many URLs are asked about.
+ */
 function urlOfPost(options: VerifyWebmentionOptions): (href: string) => boolean {
   const { document } = options.incoming;
-  const origin = new URL(options.baseUrl).origin;
+  const site = new URL(options.baseUrl);
   let copies: string[] | undefined;
 
   return (href) => {
@@ -606,14 +671,9 @@ function urlOfPost(options: VerifyWebmentionOptions): (href: string) => boolean 
     if (url === undefined) return false;
     url.hash = '';
 
-    if (url.origin === origin) {
-      if (url.search !== '') return false;
-      const path = decodedPath(url.pathname);
-      const key = commentKeyAt(path);
-      if (key !== undefined) {
-        return options.conversation.comment(key, options.site)?.post.slug === document.slug;
-      }
-      return path === document.permalink || (document.redirectFrom ?? []).includes(path);
+    if (isOnSite(url, site)) {
+      const landed = documentLandedAt(url, options);
+      return landed !== undefined && landed.path === document.path;
     }
 
     copies ??= [
@@ -636,6 +696,30 @@ function webUrl(value: string): URL | undefined {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
   if (url.hostname === '') return undefined;
   return url;
+}
+
+/**
+ * Who a source says wrote it, kept to what the comment form takes: a name on
+ * one line and no longer than a form's, the host it is on when it gives none,
+ * and no link or photo too long for a form to have taken.
+ */
+function authorOf(author: SourceEntry['author'] | undefined, page: string): PostComment['author'] {
+  const name = (author?.name ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAXIMUM_NAME_LENGTH)
+    .replace(/[\uD800-\uDBFF]$/, '')
+    .trimEnd();
+  return {
+    name: name === '' ? hostOf(page) : name,
+    url: formLength(author?.url ?? null),
+    email: null,
+    avatar: formLength(author?.photo ?? null),
+  };
+}
+
+function formLength(url: string | null): string | null {
+  return url !== null && url.length <= MAXIMUM_URL_LENGTH ? url : null;
 }
 
 /** The host a source is on, for a page that never says who wrote it. */

@@ -29,7 +29,8 @@ import {
   createSerialQueue,
 } from '../util/queue.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { permalinkOfObjectId, publicDocumentAt } from '../content/permalinks.ts';
+import { permalinkOfObjectId } from '../content/permalinks.ts';
+import type { RedirectSource } from '../content/redirects.ts';
 import { waitingChecks } from './checks.ts';
 import type { AcceptedWebmention, WaitingCheck } from './checks.ts';
 import { discoverEndpoint } from './discovery.ts';
@@ -131,6 +132,10 @@ export interface CreateWebmentionServiceOptions {
     'baseUrl' | 'contentDir' | 'dataDir' | 'now' | 'commentChecker' | 'hostLookup' | 'webmentions'
   >;
   settings: SettingsRegistry;
+  /** The site's declared redirects, which an accepted target is followed through when it is checked. */
+  redirects: RedirectSource;
+  /** The page the Reading setting serves at `/` now, or `undefined` for the latest posts. */
+  homePage: () => Document | undefined;
   /** Where failures are reported. Defaults to `console`. */
   logger?: WebmentionLogger | undefined;
   /**
@@ -545,6 +550,9 @@ export function createWebmentionService(
       if (again()) return outcome;
       if (outcome.kind === 'unreachable') await checkAgainLater(check);
       else await waiting.remove(check.id);
+      // A send of the same pair can find the record just before it goes, and
+      // the check it asks for needs the record behind it.
+      if (again()) await waiting.restore(check);
     } catch (thrown) {
       logger.warn(
         `The check of a webmention from ${check.source} was not recorded: ${messageOf(thrown)}`,
@@ -558,21 +566,26 @@ export function createWebmentionService(
     if (!site.webmentions_receive) {
       return { kind: 'refused', problem: 'target', message: 'This site takes no webmentions.' };
     }
-    const request = checkWebmentionRequest(check.source, check.target, {
-      baseUrl: config.baseUrl,
-      documentAt: (pathname) => publicDocumentAt(store, pathname),
-      syndicatedAt: (url) => postSyndicatedAt(url, store, copies),
+    const pages = {
+      store,
+      redirects: options.redirects.current(),
+      home: options.homePage(),
       conversation: options.conversation,
       site,
+    };
+    const request = checkWebmentionRequest(check.source, check.target, {
+      ...pages,
+      baseUrl: config.baseUrl,
+      syndicatedAt: (url) => postSyndicatedAt(url, store, copies),
     });
     if (!request.ok) return { kind: 'refused', problem: request.problem, message: request.message };
     return await verifyWebmention({
+      ...pages,
       incoming: { ...check, document: request.document },
       records,
       dataDir: config.dataDir,
       baseUrl: config.baseUrl,
       conversation: options.conversation,
-      site,
       checker: config.commentChecker,
       // The intake decides whether this one is news: a page that is
       // edited and re-sent updates the entry it made, and putting the

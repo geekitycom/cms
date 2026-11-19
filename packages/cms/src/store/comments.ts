@@ -176,6 +176,11 @@ export interface CommentRecord {
    */
   via?: string;
   /**
+   * Every page that carries it now, `via` among them, when more than one
+   * does. Absent while `via` is the only one.
+   */
+  carriers?: readonly string[];
+  /**
    * Whether it was imported from another system, the word a
    * migrated post uses. It was published before the site came here, so it is
    * shown in its thread and carried by no feed. Absent for every other comment.
@@ -232,6 +237,47 @@ export function rsvpField(rsvp: RsvpValue | undefined): Pick<CommentRecord, 'rsv
 /** A comment's {@link CommentRecord.via} as a record carries it: present only when there is one. */
 export function viaField(via: string | null | undefined): Pick<CommentRecord, 'via'> {
   return via === undefined || via === null || via === '' ? {} : { via };
+}
+
+/**
+ * A comment's {@link CommentRecord.carriers} as a record carries it: present
+ * only beside a `via` and while more than one page carries it.
+ */
+export function carriersField(
+  via: string | null | undefined,
+  carriers: readonly string[] | null | undefined,
+): Pick<CommentRecord, 'carriers'> {
+  if (
+    via === undefined ||
+    via === null ||
+    via === '' ||
+    carriers === undefined ||
+    carriers === null
+  ) {
+    return {};
+  }
+  const pages = [...new Set(carriers.filter((page) => page !== ''))];
+  return pages.length > 1 ? { carriers: pages } : {};
+}
+
+/** Every page that carries a comment now: none for one sent on its own. */
+export function carriersOf(comment: Pick<CommentRecord, 'via' | 'carriers'>): readonly string[] {
+  if (comment.via === undefined) return [];
+  return comment.carriers ?? [comment.via];
+}
+
+/** A list of strings out of a stored value, or `undefined` when it is not one. */
+export function stringListOf(value: unknown): string[] | undefined {
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return undefined;
+    }
+  }
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : undefined;
 }
 
 /**
@@ -335,8 +381,8 @@ export function openCommentStore(
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
         markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify,
-        redacted, rsvp, via, migrated, origin, user, actor
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        redacted, rsvp, via, carriers, migrated, origin, user, actor
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -357,6 +403,7 @@ export function openCommentStore(
         redacted = excluded.redacted,
         rsvp = excluded.rsvp,
         via = excluded.via,
+        carriers = excluded.carriers,
         migrated = excluded.migrated,
         origin = excluded.origin,
         user = excluded.user,
@@ -476,6 +523,7 @@ function toComment(row: Row): PostComment {
     ...redactedOf(row['redacted']),
     ...rsvpField(rsvpValue(row['rsvp'])),
     ...viaField(nullableText(row['via'])),
+    ...carriersField(nullableText(row['via']), stringListOf(row['carriers'])),
     ...importedFields({
       migrated: Number(row['migrated'] ?? 0) === 1,
       origin: nullableText(row['origin']),
@@ -539,6 +587,7 @@ function commentColumns(comment: PostComment): (string | number | null)[] {
     redactedColumn(comment.redacted),
     comment.rsvp ?? null,
     comment.via ?? null,
+    comment.carriers === undefined ? null : JSON.stringify(comment.carriers),
     comment.migrated === true ? 1 : 0,
     comment.origin ?? null,
     comment.user ?? null,

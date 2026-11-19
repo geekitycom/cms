@@ -59,3 +59,16 @@ export function decodedRelativePath(encoded: string): string | undefined {
     return undefined;
   }
 }
+
+/**
+ * Whether a URL is on the site at `site`, by either of http and https and with
+ * or without `www.` in front of the host: an old link or an imported post
+ * names the site the way it was spelled then.
+ */
+export function isOnSite(url: URL, site: URL): boolean {
+  return url.port === site.port && bareHost(url.hostname) === bareHost(site.hostname);
+}
+
+function bareHost(hostname: string): string {
+  return hostname.startsWith('www.') ? hostname.slice(4) : hostname;
+}

@@ -614,6 +614,10 @@ export const MIGRATIONS: readonly Migration[] = [
     version: 31,
     sql: `CREATE INDEX ap_deliveries_inbox_id ON ap_deliveries (inbox_id, attempted_at);`,
   },
+  {
+    version: 32,
+    sql: `ALTER TABLE comments ADD COLUMN carriers TEXT;`,
+  },
 ];
 
 export function openAdminDatabase(dataDir: string, now: Clock): DatabaseSync {

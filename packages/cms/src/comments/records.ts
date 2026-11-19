@@ -3,12 +3,14 @@ import { readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import {
+  carriersField,
   COMMENT_KINDS,
   COMMENT_SOURCES,
   COMMENT_STATUSES,
   importedFields,
   REDACTED_FIELDS,
   rsvpField,
+  stringListOf,
   viaField,
 } from '../store/admin-store.ts';
 import type { AdminStore, CommentRecord, PostComment } from '../store/admin-store.ts';
@@ -378,6 +380,7 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     ...redactedIn(value['redacted']),
     ...rsvpField(rsvpValue(value['rsvp'])),
     ...viaField(nonEmptyStringOrNull(value['via'])),
+    ...carriersField(nonEmptyStringOrNull(value['via']), stringListOf(value['carriers'])),
     ...importedFields({
       migrated: value['migrated'] === true,
       origin: nonEmptyStringOrNull(value['origin']),
@@ -514,6 +517,8 @@ export async function updateComment(
     readonly rsvp?: RsvpValue | null;
     /** The page now carrying it, or `null` once it is sent on its own. */
     readonly via?: string | null;
+    /** Every page carrying it now, `via` among them. */
+    readonly carriers?: readonly string[] | null;
   },
 ): Promise<PostComment | undefined> {
   const known = records.admin.getComment(id);
@@ -526,10 +531,11 @@ export async function updateComment(
     const at = held.findIndex((entry) => entry.id === id);
     if (at === -1) return undefined;
 
-    const { rsvp, via, ...fields } = change;
+    const { rsvp, via, carriers, ...fields } = change;
     const {
       rsvp: was,
       via: carried,
+      carriers: carrying,
       ...merged
     }: PostComment = {
       ...known,
@@ -541,6 +547,10 @@ export async function updateComment(
       ...merged,
       ...rsvpField(rsvp === undefined ? was : (rsvp ?? undefined)),
       ...viaField(via === undefined ? carried : via),
+      ...carriersField(
+        via === undefined ? carried : via,
+        carriers === undefined ? carrying : carriers,
+      ),
     };
     writePost(records, known.slug, known.permalink, held.with(at, moved), uninterpreted);
     records.admin.putComment(moved);
@@ -777,6 +787,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
+    ...carriersField(comment.via, comment.carriers),
     ...importedFields(comment),
   };
 }
@@ -800,6 +811,7 @@ function publishedEntryOf(comment: CommentRecord): PublishedComment {
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
+    ...carriersField(comment.via, comment.carriers),
     ...importedFields(comment),
   };
 }

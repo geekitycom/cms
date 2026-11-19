@@ -40,6 +40,8 @@ export interface WaitingChecks {
   /** Count one more failure and set when it is next due; `undefined` when it is no longer waiting. */
   postpone(id: string, dueAt: Date): Promise<WaitingCheck | undefined>;
   remove(id: string): Promise<void>;
+  /** Put a removed check back as it was, unless it or another for the same pair is waiting. */
+  restore(check: WaitingCheck): Promise<void>;
 }
 
 export function waitingChecks(dataDir: string, limit: number): WaitingChecks {
@@ -111,6 +113,17 @@ export function waitingChecks(dataDir: string, limit: number): WaitingChecks {
         checks.some((check) => check.id === id)
           ? { checks: checks.filter((check) => check.id !== id), value: undefined }
           : { value: undefined },
+      );
+    },
+
+    async restore(check) {
+      await change((checks) =>
+        checks.some(
+          (one) =>
+            one.id === check.id || (one.source === check.source && one.target === check.target),
+        )
+          ? { value: undefined }
+          : { checks: [...checks, check], value: undefined },
       );
     },
   };
