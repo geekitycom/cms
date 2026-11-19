@@ -36,6 +36,7 @@ export const PINGBACK_FAULTS = {
   targetMissing: 0x0020,
   notATarget: 0x0021,
   alreadyRegistered: 0x0030,
+  upstreamError: 0x0032,
   notWellFormed: -32700,
   unknownMethod: -32601,
   badParams: -32602,
@@ -69,7 +70,10 @@ export function pingbackAnswerFor(outcome: WebmentionOutcome): string | Pingback
     case 'refused':
       return { code: PINGBACK_REQUEST_FAULTS[outcome.problem], message: outcome.message };
     case 'unreachable':
-      return { code: PINGBACK_FAULTS.generic, message: 'The source could not be read this time.' };
+      return {
+        code: PINGBACK_FAULTS.upstreamError,
+        message: 'The source could not be read this time.',
+      };
     case 'deleted':
     case 'ignored':
       switch (outcome.why) {

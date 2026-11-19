@@ -452,11 +452,11 @@ describe('the faults a pingback is answered with', () => {
     assert.equal(mentionsOf(cms).length, 0);
   });
 
-  it('0x0000 for a source that refuses to be read but has not gone', async () => {
+  it('0x0032 for a source that refuses to be read but has not gone', async () => {
     const cms = await site();
     pages.set('https://them.example/locked', { status: 403, body: 'no' });
 
-    assert.equal(await faultOf(await ping(cms, 'https://them.example/locked')), 0x0000);
+    assert.equal(await faultOf(await ping(cms, 'https://them.example/locked')), 0x0032);
   });
 
   it('0x0011 for a source that does not link to the target', async () => {
@@ -483,11 +483,11 @@ describe('the faults a pingback is answered with', () => {
     assert.deepEqual(fetched, [], 'nothing was fetched for a target that cannot be pinged');
   });
 
-  it('a generic fault for a source that cannot be read this time', async () => {
+  it('0x0032 for a source that cannot be read this time', async () => {
     const cms = await site();
     pages.set('https://them.example/note', { status: 503 });
 
-    assert.equal(await faultOf(await ping(cms, 'https://them.example/note')), 0);
+    assert.equal(await faultOf(await ping(cms, 'https://them.example/note')), 0x0032);
   });
 
   it('0x0010, and nothing fetched or stored, for a source on a port other than the default', async () => {
@@ -499,11 +499,11 @@ describe('the faults a pingback is answered with', () => {
     assert.equal(mentionsOf(cms).length, 0);
   });
 
-  it('a generic fault, and nothing fetched, for a source that resolves to a private address', async () => {
+  it('0x0032, and nothing fetched, for a source that resolves to a private address', async () => {
     const cms = await site();
     pages.set('https://wiki.internal.example/note', { body: linkingTo(POST_URL) });
 
-    assert.equal(await faultOf(await ping(cms, 'https://wiki.internal.example/note')), 0);
+    assert.equal(await faultOf(await ping(cms, 'https://wiki.internal.example/note')), 0x0032);
     assert.deepEqual(fetched, []);
     assert.equal(mentionsOf(cms).length, 0);
   });
