@@ -651,42 +651,62 @@ function implied(
   if (properties['url'] === undefined) {
     const href =
       attributeFor(element, ['a', 'area', 'link'], 'href') ??
-      onlyAttribute(element, ['a', 'area', 'link'], 'href');
+      impliedAttribute(element, ['a', 'area'], 'href');
     const url = href === undefined ? undefined : normalize(href, base);
     if (url !== undefined) properties['url'] = [{ text: url }];
   }
 
   if (properties['photo'] === undefined) {
-    const src = attributeFor(element, ['img'], 'src') ?? onlyAttribute(element, ['img'], 'src');
+    const src = attributeFor(element, ['img'], 'src') ?? impliedAttribute(element, ['img'], 'src');
     const photo = src === undefined ? undefined : normalize(src, base);
     if (photo !== undefined) properties['photo'] = [{ text: photo }];
   }
 }
 
 /**
- * The attribute of the one such element inside this one, when there is exactly
- * one and it is not a microformat of its own.
+ * The attribute an item implies from what is directly inside it, as mf2 reads
+ * an implied `url` or `photo`: its only child of one of these types, else the
+ * only child of that type of its only child element. Nothing that is a
+ * microformat of its own counts, and nothing deeper is looked at.
  *
- * Exactly one, because two links inside a card give no reason to prefer
+ * Only one of a type, because two links inside a card give no reason to prefer
  * either, and a guess in a byline is worse than an empty one.
  */
-function onlyAttribute(
+function impliedAttribute(
   element: HtmlElement,
   names: readonly string[],
   attribute: string,
 ): string | undefined {
-  let found: string | undefined;
-
-  for (const candidate of elementsIn(element)) {
-    if (!names.includes(candidate.name)) continue;
-    if (rootTypesOf(candidate).length > 0) continue;
-    const value = candidate.attributes[attribute];
-    if (value === undefined) continue;
-    if (found !== undefined) return undefined;
-    found = value;
+  const sole = onlyChild(element);
+  for (const parent of sole === undefined ? [element] : [element, sole]) {
+    for (const name of names) {
+      const value = onlyOfType(parent, name)?.attributes[attribute];
+      if (value !== undefined) return value;
+    }
   }
+  return undefined;
+}
 
-  return found;
+/** The one child element of this one, when it has exactly one and it is not a microformat. */
+function onlyChild(element: HtmlElement): HtmlElement | undefined {
+  return soleOf(element.children.filter(isElement));
+}
+
+/** The one child element of this name, when there is exactly one and it is not a microformat. */
+function onlyOfType(element: HtmlElement, name: string): HtmlElement | undefined {
+  return soleOf(
+    element.children.filter(
+      (child): child is HtmlElement => isElement(child) && child.name === name,
+    ),
+  );
+}
+
+/** The only element of these, unless there are more or it is a microformat. */
+function soleOf(elements: readonly HtmlElement[]): HtmlElement | undefined {
+  const [only] = elements;
+  return elements.length === 1 && only !== undefined && rootTypesOf(only).length === 0
+    ? only
+    : undefined;
 }
 
 /** The `<base href>` a page declares, or the URL it was fetched from. */

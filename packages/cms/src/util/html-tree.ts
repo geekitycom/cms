@@ -238,11 +238,21 @@ export function findStartTag(
 
 /** Every element under `root`, itself excluded, in document order. */
 export function* elementsIn(root: HtmlElement): Generator<HtmlElement> {
-  for (const child of root.children) {
-    if (!isElement(child)) continue;
-    yield child;
-    yield* elementsIn(child);
+  for (const node of nodesIn(root)) if (isElement(node)) yield node;
+}
+
+/** Every node under `root`, itself excluded, in document order. */
+function* nodesIn(root: HtmlElement): Generator<HtmlNode> {
+  const pending = [...root.children].reverse();
+  for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
+    yield node;
+    if (isElement(node)) pushReversed(pending, node.children);
   }
+}
+
+/** Push nodes so that popping them gives them back in order. */
+function pushReversed<T>(stack: T[], nodes: readonly T[]): void {
+  for (let index = nodes.length - 1; index >= 0; index -= 1) stack.push(nodes[index] as T);
 }
 
 /**
@@ -259,7 +269,9 @@ export function textOf(node: HtmlNode): string {
 /** The text an element holds, exactly as the page spelled it. */
 export function rawTextOf(node: HtmlNode): string {
   if (!isElement(node)) return node.text;
-  return node.children.map(rawTextOf).join('');
+  const parts: string[] = [];
+  for (const inner of nodesIn(node)) if (!isElement(inner)) parts.push(inner.text);
+  return parts.join('');
 }
 
 /**
@@ -271,18 +283,29 @@ export function rawTextOf(node: HtmlNode): string {
  * either way, so this only has to be close enough for that to read.
  */
 export function innerHtmlOf(element: HtmlElement): string {
-  return element.children.map(markupOf).join('');
+  const parts: string[] = [];
+  const pending: (HtmlNode | string)[] = [];
+  pushReversed(pending, element.children);
+
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (typeof next === 'string') parts.push(next);
+    else if (!isElement(next)) parts.push(escapeText(next.text));
+    else {
+      parts.push(`<${next.name}${attributesOf(next)}>`);
+      if (VOID_ELEMENTS.has(next.name)) continue;
+      pending.push(`</${next.name}>`);
+      pushReversed(pending, next.children);
+    }
+  }
+
+  return parts.join('');
 }
 
-/** One node as markup. */
-function markupOf(node: HtmlNode): string {
-  if (!isElement(node)) return escapeText(node.text);
-
-  const attributes = Object.entries(node.attributes)
+/** An element's attributes as markup, each with a leading space. */
+function attributesOf(element: HtmlElement): string {
+  return Object.entries(element.attributes)
     .map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`)
     .join('');
-  if (VOID_ELEMENTS.has(node.name)) return `<${node.name}${attributes}>`;
-  return `<${node.name}${attributes}>${innerHtmlOf(node)}</${node.name}>`;
 }
 
 /** The classes an element carries, in the order it wrote them. */

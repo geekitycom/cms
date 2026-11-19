@@ -97,3 +97,38 @@ describe('reading a parsed element', () => {
     assert.equal(innerHtmlOf(paragraph), 'a &amp; <i title="x&quot;y">b</i><br>');
   });
 });
+
+describe('walking a deep tree', () => {
+  function chain(depth: number): HtmlElement {
+    const root: HtmlElement = { name: '#document', attributes: {}, children: [] };
+    let parent = root;
+    for (let level = 0; level < depth; level += 1) {
+      const element: HtmlElement = { name: 'i', attributes: {}, children: [{ text: 'x' }] };
+      parent.children.push(element);
+      parent = element;
+    }
+    return root;
+  }
+
+  it('lists every element of a 20,000-deep page without throwing', () => {
+    const root = parseHtml('<div>'.repeat(20_000));
+    const started = performance.now();
+    const count = [...elementsIn(root)].length;
+    const elapsed = performance.now() - started;
+    assert.equal(count, 20_000);
+    assert.ok(elapsed < 500, `elementsIn took ${Math.round(elapsed)} ms`);
+  });
+
+  it('lists, reads and rebuilds a 50,000-deep tree without throwing', () => {
+    const root = chain(50_000);
+    const started = performance.now();
+    assert.equal([...elementsIn(root)].length, 50_000);
+    assert.equal(rawTextOf(root).length, 50_000);
+    assert.equal(textOf(root).length, 50_000);
+    const markup = innerHtmlOf(root);
+    const elapsed = performance.now() - started;
+    assert.ok(markup.startsWith('<i>x<i>x') && markup.endsWith('</i></i>'));
+    assert.equal(markup.length, 50_000 * '<i>x</i>'.length);
+    assert.ok(elapsed < 1_000, `walking took ${Math.round(elapsed)} ms`);
+  });
+});

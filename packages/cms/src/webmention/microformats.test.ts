@@ -206,3 +206,77 @@ describe('sourceEntry replies (TASK-320)', () => {
     assert.ok(deepest > 1 && deepest < 20, `read ${String(deepest)} levels of twenty`);
   });
 });
+
+describe('implied properties of an h-card author', () => {
+  const author = (card: string) =>
+    sourceEntry(
+      `<div class="h-entry">${card}<a class="u-in-reply-to" href="${TARGET}">re</a></div>`,
+      SOURCE,
+      isTarget,
+    ).author;
+
+  it('implies the url and photo from a link wrapping an avatar', () => {
+    assert.deepEqual(
+      author(
+        `<span class="p-author h-card"><a href="/ada"><img src="/ada.jpg" alt=""></a> Ada</span>`,
+      ),
+      { name: 'Ada', url: 'https://them.example/ada', photo: 'https://them.example/ada.jpg' },
+    );
+  });
+
+  it('implies the url and photo from the only element inside the card', () => {
+    assert.deepEqual(
+      author(`<span class="p-author h-card"><span><a href="/ada">Ada</a></span></span>`),
+      { name: 'Ada', url: 'https://them.example/ada', photo: null },
+    );
+    assert.deepEqual(
+      author(`<span class="p-author h-card"><span><img src="/ada.jpg" alt=""></span>Ada</span>`),
+      { name: 'Ada', url: null, photo: 'https://them.example/ada.jpg' },
+    );
+  });
+
+  it('implies nothing from a link or avatar nested deeper than that', () => {
+    assert.deepEqual(
+      author(
+        `<span class="p-author h-card"><b><i><a href="/ada"><img src="/ada.jpg" alt=""></a></i></b>Ada</span>`,
+      ),
+      { name: 'Ada', url: null, photo: null },
+    );
+  });
+
+  it('implies nothing when the card holds two links or two avatars side by side', () => {
+    assert.deepEqual(
+      author(
+        `<span class="p-author h-card"><a href="/a"><img src="/a.jpg" alt=""></a><a href="/b"><img src="/b.jpg" alt=""></a>Ada</span>`,
+      ),
+      { name: 'Ada', url: null, photo: null },
+    );
+  });
+});
+
+describe('reading a deeply nested page', () => {
+  function timed<T>(run: () => T): { value: T; ms: number } {
+    const started = performance.now();
+    const value = run();
+    return { value, ms: performance.now() - started };
+  }
+
+  it('checks the link on 4,000 nested divs in well under 100 ms', () => {
+    const depth = 4_000;
+    const page = '<div>'.repeat(depth) + `<a href="${TARGET}">hi</a>` + '</div>'.repeat(depth);
+    const { value, ms } = timed(() => linksTo(page, SOURCE, TARGET));
+    assert.equal(value, true);
+    assert.ok(ms < 100, `linksTo took ${Math.round(ms)} ms for ${page.length} bytes`);
+  });
+
+  it('reads 800 nested h-entry divs that link to the target in well under a second', () => {
+    const depth = 800;
+    const page =
+      `<a href="${TARGET}">hi</a>` +
+      '<div class="h-entry">x'.repeat(depth) +
+      '</div>'.repeat(depth);
+    const { value, ms } = timed(() => sourceEntry(page, SOURCE, isTarget));
+    assert.equal(value.kind, 'mention');
+    assert.ok(ms < 500, `sourceEntry took ${Math.round(ms)} ms for ${page.length} bytes`);
+  });
+});
