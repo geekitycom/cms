@@ -529,6 +529,80 @@ describe('a webmention that comes again', () => {
   });
 });
 
+describe('an approved webmention that comes again', () => {
+  const NOTE = 'https://them.example/note';
+  const LOVELY = `<a class="u-in-reply-to" href="${POST_URL}">re</a><div class="e-content"><p>Lovely post.</p></div>`;
+
+  async function approvedReply(cms: Cms, page = reply(LOVELY)): Promise<PostComment> {
+    pages.set(NOTE, { body: page });
+    await sendAndSettle(cms, NOTE);
+    const held = stored(cms)[0];
+    assert.ok(held !== undefined);
+    return (
+      (await updateComment(
+        { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+        held.id,
+        { status: 'approved' },
+      )) ?? held
+    );
+  }
+
+  it('waits for a moderator again when its words and author have changed', async () => {
+    const cms = await site();
+    const first = await approvedReply(cms);
+
+    pages.set(NOTE, {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a>` +
+          '<div class="e-content"><p>Buy cheap pills.</p></div>',
+      ).replace('Ada Lovelace', 'Spam Bot'),
+    });
+    await sendAndSettle(cms, NOTE);
+
+    const [after] = stored(cms);
+    assert.equal(after?.id, first.id, 'the same entry');
+    assert.equal(after?.status, 'pending');
+    assert.equal(after?.content.html, '<p>Buy cheap pills.</p>');
+    const page = await (await cms.app.request('/2026/09/hello-world/')).text();
+    assert.doesNotMatch(page, /Buy cheap pills|Spam Bot/, 'the new version is not on the post');
+  });
+
+  it('waits for a moderator again when it now says it is something else', async () => {
+    const cms = await site();
+    await approvedReply(cms);
+
+    pages.set(NOTE, { body: reply(`<a class="u-like-of" href="${POST_URL}">liked</a>`) });
+    await sendAndSettle(cms, NOTE);
+
+    assert.deepEqual(
+      stored(cms).map((one) => [one.kind, one.status]),
+      [['like', 'pending']],
+    );
+  });
+
+  it('stays approved when the page says the same thing', async () => {
+    const cms = await site();
+    await approvedReply(cms);
+
+    await sendAndSettle(cms, NOTE);
+
+    assert.equal(stored(cms)[0]?.status, 'approved');
+  });
+
+  it('keeps its first date when the page gives none', async () => {
+    let now = new Date('2026-09-20T12:00:00.000Z');
+    const cms = await site({ now: () => now });
+    const undated = reply(LOVELY).replace(/<time class="dt-published"[^>]*>[^<]*<\/time>/, '');
+    const first = await approvedReply(cms, undated);
+    assert.equal(first.submitted, '2026-09-20T12:00:00.000Z');
+
+    now = new Date('2026-10-20T12:00:00.000Z');
+    await sendAndSettle(cms, NOTE);
+
+    assert.equal(stored(cms)[0]?.submitted, first.submitted);
+  });
+});
+
 describe('a webmention sent again to another URL of the same post', () => {
   const LIKE = 'https://them.example/like';
 
@@ -1045,6 +1119,36 @@ describe('telling the moderators about it (TASK-55)', () => {
     assert.equal(provider.sent.length, 1);
     assert.doesNotMatch(provider.sent[0]?.html ?? '', /javascript:/);
     assert.doesNotMatch(provider.sent[0]?.text ?? '', /javascript:/);
+  });
+
+  it('emails them again when an approved one comes back saying something else', async () => {
+    const { cms, provider } = await siteWithMail();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a><p class="e-content">Hi.</p>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+    const [held] = stored(cms);
+    assert.ok(held !== undefined);
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      held.id,
+      { status: 'approved' },
+    );
+    await cms.notifications.settled();
+    await cms.mail.settled();
+    provider.clear();
+
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a><p class="e-content">Bye.</p>`,
+      ),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+    await cms.notifications.settled();
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 1);
+    assert.match(provider.sent[0]?.text ?? '', /Bye\./);
   });
 
   it('says nothing the second time the same page sends one', async () => {

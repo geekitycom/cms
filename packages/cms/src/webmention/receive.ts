@@ -275,7 +275,9 @@ export async function verifyWebmention(
     kind,
     author,
     content: { markdown: text, html },
-    submitted: entry?.published ?? now.toISOString(),
+    // A page that gives no date keeps the one it was first stored with, so it
+    // does not move in the thread each time it is sent.
+    submitted: entry?.published ?? held?.submitted ?? now.toISOString(),
     inReplyTo,
     // The URL it was sent from rather than the entry's own `u-url`: this is
     // the identity a later webmention is matched against, and the sender is
@@ -416,7 +418,10 @@ function carriedComment(
           ? paragraph(reply.content.text)
           : sanitizeCommentHtml(reply.content.html),
     },
-    submitted: reply.published ?? options.now.toISOString(),
+    submitted:
+      reply.published ??
+      heldWebmention(options.records, incoming.document.slug, reply.url)?.submitted ??
+      options.now.toISOString(),
     inReplyTo: parent,
     url: reply.url,
     via: incoming.source,

@@ -286,7 +286,11 @@ describe('receiving a salmention (TASK-320)', () => {
     await sendAndSettle(cms, SOURCE);
     assert.equal(byUrl(cms, DAN), undefined, 'one the source no longer carries is gone');
     assert.equal(byUrl(cms, CAROL)?.content.html, '<p>Carol answers again.</p>');
-    assert.equal(byUrl(cms, CAROL)?.status, 'approved', 'the moderator’s decision stands');
+    assert.equal(
+      byUrl(cms, CAROL)?.status,
+      'pending',
+      'new words wait for a moderator, who approved the old ones',
+    );
 
     pages.set(SOURCE, { status: 410 });
     await sendAndSettle(cms, SOURCE);

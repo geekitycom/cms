@@ -99,6 +99,15 @@ removes the entry. A source that does not link to the target but still links to
 another URL of the same post keeps its entry. Those URLs are the post's page, a
 former permalink, a comment page on the post, and a syndicated copy.
 
+An approved entry stays approved only while the page says the same thing. When
+its kind, author name, author link, author photo or words change, the site
+decides the entry again as if it were new: it goes back to the moderation queue
+and the moderators get a new notice. Until a moderator approves it again, the
+post does not show it, and its replies sit under a placeholder that says the
+comment is no longer shown. A pending entry stays pending and sends no new
+notice. A spam entry stays spam. When the page gives no `dt-published`, the
+entry keeps the date it was first stored with.
+
 Closing rules do not apply. A post that no longer takes comments still receives
 webmentions, as it still receives fediverse replies.
 
