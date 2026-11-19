@@ -167,6 +167,15 @@ When you erase, the screen does the following:
 - Deletes the contact messages.
 - Removes the address from the opt-out list.
 
+If a post's comment file or email file does not parse, the screen cannot
+read that post's comments. It names the post when it shows what it found and
+again after the erasure, and erases everything else. Repair the file, then
+look up the address again to erase what that post holds.
+
+The retention sweep skips such a post in the same way and logs a warning that
+names the file. The next sweep after the repair removes what is past its
+period.
+
 The screen finds comments by email. It does not find a comment whose email the
 sweep has already removed, a webmention or a fediverse reply. Delete those one
 at a time on the Comments screen.

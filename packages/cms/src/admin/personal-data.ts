@@ -67,7 +67,7 @@ export function mountPersonalDataScreen(
       return render(
         c,
         ADMIN_TEMPLATES.toolsPersonalData,
-        screen({ email, found: findPersonalData(storesOf(c), email) }),
+        screen({ email, found: await findPersonalData(storesOf(c), email) }),
       );
     }
 
@@ -98,6 +98,7 @@ function screen(state: {
             comments: count(found.comments, 'comment'),
             messages: count(found.messages, 'contact message'),
             optedOut: found.optedOut,
+            unreadable: unreadableMessage(found.unreadable),
             anything: found.comments > 0 || found.messages > 0 || found.optedOut,
           },
   };
@@ -120,7 +121,18 @@ export function erasedMessage(report: PersonalDataReport): string {
   const said =
     `Erased ${count(report.comments, 'comment')} and ` +
     `${count(report.messages, 'contact message')}.`;
-  return report.optedOut ? `${said} The address is off the reply opt-out list too.` : said;
+  const optedOut = report.optedOut ? ' The address is off the reply opt-out list too.' : '';
+  const unreadable = unreadableMessage(report.unreadable);
+  return `${said}${optedOut}${unreadable === undefined ? '' : ` ${unreadable}`}`;
+}
+
+/** What to say about posts whose comment files could not be read, if there are any. */
+function unreadableMessage(slugs: readonly string[]): string | undefined {
+  if (slugs.length === 0) return undefined;
+  return (
+    `The comments on ${slugs.join(', ')} could not be read and were left as they are. ` +
+    'Repair those files and look again.'
+  );
 }
 
 /** "1 comment", "2 comments". */

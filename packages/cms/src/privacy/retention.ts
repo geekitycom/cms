@@ -166,10 +166,14 @@ export function createRetentionService(options: CreateRetentionServiceOptions): 
 
     let comments = 0;
     for (const slug of commentSlugs(config.contentDir)) {
-      const changed = await rewriteComments(records, slug, (comment) =>
-        expireComment(comment, policy, now),
-      );
-      comments += changed.length;
+      try {
+        const changed = await rewriteComments(records, slug, (comment) =>
+          expireComment(comment, policy, now),
+        );
+        comments += changed.length;
+      } catch (error) {
+        logger.warn(`Comments not swept: ${messageOf(error)}`);
+      }
     }
 
     let messagesDeleted = 0;

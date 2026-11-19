@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+import { isDeepStrictEqual } from 'node:util';
 
 import { openAdminStore } from '../store/admin-store.ts';
 import type { AdminStore, PostComment } from '../store/admin-store.ts';
@@ -652,6 +653,40 @@ describe('a comment file somebody edited by hand', () => {
     assert.equal(held[0]?.kind, 'reply');
     assert.equal(held[0]?.author.email, null);
     assert.equal(held[0]?.content.html, '');
+  });
+
+  it('keeps an entry it cannot read, and that entry’s email, when the next comment lands', async () => {
+    const site = await records();
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    const unread = [
+      { author: { name: 'Idless' }, content: { markdown: 'No id.' }, extra: [1, 2] },
+      { id: '00000000000000b2', author: {}, content: { markdown: 'No name.' } },
+      'a line somebody pasted',
+    ];
+    await writeFile(
+      file,
+      `${JSON.stringify({ post: '/2026/09/hello-world/', comments: unread }, null, 2)}\n`,
+    );
+    const privateFile = commentEmailsFile(site.dataDir, 'hello-world');
+    await mkdir(path.dirname(privateFile), { recursive: true });
+    await writeFile(
+      privateFile,
+      `${JSON.stringify({ comments: { '00000000000000b2': { email: 'nameless@example.com', notify: true } } })}\n`,
+    );
+
+    const added = await addComment(site, ada());
+
+    const written = JSON.parse(await readFile(file, 'utf8')) as { comments: unknown[] };
+    for (const entry of unread)
+      assert.ok(written.comments.some((kept) => isDeepStrictEqual(kept, entry)));
+    assert.ok(
+      written.comments.some((kept) => (kept as { id?: unknown }).id === added.id),
+      'and the new comment is there too',
+    );
+    const emails = await readFile(privateFile, 'utf8');
+    assert.match(emails, /nameless@example\.com/);
+    assert.match(emails, /ada@example\.com/);
   });
 });
 

@@ -146,8 +146,8 @@ export interface CommentRecords {
  * One post's comments, as its files say them, oldest first.
  *
  * A missing file is no comments, which is what almost every post has. An
- * entry without an id or a name is dropped, so a hand edit costs that entry
- * alone. A file that does not parse throws, naming it: every writer reads
+ * entry without an id or a name is left out, and every write puts it back as
+ * it was. A file that does not parse throws, naming it: every writer reads
  * before it writes, and a file read as empty would be written back holding
  * only the new comment. The index rebuild skips such a post with a warning
  * rather than stopping the boot.
@@ -166,14 +166,16 @@ export function readComments(
  * so a site that has not booted since upgrading loses nothing before
  * `migrateCommentEmails` moves it.
  */
-function readPost(
-  records: Pick<CommentRecords, 'contentDir' | 'dataDir'>,
-  slug: string,
-): { post: string; comments: CommentRecord[] } {
+function readPost(records: Pick<CommentRecords, 'contentDir' | 'dataDir'>, slug: string): HeldPost {
   const held = fileContents(commentsFile(records.contentDir, slug));
   const contacts = contactsIn(commentEmailsFile(records.dataDir, slug));
+  const uninterpretedIds = new Set(held.uninterpreted.flatMap(idOf));
   return {
     post: held.post,
+    uninterpreted: {
+      entries: held.uninterpreted,
+      contacts: new Map([...contacts].filter(([id]) => uninterpretedIds.has(id))),
+    },
     comments: held.comments.map((comment) => {
       const contact = contacts.get(comment.id);
       if (contact === undefined) return comment;
@@ -183,6 +185,34 @@ function readPost(
         notify: contact.notify,
       };
     }),
+  };
+}
+
+/** One post's file as read: its comments, and what it holds that is not one. */
+interface HeldPost {
+  post: string;
+  comments: CommentRecord[];
+  uninterpreted: Uninterpreted;
+}
+
+/**
+ * The entries of a comment file that are not a comment this version can read,
+ * as the JSON they are, and the emails `data/` holds under their ids. Every
+ * write puts them back, so the next comment on the post does not delete them.
+ */
+interface Uninterpreted {
+  entries: unknown[];
+  contacts: ReadonlyMap<string, CommentContact>;
+}
+
+function idOf(entry: unknown): string[] {
+  return isRecord(entry) && typeof entry['id'] === 'string' ? [entry['id']] : [];
+}
+
+function mergedUninterpreted(...held: Uninterpreted[]): Uninterpreted {
+  return {
+    entries: held.flatMap((one) => one.entries),
+    contacts: new Map(held.flatMap((one) => [...one.contacts])),
   };
 }
 
@@ -199,6 +229,7 @@ function writePost(
   slug: string,
   permalink: string,
   comments: readonly CommentRecord[],
+  uninterpreted: Uninterpreted,
 ): void {
   const file = commentsFile(records.contentDir, slug);
   for (const comment of comments) {
@@ -209,7 +240,7 @@ function writePost(
     }
   }
 
-  const contacts = new Map<string, CommentContact>();
+  const contacts = new Map<string, CommentContact>(uninterpreted.contacts);
   for (const comment of comments) {
     if (comment.author.email !== null) {
       contacts.set(comment.id, { email: comment.author.email, notify: comment.notify });
@@ -226,9 +257,11 @@ function writePost(
     rmSync(privateFile, { force: true });
   }
 
-  writeFileAtomicallySync(file, commentsJson(permalink, comments.map(publishedEntryOf)), {
-    durable: true,
-  });
+  writeFileAtomicallySync(
+    file,
+    commentsJson(permalink, [...comments.map(publishedEntryOf), ...uninterpreted.entries]),
+    { durable: true },
+  );
 }
 
 /**
@@ -260,15 +293,27 @@ export function contactsJson(contacts: ReadonlyMap<string, CommentContact>): str
  * missing file holds none; one that is not JSON of that shape throws, naming
  * the file, so the next write cannot replace it with only the new comment.
  */
-function fileContents(file: string): { post: string; comments: CommentRecord[] } {
+function fileContents(file: string): {
+  post: string;
+  comments: CommentRecord[];
+  uninterpreted: unknown[];
+} {
   const parsed = parsedFile(file);
-  if (parsed === undefined) return { post: '', comments: [] };
+  if (parsed === undefined) return { post: '', comments: [], uninterpreted: [] };
 
-  const entries = parsed['comments'] ?? [];
+  const entries: unknown = parsed['comments'] ?? [];
   if (!Array.isArray(entries)) throw unreadable(file, '"comments" is not a list');
+  const comments: CommentRecord[] = [];
+  const uninterpreted: unknown[] = [];
+  for (const entry of entries) {
+    const comment = commentFrom(entry);
+    if (comment === undefined) uninterpreted.push(entry);
+    else comments.push(comment);
+  }
   return {
     post: typeof parsed['post'] === 'string' ? parsed['post'] : '',
-    comments: entries.map(commentFrom).filter((entry) => entry !== undefined),
+    comments,
+    uninterpreted,
   };
 }
 
@@ -375,8 +420,14 @@ export async function addComment(
   };
 
   return await withFileLock(file, () => {
-    const held = readPost(records, comment.slug).comments;
-    writePost(records, comment.slug, comment.permalink, [...held, stored]);
+    const held = readPost(records, comment.slug);
+    writePost(
+      records,
+      comment.slug,
+      comment.permalink,
+      [...held.comments, stored],
+      held.uninterpreted,
+    );
     records.admin.putComment(stored);
     return stored;
   });
@@ -401,7 +452,7 @@ export async function putComments(
       if (at === -1) next.push(comment);
       else next[at] = comment;
     }
-    writePost(records, slug, post, next);
+    writePost(records, slug, post, next, held.uninterpreted);
     for (const comment of comments) records.admin.putComment({ ...comment, slug, permalink: post });
   });
 }
@@ -439,7 +490,7 @@ export async function renameComments(
       changed.push(renamed);
       return renamed;
     });
-    writePost(records, slug, held.post, next);
+    writePost(records, slug, held.post, next, held.uninterpreted);
     for (const from of moved.keys()) records.admin.deleteComment(from);
     for (const comment of changed)
       records.admin.putComment({ ...comment, slug, permalink: held.post });
@@ -478,7 +529,7 @@ export async function updateComment(
   const file = commentsFile(records.contentDir, known.slug);
 
   return await withFileLock(file, () => {
-    const held = readPost(records, known.slug).comments;
+    const { comments: held, uninterpreted } = readPost(records, known.slug);
     const at = held.findIndex((entry) => entry.id === id);
     if (at === -1) return undefined;
 
@@ -498,7 +549,7 @@ export async function updateComment(
       ...rsvpField(rsvp === undefined ? was : (rsvp ?? undefined)),
       ...viaField(via === undefined ? carried : via),
     };
-    writePost(records, known.slug, known.permalink, held.with(at, moved));
+    writePost(records, known.slug, known.permalink, held.with(at, moved), uninterpreted);
     records.admin.putComment(moved);
     return moved;
   });
@@ -518,9 +569,11 @@ export async function deleteComment(records: CommentRecords, id: string): Promis
   const file = commentsFile(records.contentDir, known.slug);
 
   return await withFileLock(file, () => {
-    const held = readPost(records, known.slug).comments;
+    const { comments: held, uninterpreted } = readPost(records, known.slug);
     const next = held.filter((entry) => entry.id !== id);
-    if (next.length !== held.length) writePost(records, known.slug, known.permalink, next);
+    if (next.length !== held.length) {
+      writePost(records, known.slug, known.permalink, next, uninterpreted);
+    }
 
     const indexed = records.admin.deleteComment(id);
     return next.length !== held.length || indexed;
@@ -557,7 +610,7 @@ export async function rewriteComments(
     });
     if (changed.length === 0) return [];
 
-    writePost(records, slug, held.post, next);
+    writePost(records, slug, held.post, next, held.uninterpreted);
     for (const comment of changed) records.admin.putComment(comment);
     return changed.map((comment) => comment.id);
   });
@@ -607,10 +660,16 @@ function followFile(records: CommentRecords, store: DocumentLookup, from: string
   const owner = permalinkOwner(store, left.post);
   if (owner === undefined || owner.slug === from) return;
 
-  const held = readPost(records, owner.slug).comments;
-  const known = new Set(held.map((comment) => comment.id));
-  const merged = [...held, ...left.comments.filter((comment) => !known.has(comment.id))];
-  writePost(records, owner.slug, owner.permalink, merged);
+  const held = readPost(records, owner.slug);
+  const known = new Set(held.comments.map((comment) => comment.id));
+  const merged = [...held.comments, ...left.comments.filter((comment) => !known.has(comment.id))];
+  writePost(
+    records,
+    owner.slug,
+    owner.permalink,
+    merged,
+    mergedUninterpreted(held.uninterpreted, left.uninterpreted),
+  );
   rmSync(commentEmailsFile(records.dataDir, from), { force: true });
   rmSync(commentsFile(records.contentDir, from), { force: true });
 
@@ -659,7 +718,7 @@ export function rebuildCommentIndexes(records: CommentRecords): CommentIndexRepo
   const comments: PostComment[] = [];
 
   for (const slug of commentSlugs(records.contentDir)) {
-    let held: ReturnType<typeof readPost>;
+    let held: HeldPost;
     try {
       held = readPost(records, slug);
     } catch (error) {
@@ -753,7 +812,7 @@ function publishedEntryOf(comment: CommentRecord): PublishedComment {
 }
 
 /** One post's comments as the file spells them: indented, newline ended. */
-function commentsJson(permalink: string, comments: readonly PublishedComment[]): string {
+function commentsJson(permalink: string, comments: readonly unknown[]): string {
   return `${JSON.stringify({ post: permalink, comments }, null, 2)}\n`;
 }
 

@@ -3,6 +3,7 @@ import { commentSlugs, readComments, rewriteComments } from '../comments/records
 import type { CommentRecords } from '../comments/records.ts';
 import { deleteContactMessage, listContactMessages } from '../contact/records.ts';
 import { hasOptedOut, removeCommentOptOut } from '../notifications/optouts.ts';
+import { messageOf } from '../util/errors.ts';
 import { withRedacted } from './retention.ts';
 
 /**
@@ -30,6 +31,11 @@ export interface PersonalDataReport {
   readonly messages: number;
   /** Whether it is on the list of addresses not to email about replies. */
   readonly optedOut: boolean;
+  /**
+   * The posts whose comment or email file does not parse, so their comments
+   * were neither counted nor erased. Each is named in a warning too.
+   */
+  readonly unreadable: readonly string[];
 }
 
 /** Where a person's data can be. */
@@ -65,16 +71,42 @@ export function eraseCommentAuthor(comment: CommentRecord): CommentRecord {
   };
 }
 
+/**
+ * `visit` run on every post with a comment file, and the posts it threw on:
+ * one file that does not parse costs its own post, not every post after it.
+ */
+async function eachPost(
+  contentDir: string,
+  visit: (slug: string) => Promise<void> | void,
+): Promise<string[]> {
+  const unreadable: string[] = [];
+  for (const slug of commentSlugs(contentDir)) {
+    try {
+      await visit(slug);
+    } catch (error) {
+      console.warn(`Comments not searched for personal data: ${messageOf(error)}`);
+      unreadable.push(slug);
+    }
+  }
+  return unreadable;
+}
+
 /** What the site holds under `email`, without changing any of it. */
-export function findPersonalData(stores: PersonalDataStores, email: string): PersonalDataReport {
+export async function findPersonalData(
+  stores: PersonalDataStores,
+  email: string,
+): Promise<PersonalDataReport> {
   const wanted = folded(email);
-  const comments = commentSlugs(stores.records.contentDir)
-    .flatMap((slug) => readComments(stores.records, slug))
-    .filter((comment) => isTheirs(comment, wanted)).length;
+  let comments = 0;
+  const unreadable = await eachPost(stores.records.contentDir, (slug) => {
+    comments += readComments(stores.records, slug).filter((comment) =>
+      isTheirs(comment, wanted),
+    ).length;
+  });
   const messages = listContactMessages(stores.dataDir).filter(
     (message) => folded(message.from.email) === wanted,
   ).length;
-  return { comments, messages, optedOut: hasOptedOut(stores.dataDir, wanted) };
+  return { comments, messages, optedOut: hasOptedOut(stores.dataDir, wanted), unreadable };
 }
 
 /**
@@ -88,15 +120,15 @@ export async function erasePersonalData(
   email: string,
 ): Promise<PersonalDataReport> {
   const wanted = folded(email);
-  if (wanted === '') return { comments: 0, messages: 0, optedOut: false };
+  if (wanted === '') return { comments: 0, messages: 0, optedOut: false, unreadable: [] };
 
   let comments = 0;
-  for (const slug of commentSlugs(stores.records.contentDir)) {
+  const unreadable = await eachPost(stores.records.contentDir, async (slug) => {
     const changed = await rewriteComments(stores.records, slug, (comment) =>
       isTheirs(comment, wanted) ? eraseCommentAuthor(comment) : undefined,
     );
     comments += changed.length;
-  }
+  });
 
   let messages = 0;
   for (const message of listContactMessages(stores.dataDir)) {
@@ -105,5 +137,5 @@ export async function erasePersonalData(
   }
 
   const optedOut = await removeCommentOptOut(stores.dataDir, wanted);
-  return { comments, messages, optedOut };
+  return { comments, messages, optedOut, unreadable };
 }
