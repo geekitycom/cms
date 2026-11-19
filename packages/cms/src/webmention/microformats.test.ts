@@ -136,7 +136,7 @@ describe('sourceEntry', () => {
 
   it('takes an author from a page-level h-card when the entry names none', () => {
     const html = `
-      <div class="h-card"><a class="u-url p-name" href="https://them.example/">Grace</a>
+      <div class="h-card"><a class="u-url p-name" rel="me" href="https://them.example/">Grace</a>
         <img class="u-photo" src="/me.jpg" alt=""></div>
       <div class="h-entry"><div class="e-content"><a href="${TARGET}">there</a></div></div>`;
 
@@ -144,6 +144,66 @@ describe('sourceEntry', () => {
     assert.equal(entry.author.name, 'Grace');
     assert.equal(entry.author.url, 'https://them.example/');
     assert.equal(entry.author.photo, 'https://them.example/me.jpg');
+  });
+
+  it('takes a page-level h-card whose url is the page itself', () => {
+    const html = `
+      <div class="h-card"><a class="p-name u-url" href="${SOURCE}">Grace</a></div>
+      <div class="h-entry"><div class="e-content"><a href="${TARGET}">there</a></div></div>`;
+
+    assert.equal(sourceEntry(html, SOURCE, isTarget).author.name, 'Grace');
+  });
+
+  it('prefers the page-level h-card the page links rel=me over the first one', () => {
+    const html = `
+      <link rel="me" href="https://them.example/">
+      <div class="h-card"><a class="u-url p-name" href="https://friend.example/">Friend</a></div>
+      <div class="h-card"><a class="u-url p-name" href="https://them.example/">Grace</a></div>
+      <div class="h-entry"><div class="e-content"><a href="${TARGET}">there</a></div></div>`;
+
+    assert.equal(sourceEntry(html, SOURCE, isTarget).author.name, 'Grace');
+  });
+
+  it('does not credit a page-level h-card that is neither the page nor rel=me', () => {
+    const html = `
+      <div class="h-card"><a class="u-url p-name" href="https://friend.example/">Friend</a></div>
+      <div class="h-entry"><div class="e-content"><a href="${TARGET}">there</a></div></div>`;
+
+    assert.equal(sourceEntry(html, SOURCE, isTarget).author.name, 'them.example');
+  });
+
+  it('does not take the author of the post it replies to as its own', () => {
+    const html = `
+      <article class="h-entry">
+        <div class="u-in-reply-to h-cite">
+          <a class="u-url" href="${TARGET}">Hello</a>
+          <a class="p-author h-card" rel="me" href="https://blog.example/">Site Owner</a>
+        </div>
+        <div class="e-content"><p>A stranger’s words.</p></div>
+      </article>`;
+
+    const entry = sourceEntry(html, SOURCE, isTarget);
+    assert.equal(entry.author.name, 'them.example');
+    assert.equal(entry.author.url, null);
+  });
+
+  it('does not take the author of another entry on the page', () => {
+    const html = `
+      <div class="h-entry"><a class="p-author h-card" rel="me" href="https://them.example/">Other</a>
+        <p class="p-name">Another post</p></div>
+      <div class="h-entry"><a class="u-in-reply-to" href="${TARGET}">re</a></div>`;
+
+    assert.equal(sourceEntry(html, SOURCE, isTarget).author.name, 'them.example');
+  });
+
+  it('takes the author of the h-feed that holds the entry', () => {
+    const html = `
+      <div class="h-feed"><a class="p-author h-card" href="https://them.example/">Grace</a>
+        <div class="h-entry"><a class="u-in-reply-to" href="${TARGET}">re</a></div></div>`;
+
+    const entry = sourceEntry(html, SOURCE, isTarget);
+    assert.equal(entry.author.name, 'Grace');
+    assert.equal(entry.author.url, 'https://them.example/');
   });
 
   it('falls back to the page title and the host when the page has no microformats', () => {

@@ -183,7 +183,7 @@ export function sourceEntry(
 
   const named = (url: string): boolean => isTarget(withoutFragment(url));
   const chosen = chooseEntry(root, entries, named, base);
-  const author = authorOf(chosen, items, sourceUrl);
+  const author = authorOf(chosen, items, root, sourceUrl, base);
   const content = contentOf(chosen, root);
 
   const kind = chosen === undefined ? 'mention' : kindOf(chosen, named);
@@ -442,29 +442,71 @@ function kindOf(entry: MicroformatItem, isTarget: (url: string) => boolean): Web
 /**
  * Who wrote an entry.
  *
- * The entry's own `p-author` first, then a representative `h-card` on the page,
- * then the source's host — which is not a name but is the truest thing the site
- * knows, and is better on a page than an empty byline.
+ * The entry's own `p-author` first, then the `p-author` of the `h-feed` that
+ * holds it, then the page's representative `h-card`, then the source's host —
+ * which is not a name but is the truest thing the site knows, and is better on
+ * a page than an empty byline.
  */
 function authorOf(
   entry: MicroformatItem | undefined,
   items: readonly MicroformatItem[],
+  root: HtmlElement,
   sourceUrl: string,
+  base: string,
 ): SourceEntry['author'] {
-  const named = entry === undefined ? undefined : first(entry, 'author');
+  const feed =
+    entry === undefined
+      ? undefined
+      : items.find((item) => item.types.includes('h-feed') && item.children.includes(entry));
 
-  if (named?.item !== undefined) return cardOf(named.item);
-  if (named !== undefined && named.text !== '') {
-    return { name: named.text, url: null, photo: null };
+  for (const holder of [entry, feed]) {
+    const named = holder === undefined ? undefined : first(holder, 'author');
+    if (named?.item !== undefined) return cardOf(named.item);
+    if (named !== undefined && named.text !== '') {
+      return { name: named.text, url: null, photo: null };
+    }
   }
 
-  const card = itemsOfType(items, 'h-card')[0];
+  const card = representativeCard(items, root, sourceUrl, base);
   if (card !== undefined) {
     const read = cardOf(card);
     if (read.name !== '') return read;
   }
 
   return { name: hostOf(sourceUrl), url: null, photo: null };
+}
+
+/**
+ * The `h-card` that stands for the page's owner: one at the top of the page,
+ * not inside an entry or a citation, whose `u-url` is the page itself or a
+ * page it links `rel=me`.
+ */
+function representativeCard(
+  items: readonly MicroformatItem[],
+  root: HtmlElement,
+  sourceUrl: string,
+  base: string,
+): MicroformatItem | undefined {
+  const page = normalize(sourceUrl, sourceUrl);
+  const me = relMeOf(root, base);
+  return items.find(
+    (item) =>
+      item.types.includes('h-card') &&
+      (item.properties['url'] ?? []).some((url) => url.text === page || me.has(url.text)),
+  );
+}
+
+/** The pages a page links `rel=me`, resolved. */
+function relMeOf(root: HtmlElement, base: string): Set<string> {
+  const me = new Set<string>();
+  for (const element of elementsIn(root)) {
+    if (element.name !== 'a' && element.name !== 'link' && element.name !== 'area') continue;
+    const rels = (element.attributes['rel'] ?? '').toLowerCase().split(/\s+/);
+    if (!rels.includes('me')) continue;
+    const href = normalize(element.attributes['href'] ?? '', base);
+    if (href !== undefined) me.add(href);
+  }
+  return me;
 }
 
 /** One `h-card` as a name, a page and an avatar. */

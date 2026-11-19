@@ -89,6 +89,12 @@ answers:
    microformats from one page and at most 16 property classes from one
    element. It keeps the first 64 KiB of the text and of the markup of each
    property value, so a longer `e-content` is cut short.
+   The author is the entry's own `p-author`, or else the `p-author` of the
+   `h-feed` that holds the entry, or else the page's representative `h-card`:
+   an `h-card` that is not inside another microformat and whose `u-url` is the
+   source URL or a link marked `rel="me"`. An `h-card` inside the entry, such as
+   the author of the post it replies to, is not used. When there is no author,
+   the site shows the source's host.
 4. It files the result as a **pending comment** with `source: "webmention"`.
 
 The comment goes in the same file, the same thread, and the same moderation
