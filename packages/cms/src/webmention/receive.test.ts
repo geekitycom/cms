@@ -527,6 +527,30 @@ describe('a webmention that comes again', () => {
 
     assert.deepEqual(stored(cms), []);
   });
+
+  for (const status of [401, 403, 408, 429, 451]) {
+    it(`keeps an approved one when the source answers ${status}`, async () => {
+      const cms = await site();
+      pages.set('https://them.example/note', {
+        body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+      });
+      await sendAndSettle(cms, 'https://them.example/note');
+      const first = stored(cms)[0];
+      assert.ok(first !== undefined);
+      await updateComment(
+        { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+        first.id,
+        { status: 'approved' },
+      );
+
+      pages.set('https://them.example/note', { status, body: 'no' });
+      await sendAndSettle(cms, 'https://them.example/note');
+
+      const held = stored(cms);
+      assert.equal(held.length, 1, `a ${status} is not the page saying it is gone`);
+      assert.equal(held[0]?.status, 'approved');
+    });
+  }
 });
 
 describe('an approved webmention that comes again', () => {

@@ -441,7 +441,7 @@ export type NotStored = 'gone' | 'unlinked' | 'discarded';
 /** What reading a source page came to. */
 type FetchedSource =
   | { kind: 'read'; body: string; url: string; html: boolean }
-  /** Definitely not there: a 404, a 410, anything a retry will not fix. */
+  /** Definitely not there: a 404 or a 410. */
   | { kind: 'gone' }
   /** Not readable this time, which is not the same thing at all. */
   | { kind: 'unreachable'; reason: string };
@@ -458,11 +458,10 @@ async function readSource(source: string, lookup: HostLookup): Promise<FetchedSo
   });
 
   if (!fetched.ok) {
-    // A page the server says is not there is a page that is not linking here.
-    // A server that is broken is a different thing and takes nothing with it.
-    if (fetched.status !== undefined && fetched.status >= 400 && fetched.status < 500) {
-      return { kind: 'gone' };
-    }
+    // Only a 404 or a 410 says the page is not there. Every other refusal —
+    // bot protection, a rate limit, a timeout, a broken server — says only
+    // that it could not be read this time, and takes nothing with it.
+    if (fetched.status === 404 || fetched.status === 410) return { kind: 'gone' };
     return { kind: 'unreachable', reason: fetched.reason };
   }
 
