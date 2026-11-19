@@ -81,7 +81,8 @@ site reports a webmention to Akismet as a `webmention`, not as a `comment`.
 A reply can name, in `u-in-reply-to`, a reply that is already on the post:
 
 - a comment, by its own page or its `#comment-{key}` anchor
-- an earlier webmention, by the page it was sent from
+- an earlier webmention of any kind (a reply, like, repost, mention or RSVP),
+  by the page it was sent from
 - a fediverse reply, by its url or id
 
 The new reply threads under the named reply. When the source is edited and

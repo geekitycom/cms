@@ -147,6 +147,9 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
 
   const held =
     origin === 'webmention' ? heldWebmention(records, comment.slug, comment.url) : undefined;
+  if (held !== undefined && comment.via !== undefined && held.via !== comment.via) {
+    return { kind: 'stored', comment: held, created: false };
+  }
 
   const verdict = await ask(options, proposed);
 

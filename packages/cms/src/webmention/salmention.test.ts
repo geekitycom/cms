@@ -53,6 +53,18 @@ Answering them.
 `;
 const REPLY_POST_URL = `${BASE_URL}/2026/09/re-upstream/`;
 
+const EVENT = `---
+title: IndieWeb Camp
+date: '2026-09-19T09:00:00Z'
+permalink: /2026/09/camp/
+start: '2026-10-10T14:00:00Z'
+location: Chicago Public Library
+---
+
+Two days of building.
+`;
+const EVENT_URL = `${BASE_URL}/2026/09/camp/`;
+
 const SOURCE = 'https://ada.example/2026/09/reply/';
 
 interface Page {
@@ -140,6 +152,7 @@ async function site(
 
   await mkdir(path.join(contentDir, 'posts'), { recursive: true });
   await writeFile(path.join(contentDir, 'posts', '2026-09-19-hello-world.md'), POST, 'utf8');
+  await writeFile(path.join(contentDir, 'posts', '2026-09-19-camp.md'), EVENT, 'utf8');
   await writeFile(
     path.join(contentDir, 'posts', '2026-09-19-re-upstream.md'),
     options.migrated === true ? REPLY_POST.replace('---\n', '---\nmigrated: true\n') : REPLY_POST,
@@ -188,8 +201,8 @@ function held(cms: Cms, slug = 'hello-world'): PostComment[] {
   return cms.admin.listCommentsFor(slug);
 }
 
-function byUrl(cms: Cms, url: string): PostComment | undefined {
-  return held(cms).find((one) => one.url === url);
+function byUrl(cms: Cms, url: string, slug = 'hello-world'): PostComment | undefined {
+  return held(cms, slug).find((one) => one.url === url);
 }
 
 async function approveAll(cms: Cms, slug = 'hello-world'): Promise<void> {
@@ -210,10 +223,14 @@ function cite(url: string, name: string, words: string, inside = ''): string {
 
 /** A source page answering the post, carrying these nested replies. */
 function source(...nested: string[]): string {
+  return sourceTo(POST_URL, ...nested);
+}
+
+function sourceTo(target: string, ...nested: string[]): string {
   return `<html><body><article class="h-entry">
     <a class="p-author h-card" href="https://ada.example/">Ada</a>
     <a class="u-url" href="${SOURCE}">permalink</a>
-    <a class="u-in-reply-to" href="${POST_URL}">re</a>
+    <a class="u-in-reply-to" href="${target}">re</a>
     <div class="e-content"><p>Ada replies.</p></div>
     ${nested.join('')}
   </article></body></html>`;
@@ -334,6 +351,77 @@ describe('receiving a salmention (TASK-320)', () => {
     pages.set(SOURCE, { body: source() });
     await sendAndSettle(cms, SOURCE);
     assert.ok(byUrl(cms, CAROL) !== undefined, 'so the source dropping her does not delete her');
+  });
+});
+
+describe('a nested reply naming a webmention that is not a reply', () => {
+  it('leaves an approved like as it is, and the carrier cannot take it away', async () => {
+    const cms = await site();
+    pages.set(DAN, {
+      body: `<article class="h-entry"><a class="p-author h-card" href="https://dan.example/">Dan</a>
+        <a class="u-like-of" href="${POST_URL}">liked</a></article>`,
+    });
+    await sendAndSettle(cms, DAN);
+    const like = byUrl(cms, DAN);
+    assert.equal(like?.kind, 'like');
+    await updateComment(records(cms), like?.id ?? '', { status: 'approved' });
+
+    pages.set(SOURCE, { body: source(cite(DAN, 'Mallory', 'Words Dan never wrote.')) });
+    await sendAndSettle(cms, SOURCE);
+
+    const after = byUrl(cms, DAN);
+    assert.equal(after?.kind, 'like');
+    assert.equal(after?.via, undefined);
+    assert.equal(after?.author.name, 'Dan');
+    assert.equal(after?.content.html, '');
+    const page = await (await cms.app.request('/2026/09/hello-world/')).text();
+    assert.doesNotMatch(page, /Words Dan never wrote\./);
+
+    pages.set(SOURCE, { body: source() });
+    await sendAndSettle(cms, SOURCE);
+    assert.equal(byUrl(cms, DAN)?.status, 'approved');
+  });
+
+  it('leaves an approved like alone when a checker says to throw the nested reply away', async () => {
+    const cms = await site({
+      checker: {
+        check: ({ comment }) => (comment.author.name === 'Mallory' ? 'discard' : 'unknown'),
+      },
+    });
+    const like = await addComment(records(cms), {
+      ...nativeComment(),
+      source: 'webmention',
+      kind: 'like',
+      status: 'approved',
+      author: { name: 'Dan', url: 'https://dan.example/', email: null, avatar: null },
+      content: { markdown: '', html: '' },
+      url: DAN,
+    });
+    pages.set(SOURCE, { body: source(cite(DAN, 'Mallory', 'Words Dan never wrote.')) });
+    await sendAndSettle(cms, SOURCE);
+    assert.equal(byUrl(cms, DAN)?.id, like.id);
+  });
+
+  it('leaves an approved RSVP on an event as it is', async () => {
+    const cms = await site();
+    pages.set(DAN, {
+      body: `<article class="h-entry"><a class="p-author h-card" href="https://dan.example/">Dan</a>
+        <a class="u-in-reply-to" href="${EVENT_URL}">camp</a>
+        <data class="p-rsvp" value="yes">yes</data></article>`,
+    });
+    await sendAndSettle(cms, DAN, EVENT_URL);
+    const rsvp = byUrl(cms, DAN, 'camp');
+    assert.equal(rsvp?.rsvp, 'yes');
+    await updateComment(records(cms), rsvp?.id ?? '', { status: 'approved' });
+
+    pages.set(SOURCE, { body: sourceTo(EVENT_URL, cite(DAN, 'Mallory', 'Forged RSVP words.')) });
+    await sendAndSettle(cms, SOURCE, EVENT_URL);
+
+    const after = byUrl(cms, DAN, 'camp');
+    assert.equal(after?.kind, rsvp?.kind);
+    assert.equal(after?.rsvp, 'yes');
+    assert.equal(after?.via, undefined);
+    assert.equal(after?.author.name, 'Dan');
   });
 });
 

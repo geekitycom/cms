@@ -1087,6 +1087,30 @@ describe('a webmention that answers a reply on the post (TASK-319)', () => {
     assert.equal(second?.kind, 'reply', 'a reply here though it never names the post itself');
   });
 
+  it('threads under an approved plain mention its source answers', async () => {
+    const cms = await site();
+    pages.set('https://dan.example/2', {
+      body: reply(`<div class="e-content"><p>See <a href="${POST_URL}">this</a>.</p></div>`),
+    });
+    await sendAndSettle(cms, 'https://dan.example/2');
+    const mention = stored(cms)[0];
+    assert.equal(mention?.kind, 'mention');
+    const { updateComment } = await import('../comments/records.ts');
+    await updateComment(records(cms), mention?.id ?? '', { status: 'approved' });
+
+    pages.set('https://eli.example/3', {
+      body: reply(
+        '<a class="u-in-reply-to" href="https://dan.example/2">re</a>' +
+          `<div class="e-content"><p>Eli answers <a href="${POST_URL}">Dan</a>.</p></div>`,
+      ),
+    });
+    await sendAndSettle(cms, 'https://eli.example/3');
+
+    const eli = stored(cms).find((one) => one.url === 'https://eli.example/3');
+    assert.equal(eli?.inReplyTo, mention?.id);
+    assert.equal(eli?.kind, 'reply');
+  });
+
   it('threads under a fediverse reply its source answers by the note’s url or id (AC #2)', async () => {
     const cms = await site();
     federatedNote(cms);
