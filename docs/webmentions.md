@@ -87,7 +87,9 @@ queue as every other comment. It goes through the same `commentChecker` seam.
 A checker can tell a webmention from a form submission by its `source`. The
 site reports a webmention to Akismet as a `webmention`, not as a `comment`.
 
-A reply can name, in `u-in-reply-to`, a reply that is already on the post:
+A reply can name, in `u-in-reply-to`, a reply that is already on the post.
+The site reads the first 8 distinct `u-in-reply-to` values and ignores the
+rest. A named reply can be:
 
 - a comment, by its own page or its `#comment-{key}` anchor
 - an earlier webmention of any kind (a reply, like, repost, mention or RSVP),

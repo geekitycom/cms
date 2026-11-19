@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import type { PostComment } from '../store/admin-store.ts';
+import type { ConversationSite } from '../comments/conversation.ts';
+import type { Document } from '../content/document.ts';
+import { openAdminStore } from '../store/admin-store.ts';
+import type { AdminStore, PostComment } from '../store/admin-store.ts';
 import type { CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -15,6 +18,7 @@ import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
+import { verifyWebmention } from './receive.ts';
 import {
   addComment,
   commentsFile,
@@ -1605,5 +1609,62 @@ describe('what the endpoint answers, word for word', () => {
       await response.text(),
       'Send a webmention here with a POST carrying source and target.',
     );
+  });
+});
+
+describe('a source that answers many things', () => {
+  const openStores: AdminStore[] = [];
+  after(() => {
+    for (const opened of openStores) opened.close();
+  });
+
+  it('asks the conversation about a few of them, not every one', async () => {
+    const source = 'https://them.example/2026/09/reply/';
+    const values = 2_000;
+    const links = Array.from(
+      { length: values },
+      (_, i) => `<a class="u-in-reply-to" href="https://elsewhere.example/${i}">${i}</a>`,
+    ).join('');
+    pages.set(source, {
+      body: `<article class="h-entry">
+        <a class="u-in-reply-to" href="${POST_URL}">the post</a>${links}
+        <p class="e-content">Hello.</p>
+      </article>`,
+    });
+    const dataDir = await temporaryDir('geekity-webmention-answers-');
+    const contentDir = await temporaryDir('geekity-webmention-answers-content-');
+    const admin = openAdminStore({ dataDir });
+    openStores.push(admin);
+    let asked = 0;
+
+    const outcome = await verifyWebmention({
+      incoming: {
+        source,
+        target: POST_URL,
+        document: {
+          slug: 'hello-world',
+          permalink: '/2026/09/hello-world/',
+          title: 'Hello world',
+          html: '<p>Words.</p>',
+        } as unknown as Document,
+      },
+      records: { admin, contentDir, dataDir },
+      dataDir,
+      baseUrl: BASE_URL,
+      conversation: {
+        replyNamed: () => {
+          asked += 1;
+          return undefined;
+        },
+        comment: () => undefined,
+      },
+      site: {} as ConversationSite,
+      now: NOW,
+      lookup,
+      logger: { warn: () => {} },
+    });
+
+    assert.equal(outcome.kind, 'stored');
+    assert.ok(asked <= 10, `asked about ${asked} of ${values + 1} values`);
   });
 });

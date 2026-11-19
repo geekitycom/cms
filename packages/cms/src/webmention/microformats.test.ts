@@ -143,6 +143,25 @@ describe('sourceEntry', () => {
   });
 });
 
+describe('what an entry answers', () => {
+  it('names each thing once, and only the first few', () => {
+    const others = Array.from(
+      { length: 20 },
+      (_, i) => `<a class="u-in-reply-to" href="https://elsewhere.example/${i}">${i}</a>`,
+    ).join('');
+    const html = `<article class="h-entry">
+      <a class="u-in-reply-to" href="${TARGET}">the post</a>
+      <a class="u-in-reply-to" href="${TARGET}">the post again</a>${others}
+    </article>`;
+
+    const { inReplyTo } = sourceEntry(html, SOURCE, isTarget);
+
+    assert.equal(inReplyTo[0], TARGET);
+    assert.equal(new Set(inReplyTo).size, inReplyTo.length);
+    assert.ok(inReplyTo.length > 1 && inReplyTo.length <= 10, `kept ${inReplyTo.length}`);
+  });
+});
+
 describe('sourceEntry replies (TASK-320)', () => {
   const entry = (inside: string): string => `
     <article class="h-entry">

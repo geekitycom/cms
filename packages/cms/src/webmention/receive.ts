@@ -255,10 +255,7 @@ export async function verifyWebmention(
 
   // The first of the things it answers that is a reply on this post. A source
   // answering one is a reply here even when it never names the post itself.
-  const inReplyTo =
-    entry?.inReplyTo
-      .map((url) => options.conversation.replyNamed(incoming.document, url, options.site)?.id)
-      .find((id) => id !== undefined) ?? null;
+  const inReplyTo = answered(options, entry?.inReplyTo ?? []);
   const kind = inReplyTo === null ? (entry?.kind ?? 'mention') : 'reply';
   const author = {
     name:
@@ -325,6 +322,14 @@ export async function verifyWebmention(
   return outcome.kind === 'discarded' && outcome.removed
     ? { kind: 'deleted', why: 'discarded' }
     : { kind: 'ignored', why: 'discarded' };
+}
+
+function answered(options: VerifyWebmentionOptions, urls: readonly string[]): string | null {
+  for (const url of urls) {
+    const named = options.conversation.replyNamed(options.incoming.document, url, options.site);
+    if (named !== undefined) return named.id;
+  }
+  return null;
 }
 
 /** Whether `source` (which has no fragment by now) is the reply's own page. */

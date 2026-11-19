@@ -106,6 +106,12 @@ export const MICROFORMAT_ITEMS_PER_PAGE = 1_000;
  */
 export const MICROFORMAT_VALUE_LENGTH = 65_536;
 
+/**
+ * How many of an entry's `in-reply-to` values are kept. A reply answers one
+ * thing, or a few; each one kept is looked for in the post's conversation.
+ */
+const IN_REPLY_TO_PER_ENTRY = 8;
+
 /** How many property classes are read off one element. */
 const PROPERTIES_PER_ELEMENT = 16;
 
@@ -199,7 +205,9 @@ export function sourceEntry(
                 ? value.text
                 : (first(value.item, 'url')?.text ?? value.text),
             )
-            .filter((url) => url !== ''),
+            .filter((url) => url !== '')
+            .filter((url, index, urls) => urls.indexOf(url) === index)
+            .slice(0, IN_REPLY_TO_PER_ENTRY),
   };
 }
 
