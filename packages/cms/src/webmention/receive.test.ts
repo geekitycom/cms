@@ -76,7 +76,7 @@ const NOW = new Date('2026-09-20T12:00:00.000Z');
 /** What the make-believe web answers for one URL. */
 interface Page {
   status?: number;
-  body?: string;
+  body?: string | Uint8Array;
   redirectTo?: string;
   contentType?: string;
 }
@@ -199,10 +199,10 @@ function stored(cms: Cms): PostComment[] {
 }
 
 /** A source page whose h-entry answers the post. */
-function reply(body: string): string {
+function reply(body: string, author = 'Ada Lovelace'): string {
   return `<html><head><title>A reply</title></head><body>
     <article class="h-entry">
-      <a class="p-author h-card" href="https://them.example/">Ada Lovelace
+      <a class="p-author h-card" href="https://them.example/">${author}
         <img class="u-photo" src="/me.jpg" alt=""></a>
       ${body}
       <time class="dt-published" datetime="2026-09-20T09:00:00Z">20 September</time>
@@ -528,6 +528,23 @@ describe('a webmention that comes again', () => {
     assert.deepEqual(stored(cms), []);
   });
 
+  it('keeps it when the page grows past the read limit with the link after the cut', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+    assert.equal(stored(cms).length, 1);
+
+    const padding = `<!-- ${'x'.repeat(1_200_000)} -->`;
+    pages.set('https://them.example/note', {
+      body: reply(`${padding}<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms).length, 1, 'a page read only in part is not proof the link is gone');
+  });
+
   for (const status of [401, 403, 408, 429, 451]) {
     it(`keeps an approved one when the source answers ${status}`, async () => {
       const cms = await site();
@@ -551,6 +568,44 @@ describe('a webmention that comes again', () => {
       assert.equal(held[0]?.status, 'approved');
     });
   }
+});
+
+describe('a source in another character encoding', () => {
+  const latin1 = (text: string): Uint8Array => Uint8Array.from(text, (char) => char.charCodeAt(0));
+
+  it('reads it by the charset in its content type', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: latin1(reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`, 'René')),
+      contentType: 'text/html; charset=windows-1252',
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms)[0]?.author.name, 'René');
+  });
+
+  it('reads it by a meta charset when the content type names none', async () => {
+    const cms = await site();
+    const html = reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`, 'René').replace(
+      '<head>',
+      '<head><meta charset="iso-8859-1">',
+    );
+    pages.set('https://them.example/note', { body: latin1(html), contentType: 'text/html' });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms)[0]?.author.name, 'René');
+  });
+
+  it('reads it as UTF-8 when the charset is not one it knows', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`, 'René'),
+      contentType: 'text/html; charset=no-such-encoding',
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms)[0]?.author.name, 'René');
+  });
 });
 
 describe('an approved webmention that comes again', () => {

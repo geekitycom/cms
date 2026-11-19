@@ -216,6 +216,12 @@ export async function verifyWebmention(
     return { kind: 'unreachable', reason: fetched.reason };
   }
 
+  if (fetched.kind === 'read' && fetched.truncated && !mentions(fetched, incoming)) {
+    const reason = 'the link was not in the part of the page that was read';
+    options.logger.warn(`Could not read all of ${incoming.source} to verify a webmention`);
+    return { kind: 'unreachable', reason };
+  }
+
   if (fetched.kind === 'gone' || !mentions(fetched, incoming)) {
     // Another URL of the same post says nothing about what was stored from
     // the source, so only a source that names none of them takes it away.
@@ -440,7 +446,7 @@ export type NotStored = 'gone' | 'unlinked' | 'discarded';
 
 /** What reading a source page came to. */
 type FetchedSource =
-  | { kind: 'read'; body: string; url: string; html: boolean }
+  | { kind: 'read'; body: string; url: string; html: boolean; truncated: boolean }
   /** Definitely not there: a 404 or a 410. */
   | { kind: 'gone' }
   /** Not readable this time, which is not the same thing at all. */
@@ -467,10 +473,27 @@ async function readSource(source: string, lookup: HostLookup): Promise<FetchedSo
 
   return {
     kind: 'read',
-    body: new TextDecoder().decode(fetched.body),
+    body: decode(fetched.body, fetched.type),
     url: fetched.url,
     html: /^\s*(text\/html|application\/xhtml\+xml)/i.test(fetched.type),
+    truncated: fetched.truncated,
   };
+}
+
+/**
+ * The text of a body, in the encoding its `Content-Type` names, or failing that
+ * the one a `<meta>` in its first kilobyte names, or failing both, UTF-8.
+ */
+function decode(body: Uint8Array, type: string): string {
+  const head = new TextDecoder('latin1').decode(body.subarray(0, 1024));
+  const label =
+    /;\s*charset\s*=\s*["']?([^"';\s]+)/i.exec(type)?.[1] ??
+    /<meta[^>]+charset\s*=\s*["']?([^"'\s/>;]+)/i.exec(head)?.[1];
+  try {
+    return new TextDecoder(label).decode(body);
+  } catch {
+    return new TextDecoder().decode(body);
+  }
 }
 
 /**

@@ -67,7 +67,10 @@ The endpoint takes a form `POST` of `source` and `target`. It answers `202`
 for a request worth checking and `400` for one that is not. It does the checks
 after it answers:
 
-1. It fetches the source.
+1. It fetches the source, up to its first megabyte. It decodes the source in
+   the character encoding that its `Content-Type` names. When the header names
+   none, it uses the encoding that a `<meta>` element in the first kilobyte
+   names. Otherwise it uses UTF-8.
 2. It checks that the source links to the target.
 3. It reads the source's microformats: `h-entry`, `h-card`, and whether it is a
    reply, a like, a repost, or a plain mention.
@@ -96,7 +99,9 @@ The source URL identifies a webmention. When a page sends its webmention
 again, the site updates the earlier entry and does not add a second one. When
 the link is gone from the source, or the source answers 404 or 410, the site
 removes the entry. Any other failure to read the source, such as a 401, 403,
-408, 429, 451 or 5xx answer or a timeout, changes nothing. A source that does
+408, 429, 451 or 5xx answer or a timeout, changes nothing. A source larger
+than a megabyte that has no link to the target in its first megabyte also
+changes nothing, because the link can be in the part that was not read. A source that does
 not link to the target but still links to another URL of the same post keeps
 its entry. Those URLs are the post's page, a former permalink, a comment page
 on the post, and a syndicated copy.
@@ -128,15 +133,15 @@ files it as the same comment, so a link that was pinged and mentioned is one
 entry. XML-RPC expects an answer, so the endpoint reads the source before it
 replies. A failure returns one of the spec's fault codes:
 
-| Code     | Meaning                                                                                                                                                                                          |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `0x0000` | The source could not be read this time: it timed out, the server failed, or it answered any 4xx status other than 404 and 410. Nothing stored changes. Also sent when the ping was not accepted. |
-| `0x0010` | The source answers 404 or 410, or its URL is not a public `http` or `https` page.                                                                                                                |
-| `0x0011` | The source does not link here.                                                                                                                                                                   |
-| `0x0020` | The target does not exist.                                                                                                                                                                       |
-| `0x0021` | The target takes no pingbacks.                                                                                                                                                                   |
-| `0x0030` | The ping was sent before. The site still rewrites the entry from the source as it reads now.                                                                                                     |
-| `-32700` | The body is over 16 KB, the XML is not well formed, or it has a document type declaration. The site refuses these before it resolves anything.                                                   |
+| Code     | Meaning                                                                                                                                                                                                                                                                     |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0x0000` | The source could not be read this time: it timed out, the server failed, or it answered any 4xx status other than 404 and 410, or it is larger than a megabyte and has no link in the part that was read. Nothing stored changes. Also sent when the ping was not accepted. |
+| `0x0010` | The source answers 404 or 410, or its URL is not a public `http` or `https` page.                                                                                                                                                                                           |
+| `0x0011` | The source does not link here.                                                                                                                                                                                                                                              |
+| `0x0020` | The target does not exist.                                                                                                                                                                                                                                                  |
+| `0x0021` | The target takes no pingbacks.                                                                                                                                                                                                                                              |
+| `0x0030` | The ping was sent before. The site still rewrites the entry from the source as it reads now.                                                                                                                                                                                |
+| `-32700` | The body is over 16 KB, the XML is not well formed, or it has a document type declaration. The site refuses these before it resolves anything.                                                                                                                              |
 
 The CMS does not send pingbacks.
 
