@@ -110,6 +110,14 @@ answers:
    source's host.
 4. It files the result as a **pending comment** with `source: "webmention"`.
 
+**One address can send only so many.** Each client address can send 60
+webmentions and pingbacks together in 10 minutes. After that, the webmention
+endpoint answers `429` with a `Retry-After` header, and the pingback endpoint
+answers fault `0x0000`. Nothing is recorded or fetched for a refused request.
+The site counts IPv6 addresses by their /64. Behind a proxy, set `trustProxy`
+so that the site counts the address in `X-Forwarded-For`, not the proxy's
+address. `rateLimit` in the site config sets another limit.
+
 **Accepted webmentions are recorded before the answer.** Before the endpoint
 answers `202`, it writes the webmention to `data/webmention-checks.json` with
 the source, the target, and the sender's address, user agent and referrer for
@@ -150,6 +158,7 @@ export default defineConfig({
     retryDelaysMs: [60_000, 600_000, 3_600_000, 21_600_000],
     maxWaiting: 1000,
     pingbackAnswerMs: 20_000,
+    rateLimit: { requests: 60, windowSeconds: 600 },
   },
 });
 ```
@@ -171,6 +180,17 @@ rest. A named reply can be:
 The new reply threads under the named reply. When the source is edited and
 sent again, the reply moves with it. A webmention sent to a comment's page,
 `/comment/{key}/`, lands on that comment's post.
+
+A source can carry replies from other pages in its `h-entry`, as
+`p-comment h-cite` items or as `h-entry` or `h-cite` children whose
+`u-in-reply-to` is the entry. This is a salmention. The site files each
+carried reply as a pending webmention under the source, with the reply's own
+page as its URL. It reads at most 20 carried replies from one source, at most
+8 levels deep. The spam checker is asked only about the source. The replies a
+spam source carries are filed as spam, and the others wait for a moderator.
+The moderators get one notice for the source and the replies it carries. When
+the source stops carrying a reply, the site removes it, unless the reply's own
+page has since sent its own webmention.
 
 The endpoint refuses a target on this site with a query string, because no
 page here has one.
@@ -226,15 +246,15 @@ answers `0x0000` with "The source is still being checked". The record keeps
 the ping, and the check runs to the end and files it as usual. When 1,000
 checks are waiting, a new ping gets `0x0000` and is not recorded. A failure returns one of the spec's fault codes:
 
-| Code     | Meaning                                                                                                                                                                                                                                                                                                                                                            |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `0x0000` | The source could not be read this time: it timed out, the server failed, or it answered any 4xx status other than 404 and 410, or it is larger than a megabyte and has no link in the part that was read. Nothing stored changes. Also sent when the ping was not accepted, when too many checks are waiting, and when the check is still running at the deadline. |
-| `0x0010` | The source answers 404 or 410, its URL is not a public `http` or `https` page, or it is a page on this site.                                                                                                                                                                                                                                                       |
-| `0x0011` | The source does not link here.                                                                                                                                                                                                                                                                                                                                     |
-| `0x0020` | The target does not exist.                                                                                                                                                                                                                                                                                                                                         |
-| `0x0021` | The target takes no pingbacks.                                                                                                                                                                                                                                                                                                                                     |
-| `0x0030` | The ping was sent before. The site still rewrites the entry from the source as it reads now.                                                                                                                                                                                                                                                                       |
-| `-32700` | The body is over 16 KB, the XML is not well formed, or it has a document type declaration. The site refuses these before it resolves anything.                                                                                                                                                                                                                     |
+| Code     | Meaning                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `0x0000` | The source could not be read this time: it timed out, the server failed, or it answered any 4xx status other than 404 and 410, or it is larger than a megabyte and has no link in the part that was read. Nothing stored changes. Also sent when the ping was not accepted, when its address has sent too many, when too many checks are waiting, and when the check is still running at the deadline. |
+| `0x0010` | The source answers 404 or 410, its URL is not a public `http` or `https` page, or it is a page on this site.                                                                                                                                                                                                                                                                                           |
+| `0x0011` | The source does not link here.                                                                                                                                                                                                                                                                                                                                                                         |
+| `0x0020` | The target does not exist.                                                                                                                                                                                                                                                                                                                                                                             |
+| `0x0021` | The target takes no pingbacks.                                                                                                                                                                                                                                                                                                                                                                         |
+| `0x0030` | The ping was sent before. The site still rewrites the entry from the source as it reads now.                                                                                                                                                                                                                                                                                                           |
+| `-32700` | The body is over 16 KB, the XML is not well formed, or it has a document type declaration. The site refuses these before it resolves anything.                                                                                                                                                                                                                                                         |
 
 The CMS does not send pingbacks.
 

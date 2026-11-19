@@ -16,19 +16,29 @@ import { checkWebmentionRequest } from '../webmention/receive.ts';
 import type { ReceivedWebmention } from '../webmention/service.ts';
 import { messageOf } from '../util/errors.ts';
 import { readBounded } from './bounded-body.ts';
-import type { SyndicatedAt } from './webmention-routes.ts';
+import type { SenderLimit, SyndicatedAt } from './webmention-routes.ts';
 import type { GeekityEnv } from './env.ts';
 import { escapeXml } from './feed-xml.ts';
 import { clientAddress } from './throttle.ts';
 
 /** Register the pingback endpoint. Mounted by the public site. */
-export function mountPingbacks(app: Hono<GeekityEnv>, syndicatedAt: SyndicatedAt): void {
+export function mountPingbacks(
+  app: Hono<GeekityEnv>,
+  syndicatedAt: SyndicatedAt,
+  limit: SenderLimit,
+): void {
   app.post(PINGBACK_PATH, async (c) => {
     if (!c.var.siteAtRequestStart.webmentions_receive) {
       return c.text('This site does not take pingbacks.', 404);
     }
 
-    const answer = await answerPing(c, syndicatedAt);
+    const answer =
+      limit(c) === undefined
+        ? await answerPing(c, syndicatedAt)
+        : {
+            code: PINGBACK_FAULTS.generic,
+            message: 'Too many pings from this address. Send it again later.',
+          };
     return c.body(typeof answer === 'string' ? success(answer) : fault(answer), 200, {
       'content-type': 'text/xml; charset=utf-8',
     });

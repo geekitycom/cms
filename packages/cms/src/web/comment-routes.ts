@@ -117,11 +117,10 @@ export function mountComments(app: Hono<GeekityEnv>): void {
         address: clientAddress(c, config),
       });
       if (answered.kind === 'saved') {
-        const reply = c.var.conversation.replyNamed(
+        const reply = c.var.conversation.replyFinder(
           document,
-          answered.saved.permalink,
           c.var.siteAtRequestStart,
-        );
+        )(answered.saved.permalink);
         const anchor = reply === undefined ? 'comments' : commentAnchor(reply.key);
         return c.redirect(`${document.permalink}?${COMMENT_NOTICE_PARAM}=posted#${anchor}`, 303);
       }

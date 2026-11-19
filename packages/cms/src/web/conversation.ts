@@ -84,7 +84,7 @@ export function createConversation(base: ConversationContext): ConversationReade
     counts: (documents, site) => directCounts(reading(site), documents),
     latest: (limit, site) => siteConversation(reading(site), limit),
     comment: (id, site) => commentThread(reading(site), id),
-    replyNamed: (document, url, site) => replyNamed(reading(site), document, url),
+    replyFinder: (document, site) => replyFinder(reading(site), document),
     heldAt: (url, site) => heldAt(reading(site), url),
     repliesTo: (segment, site) => repliesTo(reading(site), segment),
     documentOf: (url) => documentNamed(base, url),
@@ -150,7 +150,10 @@ function commentThread(context: Reading, id: string): CommentThread | undefined 
   };
 }
 
-function replyNamed(context: Reading, document: Document, url: string): Interaction | undefined {
+function replyFinder(
+  context: Reading,
+  document: Document,
+): (url: string) => Interaction | undefined {
   const said = gather(context, document);
   const everything = [
     ...said.written,
@@ -160,7 +163,7 @@ function replyNamed(context: Reading, document: Document, url: string): Interact
     ...said.answers,
     ...said.held.values(),
   ];
-  return namedIn(context, document, everything, url);
+  return (url) => namedIn(context, document, everything, url);
 }
 
 function namedIn(

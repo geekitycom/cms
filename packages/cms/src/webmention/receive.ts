@@ -160,11 +160,14 @@ export interface VerifyWebmentionOptions {
   /** The site's public origin. */
   readonly baseUrl: string;
   /** What says which reply on the post a source answers, and which post a comment's page is on. */
-  readonly conversation: Pick<ConversationReader, 'replyNamed' | 'comment'>;
+  readonly conversation: Pick<ConversationReader, 'replyFinder' | 'comment'>;
   readonly site: ConversationSite;
   /** The checker, when the site named one. */
   readonly checker?: CommentChecker | undefined;
-  /** Who to tell when one lands in the queue, handed to the intake. */
+  /**
+   * Who to tell when one lands in the queue. A source and the replies it
+   * carries are told in one notice.
+   */
   readonly notices?: CommentNotices | undefined;
   /** The clock. */
   readonly now: Date;
@@ -206,6 +209,27 @@ export type WebmentionOutcome =
 export async function verifyWebmention(
   options: VerifyWebmentionOptions,
 ): Promise<WebmentionOutcome> {
+  const told = options.notices;
+  if (told === undefined) return await verifyAndStore(options);
+
+  const waiting: PostComment[] = [];
+  try {
+    return await verifyAndStore({
+      ...options,
+      notices: {
+        pending: (comment) => waiting.push(comment),
+        replyApproved: (reply) => {
+          told.replyApproved(reply);
+        },
+      },
+    });
+  } finally {
+    const [first, ...carried] = waiting;
+    if (first !== undefined) told.pending(first, carried);
+  }
+}
+
+async function verifyAndStore(options: VerifyWebmentionOptions): Promise<WebmentionOutcome> {
   const { incoming, records, now } = options;
   const held = heldWebmention(records, incoming.document.slug, incoming.source);
 
@@ -324,9 +348,11 @@ export async function verifyWebmention(
 }
 
 function answered(options: VerifyWebmentionOptions, urls: readonly string[]): string | null {
+  if (urls.length === 0) return null;
+  const named = options.conversation.replyFinder(options.incoming.document, options.site);
   for (const url of urls) {
-    const named = options.conversation.replyNamed(options.incoming.document, url, options.site);
-    if (named !== undefined) return named.id;
+    const reply = named(url);
+    if (reply !== undefined) return reply.id;
   }
   return null;
 }
@@ -341,9 +367,11 @@ function isOwnPage(source: string, fetchedUrl: string, entry: SourceEntry | unde
  * (a salmention), and take away the ones it carried before and
  * carries no longer.
  *
- * Each is a webmention of its own as far as the thread and the moderator are
- * concerned, put through the same intake with its own page as its `url`, and
- * `via` naming the source, which is what lets the source take it away again.
+ * Each is a webmention of its own as far as the thread is concerned, put
+ * through the same intake with its own page as its `url`, and `via` naming
+ * the source, which is what lets the source take it away again. The checker
+ * is not asked about each: the replies a spam source carries are spam, and the
+ * rest wait for a moderator.
  * One this site already has some other way is not copied: a page of this
  * site's, a reply post or a comment's page, or a reply the conversation
  * already names that this source did not bring, such as one held from its own
@@ -357,10 +385,12 @@ async function keepCarried(
   const { incoming, records } = options;
   const site = new URL(options.baseUrl).origin;
   const kept = new Set<string>();
+  const replyNamed = options.conversation.replyFinder(incoming.document, options.site);
+  const verdict = carrier.status === 'spam' ? 'spam' : 'unknown';
 
   const bring = async (nested: readonly NestedReply[], parent: string): Promise<void> => {
     for (const reply of nested) {
-      const named = options.conversation.replyNamed(incoming.document, reply.url, options.site)?.id;
+      const named = replyNamed(reply.url)?.id;
       const theirs =
         named !== undefined && records.admin.getComment(named)?.via === incoming.source;
       let id = named;
@@ -372,7 +402,7 @@ async function keepCarried(
           post: { title: postLabel(incoming.document), url: incoming.target },
           dataDir: options.dataDir,
           baseUrl: options.baseUrl,
-          checker: options.checker,
+          verdict,
           notices: options.notices,
           address: incoming.address,
           userAgent: incoming.userAgent,

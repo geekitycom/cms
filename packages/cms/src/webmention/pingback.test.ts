@@ -501,6 +501,43 @@ describe('the faults a pingback is answered with', () => {
   });
 });
 
+describe('one address sending many pings', () => {
+  it('is answered with a fault once it has sent too many, and the webmention endpoint shares the count', async () => {
+    const cms = await site({
+      trustProxy: true,
+      webmentions: { rateLimit: { requests: 2, windowSeconds: 600 } },
+    });
+    pages.set('https://them.example/note', { body: linkingTo(POST_URL) });
+    const from = async (body: string, type: string): Promise<Response> =>
+      await cms.app.request(PINGBACK_PATH, {
+        method: 'POST',
+        headers: { 'content-type': type, 'x-forwarded-for': '198.51.100.9' },
+        body,
+      });
+    const pingFrom = (source: string): Promise<Response> =>
+      from(call('pingback.ping', source, POST_URL), 'text/xml');
+
+    assert.equal(await faultOf(await pingFrom('https://them.example/note')), undefined);
+    const webmention = await cms.app.request('/_geekity/webmention', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-forwarded-for': '198.51.100.9',
+      },
+      body: new URLSearchParams({
+        source: 'https://them.example/other',
+        target: POST_URL,
+      }).toString(),
+    });
+    assert.equal(webmention.status, 202);
+    await cms.webmentions.settled();
+    fetched.length = 0;
+
+    assert.equal(await faultOf(await pingFrom('https://them.example/again')), 0);
+    assert.deepEqual(fetched, [], 'a refused ping reads nothing');
+  });
+});
+
 describe('what is refused before it is parsed', () => {
   it('refuses XML that is not well formed', async () => {
     const cms = await site();

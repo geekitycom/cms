@@ -16,6 +16,29 @@ When: {{ comment.submitted }}
 --
 {% for choice in actions %}{{ choice.label }}: {{ choice.url }}
 {% endfor %}
+{% if carried and carried.length %}
+
+The same page carries {{ carried.length }} more {{ 'reply' if carried.length == 1 else 'replies' }} from other pages, waiting too.
+{% for reply in carried %}
+
+--
+From: {{ reply.author }}
+{% if reply.website %}
+Site: {{ reply.website }}
+{% endif %}
+{% if reply.url %}
+Page: {{ reply.url }}
+{% endif %}
+
+{{ reply.text | trim if reply.text | trim else '(nothing was said)' }}
+
+{% for choice in reply.actions %}
+{{ choice.label }}: {{ choice.url }}
+{% endfor %}
+{% endfor %}
+
+--
+{% endif %}
 Each link works once and lasts a week. After that, the queue is at
 {{ queueUrl }}.
 

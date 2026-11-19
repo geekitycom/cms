@@ -292,7 +292,9 @@ email to every user who has an address and has not turned the notice off on
 their `/admin/users/<id>` screen. The message holds the comment, the post it is
 on, and approve, spam and delete links that work without a login. The server
 sends nothing about a comment that Akismet filed as spam or told the site to
-discard. It sends only about comments that wait for a person.
+discard. It sends only about comments that wait for a person. A webmention
+whose source carries replies from other pages sends one message: the first
+new entry, then each carried reply with its own three links.
 
 Each link opens a small page with a button. Only the button acts.
 

@@ -14,10 +14,35 @@ import type { SyndicationCopies } from '../webmention/syndication.ts';
 import { messageOf } from '../util/errors.ts';
 import { readBounded } from './bounded-body.ts';
 import type { GeekityEnv } from './env.ts';
-import { clientAddress } from './throttle.ts';
+import { addressKey, clientAddress, createRequestLimit } from './throttle.ts';
+import type { RequestLimit } from './throttle.ts';
 
 /** How long a sender is asked to wait when too many webmentions are waiting. */
 const BUSY_RETRY_AFTER_SECONDS = 300;
+
+/** How many webmentions and pingbacks one address may send in a window, unless the config says. */
+const SENDER_LIMIT = { requests: 60, windowSeconds: 600 } as const;
+
+/**
+ * Counts one request against the address it came from, and answers how many
+ * seconds that address must wait, or `undefined` when it may go on.
+ */
+export type SenderLimit = (c: Context<GeekityEnv>) => number | undefined;
+
+/** One {@link SenderLimit} for both endpoints, built on first use from the config. */
+export function senderLimit(): SenderLimit {
+  let limit: RequestLimit | undefined;
+  return (c) => {
+    const { config } = c.var;
+    const address = clientAddress(c, config);
+    if (address === undefined) return undefined;
+    limit ??= createRequestLimit({
+      ...(config.webmentions.rateLimit ?? SENDER_LIMIT),
+      now: config.now,
+    });
+    return limit.take(addressKey(address));
+  };
+}
 
 /** The public post that a recorded syndicated copy URL is a copy of. */
 export type SyndicatedAt = (c: Context<GeekityEnv>, url: string) => Document | undefined;
@@ -36,7 +61,11 @@ export function syndicatedAtLookup(): SyndicatedAt {
  * anything that is not, and the looking happens afterwards — see
  * `webmention/receive.ts` for why that split is the whole design.
  */
-export function mountWebmentions(app: Hono<GeekityEnv>, syndicatedAt: SyndicatedAt): void {
+export function mountWebmentions(
+  app: Hono<GeekityEnv>,
+  syndicatedAt: SyndicatedAt,
+  limit: SenderLimit,
+): void {
   app.post(WEBMENTION_PATH, async (c) => {
     const { store, config, webmentions, conversation } = c.var;
 
@@ -44,6 +73,12 @@ export function mountWebmentions(app: Hono<GeekityEnv>, syndicatedAt: Syndicated
       // A 404 rather than a 403: a site that does not take webmentions has no
       // endpoint, and that is what having no endpoint looks like.
       return c.text('This site does not take webmentions.', 404);
+    }
+
+    const wait = limit(c);
+    if (wait !== undefined) {
+      c.header('retry-after', String(wait));
+      return c.text('Too many webmentions from this address. Send it again later.', 429);
     }
 
     const mediaType = (c.req.header('content-type') ?? '').split(';')[0]?.trim().toLowerCase();

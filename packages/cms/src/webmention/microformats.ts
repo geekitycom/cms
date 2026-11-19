@@ -92,7 +92,7 @@ export interface NestedReply {
  * page is as long as they like, and a thread is rarely more than a few deep.
  */
 const NESTED_DEPTH = 8;
-const NESTED_LIMIT = 200;
+const NESTED_LIMIT = 20;
 
 /**
  * How many microformats are read off one page, nested ones counted. A blog's
@@ -227,6 +227,7 @@ function nestedReplies(
   now: Date,
 ): NestedReply[] {
   const seen = new Set<string>([url, sourceUrl]);
+  let replied = 0;
 
   const read = (item: MicroformatItem, itsUrl: string, depth: number): NestedReply[] => {
     if (depth >= NESTED_DEPTH) return [];
@@ -243,7 +244,8 @@ function nestedReplies(
     const replies: NestedReply[] = [];
     for (const reply of carried) {
       const at = first(reply, 'url')?.text;
-      if (at === undefined || !isWebUrl(at) || seen.has(at) || seen.size > NESTED_LIMIT) continue;
+      if (at === undefined || !isWebUrl(at) || seen.has(at) || replied >= NESTED_LIMIT) continue;
+      replied += 1;
       seen.add(at);
       const author = first(reply, 'author');
       replies.push({

@@ -2179,9 +2179,9 @@ describe('a source that answers many things', () => {
       dataDir,
       baseUrl: BASE_URL,
       conversation: {
-        replyNamed: () => {
+        replyFinder: () => {
           asked += 1;
-          return undefined;
+          return () => undefined;
         },
         comment: () => undefined,
       },
@@ -2193,5 +2193,122 @@ describe('a source that answers many things', () => {
 
     assert.equal(outcome.kind, 'stored');
     assert.ok(asked <= 10, `asked about ${asked} of ${values + 1} values`);
+  });
+});
+
+describe('a source that carries many replies', () => {
+  const openStores: AdminStore[] = [];
+  after(() => {
+    for (const opened of openStores) opened.close();
+  });
+
+  it('reads the conversation a few times, not once a reply', async () => {
+    const source = 'https://ada.example/2026/09/reply/';
+    const nested = Array.from(
+      { length: 50 },
+      (_, n) => `<div class="p-comment h-cite">
+        <a class="p-author h-card" href="https://p${String(n)}.example/">P${String(n)}</a>
+        <a class="u-url" href="https://p${String(n)}.example/${String(n)}">then</a>
+        <div class="e-content"><p>Reply ${String(n)}.</p></div>
+      </div>`,
+    ).join('');
+    pages.set(source, {
+      body: `<article class="h-entry">
+        <a class="u-url" href="${source}">permalink</a>
+        <a class="u-in-reply-to" href="${POST_URL}">the post</a>
+        <p class="e-content">Hello.</p>${nested}
+      </article>`,
+    });
+    const dataDir = await temporaryDir('geekity-webmention-carrier-');
+    const contentDir = await temporaryDir('geekity-webmention-carrier-content-');
+    const admin = openAdminStore({ dataDir });
+    openStores.push(admin);
+    let gathered = 0;
+
+    const outcome = await verifyWebmention({
+      incoming: {
+        source,
+        target: POST_URL,
+        document: {
+          slug: 'hello-world',
+          permalink: '/2026/09/hello-world/',
+          title: 'Hello world',
+          html: '<p>Words.</p>',
+        } as unknown as Document,
+      },
+      records: { admin, contentDir, dataDir },
+      dataDir,
+      baseUrl: BASE_URL,
+      conversation: {
+        replyFinder: () => {
+          gathered += 1;
+          return () => undefined;
+        },
+        comment: () => undefined,
+      },
+      site: {} as ConversationSite,
+      now: NOW,
+      lookup,
+      logger: { warn: () => {} },
+    });
+
+    assert.equal(outcome.kind, 'stored');
+    assert.ok(admin.listCommentsFor('hello-world').length > 1, 'the replies were brought in');
+    assert.ok(gathered <= 3, `read the conversation ${String(gathered)} times`);
+  });
+});
+
+describe('one address sending many webmentions', () => {
+  async function sendFrom(cms: Cms, address: string, source: string): Promise<Response> {
+    return await cms.app.request(WEBMENTION_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-forwarded-for': address,
+      },
+      body: new URLSearchParams({ source, target: POST_URL }).toString(),
+    });
+  }
+
+  it('is answered 429 once it has sent too many', async () => {
+    const cms = await site({ trustProxy: true });
+    const statuses: number[] = [];
+    for (let n = 0; n < 100; n += 1) {
+      statuses.push(
+        (await sendFrom(cms, '198.51.100.9', `https://them.example/?n=${String(n)}`)).status,
+      );
+    }
+    await cms.webmentions.settled();
+
+    assert.equal(statuses[0], 202);
+    assert.equal(statuses.at(-1), 429);
+  });
+
+  it('is told when to try again, and another address is not held up', async () => {
+    const cms = await site({
+      trustProxy: true,
+      webmentions: { rateLimit: { requests: 2, windowSeconds: 600 } },
+    });
+
+    assert.equal((await sendFrom(cms, '198.51.100.9', 'https://them.example/1')).status, 202);
+    assert.equal((await sendFrom(cms, '198.51.100.9', 'https://them.example/2')).status, 202);
+    const refused = await sendFrom(cms, '198.51.100.9', 'https://them.example/3');
+    assert.equal(refused.status, 429);
+    assert.equal(refused.headers.get('retry-after'), '600');
+    assert.equal((await sendFrom(cms, '198.51.100.10', 'https://them.example/4')).status, 202);
+    await cms.webmentions.settled();
+    assert.equal((await waitingChecks(cms)).length, 0);
+    assert.ok(!requested.includes('https://them.example/3'), 'the refused source is not read');
+  });
+
+  it('counts addresses in one IPv6 /64 as one', async () => {
+    const cms = await site({
+      trustProxy: true,
+      webmentions: { rateLimit: { requests: 1, windowSeconds: 600 } },
+    });
+
+    assert.equal((await sendFrom(cms, '2001:db8:1:2::1', 'https://them.example/1')).status, 202);
+    assert.equal((await sendFrom(cms, '2001:db8:1:2::9', 'https://them.example/2')).status, 429);
+    await cms.webmentions.settled();
   });
 });

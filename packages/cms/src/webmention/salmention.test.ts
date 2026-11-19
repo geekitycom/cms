@@ -10,8 +10,10 @@ import { addComment, rebuildCommentIndexes, updateComment } from '../comments/re
 import type { NewComment } from '../comments/records.ts';
 import { seedActorKeys } from '../federation/__testing__/keys.ts';
 import { createCms } from '../index.ts';
-import type { Cms } from '../index.ts';
+import type { Cms, GeekityConfig } from '../index.ts';
 import type { CommentChecker } from '../forms/checker.ts';
+import { createMemoryMailProvider } from '../mail/memory.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { sourceEntry } from './microformats.ts';
@@ -146,7 +148,12 @@ async function temporaryDir(prefix: string): Promise<string> {
 }
 
 async function site(
-  options: { webmentionsSend?: boolean; checker?: CommentChecker; migrated?: boolean } = {},
+  options: {
+    webmentionsSend?: boolean;
+    checker?: CommentChecker;
+    migrated?: boolean;
+    mail?: GeekityConfig['mail'];
+  } = {},
 ): Promise<Cms> {
   const contentDir = await temporaryDir('geekity-salmention-content-');
   const dataDir = await temporaryDir('geekity-salmention-data-');
@@ -179,6 +186,7 @@ async function site(
     now: () => NOW,
     hostLookup: resolvePublic,
     ...(options.checker === undefined ? {} : { commentChecker: options.checker }),
+    ...(options.mail === undefined ? {} : { mail: options.mail }),
   });
   started.push(instance);
   await instance.sync();
@@ -495,6 +503,91 @@ describe('a webmention from a carried reply’s own URL', () => {
     assert.equal(carol?.content.html, '<p>Carol on her own.</p>');
     assert.equal(carol?.via, undefined);
     assert.equal(carol?.status, 'pending');
+  });
+});
+
+describe('a source that carries many replies', () => {
+  const many = (count: number): string[] =>
+    Array.from({ length: count }, (_, n) =>
+      cite(`https://p${String(n)}.example/${String(n)}`, `P${String(n)}`, `Reply ${String(n)}.`),
+    );
+
+  it('brings in no more than twenty of them', async () => {
+    const cms = await site();
+    pages.set(SOURCE, { body: source(...many(50)) });
+    await sendAndSettle(cms, SOURCE);
+
+    assert.equal(held(cms).filter((one) => one.via === SOURCE).length, 20);
+  });
+
+  it('sends the moderators one email listing them, and asks the checker once', async () => {
+    const provider = createMemoryMailProvider();
+    let checked = 0;
+    const cms = await site({
+      mail: { provider, backoffMs: () => 0, logger: { info: () => {}, warn: () => {} } },
+      checker: {
+        check: () => {
+          checked += 1;
+          return 'unknown';
+        },
+      },
+    });
+    writeUsers(cms.config.dataDir, [{ username: 'ada', email: 'ada@example.com' }]);
+    pages.set(SOURCE, { body: source(...many(50)) });
+
+    await sendAndSettle(cms, SOURCE);
+    await cms.notifications.settled();
+    await cms.mail.settled();
+
+    assert.equal(checked, 1);
+    assert.equal(provider.sent.length, 1);
+    const [message] = provider.sent;
+    assert.match(message?.text ?? '', /Ada replies\./);
+    assert.match(message?.text ?? '', /https:\/\/p0\.example\/0/);
+    assert.match(message?.text ?? '', /Reply 19\./);
+    assert.match(message?.html ?? '', /Reply 19\./);
+  });
+
+  it('files the replies a spam source carries as spam without asking about each', async () => {
+    let checked = 0;
+    const cms = await site({
+      checker: {
+        check: () => {
+          checked += 1;
+          return 'spam';
+        },
+      },
+    });
+    pages.set(SOURCE, { body: source(...many(3)) });
+    await sendAndSettle(cms, SOURCE);
+
+    assert.equal(checked, 1);
+    assert.deepEqual(
+      held(cms).map((one) => one.status),
+      ['spam', 'spam', 'spam', 'spam'],
+    );
+  });
+
+  it('sends one email when only the replies it carries are new', async () => {
+    const provider = createMemoryMailProvider();
+    const cms = await site({
+      mail: { provider, backoffMs: () => 0, logger: { info: () => {}, warn: () => {} } },
+    });
+    writeUsers(cms.config.dataDir, [{ username: 'ada', email: 'ada@example.com' }]);
+    pages.set(SOURCE, { body: source() });
+    await sendAndSettle(cms, SOURCE);
+    await cms.notifications.settled();
+    await cms.mail.settled();
+    provider.clear();
+
+    pages.set(SOURCE, { body: source(...many(5)) });
+    await sendAndSettle(cms, SOURCE);
+    await cms.notifications.settled();
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 1);
+    assert.match(provider.sent[0]?.text ?? '', /Reply 0\./);
+    assert.match(provider.sent[0]?.text ?? '', /Reply 4\./);
   });
 });
 

@@ -166,10 +166,10 @@ export interface IndexNowOverrides {
 }
 
 /**
- * How the CMS treats accepted webmentions: how one whose source could not be
- * read is tried again, how many may wait, and how long a pingback waits for
- * its answer. A test names short delays so that it waits for none of the
- * defaults.
+ * How the CMS treats webmentions: how many one address may send, how one
+ * whose source could not be read is tried again, how many may wait, and how
+ * long a pingback waits for its answer. A test names short delays so that it
+ * waits for none of the defaults.
  */
 export interface WebmentionOverrides {
   /**
@@ -188,6 +188,12 @@ export interface WebmentionOverrides {
    * check is still running, in milliseconds. Defaults to twenty seconds.
    */
   pingbackAnswerMs?: number | undefined;
+  /**
+   * How many webmentions and pingbacks one client address may send in a
+   * window of seconds. One past this is answered 429, or a pingback fault.
+   * Defaults to 60 in 600 seconds.
+   */
+  rateLimit?: { readonly requests: number; readonly windowSeconds: number } | undefined;
 }
 
 /**
