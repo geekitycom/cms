@@ -20,6 +20,18 @@ export function absoluteUrl(pathname: string, baseUrl: string): string {
   return URL.parse(resolved, base)?.toString() ?? pathname;
 }
 
+/**
+ * A URL path percent-decoded, because permalinks are stored decoded. A path
+ * whose escapes are malformed comes back as it was, which names nothing.
+ */
+export function decodedPath(pathname: string): string {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
+}
+
 /** A decoded path with each segment percent-encoded, so `#`, `?`, `%` and spaces name the file rather than end the path. */
 export function encodePath(pathname: string): string {
   return pathname

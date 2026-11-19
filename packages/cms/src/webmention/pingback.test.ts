@@ -43,6 +43,14 @@ comments: true
 
 Who this is.
 `,
+  'posts/2026-09-19-cafe.md': `---
+title: Café
+date: '2026-09-19T09:00:00Z'
+permalink: /2026/09/café/
+---
+
+Coffee.
+`,
   'pages/colophon.md': `---
 title: Colophon
 permalink: /colophon/
@@ -302,6 +310,19 @@ describe('a valid pingback', () => {
     assert.equal(held.length, 1, 'still one');
     assert.equal(held[0]?.id, first?.id, 'the same one');
     assert.match(held[0]?.content.html ?? '', /Second thought\./);
+  });
+
+  it('is filed against a post whose target is the encoded spelling of its permalink', async () => {
+    const cms = await site();
+    const target = `${BASE_URL}/2026/09/caf%C3%A9/`;
+    pages.set('https://them.example/note', { body: linkingTo(target) });
+
+    assert.equal(await faultOf(await ping(cms, 'https://them.example/note', target)), undefined);
+
+    assert.deepEqual(
+      mentionsOf(cms, 'café').map((one) => one.url),
+      ['https://them.example/note'],
+    );
   });
 
   it('leaves an approved entry alone when sent again with a query on the target', async () => {

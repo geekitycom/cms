@@ -2,25 +2,16 @@ import type { Context } from 'hono';
 
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
-import { plainRelativePath } from '../util/url.ts';
+import { decodedPath, plainRelativePath } from '../util/url.ts';
 import type { GeekityEnv } from './env.ts';
 import { FEED_FORMATS, FEED_SEGMENTS } from './feeds.ts';
 import type { FeedFormat } from './feeds.ts';
 import { selectRepresentation } from './negotiate.ts';
 import type { ConditionalHeaders, Representation } from './negotiate.ts';
 
-/**
- * The requested path, percent-decoded, because permalinks are stored decoded.
- * A path whose escapes are malformed is used as it arrived, which resolves to
- * nothing and so 404s.
- */
+/** The requested path, percent-decoded as {@link decodedPath} decodes it. */
 export function requestPath(c: Context<GeekityEnv>): string {
-  const { pathname } = new URL(c.req.url);
-  try {
-    return decodeURIComponent(pathname);
-  } catch {
-    return pathname;
-  }
+  return decodedPath(new URL(c.req.url).pathname);
 }
 
 /**

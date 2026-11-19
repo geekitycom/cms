@@ -1054,6 +1054,76 @@ describe('a webmention sent again to another URL of the same post', () => {
   });
 });
 
+describe('a post whose permalink is not plain ASCII', () => {
+  const CAFE_URL = `${BASE_URL}/2026/09/caf%C3%A9/`;
+  const LIKE = 'https://them.example/like';
+
+  async function cafeSite(): Promise<Cms> {
+    const cms = await site();
+    await writeFile(
+      path.join(cms.config.contentDir, 'posts', '2026-09-19-cafe.md'),
+      POST.replace('title: Hello world', 'title: Café').replace(
+        'permalink: /2026/09/hello-world/',
+        'permalink: /2026/09/café/',
+      ),
+      'utf8',
+    );
+    await cms.sync();
+    return cms;
+  }
+
+  function onCafe(cms: Cms): PostComment[] {
+    return cms.admin.listCommentsFor('café').filter((one) => one.source === 'webmention');
+  }
+
+  it('takes a webmention sent to the encoded spelling of the permalink', async () => {
+    const cms = await cafeSite();
+    assert.equal((await cms.app.request('/2026/09/caf%C3%A9/')).status, 200);
+    pages.set(LIKE, { body: reply(`<a class="u-like-of" href="${CAFE_URL}">liked</a>`) });
+
+    const response = await sendAndSettle(cms, LIKE, CAFE_URL);
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(
+      onCafe(cms).map((one) => [one.url, one.kind]),
+      [[LIKE, 'like']],
+    );
+  });
+
+  it('keeps a like sent again to a comment page when it names the post by its encoded URL', async () => {
+    const cms = await cafeSite();
+    pages.set(LIKE, { body: reply(`<a class="u-like-of" href="${CAFE_URL}">liked</a>`) });
+    await sendAndSettle(cms, LIKE, CAFE_URL);
+    const records = {
+      admin: cms.admin,
+      contentDir: cms.config.contentDir,
+      dataDir: cms.config.dataDir,
+    };
+    const note = await addComment(records, {
+      slug: 'café',
+      permalink: '/2026/09/café/',
+      source: 'comment',
+      kind: 'reply',
+      status: 'approved',
+      author: { name: 'Bob', url: null, email: null, avatar: null },
+      content: { markdown: 'Bob says so.', html: '<p>Bob says so.</p>' },
+      submitted: '2026-09-19T10:00:00.000Z',
+      addressHash: null,
+      inReplyTo: null,
+      url: null,
+      notify: false,
+    });
+
+    const response = await sendAndSettle(cms, LIKE, `${BASE_URL}/comment/${note.id}/`);
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(
+      onCafe(cms).map((one) => one.url),
+      [LIKE],
+    );
+  });
+});
+
 describe('the spam checker seam', () => {
   it('is asked about a webmention, and is told it is one', async () => {
     const seen: CommentSubmission[] = [];

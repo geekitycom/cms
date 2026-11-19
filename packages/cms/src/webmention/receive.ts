@@ -18,6 +18,7 @@ import type { NestedReply, SourceEntry } from './microformats.ts';
 import { handSyndicationOf, syndicationCopies } from './syndication.ts';
 import { isPrivateHost } from '../util/public-address.ts';
 import type { HostLookup } from '../util/public-address.ts';
+import { decodedPath } from '../util/url.ts';
 
 /**
  * Taking a webmention somebody sent this site.
@@ -144,11 +145,10 @@ export function checkWebmentionRequest(
 
   // A comment's page is a page here, and what is said to it is said on the
   // post it is under.
-  const key = commentKeyAt(to.pathname);
+  const path = decodedPath(to.pathname);
+  const key = commentKeyAt(path);
   const pathname =
-    key === undefined
-      ? to.pathname
-      : options.conversation.comment(key, options.site)?.post.permalink;
+    key === undefined ? path : options.conversation.comment(key, options.site)?.post.permalink;
   const document = pathname === undefined ? undefined : options.documentAt(pathname);
   if (document === undefined) return refuse('target', 'There is no page here at that address.');
 
@@ -578,13 +578,12 @@ function urlOfPost(options: VerifyWebmentionOptions): (href: string) => boolean 
 
     if (url.origin === origin) {
       if (url.search !== '') return false;
-      const key = commentKeyAt(url.pathname);
+      const path = decodedPath(url.pathname);
+      const key = commentKeyAt(path);
       if (key !== undefined) {
         return options.conversation.comment(key, options.site)?.post.slug === document.slug;
       }
-      return (
-        url.pathname === document.permalink || (document.redirectFrom ?? []).includes(url.pathname)
-      );
+      return path === document.permalink || (document.redirectFrom ?? []).includes(path);
     }
 
     copies ??= [
