@@ -612,6 +612,40 @@ describe('syndicating a post to the site’s targets', () => {
     assert.deepEqual(await copiesOf(cms), { '/2026/03/hello-again/': { [NEWS]: NEWS_COPY } });
   });
 
+  it('still tells its targets about a moved post when the copies file does not parse', async () => {
+    const cms = await site({ files: { '_data/syndicationTargets.json': TARGETS_FILE } });
+    const agent = signedInAs(cms, FIRST_ADMIN.username);
+    await publish(agent, 'Nothing linked.', { tags: 'news' });
+    await cms.webmentions.settled();
+    const copiesFile = path.join(cms.config.contentDir, '_data', 'syndication.json');
+    const damaged = '{ "/2026/03/hello-world/": ';
+    await writeFile(copiesFile, damaged);
+    sent.length = 0;
+
+    const before = cms.store.getBySlug('hello-world');
+    assert.ok(before !== undefined);
+    const warn = console.warn;
+    console.warn = () => undefined;
+    try {
+      cms.webmentions.handle({
+        type: 'updated',
+        origin: 'watch',
+        path: 'posts/hello-world.md',
+        previous: before,
+        next: { ...before, permalink: '/2026/03/hello-again/' },
+      });
+      await cms.webmentions.settled();
+    } finally {
+      console.warn = warn;
+    }
+
+    assert.deepEqual(
+      sent.map((one) => [one.source, one.target]),
+      [[`${BASE_URL}/2026/03/hello-again/`, NEWS]],
+    );
+    assert.equal(await readFile(copiesFile, 'utf8'), damaged);
+  });
+
   it('sends to targets again on a resend', async () => {
     const cms = await site({
       files: {

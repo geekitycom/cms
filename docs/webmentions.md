@@ -260,6 +260,12 @@ linking to, and drops the copy from `syndication.json`. IndieNews takes the
 post down when it finds the link gone. Drafting or trashing the post has the
 same effect.
 
+A `syndication.json` that cannot be read as a JSON object is read as empty,
+and the site logs a warning that names the file once, so pages show no
+**Also on** links in the meantime. The site does not write over a damaged
+file: recording or dropping a copy fails, and logs why, until the file is
+fixed.
+
 The posts table on `/admin/federation` lists each selected target with the
 result of its last webmention and a link to its copy. **Resend** queues a job
 that sends to the targets again.

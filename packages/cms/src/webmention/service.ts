@@ -382,7 +382,11 @@ export function createWebmentionService(
 
     sends
       .run(async () => {
-        if (moved !== undefined) await copies.forget(moved);
+        if (moved !== undefined) {
+          await copies.forget(moved).catch((thrown: unknown) => {
+            logger.warn(`Syndication copies of ${moved} not forgotten: ${messageOf(thrown)}`);
+          });
+        }
         await keepCopies(
           document.permalink,
           [change.previous, change.next],

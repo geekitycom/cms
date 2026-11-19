@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { after, describe, it } from 'node:test';
 
 import { SYNDICATE_TO_FRONT_MATTER_KEY } from '../content/syndicate-to.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
@@ -8,6 +11,8 @@ import {
   handSyndicationOf,
   parseSyndicationTargets,
   selectedTargets,
+  SYNDICATION_FILE,
+  syndicationCopies,
 } from './syndication.ts';
 
 const INDIENEWS: SyndicationTarget = {
@@ -282,4 +287,68 @@ describe('a target restricted to some languages (TASK-156 AC #2, #3)', () => {
       'not even when the post lists it by id',
     );
   });
+});
+
+describe('a copies file that does not parse', () => {
+  const roots: string[] = [];
+  after(async () => {
+    await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
+  });
+
+  async function siteWith(text: string): Promise<{ contentDir: string; file: string }> {
+    const contentDir = await mkdtemp(path.join(tmpdir(), 'geekity-syndication-'));
+    roots.push(contentDir);
+    const file = path.join(contentDir, ...SYNDICATION_FILE.split('/'));
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, text);
+    return { contentDir, file };
+  }
+
+  function quietly<T>(task: () => T): { result: T; warned: string[] } {
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (line: string) => warned.push(line);
+    try {
+      return { result: task(), warned };
+    } finally {
+      console.warn = warn;
+    }
+  }
+
+  const damagedTexts = {
+    'is not JSON':
+      '{\n  "/posts/a/": { "https://brid.gy/publish/mastodon": "https://m.example/1" },\n}\n',
+    'is JSON but not an object': '["https://m.example/1"]\n',
+  };
+
+  for (const [why, text] of Object.entries(damagedTexts)) {
+    it(`refuses to record a copy when the file ${why}, and leaves its bytes alone`, async () => {
+      const { contentDir, file } = await siteWith(text);
+      const copies = syndicationCopies(contentDir);
+
+      await assert.rejects(
+        copies.write('/posts/b/', 'https://news.indieweb.org/en', 'https://news.example/2'),
+        (error: Error) => error.message.includes(file),
+      );
+      await assert.rejects(copies.forget('/posts/a/'), (error: Error) =>
+        error.message.includes(file),
+      );
+
+      assert.equal(await readFile(file, 'utf8'), text);
+    });
+
+    it(`reads no copies, with a warning naming the file, when it ${why}`, async () => {
+      const { contentDir, file } = await siteWith(text);
+      const copies = syndicationCopies(contentDir);
+
+      const { result, warned } = quietly(() => [
+        copies.read('/posts/a/'),
+        copies.read('/posts/a/'),
+      ]);
+
+      assert.deepEqual(result, [{}, {}]);
+      assert.equal(warned.length, 1);
+      assert.ok(warned[0]?.includes(file));
+    });
+  }
 });
