@@ -15,7 +15,12 @@ import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
-import { commentsFile, rebuildCommentIndexes, updateComment } from '../comments/records.ts';
+import {
+  addComment,
+  commentsFile,
+  rebuildCommentIndexes,
+  updateComment,
+} from '../comments/records.ts';
 
 /**
  * Webmentions as somebody else's server meets them: an endpoint advertised on
@@ -519,6 +524,104 @@ describe('a webmention that comes again', () => {
 
     pages.set('https://them.example/note', { status: 410 });
     await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.deepEqual(stored(cms), []);
+  });
+});
+
+describe('a webmention sent again to another URL of the same post', () => {
+  const LIKE = 'https://them.example/like';
+
+  async function approvedLike(cms: Cms): Promise<PostComment> {
+    pages.set(LIKE, { body: reply(`<a class="u-like-of" href="${POST_URL}">liked</a>`) });
+    await sendAndSettle(cms, LIKE);
+    const like = stored(cms)[0];
+    assert.ok(like !== undefined);
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      like.id,
+      { status: 'approved' },
+    );
+    return like;
+  }
+
+  function assertKept(cms: Cms, like: PostComment): void {
+    const held = stored(cms).filter((one) => one.url === LIKE);
+    assert.equal(held.length, 1, 'the like is still stored');
+    assert.equal(held[0]?.id, like.id);
+    assert.equal(held[0]?.status, 'approved');
+  }
+
+  it('refuses a target with a query string and keeps the like', async () => {
+    const cms = await site();
+    const like = await approvedLike(cms);
+
+    const response = await sendAndSettle(cms, LIKE, `${POST_URL}?x=1`);
+
+    assert.equal(response.status, 400);
+    assertKept(cms, like);
+  });
+
+  it('keeps the like when the target is the post with a fragment', async () => {
+    const cms = await site();
+    const like = await approvedLike(cms);
+
+    const response = await sendAndSettle(cms, LIKE, `${POST_URL}#elsewhere`);
+
+    assert.equal(response.status, 202);
+    assertKept(cms, like);
+  });
+
+  it('keeps the like when the target is a comment page on the post', async () => {
+    const cms = await site();
+    const like = await approvedLike(cms);
+    const note = await addComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      {
+        slug: 'hello-world',
+        permalink: '/2026/09/hello-world/',
+        source: 'comment',
+        kind: 'reply',
+        status: 'approved',
+        author: { name: 'Bob', url: null, email: null, avatar: null },
+        content: { markdown: 'Bob says so.', html: '<p>Bob says so.</p>' },
+        submitted: '2026-09-19T10:00:00.000Z',
+        addressHash: null,
+        inReplyTo: null,
+        url: null,
+        notify: false,
+      },
+    );
+
+    const response = await sendAndSettle(cms, LIKE, `${BASE_URL}/comment/${note.id}/`);
+
+    assert.equal(response.status, 202);
+    assertKept(cms, like);
+  });
+
+  it('keeps the like when the target is a syndicated copy of the post', async () => {
+    const cms = await site();
+    const copy = 'https://social.example/@me/1';
+    await writeFile(
+      path.join(cms.config.contentDir, 'posts', '2026-09-19-hello-world.md'),
+      POST.replace('---\n\nWords.', `syndication:\n  - ${copy}\n---\n\nWords.`),
+      'utf8',
+    );
+    await cms.sync();
+    const like = await approvedLike(cms);
+
+    const response = await sendAndSettle(cms, LIKE, copy);
+
+    assert.equal(response.status, 202);
+    assertKept(cms, like);
+  });
+
+  it('still deletes the like when its source links to no URL of the post', async () => {
+    const cms = await site();
+    await approvedLike(cms);
+
+    pages.set(LIKE, { body: reply('<p>Changed my mind.</p>') });
+    await sendAndSettle(cms, LIKE, `${POST_URL}#elsewhere`);
 
     assert.deepEqual(stored(cms), []);
   });

@@ -89,11 +89,18 @@ The new reply threads under the named reply. When the source is edited and
 sent again, the reply moves with it. A webmention sent to a comment's page,
 `/comment/{key}/`, lands on that comment's post.
 
+The endpoint refuses a target on this site with a query string, because no
+page here has one.
+
 The source URL identifies a webmention. When a page sends its webmention
 again, the site updates the earlier entry and does not add a second one. When
 the link is gone from the source, or the source answers 404 or 410, the site
-removes the entry. Closing rules do not apply. A post that no longer takes
-comments still receives webmentions, as it still receives fediverse replies.
+removes the entry. A source that does not link to the target but still links to
+another URL of the same post keeps its entry. Those URLs are the post's page, a
+former permalink, a comment page on the post, and a syndicated copy.
+
+Closing rules do not apply. A post that no longer takes comments still receives
+webmentions, as it still receives fediverse replies.
 
 **Pingbacks** are how most WordPress sites report a link. The
 `webmentionsReceive` switch also accepts them at `/_geekity/pingback`. The

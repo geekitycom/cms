@@ -116,6 +116,12 @@ export function linksTo(html: string, sourceUrl: string, target: string): boolea
   return linkedFrom(root, base).has(wanted);
 }
 
+/** Every URL a source page links to, resolved and normalised as {@link linksTo} reads them. */
+export function linksIn(html: string, sourceUrl: string): Set<string> {
+  const root = parseHtml(html);
+  return linkedFrom(root, baseOf(root, sourceUrl));
+}
+
 /** Every URL an element and everything under it links to, normalised. */
 function linkedFrom(root: HtmlElement, base: string): Set<string> {
   const found = new Set<string>();

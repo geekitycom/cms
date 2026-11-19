@@ -13,8 +13,9 @@ import type { ConversationReader, ConversationSite } from '../comments/conversat
 import { sanitizeCommentHtml } from '../content/sanitize.ts';
 import { DISCOVERY_MAX_BYTES } from './discovery.ts';
 import { fetchPublic } from './fetch-public.ts';
-import { linksTo, sourceEntry } from './microformats.ts';
+import { linksIn, linksTo, sourceEntry } from './microformats.ts';
 import type { NestedReply } from './microformats.ts';
+import { handSyndicationOf, syndicationCopies } from './syndication.ts';
 import { isPrivateHost } from '../util/public-address.ts';
 import type { HostLookup } from '../util/public-address.ts';
 
@@ -134,6 +135,8 @@ export function checkWebmentionRequest(
     return refuse('elsewhere', 'The target is not a page on this site.');
   }
 
+  if (to.search !== '') return refuse('target', 'There is no page here at that address.');
+
   // A comment's page is a page here, and what is said to it is said on the
   // post it is under.
   const key = commentKeyAt(to.pathname);
@@ -157,8 +160,8 @@ export interface VerifyWebmentionOptions {
   readonly dataDir: string;
   /** The site's public origin. */
   readonly baseUrl: string;
-  /** What says which reply on the post a source answers. */
-  readonly conversation: Pick<ConversationReader, 'replyNamed'>;
+  /** What says which reply on the post a source answers, and which post a comment's page is on. */
+  readonly conversation: Pick<ConversationReader, 'replyNamed' | 'comment'>;
   readonly site: ConversationSite;
   /** The checker, when the site named one. */
   readonly checker?: CommentChecker | undefined;
@@ -214,6 +217,11 @@ export async function verifyWebmention(
   }
 
   if (fetched.kind === 'gone' || !mentions(fetched, incoming)) {
+    // Another URL of the same post says nothing about what was stored from
+    // the source, so only a source that names none of them takes it away.
+    if (fetched.kind === 'read' && namesThePost(fetched, options)) {
+      return { kind: 'ignored', why: 'unlinked' };
+    }
     const why = fetched.kind === 'gone' ? 'gone' : 'unlinked';
     await dropCarried(records, incoming, new Set());
     if (held === undefined) return { kind: 'ignored', why };
@@ -461,6 +469,41 @@ function mentions(
   return fetched.html
     ? linksTo(fetched.body, fetched.url, incoming.target)
     : fetched.body.includes(incoming.target);
+}
+
+/** Whether what was read links to any URL of the post the webmention was sent to. */
+function namesThePost(
+  fetched: { body: string; url: string; html: boolean },
+  options: VerifyWebmentionOptions,
+): boolean {
+  const named = fetched.html
+    ? linksIn(fetched.body, fetched.url)
+    : (fetched.body.match(/https?:\/\/[^\s"'<>\\]+/g) ?? []);
+  return [...named].some((url) => isUrlOfPost(url, options));
+}
+
+/** Whether a URL is the post's page, a former one, a comment page on it, or a syndicated copy. */
+function isUrlOfPost(href: string, options: VerifyWebmentionOptions): boolean {
+  const url = webUrl(href);
+  if (url === undefined) return false;
+  url.hash = '';
+  const { document } = options.incoming;
+
+  if (url.origin === new URL(options.baseUrl).origin) {
+    if (url.search !== '') return false;
+    const key = commentKeyAt(url.pathname);
+    if (key !== undefined) {
+      return options.conversation.comment(key, options.site)?.post.slug === document.slug;
+    }
+    return (
+      url.pathname === document.permalink || (document.redirectFrom ?? []).includes(url.pathname)
+    );
+  }
+
+  const copies = syndicationCopies(options.records.contentDir).read(document.permalink);
+  return (
+    handSyndicationOf(document.extra).includes(url.href) || Object.values(copies).includes(url.href)
+  );
 }
 
 /** A URL, when it is an http or https one, and `undefined` otherwise. */
