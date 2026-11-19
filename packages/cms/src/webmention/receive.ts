@@ -120,6 +120,7 @@ export function checkWebmentionRequest(
   const to = webUrl(target);
   if (from === undefined) return refuse('source', 'The source is not an http or https URL.');
   if (to === undefined) return refuse('target', 'The target is not an http or https URL.');
+  from.hash = '';
   if (from.href === to.href) {
     return refuse('same', 'The source and the target are the same page.');
   }
@@ -326,11 +327,11 @@ export async function verifyWebmention(
 
 /**
  * Whether the page read from `source` is the reply that lives there, which is
- * what lets it take over a reply another page carried. A page holding the
- * reply under a fragment, such as the carrier itself, is not.
+ * what lets it take over a reply another page carried. The source has lost
+ * any fragment by now, so a reply the carrier holds under one is never it.
  */
 function isOwnPage(source: string, fetchedUrl: string, entry: SourceEntry | undefined): boolean {
-  return new URL(source).hash === '' && (fetchedUrl === source || entry?.url === source);
+  return fetchedUrl === source || entry?.url === source;
 }
 
 /**

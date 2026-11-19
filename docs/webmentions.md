@@ -95,8 +95,8 @@ sent again, the reply moves with it. A webmention sent to a comment's page,
 The endpoint refuses a target on this site with a query string, because no
 page here has one.
 
-The source URL identifies a webmention. When a page sends its webmention
-again, the site updates the earlier entry and does not add a second one. When
+The source URL, without any fragment, identifies a webmention: `X` and
+`X#reply` are one source. When a page sends its webmention again, the site updates the earlier entry and does not add a second one. When
 the link is gone from the source, or the source answers 404 or 410, the site
 removes the entry. Any other failure to read the source, such as a 401, 403,
 408, 429, 451 or 5xx answer or a timeout, changes nothing. A source larger

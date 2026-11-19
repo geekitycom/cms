@@ -114,7 +114,7 @@ function routeTheWeb(): () => void {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     requested.push(url);
 
-    const page = pages.get(url);
+    const page = pages.get(url.split('#')[0] ?? url);
     if (page === undefined) return new Response('missing', { status: 404 });
     if (page.redirectTo !== undefined) {
       return new Response(null, { status: 302, headers: { location: page.redirectTo } });
@@ -264,6 +264,7 @@ describe('what the endpoint refuses', () => {
     const cms = await site();
 
     assert.equal((await send(cms, { source: POST_URL, target: POST_URL })).status, 400);
+    assert.equal((await send(cms, { source: `${POST_URL}#x`, target: POST_URL })).status, 400);
   });
 
   it('refuses a target that is not on this site', async () => {
@@ -473,6 +474,22 @@ describe('a webmention that comes again', () => {
     assert.equal(held.length, 1, 'still one comment');
     assert.equal(held[0]?.id, first?.id, 'the same one');
     assert.equal(held[0]?.content.html, '<p>Second thought.</p>');
+  });
+
+  it('takes the source with a fragment as the same page', async () => {
+    const cms = await site();
+    const note = 'https://them.example/note';
+    pages.set(note, {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a><p>Hi.</p>`),
+    });
+
+    await sendAndSettle(cms, note);
+    await sendAndSettle(cms, `${note}#one`);
+    await sendAndSettle(cms, `${note}#two`);
+
+    const held = stored(cms);
+    assert.equal(held.length, 1, 'one comment');
+    assert.equal(held[0]?.url, note);
   });
 
   it('deletes it when the source no longer links here', async () => {
