@@ -765,6 +765,7 @@ function parseItem(element: HtmlElement, base: string, reading: Reading): Microf
   // Whether anything inside is a `p-` or `e-` property or a microformat of its
   // own, which is when mf2 stops implying a name from the whole text.
   let textual = false;
+  let explicitUrl = false;
 
   const add = (name: string, value: MicroformatValue): void => {
     const values = found.get(name);
@@ -786,6 +787,7 @@ function parseItem(element: HtmlElement, base: string, reading: Reading): Microf
         if (named.length === 0) children.push(nested);
         else {
           for (const { prefix, name } of named) {
+            if (prefix === 'u') explicitUrl = true;
             add(name, { text: nestedText(prefix, nested, child, base, reading), item: nested });
           }
         }
@@ -794,6 +796,7 @@ function parseItem(element: HtmlElement, base: string, reading: Reading): Microf
 
       for (const { prefix, name } of named) {
         if (prefix === 'p' || prefix === 'e') textual = true;
+        if (prefix === 'u') explicitUrl = true;
         add(name, valueOf(prefix, child, base, reading));
       }
       walk(child);
@@ -802,7 +805,7 @@ function parseItem(element: HtmlElement, base: string, reading: Reading): Microf
 
   walk(element);
   const properties: Record<string, MicroformatValue[]> = Object.fromEntries(found);
-  implied(element, properties, base, reading, !textual);
+  implied(element, properties, base, reading, !textual, !explicitUrl);
   return { types: rootTypesOf(element), properties, children, element };
 }
 
@@ -881,7 +884,9 @@ function attributeFor(
  * actually arrives in and stops short of guessing. A name is implied only when
  * nothing inside is a `p-` or `e-` property or a nested microformat, as mf2
  * says, so an entry with an `e-content` and no `p-name` has no name rather
- * than the text of everything around it.
+ * than the text of everything around it. A url is implied from a link inside
+ * only when nothing inside is a `u-` property, so a reply's `u-in-reply-to` is
+ * not read as the page the reply lives at.
  */
 function implied(
   element: HtmlElement,
@@ -889,6 +894,7 @@ function implied(
   base: string,
   reading: Reading,
   impliesName: boolean,
+  impliesChildUrl: boolean,
 ): void {
   if (impliesName && properties['name'] === undefined) {
     const name =
@@ -901,7 +907,7 @@ function implied(
   if (properties['url'] === undefined) {
     const href =
       attributeFor(element, ['a', 'area', 'link'], 'href') ??
-      impliedAttribute(element, ['a', 'area'], 'href');
+      (impliesChildUrl ? impliedAttribute(element, ['a', 'area'], 'href') : undefined);
     const url = href === undefined ? undefined : normalize(href, base);
     if (url !== undefined) properties['url'] = [{ text: url }];
   }

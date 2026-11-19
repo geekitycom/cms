@@ -566,6 +566,43 @@ describe('implied properties of an h-card author', () => {
   });
 });
 
+describe('the implied url of an item with explicit u- properties', () => {
+  it('does not imply an entry lives at the post its u-in-reply-to link answers', () => {
+    const entry = sourceEntry(
+      `<div class="h-entry"><a class="u-in-reply-to" href="${TARGET}">re</a></div>`,
+      SOURCE,
+      isTarget,
+      NOW,
+    );
+    assert.equal(entry.kind, 'reply');
+    assert.equal(entry.url, SOURCE);
+  });
+
+  it('still reads the url of a card written as a link around its u-photo', () => {
+    const entry = sourceEntry(
+      `<div class="h-entry"><a class="p-author h-card" href="/ada"><img class="u-photo" src="/ada.jpg" alt=""> Ada</a><a class="u-in-reply-to" href="${TARGET}">re</a></div>`,
+      SOURCE,
+      isTarget,
+      NOW,
+    );
+    assert.deepEqual(entry.author, {
+      name: 'Ada',
+      url: 'https://them.example/ada',
+      photo: 'https://them.example/ada.jpg',
+    });
+  });
+
+  it('implies a url from the only link when nothing explicit but a nested card is there', () => {
+    const [item] = itemsIn(
+      parseHtml(
+        `<div class="h-entry"><a href="/post">Post</a><span class="h-card">Ada</span></div>`,
+      ),
+      SOURCE,
+    );
+    assert.deepEqual(item?.properties['url'], [{ text: 'https://them.example/post' }]);
+  });
+});
+
 describe('reading a deeply nested page', () => {
   function timed<T>(run: () => T): { value: T; ms: number } {
     const started = performance.now();
