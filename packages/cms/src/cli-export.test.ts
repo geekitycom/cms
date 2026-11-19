@@ -11,6 +11,7 @@ import { cleanupTemporaryDirs, runCli, siteWithContent } from './__testing__/cli
 import { readTar } from './files/tar.ts';
 import { createCms } from './index.ts';
 import { FEDERATION_QUEUE_TABLE, queueFile } from './store/queue-database.ts';
+import { waitingChecks } from './webmention/checks.ts';
 
 after(cleanupTemporaryDirs);
 
@@ -80,6 +81,23 @@ describe('geekity export', () => {
     assert.equal(names[0], 'manifest.json');
     assert.ok(names.includes('data/users.json'));
     assert.ok(!names.some((name) => name.includes('queue.sqlite')));
+  });
+
+  it('prints the webmention checks waiting before it writes', async () => {
+    const directory = await site();
+    const checks = waitingChecks(path.join(directory, 'data'), 10);
+    const at = new Date('2026-10-14T15:04:05Z');
+    await checks.add({ source: 'https://a.example/1', target: `${BASE}/one/` }, at);
+    await checks.add({ source: 'https://b.example/2', target: `${BASE}/one/` }, at);
+
+    const run = await runCli(['export', '--out', 'site.tar.gz'], directory, undefined, {
+      GEEKITY_BASE_URL: BASE,
+    });
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(
+      run.stdout,
+      /^2 webmention checks are waiting in data\/webmention-checks\.json\. They are not exported: before a move, wait until none are\.$/m,
+    );
   });
 
   it('names each entry under content/ that is not a regular file, and leaves it out', async () => {

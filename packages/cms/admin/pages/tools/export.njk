@@ -28,6 +28,12 @@
       waiting in <code>data/queue.sqlite</code>. They are not exported: before moving the
       site, wait until none are, and look again here.
     </p>
+    {% if pending.webmentionChecks %}
+      <p id="export-pending-webmentions" class="max-w-prose">
+        {% if pending.webmentionChecks == 1 %}1 webmention check is{% else %}{{ pending.webmentionChecks }} webmention checks are{% endif %}
+        waiting in <code>data/webmention-checks.json</code>. They are not exported either.
+      </p>
+    {% endif %}
 
     <div class="flex flex-col gap-6" data-job-region>
       {% if job %}

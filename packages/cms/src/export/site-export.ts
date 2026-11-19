@@ -26,6 +26,7 @@ import type { SettingsRegistry } from '../settings/types.ts';
 import { countWaitingMessages } from '../store/queue-database.ts';
 import { isNotFound } from '../util/files.ts';
 import { isRecord } from '../util/guards.ts';
+import { countWaitingChecks } from '../webmention/checks.ts';
 
 /**
  * It reads only. Every writer replaces its file by rename, so each file read
@@ -75,6 +76,7 @@ export interface ManifestOverride {
 export interface PendingWork {
   readonly deliveries: number;
   readonly jobs: { readonly queued: number; readonly running: number };
+  readonly webmentionChecks: number;
 }
 
 export type NotCarried = {
@@ -148,6 +150,7 @@ export async function pendingWork(dataDir: string): Promise<PendingWork> {
       queued: jobs.filter((job) => job.state === 'queued').length,
       running: jobs.filter((job) => job.state === 'running').length,
     },
+    webmentionChecks: await countWaitingChecks(dataDir),
   };
 }
 

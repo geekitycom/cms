@@ -15,6 +15,7 @@ import type { Cms } from '../index.ts';
 import { createFileRecords } from '../jobs/file-records.ts';
 import type { JobState } from '../jobs/types.ts';
 import { FEDERATION_QUEUE_TABLE } from '../store/queue-database.ts';
+import { waitingChecks } from '../webmention/checks.ts';
 import { FIRST_ADMIN, browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { flashes } from './__testing__/flash.ts';
@@ -91,6 +92,20 @@ describe('Tools > Export', () => {
     const html = section(await (await agent.get(EXPORT_URL)).text());
 
     assert.match(html, /2 deliveries are waiting in <code>data\/queue.sqlite<\/code>/);
+  });
+
+  it('shows the webmention checks waiting before an export starts', async () => {
+    const { cms, agent } = await site();
+    const checks = waitingChecks(cms.config.dataDir, 10);
+    const at = new Date('2026-10-14T15:04:05Z');
+    await checks.add({ source: 'https://a.example/1', target: 'https://blog.example/one/' }, at);
+
+    const html = section(await (await agent.get(EXPORT_URL)).text());
+
+    assert.match(
+      html,
+      /1 webmention check is\s+waiting in <code>data\/webmention-checks.json<\/code>/,
+    );
   });
 
   it('queues nothing when the password is wrong or missing (AC #1)', async () => {

@@ -331,18 +331,19 @@ export function syndicationCopies(contentDir: string): SyndicationCopies {
   /**
    * Change the file under its lock, and write it only when something changed:
    * a resend that gets the same copy back must not churn a file that is in the
-   * site's git history.
+   * site's git history. The change sees the file as written, so an entry this
+   * cannot read is written back as it was.
    */
-  function update(change: (all: Record<string, Record<string, string>>) => boolean): Promise<void> {
+  function update(change: (all: Record<string, unknown>) => boolean): Promise<void> {
     return withFileLock(file, () => {
       const current = readFileIfPresentSync(file);
-      const parsed = current === undefined ? { copies: {} } : parseCopies(current);
+      const parsed = current === undefined ? { raw: {} } : parseObject(current);
       if ('problem' in parsed) {
         throw new Error(
           `${file} cannot be read (${parsed.problem}), so nothing is written to it until it is repaired.`,
         );
       }
-      const all = parsed.copies;
+      const all = parsed.raw;
       if (change(all)) writeFileAtomicallySync(file, `${JSON.stringify(all, null, 2)}\n`);
     });
   }
@@ -367,8 +368,9 @@ export function syndicationCopies(contentDir: string): SyndicationCopies {
 
     write(permalink, target, copy) {
       return update((all) => {
-        const copies = { ...all[permalink] };
-        if (copies[target] === copy) return false;
+        const held = all[permalink];
+        const copies = isRecord(held) ? { ...held } : {};
+        if (isRecord(held) ? copies[target] === copy : copy === undefined) return false;
         if (copy === undefined) delete copies[target];
         else copies[target] = copy;
         if (Object.keys(copies).length === 0) delete all[permalink];
@@ -412,16 +414,11 @@ export function postSyndicatedAt(
 function parseCopies(
   text: string,
 ): { readonly copies: Record<string, Record<string, string>> } | { readonly problem: string } {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    return { problem: messageOf(error) };
-  }
-  if (!isRecord(parsed)) return { problem: 'it is not a JSON object' };
+  const parsed = parseObject(text);
+  if ('problem' in parsed) return parsed;
 
   const all: Record<string, Record<string, string>> = {};
-  for (const [permalink, value] of Object.entries(parsed)) {
+  for (const [permalink, value] of Object.entries(parsed.raw)) {
     if (!isRecord(value)) continue;
     const copies: Record<string, string> = {};
     for (const [target, copy] of Object.entries(value)) {
@@ -431,6 +428,18 @@ function parseCopies(
     if (Object.keys(copies).length > 0) all[permalink] = copies;
   }
   return { copies: all };
+}
+
+function parseObject(
+  text: string,
+): { readonly raw: Record<string, unknown> } | { readonly problem: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    return { problem: messageOf(error) };
+  }
+  return isRecord(parsed) ? { raw: parsed } : { problem: 'it is not a JSON object' };
 }
 
 /** A front matter value as a list of strings: a lone string is a list of one. */

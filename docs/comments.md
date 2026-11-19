@@ -39,6 +39,11 @@ file, and go on to every other post; an erasure also names the post on
 of the index and logs a warning that names the file, and every other post is
 indexed as usual. Repair the file and restart to bring its comments back.
 
+An entry in a comment file that the server cannot read as a comment, such as
+one with no `id` or no author name, is not shown, and every write puts it back
+as it was, in its place among the other entries. When a comment it answers
+gets a new id, its `inReplyTo` names the new id; nothing else in it changes.
+
 An entry that parses but is not an object, or has no `id` or no author `name`,
 is not shown or indexed. Every write to that post keeps it in the file,
 unchanged, after the comments it can read, and keeps the email `data/` holds
@@ -108,7 +113,9 @@ names the migrated comment in `source:inReplyTo` by its guid. The guid is the
 otherwise its `url`.
 
 If the same comment arrives again, the site keeps the stored one, with the
-moderator's decision on it. The server matches arrivals as follows:
+moderator's decision on it. A decision a moderator makes while the comment
+checker is judging the resent copy stands too, unless the checker calls the
+new copy spam. The server matches arrivals as follows:
 
 - A resent webmention matches by its source.
 - A redelivered `Create` or `Like`, and a note that the

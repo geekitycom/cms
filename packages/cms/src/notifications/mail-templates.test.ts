@@ -128,4 +128,66 @@ describe('mail templates', () => {
 
     assert.equal(message.text.trim(), 'https://blog.example/admin/');
   });
+
+  describe('the packaged plain text bodies', () => {
+    async function packaged(name: string, context: Record<string, unknown>): Promise<string> {
+      return createMailTemplates({
+        themes: await themeSource(),
+        baseUrl: 'https://blog.example',
+        now: systemClock,
+      }).render(name, { site: SITE, baseUrl: 'https://blog.example', ...context }).text;
+    }
+
+    const comment = {
+      source: 'comment',
+      author: 'Grace',
+      website: 'https://grace.example/',
+      url: 'https://grace.example/2026/09/about-that/',
+      submitted: '4 September 2026',
+      text: 'Good post.',
+      kind: 'reply',
+    };
+    const pending = {
+      post: { title: 'Hello', url: 'https://blog.example/hello/' },
+      actions: [{ label: 'Approve', url: 'https://blog.example/a' }],
+      queueUrl: 'https://blog.example/admin/comments',
+    };
+
+    it('puts each header of a moderation notice on its own line', async () => {
+      const text = await packaged('comment-pending', { ...pending, comment });
+
+      assert.ok(
+        text.includes(
+          'From: Grace\nSite: https://grace.example/\nPage: https://grace.example/2026/09/about-that/\nWhen: 4 September 2026\n\nGood post.',
+        ),
+        text,
+      );
+    });
+
+    it('puts the headers a moderation notice has on their own lines when some are missing', async () => {
+      const text = await packaged('comment-pending', {
+        ...pending,
+        comment: { ...comment, website: null, url: null },
+      });
+
+      assert.ok(text.includes('From: Grace\nWhen: 4 September 2026\n\nGood post.'), text);
+    });
+
+    for (const subject of ['Hello there', undefined]) {
+      it(`leaves a blank line between a contact message's headers and its words${subject === undefined ? ' when it has no subject' : ''}`, async () => {
+        const text = await packaged('contact-message', {
+          from: { name: 'Grace', email: 'grace@example.com' },
+          page: { title: 'Contact', url: 'https://blog.example/contact/' },
+          message: { received: '4 September 2026', subject, text: 'Hi.' },
+          messagesUrl: 'https://blog.example/admin/messages',
+        });
+
+        const headers =
+          subject === undefined
+            ? 'When: 4 September 2026'
+            : `When: 4 September 2026\nSubject: ${subject}`;
+        assert.ok(text.includes(`${headers}\n\nHi.`), text);
+      });
+    }
+  });
 });

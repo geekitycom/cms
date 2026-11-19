@@ -352,3 +352,54 @@ describe('a copies file that does not parse', () => {
     });
   }
 });
+
+describe('a copies file edited by hand', () => {
+  const roots: string[] = [];
+  after(async () => {
+    await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
+  });
+
+  const handWritten = {
+    '/posts/a/': {
+      'https://brid.gy/publish/mastodon': 'https://m.example/1',
+      'https://news.indieweb.org/en': 'see the thread',
+    },
+    '/posts/b/': 'posted by hand',
+    '/posts/c/': ['https://m.example/3'],
+  };
+
+  async function copiesWith(
+    text: string,
+  ): Promise<{ file: string; copies: ReturnType<typeof syndicationCopies> }> {
+    const contentDir = await mkdtemp(path.join(tmpdir(), 'geekity-syndication-'));
+    roots.push(contentDir);
+    const file = path.join(contentDir, ...SYNDICATION_FILE.split('/'));
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, text);
+    return { file, copies: syndicationCopies(contentDir) };
+  }
+
+  it('reads only the copies that are web URLs', async () => {
+    const { copies } = await copiesWith(JSON.stringify(handWritten));
+
+    assert.deepEqual(copies.read('/posts/a/'), {
+      'https://brid.gy/publish/mastodon': 'https://m.example/1',
+    });
+    assert.deepEqual(copies.read('/posts/b/'), {});
+  });
+
+  it('keeps the entries it cannot read as written when it records another copy', async () => {
+    const { file, copies } = await copiesWith(JSON.stringify(handWritten));
+
+    await copies.write('/posts/d/', 'https://brid.gy/publish/mastodon', 'https://m.example/4');
+    await copies.write('/posts/a/', 'https://brid.gy/publish/mastodon', undefined);
+    await copies.write('/posts/b/', 'https://brid.gy/publish/mastodon', undefined);
+
+    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), {
+      '/posts/a/': { 'https://news.indieweb.org/en': 'see the thread' },
+      '/posts/b/': 'posted by hand',
+      '/posts/c/': ['https://m.example/3'],
+      '/posts/d/': { 'https://brid.gy/publish/mastodon': 'https://m.example/4' },
+    });
+  });
+});

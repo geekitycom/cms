@@ -28,6 +28,7 @@ import { sitePluginRegistry } from '../plugins/site-registry.ts';
 import { createSettings } from '../site/namespace.ts';
 import { FEDERATION_QUEUE_TABLE } from '../store/queue-database.ts';
 import { exportFileName, pendingWork, planSiteExport, writeSiteExport } from './site-export.ts';
+import { waitingChecks } from '../webmention/checks.ts';
 import type { ExportManifest, SiteExportOptions } from './site-export.ts';
 
 const dirs: string[] = [];
@@ -367,7 +368,11 @@ describe('a site export', () => {
     assert.equal(manifest.exportedAt, NOW.toISOString());
     assert.equal(manifest.devMode, true);
     assert.match(manifest.cms, /^\d+\.\d+\.\d+/);
-    assert.deepEqual(manifest.pending, { deliveries: 2, jobs: { queued: 1, running: 0 } });
+    assert.deepEqual(manifest.pending, {
+      deliveries: 2,
+      jobs: { queued: 1, running: 0 },
+      webmentionChecks: 0,
+    });
   });
 
   it('reports progress per file and stops between files when aborted', async () => {
@@ -404,7 +409,19 @@ describe('pendingWork', () => {
     assert.deepEqual(await pendingWork(dataDir), {
       deliveries: 0,
       jobs: { queued: 0, running: 0 },
+      webmentionChecks: 0,
     });
+  });
+
+  it('counts the webmentions accepted and not yet checked', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-export-checks-'));
+    dirs.push(dataDir);
+    const checks = waitingChecks(dataDir, 10);
+    const at = new Date('2026-10-14T15:04:05Z');
+    await checks.add({ source: 'https://a.example/1', target: `${BASE}/hello/` }, at);
+    await checks.add({ source: 'https://b.example/2', target: `${BASE}/hello/` }, at);
+
+    assert.equal((await pendingWork(dataDir)).webmentionChecks, 2);
   });
 });
 

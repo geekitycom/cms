@@ -129,6 +129,22 @@ export function waitingChecks(dataDir: string, limit: number): WaitingChecks {
   };
 }
 
+/**
+ * How many checks `data/webmention-checks.json` holds, read without taking its
+ * lock, for a reader that must write nothing under `data/`.
+ */
+export async function countWaitingChecks(dataDir: string): Promise<number> {
+  let text: string;
+  try {
+    text = await readFile(dataPath(dataDir, WEBMENTION_CHECKS), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+    throw error;
+  }
+  const parsed: unknown = JSON.parse(text);
+  return Array.isArray(parsed) ? parsed.filter(isWaitingCheck).length : 0;
+}
+
 function isWaitingCheck(value: unknown): value is WaitingCheck {
   if (!isRecord(value)) return false;
   const optional = (field: unknown): boolean => field === undefined || typeof field === 'string';

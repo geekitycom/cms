@@ -7,8 +7,10 @@
 
 {{ page.url }}
 When: {{ message.received }}
-{% if message.subject %}Subject: {{ message.subject }}
+{% if message.subject %}
+Subject: {{ message.subject }}
 {% endif %}
+
 {{ message.text }}
 
 --

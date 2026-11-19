@@ -39,10 +39,14 @@ export async function exportCommand({ configPath, flags }: ParsedArgs): Promise<
       withContent: flags['without-content'] !== true,
     },
   );
-  const { deliveries } = plan.site.pending;
+  const { deliveries, webmentionChecks } = plan.site.pending;
   process.stdout.write(
     `${count(deliveries, 'delivery is', 'deliveries are')} waiting in data/queue.sqlite. ` +
       'They are not exported: before a move, wait until none are.\n' +
+      (webmentionChecks === 0
+        ? ''
+        : `${count(webmentionChecks, 'webmention check is', 'webmention checks are')} waiting in data/webmention-checks.json. ` +
+          'They are not exported: before a move, wait until none are.\n') +
       'The archive holds actor keys, password hashes and personal data. ' +
       'Store it as carefully as data/.\n',
   );

@@ -6,9 +6,13 @@
 
 {{ post.url }}
 
-From: {{ comment.author }}{% if comment.website %}
-Site: {{ comment.website }}{% endif %}{% if comment.url %}
-Page: {{ comment.url }}{% endif %}
+From: {{ comment.author }}
+{% if comment.website %}
+Site: {{ comment.website }}
+{% endif %}
+{% if comment.url %}
+Page: {{ comment.url }}
+{% endif %}
 When: {{ comment.submitted }}
 
 {{ comment.text | trim if comment.text | trim else '(nothing was said — it is a ' + comment.kind + ')' }}

@@ -23,6 +23,7 @@ import {
   putComments,
   readComments,
   rebuildCommentIndexes,
+  renameComments,
   updateComment,
 } from './records.ts';
 import type { CommentRecords, NewComment } from './records.ts';
@@ -688,6 +689,69 @@ describe('a comment file somebody edited by hand', () => {
     assert.match(emails, /nameless@example\.com/);
     assert.match(emails, /ada@example\.com/);
   });
+
+  async function handWritten(site: CommentRecords, comments: unknown[]): Promise<string> {
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, `${JSON.stringify({ post: '/2026/09/hello-world/', comments })}\n`);
+    rebuildCommentIndexes(site);
+    return file;
+  }
+
+  async function entriesIn(file: string): Promise<unknown[]> {
+    return (JSON.parse(await readFile(file, 'utf8')) as { comments: unknown[] }).comments;
+  }
+
+  const first = { id: '00000000000000a1', author: { name: 'Ada' }, status: 'approved' };
+  const kept = { id: '00000000000000b2', author: {}, inReplyTo: '00000000000000a1', note: 'x' };
+  const last = { id: '00000000000000c3', author: { name: 'Cy' }, status: 'approved' };
+
+  it('keeps an entry it cannot read in its place among the others, oldest first', async () => {
+    const site = await records();
+    const file = await handWritten(site, ['a pasted line', first, kept, last]);
+
+    await updateComment(site, first.id, { status: 'spam' });
+    await deleteComment(site, last.id);
+    await addComment(site, ada({ id: '00000000000000d4' }));
+
+    const ids = (await entriesIn(file)).map((entry) =>
+      typeof entry === 'string' ? entry : (entry as { id?: unknown }).id,
+    );
+    assert.deepEqual(ids, ['a pasted line', first.id, kept.id, '00000000000000d4']);
+  });
+
+  it('keeps an entry it cannot read in its place when the comment before it goes', async () => {
+    const site = await records();
+    const file = await handWritten(site, [first, kept, last]);
+
+    await deleteComment(site, first.id);
+
+    const ids = (await entriesIn(file)).map((entry) => (entry as { id?: unknown }).id);
+    assert.deepEqual(ids, [kept.id, last.id]);
+  });
+
+  it('renames what an entry it cannot read answers, touching nothing else in it', async () => {
+    const site = await records();
+    const file = await handWritten(site, [first, kept, last]);
+
+    await renameComments(site, 'hello-world', new Map([[first.id, 'aaaaaaaaaaaaaaaa']]));
+
+    const entries = await entriesIn(file);
+    assert.deepEqual(entries[1], { ...kept, inReplyTo: 'aaaaaaaaaaaaaaaa' });
+    assert.equal((entries[0] as { id?: unknown }).id, 'aaaaaaaaaaaaaaaa');
+  });
+
+  it('refuses to rename a comment to the id an entry it cannot read holds', async () => {
+    const site = await records();
+    const file = await handWritten(site, [first, kept, last]);
+    const before = await readFile(file, 'utf8');
+
+    await assert.rejects(
+      renameComments(site, 'hello-world', new Map([[last.id, kept.id]])),
+      /cannot take id "00000000000000b2"/,
+    );
+    assert.equal(await readFile(file, 'utf8'), before);
+  });
 });
 
 describe('a comment or email file that does not parse', () => {
@@ -872,6 +936,16 @@ function checkerSaying(answer: CommentVerdict | Error): RememberingChecker {
     check(submission) {
       seen.push(submission);
       if (answer instanceof Error) throw answer;
+      return answer;
+    },
+  };
+}
+
+/** One that runs `meanwhile` before it answers, as a moderator acting during a slow check. */
+function checkerMeanwhile(meanwhile: () => Promise<void>, answer: CommentVerdict): CommentChecker {
+  return {
+    async check() {
+      await meanwhile();
       return answer;
     },
   };
@@ -1232,6 +1306,41 @@ describe('the comment intake', () => {
     });
 
     assert.equal(onlyStored(outcome).status, 'spam');
+  });
+
+  it('keeps what a moderator decided while the checker was still answering', async () => {
+    const site = await intakeSite();
+    const first = onlyStored(await site.take({ origin: 'webmention', comment: mention() }));
+
+    const outcome = await site.take({
+      origin: 'webmention',
+      comment: mention(),
+      checker: checkerMeanwhile(async () => {
+        await updateComment(site, first.id, { status: 'approved' });
+      }, 'unknown'),
+    });
+
+    assert.equal(onlyStored(outcome).status, 'approved');
+    assert.equal(readComments(site, 'hello-world')[0]?.status, 'approved');
+  });
+
+  it('keeps a moderator’s spam made during the check of an approved one that now says something else', async () => {
+    const site = await intakeSite();
+    const first = onlyStored(await site.take({ origin: 'webmention', comment: mention() }));
+    await updateComment(site, first.id, { status: 'approved' });
+    const before = site.provider.sent.length;
+
+    const outcome = await site.take({
+      origin: 'webmention',
+      comment: mention({ content: { markdown: 'Other words', html: '<p>Other words</p>' } }),
+      checker: checkerMeanwhile(async () => {
+        await updateComment(site, first.id, { status: 'spam' });
+      }, 'unknown'),
+    });
+
+    assert.equal(onlyStored(outcome).status, 'spam');
+    assert.equal(readComments(site, 'hello-world')[0]?.status, 'spam');
+    assert.equal(site.provider.sent.length, before, 'and nobody is told it waits');
   });
 
   it('takes the webmention it already held away when a checker says discard', async () => {
