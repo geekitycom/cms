@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { addComment } from '../comments/records.ts';
+import { addComment, commentsFile, rebuildCommentIndexes } from '../comments/records.ts';
 import type { NewComment } from '../comments/records.ts';
 import type { CommentReport } from '../forms/checker.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -118,6 +118,36 @@ describe('the comments screen', () => {
     assert.ok(!html.includes('Buy pills.'), 'the spam list is not the pending one');
     // The email is the one thing only this screen shows.
     assert.match(html, /ada@example\.com/);
+  });
+
+  it('links no author address in a comment file that is not a web address', async () => {
+    const { cms, agent } = await moderating();
+    const { contentDir, dataDir } = cms.config;
+    const file = commentsFile(contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(
+      file,
+      `${JSON.stringify({
+        post: '/2026/09/hello-world/',
+        comments: [
+          {
+            id: '0000000000000001',
+            source: 'webmention',
+            kind: 'reply',
+            status: 'pending',
+            author: { name: 'Mallory', url: 'javascript:alert(1)', avatar: null },
+            content: { markdown: 'Waiting.', html: '<p>Waiting.</p>' },
+            submitted: '2026-09-20T09:00:00.000Z',
+            url: 'https://mallory.example/reply',
+          },
+        ],
+      })}\n`,
+    );
+    rebuildCommentIndexes({ admin: cms.admin, contentDir, dataDir });
+
+    const html = await (await agent.get(COMMENTS_PATH)).text();
+    assert.match(html, /Waiting\./);
+    assert.doesNotMatch(html, /javascript:/);
   });
 
   it('shows the spam list when asked for it', async () => {

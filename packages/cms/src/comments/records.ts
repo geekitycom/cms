@@ -13,6 +13,7 @@ import {
 } from '../store/admin-store.ts';
 import type { AdminStore, CommentRecord, PostComment } from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
+import { isWebUrl } from '../content/enclosure.ts';
 import { slugForPermalink } from '../content/parser.ts';
 import { rsvpValue } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
@@ -301,9 +302,9 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     status: oneOf(value['status'], COMMENT_STATUSES, 'pending'),
     author: {
       name,
-      url: nonEmptyStringOrNull(author['url']),
+      url: webLink(author['url']),
       email: nonEmptyStringOrNull(author['email']),
-      avatar: nonEmptyStringOrNull(author['avatar']),
+      avatar: webLink(author['avatar']),
     },
     content: {
       markdown: typeof content['markdown'] === 'string' ? content['markdown'] : '',
@@ -367,9 +368,10 @@ export async function putComments(
   records: CommentRecords,
   slug: string,
   permalink: string,
-  comments: readonly CommentRecord[],
+  given: readonly CommentRecord[],
 ): Promise<void> {
-  if (comments.length === 0) return;
+  if (given.length === 0) return;
+  const comments = given.map((comment) => ({ ...comment, author: withWebLinks(comment.author) }));
   const file = commentsFile(records.contentDir, slug);
 
   await withFileLock(file, () => {
@@ -471,6 +473,7 @@ export async function updateComment(
       ...known,
       ...(held[at] as CommentRecord),
       ...fields,
+      ...(fields.author === undefined ? {} : { author: withWebLinks(fields.author) }),
     };
     const moved: PostComment = {
       ...merged,
@@ -662,6 +665,19 @@ function commentFiles(contentDir: string): string[] {
     .map((name) => path.join(commentsDirectory(contentDir), name));
 }
 
+/**
+ * An author's link or picture, kept only when it is an http or https address:
+ * both are printed as links, and the page they are on is the admin's origin.
+ */
+function webLink(value: unknown): string | null {
+  const text = nonEmptyStringOrNull(value);
+  return text !== null && isWebUrl(text) ? text : null;
+}
+
+function withWebLinks<Author extends CommentRecord['author']>(author: Author): Author {
+  return { ...author, url: webLink(author.url), avatar: webLink(author.avatar) };
+}
+
 /** A new comment as the record it becomes, id and all. */
 function commentRecordOf(comment: NewComment): CommentRecord {
   return {
@@ -669,7 +685,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     source: comment.source,
     kind: comment.kind,
     status: comment.status,
-    author: { ...comment.author },
+    author: withWebLinks(comment.author),
     content: { ...comment.content },
     submitted: comment.submitted,
     addressHash: comment.addressHash,

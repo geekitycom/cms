@@ -15,6 +15,7 @@ import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
+import { commentsFile, rebuildCommentIndexes, updateComment } from '../comments/records.ts';
 
 /**
  * Webmentions as somebody else's server meets them: an endpoint advertised on
@@ -610,6 +611,91 @@ describe('a webmention on the page', () => {
   });
 });
 
+describe('an author link that is not a web address', () => {
+  function records(cms: Cms) {
+    return { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir };
+  }
+
+  it('is not stored, and the approved webmention links nowhere it does not go', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a>` +
+          '<div class="e-content"><p>Good post.</p></div>',
+      )
+        .replace('href="https://them.example/"', 'href="javascript:alert(document.domain)"')
+        .replace('src="/me.jpg"', 'src="data:image/svg+xml,%3Csvg%2F%3E"'),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    const held = stored(cms)[0];
+    assert.ok(held !== undefined);
+    assert.equal(held.author.url, null);
+    assert.equal(held.author.avatar, null);
+    const file = await readFile(commentsFile(cms.config.contentDir, 'hello-world'), 'utf8');
+    assert.doesNotMatch(file, /javascript:|data:image/);
+
+    await updateComment(records(cms), held.id, { status: 'approved' });
+    const page = await (await cms.app.request('/2026/09/hello-world/')).text();
+    assert.match(page, /Good post\./);
+    assert.doesNotMatch(page, /href="javascript:/);
+  });
+
+  it('keeps an http author link and photo', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms)[0]?.author.url, 'https://them.example/');
+    assert.equal(stored(cms)[0]?.author.avatar, 'https://them.example/me.jpg');
+  });
+
+  it('in a comment file already on disk is linked from no page', async () => {
+    const cms = await site();
+    const author = { name: 'Mallory', url: 'javascript:alert(1)', avatar: 'javascript:alert(2)' };
+    const file = commentsFile(cms.config.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(
+      file,
+      `${JSON.stringify({
+        post: '/2026/09/hello-world/',
+        comments: [
+          {
+            id: '0000000000000001',
+            source: 'webmention',
+            kind: 'reply',
+            status: 'approved',
+            author,
+            content: { markdown: 'Mallory says hi.', html: '<p>Mallory says hi.</p>' },
+            submitted: '2026-09-20T09:00:00.000Z',
+            url: 'https://mallory.example/reply',
+          },
+          {
+            id: '0000000000000002',
+            source: 'webmention',
+            kind: 'like',
+            status: 'approved',
+            author,
+            content: { markdown: '', html: '' },
+            submitted: '2026-09-20T09:00:00.000Z',
+            url: null,
+          },
+        ],
+      })}\n`,
+    );
+    rebuildCommentIndexes(records(cms));
+
+    const page = await (await cms.app.request('/2026/09/hello-world/')).text();
+    assert.match(page, /Mallory says hi\./);
+    assert.doesNotMatch(page, /javascript:/);
+    const markdown = await (await cms.app.request('/2026/09/hello-world/index.md')).text();
+    assert.match(markdown, /Mallory/);
+    assert.doesNotMatch(markdown, /javascript:/);
+  });
+});
+
 describe('an RSVP webmention (TASK-198 AC #4)', () => {
   function rsvp(value: string): string {
     return reply(
@@ -838,6 +924,24 @@ describe('telling the moderators about it (TASK-55)', () => {
     assert.equal(provider.sent.length, 1);
     assert.match(provider.sent[0]?.text ?? '', /https:\/\/them\.example\/note/);
     assert.match(provider.sent[0]?.subject ?? '', /Hello world/);
+  });
+
+  it('links no author address that is not a web address', async () => {
+    const { cms, provider } = await siteWithMail();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`).replace(
+        'href="https://them.example/"',
+        'href="javascript:alert(1)"',
+      ),
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note');
+    await cms.notifications.settled();
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 1);
+    assert.doesNotMatch(provider.sent[0]?.html ?? '', /javascript:/);
+    assert.doesNotMatch(provider.sent[0]?.text ?? '', /javascript:/);
   });
 
   it('says nothing the second time the same page sends one', async () => {

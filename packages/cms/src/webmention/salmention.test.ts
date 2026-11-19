@@ -337,6 +337,22 @@ describe('receiving a salmention (TASK-320)', () => {
   });
 });
 
+describe('a nested reply whose author link is not a web address', () => {
+  it('is stored with no author URL', async () => {
+    const cms = await site();
+    const carol = cite(CAROL, 'Carol', 'Carol answers.').replace(
+      'href="https://carol.example/"',
+      'href="javascript:alert(1)"',
+    );
+    pages.set(SOURCE, { body: source(carol) });
+    await sendAndSettle(cms, SOURCE);
+
+    const stored = byUrl(cms, CAROL);
+    assert.ok(stored !== undefined);
+    assert.equal(stored.author.url, null);
+  });
+});
+
 function nativeComment(values: Partial<NewComment> = {}): NewComment {
   return {
     slug: 'hello-world',

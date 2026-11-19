@@ -655,6 +655,59 @@ describe('a comment file somebody edited by hand', () => {
   });
 });
 
+describe('an author link in a comment file', () => {
+  it('is read only when it is an http or https address', async () => {
+    const site = await records();
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    const entry = (id: string, url: string, avatar: string) => ({
+      id,
+      author: { name: 'Ada', url, avatar },
+      content: { markdown: 'Hi' },
+      status: 'approved',
+    });
+    await writeFile(
+      file,
+      `${JSON.stringify({
+        post: '/2026/09/hello-world/',
+        comments: [
+          entry('c1', 'javascript:alert(1)', 'data:image/png;base64,AAAA'),
+          entry('c2', 'https://ada.example/', 'http://ada.example/me.jpg'),
+          entry('c3', 'ada.example', '/me.jpg'),
+        ],
+      })}\n`,
+    );
+
+    const held = readComments(site, 'hello-world').map(({ author }) => [author.url, author.avatar]);
+
+    assert.deepEqual(held, [
+      [null, null],
+      ['https://ada.example/', 'http://ada.example/me.jpg'],
+      [null, null],
+    ]);
+  });
+
+  it('is not written, nor indexed, when it is not one', async () => {
+    const site = await records();
+
+    const stored = await addComment(
+      site,
+      ada({ author: { name: 'Ada', url: 'javascript:alert(1)', email: null, avatar: 'data:,x' } }),
+    );
+    await updateComment(site, stored.id, {
+      author: { name: 'Ada', url: 'javascript:alert(2)', email: null, avatar: null },
+    });
+
+    assert.equal(stored.author.url, null);
+    assert.equal(stored.author.avatar, null);
+    assert.equal(site.admin.getComment(stored.id)?.author.url, null);
+    assert.doesNotMatch(
+      await readFile(commentsFile(site.contentDir, 'hello-world'), 'utf8'),
+      /javascript:|data:/,
+    );
+  });
+});
+
 /**
  * The intake, driven through its own interface.
  *
