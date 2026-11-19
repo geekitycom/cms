@@ -88,6 +88,28 @@ describe('sanitising a comment', () => {
     assert.equal(sanitizeCommentHtml('<em>a</strong>b</em>'), '<em>ab</em>');
   });
 
+  it('sanitises 30,000 unclosed tags followed by 30,000 stray closing tags in well under a second', () => {
+    const note = '<b>'.repeat(30_000) + '</div>'.repeat(30_000);
+    const started = performance.now();
+    const clean = sanitizeCommentHtml(note);
+    const elapsed = performance.now() - started;
+    assert.ok(clean.startsWith('<b><b>'));
+    assert.ok(clean.endsWith('</b></b>'));
+    assert.ok(elapsed < 1_000, `sanitizeCommentHtml took ${Math.round(elapsed)} ms`);
+  });
+
+  it('still closes an element that is open beneath stray closing tags', () => {
+    assert.equal(
+      sanitizeCommentHtml('<em><b>one</a></u><b>two</em><p>three'),
+      '<em><b>one<b>two</b></b></em><p>three</p>',
+    );
+  });
+
+  it('nests no deeper than 512 elements and unwraps the rest', () => {
+    const clean = sanitizeCommentHtml('<b>'.repeat(600) + 'end');
+    assert.equal(clean, '<b>'.repeat(512) + 'end' + '</b>'.repeat(512));
+  });
+
   it('drops a comment, a doctype and a stray angle bracket', () => {
     assert.equal(sanitizeCommentHtml('<!-- <script>x</script> -->ok'), 'ok');
     assert.equal(sanitizeCommentHtml('<!doctype html><p>ok</p>'), '<p>ok</p>');

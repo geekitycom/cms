@@ -57,6 +57,12 @@ const DROPPED_WHOLE: readonly string[] = ['script', 'style'];
 const CLOSED_BY_ITSELF: readonly string[] = ['p', 'li'];
 
 /**
+ * How deep kept elements nest before further ones are unwrapped, the limit
+ * browsers apply.
+ */
+const MAX_DEPTH = 512;
+
+/**
  * URL schemes a link may use.
  *
  * An allowlist rather than a `javascript:` denylist: `data:` and `vbscript:`
@@ -89,14 +95,19 @@ export function sanitizeCommentHtml(html: string): string {
   const out: string[] = [];
   /** The elements written and not yet closed, outermost first. */
   const open: string[] = [];
+  const openByName = new Map<string, number>();
   let at = 0;
 
   /** Close open elements down to and including `name`, if it is open at all. */
-  function closeThrough(name: string): boolean {
-    const index = open.lastIndexOf(name);
-    if (index < 0) return false;
-    while (open.length > index) out.push(`</${open.pop() ?? ''}>`);
-    return true;
+  function closeThrough(name: string): void {
+    if (!openByName.has(name)) return;
+    for (let element = open.pop(); element !== undefined; element = open.pop()) {
+      out.push(`</${element}>`);
+      const count = openByName.get(element) ?? 0;
+      if (count > 1) openByName.set(element, count - 1);
+      else openByName.delete(element);
+      if (element === name) return;
+    }
   }
 
   while (at < html.length) {
@@ -147,8 +158,10 @@ export function sanitizeCommentHtml(html: string): string {
     }
 
     if (CLOSED_BY_ITSELF.includes(tag.name)) closeThrough(tag.name);
+    if (open.length >= MAX_DEPTH) continue;
     out.push(`<${tag.name}${attributes}>`);
     open.push(tag.name);
+    openByName.set(tag.name, (openByName.get(tag.name) ?? 0) + 1);
   }
 
   while (open.length > 0) out.push(`</${open.pop() ?? ''}>`);
