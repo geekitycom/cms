@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { linksTo, sourceEntry } from './microformats.ts';
+import { MICROFORMAT_ITEMS_PER_PAGE, linksTo, sourceEntry } from './microformats.ts';
 
 const SOURCE = 'https://them.example/2026/09/reply/';
 const TARGET = 'https://blog.example/2026/09/hello/';
@@ -278,5 +278,67 @@ describe('reading a deeply nested page', () => {
     const { value, ms } = timed(() => sourceEntry(page, SOURCE, isTarget));
     assert.equal(value.kind, 'mention');
     assert.ok(ms < 500, `sourceEntry took ${Math.round(ms)} ms for ${page.length} bytes`);
+  });
+
+  it('reads a 24-deep chain of roots that each carry two property classes in well under a second', () => {
+    const depth = 24;
+    const page =
+      `<div class="h-entry"><a href="${TARGET}">hello</a>` +
+      '<div class="p-a p-b h-x">x'.repeat(depth) +
+      '</div>'.repeat(depth) +
+      '</div>';
+    const { value, ms } = timed(() => sourceEntry(page, SOURCE, isTarget));
+    assert.equal(value.kind, 'mention');
+    assert.ok(ms < 500, `sourceEntry took ${Math.round(ms)} ms for ${page.length} bytes`);
+  });
+
+  it('reads a 500-deep chain of roots that each carry three property classes in well under a second', () => {
+    const depth = 500;
+    const page =
+      `<div class="h-entry"><a href="${TARGET}">hello</a>` +
+      '<div class="p-a p-b p-c h-entry">x'.repeat(depth) +
+      '</div>'.repeat(depth) +
+      '</div>';
+    const { value, ms } = timed(() => sourceEntry(page, SOURCE, isTarget));
+    assert.equal(value.kind, 'mention');
+    assert.ok(ms < 1_000, `sourceEntry took ${Math.round(ms)} ms for ${page.length} bytes`);
+  });
+
+  it('looks for a link to the target in 500 nested entries over thousands of links in well under a second', () => {
+    const depth = 500;
+    const links = `<a href="https://elsewhere.example/a">a</a>`.repeat(20_000);
+    const page =
+      `<a href="${TARGET}">hi</a>` +
+      '<div class="h-entry">x'.repeat(depth) +
+      links +
+      '</div>'.repeat(depth);
+    const { value, ms } = timed(() => sourceEntry(page, SOURCE, isTarget));
+    assert.equal(value.kind, 'mention');
+    assert.ok(ms < 1_000, `sourceEntry took ${Math.round(ms)} ms for ${page.length} bytes`);
+  });
+});
+
+describe('how many microformats one page may hold', () => {
+  const plain = '<div class="h-entry"><p class="p-name">another post</p></div>';
+  const like = `<div class="h-entry"><a class="u-like-of" href="${TARGET}">liked</a></div>`;
+
+  it('reads the last item that fits under the limit', () => {
+    const page = plain.repeat(MICROFORMAT_ITEMS_PER_PAGE - 1) + like;
+    assert.equal(sourceEntry(page, SOURCE, isTarget).kind, 'like');
+  });
+
+  it('reads no item past the limit, nested items counted', () => {
+    const nested = '<div class="h-entry"><div class="p-author h-card">Ada</div></div>';
+    const page = nested.repeat(MICROFORMAT_ITEMS_PER_PAGE / 2) + like;
+    assert.equal(sourceEntry(page, SOURCE, isTarget).kind, 'mention');
+  });
+
+  it('reads a page of 50,000 entries that link to the target in well under a second', () => {
+    const page = `<div class="h-entry"><a href="${TARGET}">hi</a></div>`.repeat(50_000);
+    const started = performance.now();
+    const entry = sourceEntry(page, SOURCE, isTarget);
+    const ms = performance.now() - started;
+    assert.equal(entry.kind, 'mention');
+    assert.ok(ms < 1_000, `sourceEntry took ${Math.round(ms)} ms for ${page.length} bytes`);
   });
 });

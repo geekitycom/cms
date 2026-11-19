@@ -94,6 +94,12 @@ export interface NestedReply {
 const NESTED_DEPTH = 8;
 const NESTED_LIMIT = 200;
 
+/**
+ * How many microformats are read off one page, nested ones counted. A blog's
+ * front page carries a few hundred at most; anything past this is passed over.
+ */
+export const MICROFORMAT_ITEMS_PER_PAGE = 1_000;
+
 /** The attributes that make an element a link to somewhere. */
 const LINK_ATTRIBUTES: readonly string[] = ['href', 'src', 'data', 'poster', 'cite'];
 
@@ -159,7 +165,7 @@ export function sourceEntry(
   const items = itemsIn(root, base);
   const entries = itemsOfType(items, 'h-entry');
 
-  const chosen = chooseEntry(entries, isTarget, base);
+  const chosen = chooseEntry(root, entries, isTarget, base);
   const author = authorOf(chosen, items, sourceUrl);
   const content = contentOf(chosen, root);
 
@@ -331,6 +337,7 @@ function valuesOf(item: MicroformatItem, property: string): string[] {
 
 /** The entry a webmention is about, or `undefined` when the page has none. */
 function chooseEntry(
+  root: HtmlElement,
   entries: readonly MicroformatItem[],
   isTarget: (url: string) => boolean,
   base: string,
@@ -338,11 +345,64 @@ function chooseEntry(
   for (const entry of entries) {
     if (kindOf(entry, isTarget) !== 'mention') return entry;
   }
-  for (const entry of entries) {
-    if ([...linkedFrom(entry.element, base)].some(isTarget)) return entry;
+  const linking = entriesLinkingTo(root, entries, isTarget, base);
+  return entries.find((entry) => linking.has(entry.element)) ?? entries[0];
+}
+
+/**
+ * The elements of those entries that have a link to the target somewhere
+ * inside them, found in one walk of the page however deeply they nest.
+ */
+function entriesLinkingTo(
+  root: HtmlElement,
+  entries: readonly MicroformatItem[],
+  isTarget: (url: string) => boolean,
+  base: string,
+): Set<HtmlElement> {
+  const isEntry = new Set(entries.map((entry) => entry.element));
+  const linking = new Set<HtmlElement>();
+  const open: HtmlElement[] = [];
+  const pending: { element: HtmlElement; leaving: boolean }[] = [{ element: root, leaving: false }];
+
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    const { element, leaving } = next;
+    if (leaving) {
+      open.pop();
+      continue;
+    }
+
+    if (element !== root && linksToTarget(element, isTarget, base)) {
+      for (let index = open.length - 1; index >= 0; index -= 1) {
+        const enclosing = open[index] as HtmlElement;
+        if (linking.has(enclosing)) break;
+        linking.add(enclosing);
+      }
+    }
+
+    if (isEntry.has(element)) {
+      open.push(element);
+      pending.push({ element, leaving: true });
+    }
+    for (let index = element.children.length - 1; index >= 0; index -= 1) {
+      const child = element.children[index];
+      if (child !== undefined && isElement(child)) pending.push({ element: child, leaving: false });
+    }
   }
 
-  return entries[0];
+  return linking;
+}
+
+/** Whether one element, itself and not what is inside it, links to the target. */
+function linksToTarget(
+  element: HtmlElement,
+  isTarget: (url: string) => boolean,
+  base: string,
+): boolean {
+  return LINK_ATTRIBUTES.some((attribute) => {
+    const value = element.attributes[attribute];
+    const resolved = value === undefined ? undefined : normalize(value, base);
+    return resolved !== undefined && isTarget(resolved);
+  });
 }
 
 /** Which of the four an entry is, given what the target is. */
@@ -463,17 +523,28 @@ function first(item: MicroformatItem, property: string): MicroformatValue | unde
   return item.properties[property]?.[0];
 }
 
-/** Every item of one type, at any depth. */
+/**
+ * Every item of one type, at any depth, in document order. One nested item can
+ * be the value of several properties at once, and it is listed once.
+ */
 function itemsOfType(items: readonly MicroformatItem[], type: string): MicroformatItem[] {
   const found: MicroformatItem[] = [];
+  const seen = new Set<MicroformatItem>();
+  const pending = [...items].reverse();
 
-  for (const item of items) {
+  for (let item = pending.pop(); item !== undefined; item = pending.pop()) {
+    if (seen.has(item)) continue;
+    seen.add(item);
     if (item.types.includes(type)) found.push(item);
-    found.push(...itemsOfType(item.children, type));
-    for (const values of Object.values(item.properties)) {
-      for (const value of values) {
-        if (value.item !== undefined) found.push(...itemsOfType([value.item], type));
-      }
+
+    const inside = [
+      ...item.children,
+      ...Object.values(item.properties).flatMap((values) =>
+        values.flatMap((value) => (value.item === undefined ? [] : [value.item])),
+      ),
+    ];
+    for (let index = inside.length - 1; index >= 0; index -= 1) {
+      pending.push(inside[index] as MicroformatItem);
     }
   }
 
@@ -483,12 +554,13 @@ function itemsOfType(items: readonly MicroformatItem[], type: string): Microform
 /** The microformats at the top of a page: roots that are inside no other root. */
 export function itemsIn(root: HtmlElement, base: string): MicroformatItem[] {
   const items: MicroformatItem[] = [];
+  const budget = { left: MICROFORMAT_ITEMS_PER_PAGE };
 
   const walk = (element: HtmlElement): void => {
     for (const child of element.children) {
       if (!isElement(child)) continue;
-      if (rootTypesOf(child).length > 0) items.push(parseItem(child, base));
-      else walk(child);
+      if (rootTypesOf(child).length === 0) walk(child);
+      else if (budget.left > 0) items.push(parseItem(child, base, budget));
     }
   };
 
@@ -521,7 +593,8 @@ function propertiesOf(element: HtmlElement): { prefix: string; name: string }[] 
  * entry's. That one rule is what keeps an author's name out of the entry's
  * title.
  */
-function parseItem(element: HtmlElement, base: string): MicroformatItem {
+function parseItem(element: HtmlElement, base: string, budget: { left: number }): MicroformatItem {
+  budget.left -= 1;
   const properties: Record<string, MicroformatValue[]> = {};
   const children: MicroformatItem[] = [];
   // Whether anything inside is a `p-` or `e-` property or a microformat of its
@@ -541,7 +614,8 @@ function parseItem(element: HtmlElement, base: string): MicroformatItem {
 
       if (roots.length > 0) {
         textual = true;
-        const nested = parseItem(child, base);
+        if (budget.left <= 0) continue;
+        const nested = parseItem(child, base, budget);
         if (named.length === 0) children.push(nested);
         else {
           for (const { prefix, name } of named) {
