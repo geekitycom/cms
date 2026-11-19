@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   classesOf,
+  type HtmlElement,
   elementsIn,
   hasRel,
   innerHtmlOf,
@@ -37,6 +38,37 @@ describe('parseHtml', () => {
     const scripts = [...elementsIn(root)];
     assert.equal(scripts.length, 1);
     assert.equal(scripts[0]?.data, '{"a":1}');
+  });
+
+  it('parses 30,000 unclosed tags followed by 30,000 stray closing tags in well under a second', () => {
+    const page = '<b>'.repeat(30_000) + '</i>'.repeat(30_000);
+    const started = performance.now();
+    const root = parseHtml(page);
+    const elapsed = performance.now() - started;
+    assert.equal(root.name, '#document');
+    assert.ok(elapsed < 1_000, `parseHtml took ${Math.round(elapsed)} ms for ${page.length} bytes`);
+  });
+
+  it('still closes an element that is open beneath stray closing tags', () => {
+    const root = parseHtml('<i><b>one</a></u><b>two</i><p>three');
+    assert.deepEqual(
+      root.children.filter(isElement).map((element) => element.name),
+      ['i', 'p'],
+    );
+  });
+
+  it('nests no deeper than 512 elements and keeps the rest as siblings at the deepest level', () => {
+    const root = parseHtml('<div>'.repeat(600) + 'end');
+    let deepest = 0;
+    const pending: [HtmlElement, number][] = [[root, 0]];
+    for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+      const [element, depth] = next;
+      deepest = Math.max(deepest, depth);
+      for (const child of element.children) if (isElement(child)) pending.push([child, depth + 1]);
+    }
+    assert.equal(deepest, 512);
+    assert.equal([...elementsIn(root)].length, 600);
+    assert.equal(textOf(root), 'end');
   });
 });
 

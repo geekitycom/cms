@@ -92,6 +92,12 @@ const CLOSED_BY_ITSELF: ReadonlySet<string> = new Set([
   'th',
 ]);
 
+/**
+ * How deep elements nest before further ones are kept as siblings at the
+ * deepest level, the limit browsers apply.
+ */
+const MAX_DEPTH = 512;
+
 /** One tag, as the scanner reads it off the source. */
 interface Tag {
   /** Lower-cased element name. */
@@ -114,6 +120,7 @@ interface Tag {
 export function parseHtml(source: string): HtmlElement {
   const root: HtmlElement = { name: '#document', attributes: {}, children: [] };
   const open: HtmlElement[] = [root];
+  const openByName = new Map<string, number>();
   let at = 0;
 
   /** Where a node goes: inside the innermost element still open. */
@@ -123,9 +130,13 @@ export function parseHtml(source: string): HtmlElement {
 
   /** Close open elements down to and including `name`, if it is open at all. */
   function closeThrough(name: string): void {
-    const index = open.findLastIndex((element) => element.name === name);
-    // Never the root, which nothing closes.
-    if (index > 0) open.length = index;
+    if (!openByName.has(name)) return;
+    for (let element = open.pop(); element !== undefined; element = open.pop()) {
+      const count = openByName.get(element.name) ?? 0;
+      if (count > 1) openByName.set(element.name, count - 1);
+      else openByName.delete(element.name);
+      if (element.name === name) return;
+    }
   }
 
   while (at < source.length) {
@@ -177,7 +188,10 @@ export function parseHtml(source: string): HtmlElement {
 
     const element: HtmlElement = { name: tag.name, attributes: tag.attributes, children: [] };
     current().children.push(element);
-    if (!VOID_ELEMENTS.has(tag.name)) open.push(element);
+    if (!VOID_ELEMENTS.has(tag.name) && open.length < MAX_DEPTH) {
+      open.push(element);
+      openByName.set(tag.name, (openByName.get(tag.name) ?? 0) + 1);
+    }
   }
 
   return root;
