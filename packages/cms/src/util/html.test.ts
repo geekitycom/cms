@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { decodeEntities, escapeAttribute, escapeText } from './html.ts';
+import { decodeAttribute, decodeEntities, escapeAttribute, escapeText } from './html.ts';
 
 describe('escapeText', () => {
   it('escapes the characters that would start markup', () => {
@@ -31,19 +31,61 @@ describe('decodeEntities', () => {
 
   it('leaves an unknown name or an invalid code point as written', () => {
     assert.equal(
-      decodeEntities('&bogus; &#xD800; &#1114112; &AMP;'),
-      '&bogus; &#xD800; &#1114112; &AMP;',
+      decodeEntities('&bogus; &#xD800; &#1114112; &Amp;'),
+      '&bogus; &#xD800; &#1114112; &Amp;',
     );
+  });
+
+  it('resolves every name in the HTML table', () => {
+    assert.equal(
+      decodeEntities(
+        '&eacute;&rsquo;&hellip;&AMP;&CounterClockwiseContourIntegral;&fjlig;&NewLine;',
+      ),
+      'é’…&∳fj\n',
+    );
+  });
+
+  it('resolves a legacy name written without its semicolon', () => {
+    assert.equal(
+      decodeEntities('Ren&eacute Caf&eacute; &copy 2026 &amp &lt;b&gt'),
+      'René Café © 2026 & <b>',
+    );
+  });
+
+  it('reads the longest legacy name a run of letters starts with', () => {
+    assert.equal(decodeEntities('&copy2026 &notit; &notin; &ampx'), '©2026 ¬it; ∉ &x');
+  });
+
+  it('leaves a name that is only valid with a semicolon alone without one', () => {
+    assert.equal(decodeEntities('&rsquo &hellip.'), '&rsquo &hellip.');
   });
 
   for (const name of ['constructor', 'toString', 'valueOf', '__proto__', 'hasOwnProperty']) {
     it(`keeps &${name}; as written`, () => {
       assert.equal(decodeEntities(`a &${name}; b`), `a &${name}; b`);
+      assert.equal(decodeAttribute(`a &${name}; b`), `a &${name}; b`);
     });
   }
 
   it('round-trips through escapeAttribute', () => {
     const value = `Fish & "chips" <b>'s</b>`;
     assert.equal(decodeEntities(escapeAttribute(value)), value);
+  });
+});
+
+describe('decodeAttribute', () => {
+  it('resolves references the way text does', () => {
+    assert.equal(decodeAttribute('Ren&eacute; &rsquo; &#38; &copy 2026'), 'René ’ & © 2026');
+  });
+
+  it('keeps a legacy name without a semicolon as written before = or a letter or digit', () => {
+    assert.equal(
+      decodeAttribute('/search?q=1&copy=2&amp=3&notes=4&lt5'),
+      '/search?q=1&copy=2&amp=3&notes=4&lt5',
+    );
+  });
+
+  it('resolves a legacy name without a semicolon before anything else', () => {
+    assert.equal(decodeAttribute('?a=1&amp&b=2&copy;'), '?a=1&&b=2©');
   });
 });

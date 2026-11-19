@@ -31,6 +31,13 @@ describe('parseHtml', () => {
     assert.equal(textOf(root), 'x 1 < 2');
   });
 
+  it('decodes a legacy reference in text but not one a query string runs into', () => {
+    const root = parseHtml('<a href="/?a=1&copy=2&amp;b=3">&copy 2026 Ren&eacute;</a>');
+    const [link] = [...elementsIn(root)];
+    assert.equal(link?.attributes['href'], '/?a=1&copy=2&b=3');
+    assert.equal(textOf(root), '© 2026 René');
+  });
+
   it('keeps the data of a JSON-LD script and drops any other script', () => {
     const root = parseHtml(
       '<script type="application/ld+json">{"a":1}</script><script>alert(1)</script>',

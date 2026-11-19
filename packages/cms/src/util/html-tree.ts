@@ -1,4 +1,4 @@
-import { decodeEntities, escapeAttribute, escapeText } from './html.ts';
+import { decodeAttribute, decodeEntities, escapeAttribute, escapeText } from './html.ts';
 
 /**
  * Somebody else's page, as a tree small enough to ask questions of.
@@ -391,7 +391,7 @@ function readTag(source: string, at: number): Tag | undefined {
     }
     const raw = attribute[3];
     attributes[(attribute[1] ?? '').toLowerCase()] =
-      raw === undefined ? '' : decodeEntities(unquote(raw));
+      raw === undefined ? '' : decodeAttribute(unquote(raw));
     cursor += attribute[0].length;
   }
 }

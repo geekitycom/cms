@@ -1,4 +1,4 @@
-import { decodeEntities, escapeAttribute, escapeText } from '../util/html.ts';
+import { decodeAttribute, decodeEntities, escapeAttribute, escapeText } from '../util/html.ts';
 
 /**
  * Sanitising the HTML a stranger wrote.
@@ -321,7 +321,7 @@ export function cleanPostHtml(html: string): string {
     }
     const attributes = Object.entries(rules).flatMap(([name, rule]) => {
       const given = tag.attributes[name];
-      const value = given === undefined ? undefined : rule(decodeEntities(given));
+      const value = given === undefined ? undefined : rule(decodeAttribute(given));
       return value === undefined ? [] : [` ${name}="${escapeAttribute(value)}"`];
     });
     out.push(`<${tag.name}${attributes.join('')}>`);
@@ -371,7 +371,7 @@ function safeHref(value: string | undefined): string | undefined {
   // Control characters are dropped and the ends trimmed before the scheme is
   // read, because that is what a browser's URL parser does: `java&#10;script:`
   // is a script URL to everything that will render this.
-  const href = [...decodeEntities(value)]
+  const href = [...decodeAttribute(value)]
     .filter((character) => !isControl(character))
     .join('')
     .trim();

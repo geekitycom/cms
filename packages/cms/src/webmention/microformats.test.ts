@@ -141,6 +141,21 @@ describe('sourceEntry', () => {
     assert.equal(entry.author.name, 'Alan Turing');
     assert.equal(entry.author.url, null);
   });
+
+  it('decodes named character references in the author and the content', () => {
+    const html = `
+      <article class="h-entry">
+        <a class="p-author h-card" href="https://them.example/">Ren&eacute;</a>
+        <a class="u-in-reply-to" href="${TARGET}">in reply to</a>
+        <div class="e-content"><p>It&rsquo;s here&hellip;</p></div>
+      </article>`;
+
+    const entry = sourceEntry(html, SOURCE, isTarget);
+
+    assert.equal(entry.author.name, 'René');
+    assert.equal(entry.content.text, 'It’s here…');
+    assert.equal(entry.content.html, '<p>It’s here…</p>');
+  });
 });
 
 describe('what an entry answers', () => {
