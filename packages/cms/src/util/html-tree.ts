@@ -257,41 +257,61 @@ function pushReversed<T>(stack: T[], nodes: readonly T[]): void {
 
 /**
  * The text an element holds, everything nested in it included, with runs of
- * whitespace collapsed.
+ * whitespace collapsed, from no more than `limit` characters of it.
  *
  * Collapsed because it is read as a name or a title, and a page that wrote one
  * across three indented lines meant one line.
  */
-export function textOf(node: HtmlNode): string {
-  return rawTextOf(node).replace(/\s+/g, ' ').trim();
+export function textOf(node: HtmlNode, limit = Infinity): string {
+  return rawTextOf(node, limit).replace(/\s+/g, ' ').trim();
 }
 
-/** The text an element holds, exactly as the page spelled it. */
-export function rawTextOf(node: HtmlNode): string {
-  if (!isElement(node)) return node.text;
+/**
+ * The text an element holds, exactly as the page spelled it, cut off after
+ * `limit` characters.
+ */
+export function rawTextOf(node: HtmlNode, limit = Infinity): string {
+  if (!isElement(node)) return node.text.slice(0, limit);
   const parts: string[] = [];
-  for (const inner of nodesIn(node)) if (!isElement(inner)) parts.push(inner.text);
+  let length = 0;
+  for (const inner of nodesIn(node)) {
+    if (length >= limit) break;
+    if (isElement(inner)) continue;
+    const text = inner.text.slice(0, limit - length);
+    parts.push(text);
+    length += text.length;
+  }
   return parts.join('');
 }
 
 /**
- * An element's inner markup, rebuilt from the tree.
+ * An element's inner markup, rebuilt from the tree, with no text or opening
+ * tag past `limit` characters; the closing tags of what it opened still follow.
  *
  * Rebuilt rather than sliced out of the source because the tree is what this
  * module trusts: an unclosed element in the page cannot leave a stray closing
  * tag in the result. It goes through `sanitizeCommentHtml` before it is stored
  * either way, so this only has to be close enough for that to read.
  */
-export function innerHtmlOf(element: HtmlElement): string {
+export function innerHtmlOf(element: HtmlElement, limit = Infinity): string {
   const parts: string[] = [];
   const pending: (HtmlNode | string)[] = [];
+  let length = 0;
   pushReversed(pending, element.children);
 
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    if (typeof next === 'string') parts.push(next);
-    else if (!isElement(next)) parts.push(escapeText(next.text));
-    else {
-      parts.push(`<${next.name}${attributesOf(next)}>`);
+    if (typeof next === 'string') {
+      parts.push(next);
+      length += next.length;
+    } else if (!isElement(next)) {
+      const text = escapedWithin(next.text, limit - length);
+      parts.push(text);
+      length += text.length;
+    } else {
+      const open = `<${next.name}${attributesOf(next)}>`;
+      if (length + open.length > limit) continue;
+      parts.push(open);
+      length += open.length;
       if (VOID_ELEMENTS.has(next.name)) continue;
       pending.push(`</${next.name}>`);
       pushReversed(pending, next.children);
@@ -299,6 +319,13 @@ export function innerHtmlOf(element: HtmlElement): string {
   }
 
   return parts.join('');
+}
+
+/** Text escaped as markup, no longer than `room`, never ending part way through a reference. */
+function escapedWithin(text: string, room: number): string {
+  if (room <= 0) return '';
+  const escaped = escapeText(text.slice(0, room));
+  return escaped.length <= room ? escaped : escaped.slice(0, room).replace(/&[^;]*$/, '');
 }
 
 /** An element's attributes as markup, each with a leading space. */

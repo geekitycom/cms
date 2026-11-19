@@ -98,6 +98,27 @@ describe('reading a parsed element', () => {
   });
 });
 
+describe('reading part of an element', () => {
+  const [section] = [
+    ...elementsIn(parseHtml('<section>one <b>two &amp; three</b> four<br></section>')),
+  ];
+
+  it('reads text up to a limit', () => {
+    assert.ok(section !== undefined);
+    assert.equal(rawTextOf(section, 6), 'one tw');
+    assert.equal(textOf(section, 4), 'one');
+    assert.equal(rawTextOf(section), 'one two & three four');
+  });
+
+  it('rebuilds markup up to a limit and closes what it opened', () => {
+    assert.ok(section !== undefined);
+    assert.equal(innerHtmlOf(section, 13), 'one <b>two </b>');
+    assert.equal(innerHtmlOf(section, 16), 'one <b>two &amp;</b>');
+    assert.equal(innerHtmlOf(section, 3), 'one');
+    assert.equal(innerHtmlOf(section), 'one <b>two &amp; three</b> four<br>');
+  });
+});
+
 describe('walking a deep tree', () => {
   function chain(depth: number): HtmlElement {
     const root: HtmlElement = { name: '#document', attributes: {}, children: [] };

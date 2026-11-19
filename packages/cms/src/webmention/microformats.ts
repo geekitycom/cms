@@ -100,6 +100,15 @@ const NESTED_LIMIT = 200;
  */
 export const MICROFORMAT_ITEMS_PER_PAGE = 1_000;
 
+/**
+ * How many characters of one value's text, or of its markup, are kept. A reply
+ * is a few paragraphs; a page that sends more is cut short here.
+ */
+export const MICROFORMAT_VALUE_LENGTH = 65_536;
+
+/** How many property classes are read off one element. */
+const PROPERTIES_PER_ELEMENT = 16;
+
 /** The attributes that make an element a link to somewhere. */
 const LINK_ATTRIBUTES: readonly string[] = ['href', 'src', 'data', 'poster', 'cite'];
 
@@ -554,13 +563,17 @@ function itemsOfType(items: readonly MicroformatItem[], type: string): Microform
 /** The microformats at the top of a page: roots that are inside no other root. */
 export function itemsIn(root: HtmlElement, base: string): MicroformatItem[] {
   const items: MicroformatItem[] = [];
-  const budget = { left: MICROFORMAT_ITEMS_PER_PAGE };
+  const reading: Reading = {
+    left: MICROFORMAT_ITEMS_PER_PAGE,
+    texts: new Map(),
+    markup: new Map(),
+  };
 
   const walk = (element: HtmlElement): void => {
     for (const child of element.children) {
       if (!isElement(child)) continue;
       if (rootTypesOf(child).length === 0) walk(child);
-      else if (budget.left > 0) items.push(parseItem(child, base, budget));
+      else if (reading.left > 0) items.push(parseItem(child, base, reading));
     }
   };
 
@@ -573,16 +586,53 @@ function rootTypesOf(element: HtmlElement): string[] {
   return classesOf(element).filter((name) => name.startsWith('h-') && name.length > 2);
 }
 
-/** The property classes an element carries, as `{prefix, name}` pairs. */
+/**
+ * The property classes an element carries, as `{prefix, name}` pairs, each
+ * once and no more than {@link PROPERTIES_PER_ELEMENT} of them.
+ */
 function propertiesOf(element: HtmlElement): { prefix: string; name: string }[] {
   const found: { prefix: string; name: string }[] = [];
+  const seen = new Set<string>();
 
   for (const value of classesOf(element)) {
+    if (found.length >= PROPERTIES_PER_ELEMENT) break;
     const match = /^(p|u|e|dt)-(.+)$/.exec(value);
-    if (match !== null) found.push({ prefix: match[1] ?? '', name: match[2] ?? '' });
+    if (match === null || seen.has(value)) continue;
+    seen.add(value);
+    found.push({ prefix: match[1] ?? '', name: match[2] ?? '' });
   }
 
   return found;
+}
+
+/**
+ * One page as it is being read: how many more items it may yield, and the text
+ * and markup of each element already read, which several properties can share.
+ */
+interface Reading {
+  left: number;
+  readonly texts: Map<HtmlElement, string>;
+  readonly markup: Map<HtmlElement, string>;
+}
+
+/** An element's text, read once per page and no longer than a value is kept. */
+function textIn(element: HtmlElement, reading: Reading): string {
+  let text = reading.texts.get(element);
+  if (text === undefined) {
+    text = textOf(element, MICROFORMAT_VALUE_LENGTH);
+    reading.texts.set(element, text);
+  }
+  return text;
+}
+
+/** An element's inner markup, read once per page and no longer than a value is kept. */
+function markupIn(element: HtmlElement, reading: Reading): string {
+  let markup = reading.markup.get(element);
+  if (markup === undefined) {
+    markup = innerHtmlOf(element, MICROFORMAT_VALUE_LENGTH);
+    reading.markup.set(element, markup);
+  }
+  return markup;
 }
 
 /**
@@ -593,8 +643,8 @@ function propertiesOf(element: HtmlElement): { prefix: string; name: string }[] 
  * entry's. That one rule is what keeps an author's name out of the entry's
  * title.
  */
-function parseItem(element: HtmlElement, base: string, budget: { left: number }): MicroformatItem {
-  budget.left -= 1;
+function parseItem(element: HtmlElement, base: string, reading: Reading): MicroformatItem {
+  reading.left -= 1;
   const properties: Record<string, MicroformatValue[]> = {};
   const children: MicroformatItem[] = [];
   // Whether anything inside is a `p-` or `e-` property or a microformat of its
@@ -614,12 +664,12 @@ function parseItem(element: HtmlElement, base: string, budget: { left: number })
 
       if (roots.length > 0) {
         textual = true;
-        if (budget.left <= 0) continue;
-        const nested = parseItem(child, base, budget);
+        if (reading.left <= 0) continue;
+        const nested = parseItem(child, base, reading);
         if (named.length === 0) children.push(nested);
         else {
           for (const { prefix, name } of named) {
-            add(name, { text: nestedText(prefix, nested, child, base), item: nested });
+            add(name, { text: nestedText(prefix, nested, child, base, reading), item: nested });
           }
         }
         continue;
@@ -627,14 +677,14 @@ function parseItem(element: HtmlElement, base: string, budget: { left: number })
 
       for (const { prefix, name } of named) {
         if (prefix === 'p' || prefix === 'e') textual = true;
-        add(name, valueOf(prefix, child, base));
+        add(name, valueOf(prefix, child, base, reading));
       }
       walk(child);
     }
   };
 
   walk(element);
-  implied(element, properties, base, !textual);
+  implied(element, properties, base, reading, !textual);
   return { types: rootTypesOf(element), properties, children, element };
 }
 
@@ -644,13 +694,19 @@ function nestedText(
   item: MicroformatItem,
   element: HtmlElement,
   base: string,
+  reading: Reading,
 ): string {
-  if (prefix === 'u') return first(item, 'url')?.text ?? valueOf('u', element, base).text;
-  return first(item, 'name')?.text ?? textOf(element);
+  if (prefix === 'u') return first(item, 'url')?.text ?? valueOf('u', element, base, reading).text;
+  return first(item, 'name')?.text ?? textIn(element, reading);
 }
 
 /** One element as the value of one property. */
-function valueOf(prefix: string, element: HtmlElement, base: string): MicroformatValue {
+function valueOf(
+  prefix: string,
+  element: HtmlElement,
+  base: string,
+  reading: Reading,
+): MicroformatValue {
   const attributes = element.attributes;
 
   if (prefix === 'u') {
@@ -660,7 +716,7 @@ function valueOf(prefix: string, element: HtmlElement, base: string): Microforma
       attributeFor(element, ['object'], 'data') ??
       attributeFor(element, ['video'], 'poster') ??
       attributeFor(element, ['data'], 'value') ??
-      textOf(element);
+      textIn(element, reading);
     return { text: normalize(raw, base) ?? raw.trim() };
   }
 
@@ -670,11 +726,11 @@ function valueOf(prefix: string, element: HtmlElement, base: string): Microforma
         attributeFor(element, ['time', 'ins', 'del'], 'datetime') ??
         attributeFor(element, ['abbr'], 'title') ??
         attributeFor(element, ['data'], 'value') ??
-        textOf(element),
+        textIn(element, reading),
     };
   }
 
-  if (prefix === 'e') return { text: textOf(element), html: innerHtmlOf(element) };
+  if (prefix === 'e') return { text: textIn(element, reading), html: markupIn(element, reading) };
 
   return {
     text:
@@ -682,7 +738,7 @@ function valueOf(prefix: string, element: HtmlElement, base: string): Microforma
       attributeFor(element, ['abbr'], 'title') ??
       attributeFor(element, ['data', 'input'], 'value') ??
       (element.name === 'meta' ? attributes['content'] : undefined) ??
-      textOf(element),
+      textIn(element, reading),
   };
 }
 
@@ -712,13 +768,14 @@ function implied(
   element: HtmlElement,
   properties: Record<string, MicroformatValue[]>,
   base: string,
+  reading: Reading,
   impliesName: boolean,
 ): void {
   if (impliesName && properties['name'] === undefined) {
     const name =
       attributeFor(element, ['img', 'area'], 'alt') ??
       attributeFor(element, ['abbr'], 'title') ??
-      textOf(element);
+      textIn(element, reading);
     if (name !== '') properties['name'] = [{ text: name }];
   }
 

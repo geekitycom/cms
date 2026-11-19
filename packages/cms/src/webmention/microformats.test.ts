@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { MICROFORMAT_ITEMS_PER_PAGE, linksTo, sourceEntry } from './microformats.ts';
+import { parseHtml } from '../util/html-tree.ts';
+import {
+  MICROFORMAT_ITEMS_PER_PAGE,
+  MICROFORMAT_VALUE_LENGTH,
+  itemsIn,
+  linksTo,
+  sourceEntry,
+} from './microformats.ts';
+import type { MicroformatItem } from './microformats.ts';
 
 const SOURCE = 'https://them.example/2026/09/reply/';
 const TARGET = 'https://blog.example/2026/09/hello/';
@@ -340,5 +348,74 @@ describe('how many microformats one page may hold', () => {
     const ms = performance.now() - started;
     assert.equal(entry.kind, 'mention');
     assert.ok(ms < 1_000, `sourceEntry took ${Math.round(ms)} ms for ${page.length} bytes`);
+  });
+});
+
+describe('how much of one element is kept', () => {
+  function keptLength(item: MicroformatItem): number {
+    let total = 0;
+    for (const values of Object.values(item.properties)) {
+      for (const value of values) {
+        total += value.text.length + (value.html?.length ?? 0);
+        if (value.item !== undefined) total += keptLength(value.item);
+      }
+    }
+    return total;
+  }
+
+  const text = 'word '.repeat(4_000);
+  const repeated = `<div class="h-entry"><div class="${'e-content '.repeat(500)}">${text}</div></div>`;
+
+  it('reads a property class repeated on one element once', () => {
+    const [entry] = itemsIn(parseHtml(repeated), SOURCE);
+    assert.ok(entry !== undefined);
+    assert.equal(entry.properties['content']?.length, 1);
+  });
+
+  it('keeps no more than a small multiple of the page in property values', () => {
+    const [entry] = itemsIn(parseHtml(repeated), SOURCE);
+    assert.ok(entry !== undefined);
+    const kept = keptLength(entry);
+    assert.ok(kept <= 4 * repeated.length, `kept ${kept} characters for ${repeated.length}`);
+  });
+
+  it('reads no more than 16 property classes off one element', () => {
+    const classes = Array.from({ length: 2_000 }, (_, index) => `e-a${String(index)}`).join(' ');
+    const [entry] = itemsIn(
+      parseHtml(`<div class="h-entry"><div class="${classes}">hi</div></div>`),
+      SOURCE,
+    );
+    assert.ok(entry !== undefined);
+    assert.equal(Object.keys(entry.properties).length, 16);
+    assert.ok(entry.properties['a0'] !== undefined && entry.properties['a15'] !== undefined);
+  });
+
+  it('cuts a long e-content short and still closes what it opened', () => {
+    const long = '<p><b>' + 'word '.repeat(40_000) + '</b></p>';
+    const read = sourceEntry(
+      `<div class="h-entry"><a class="u-in-reply-to" href="${TARGET}">re</a><div class="e-content">${long}</div></div>`,
+      SOURCE,
+      isTarget,
+    );
+    assert.equal(read.kind, 'reply');
+    assert.ok(read.content.html.length <= MICROFORMAT_VALUE_LENGTH + 64);
+    assert.ok(read.content.html.startsWith('<p><b>word'));
+    assert.ok(read.content.html.endsWith('</b></p>'), read.content.html.slice(-40));
+    assert.ok(read.content.text.length <= MICROFORMAT_VALUE_LENGTH);
+  });
+
+  it('reads 500 nested h-entry e-content roots over 900 KB of text in well under a second', () => {
+    const depth = 500;
+    const page =
+      `<div class="h-entry"><a href="${TARGET}">hi</a>` +
+      '<div class="h-entry e-content">'.repeat(depth) +
+      'word '.repeat(180_000) +
+      '</div>'.repeat(depth) +
+      '</div>';
+    const started = performance.now();
+    const read = sourceEntry(page, SOURCE, isTarget);
+    const ms = performance.now() - started;
+    assert.equal(read.kind, 'mention');
+    assert.ok(ms < 500, `sourceEntry took ${Math.round(ms)} ms for ${page.length} bytes`);
   });
 });

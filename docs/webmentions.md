@@ -76,7 +76,10 @@ answers:
    names. Otherwise it uses UTF-8.
 2. It checks that the source links to the target.
 3. It reads the source's microformats: `h-entry`, `h-card`, and whether it is a
-   reply, a like, a repost, or a plain mention.
+   reply, a like, a repost, or a plain mention. It reads at most 1,000
+   microformats from one page and at most 16 property classes from one
+   element. It keeps the first 64 KiB of the text and of the markup of each
+   property value, so a longer `e-content` is cut short.
 4. It files the result as a **pending comment** with `source: "webmention"`.
 
 The comment goes in the same file, the same thread, and the same moderation
