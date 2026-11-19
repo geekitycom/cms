@@ -243,12 +243,13 @@ export async function verifyWebmention(
   }
 
   const isUrlOfPost = urlOfPost(options);
-  const entry = fetched.html
-    ? sourceEntry(fetched.body, fetched.url, (url) => url === incoming.target || isUrlOfPost(url))
-    : // A source that is not HTML — plain text, JSON, anything — has no
-      // microformats to read, so all that can be said about it is that it
-      // links here.
-      undefined;
+  const entry =
+    fetched.format === 'html'
+      ? sourceEntry(fetched.body, fetched.url, (url) => url === incoming.target || isUrlOfPost(url))
+      : // A source that is not HTML — plain text, JSON, anything — has no
+        // microformats to read, so all that can be said about it is that it
+        // links here.
+        undefined;
 
   if (held !== undefined && isCarried(held) && !isOwnPage(incoming.source, fetched.url, entry)) {
     return { kind: 'stored', comment: held, created: false };
@@ -449,9 +450,11 @@ function carriedComment(
  */
 export type NotStored = 'gone' | 'unlinked' | 'discarded';
 
+type SourceFormat = 'html' | 'json' | 'text';
+
 /** What reading a source page came to. */
 type FetchedSource =
-  | { kind: 'read'; body: string; url: string; html: boolean; truncated: boolean }
+  | { kind: 'read'; body: string; url: string; format: SourceFormat; truncated: boolean }
   | { kind: 'gone' }
   /** Not readable this time, which is not the same thing at all. */
   | { kind: 'unreachable'; reason: string };
@@ -476,9 +479,15 @@ async function readSource(source: string, lookup: HostLookup): Promise<FetchedSo
     kind: 'read',
     body: decode(fetched.body, fetched.type),
     url: fetched.url,
-    html: /^\s*(text\/html|application\/xhtml\+xml)/i.test(fetched.type),
+    format: formatOf(fetched.type),
     truncated: fetched.truncated,
   };
+}
+
+function formatOf(type: string): SourceFormat {
+  if (/^\s*(text\/html|application\/xhtml\+xml)/i.test(type)) return 'html';
+  if (/^\s*application\/([\w.-]+\+)?json\s*(;|$)/i.test(type)) return 'json';
+  return 'text';
 }
 
 /** How far into a body to look for a `<meta>` charset: the WHATWG prescan window. */
@@ -501,27 +510,70 @@ function decode(body: Uint8Array, type: string): string {
  * Whether what was read really links to the target.
  *
  * HTML is parsed, because a link is a link and the target written out in the
- * prose is not one. Anything else — plain text, JSON, whatever somebody chose
- * to publish — is searched for the target as it stands, which is all a format
- * with no links can offer and what the spec asks for.
+ * prose is not one. Anything else has no links, so it is read for the URLs it
+ * names, as {@link urlsNamedIn} finds them.
  */
 function mentions(
-  fetched: { body: string; url: string; html: boolean },
+  fetched: { body: string; url: string; format: SourceFormat },
   incoming: IncomingWebmention,
 ): boolean {
-  return fetched.html
-    ? linksTo(fetched.body, fetched.url, incoming.target)
-    : fetched.body.includes(incoming.target);
+  if (fetched.format === 'html') return linksTo(fetched.body, fetched.url, incoming.target);
+  const wanted = webUrl(incoming.target);
+  return wanted !== undefined && urlsNamedIn(fetched).has(wanted.href);
 }
 
 function namesThePost(
-  fetched: { body: string; url: string; html: boolean },
+  fetched: { body: string; url: string; format: SourceFormat },
   options: VerifyWebmentionOptions,
 ): boolean {
-  const named = fetched.html
-    ? linksIn(fetched.body, fetched.url)
-    : (fetched.body.match(/https?:\/\/[^\s"'<>\\]+/g) ?? []);
+  const named =
+    fetched.format === 'html' ? linksIn(fetched.body, fetched.url) : urlsNamedIn(fetched);
   return [...named].some(urlOfPost(options));
+}
+
+/**
+ * The URLs a source that is not HTML names, normalised and less any fragment.
+ *
+ * A JSON value names a URL only when the whole string is one, so an endpoint
+ * that echoes a longer URL back names nothing. Plain text, and JSON too broken
+ * to parse, names a URL that stands on its own between spaces, quotes or
+ * brackets, less any full stop or comma that ends the sentence.
+ */
+function urlsNamedIn(fetched: { body: string; format: SourceFormat }): Set<string> {
+  const candidates =
+    (fetched.format === 'json' ? jsonStrings(fetched.body) : undefined) ??
+    (fetched.body.match(/https?:\/\/[^\s"'`<>()\\]+/gi) ?? []).map((url) =>
+      url.replace(/[.,;:!?]+$/, ''),
+    );
+
+  const named = new Set<string>();
+  for (const candidate of candidates) {
+    const url = webUrl(candidate);
+    if (url === undefined) continue;
+    url.hash = '';
+    named.add(url.href);
+  }
+  return named;
+}
+
+/** Every string value in a JSON document, or `undefined` when it does not parse. */
+function jsonStrings(body: string): string[] | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+
+  const strings: string[] = [];
+  const pending: unknown[] = [parsed];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (typeof value === 'string') strings.push(value);
+    else if (typeof value === 'object' && value !== null)
+      pending.push(...Object.values(value as Record<string, unknown>));
+  }
+  return strings;
 }
 
 function urlOfPost(options: VerifyWebmentionOptions): (href: string) => boolean {

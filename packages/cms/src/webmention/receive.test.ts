@@ -440,6 +440,54 @@ describe('verifying a webmention', () => {
     );
   });
 
+  it('stores nothing for a text source that names only a longer URL', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note.txt', {
+      body: `See ${POST_URL}more for details.`,
+      contentType: 'text/plain; charset=utf-8',
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note.txt');
+
+    assert.deepEqual(stored(cms), []);
+  });
+
+  it('accepts a text source that names the target at the end of a sentence', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note.txt', {
+      body: `Read (${POST_URL}), then "${POST_URL}#comments".\nOr just ${POST_URL}.`,
+      contentType: 'text/plain; charset=utf-8',
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note.txt');
+
+    assert.equal(stored(cms).length, 1);
+  });
+
+  it('stores nothing for a JSON source that has the target only inside a longer string', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note.json', {
+      body: JSON.stringify({ q: `${POST_URL}?echo=1`, text: `I liked ${POST_URL} a lot.` }),
+      contentType: 'application/json',
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note.json');
+
+    assert.deepEqual(stored(cms), []);
+  });
+
+  it('accepts a JSON source that writes the target with escaped slashes', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note.json', {
+      body: `{"items":[{"url":"${POST_URL.replaceAll('/', '\\/')}"}]}`,
+      contentType: 'application/activity+json',
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note.json');
+
+    assert.equal(stored(cms).length, 1);
+  });
+
   it('follows a redirect and verifies the page it lands on', async () => {
     const cms = await site();
     pages.set('https://them.example/old', { redirectTo: 'https://them.example/new' });
@@ -816,6 +864,25 @@ describe('a webmention sent again to another URL of the same post', () => {
 
     assert.equal(response.status, 202);
     assertKept(cms, like);
+  });
+
+  it('keeps a JSON mention sent to a comment page when its escaped URL names the post', async () => {
+    const cms = await site();
+    const source = 'https://them.example/note.json';
+    pages.set(source, {
+      body: `{"url":"${POST_URL.replaceAll('/', '\\/')}"}`,
+      contentType: 'application/json',
+    });
+    await sendAndSettle(cms, source);
+    assert.equal(stored(cms).length, 1);
+
+    const response = await sendAndSettle(cms, source, await commentPage(cms));
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(
+      stored(cms).map((one) => one.url),
+      [source],
+    );
   });
 
   it('reads a like that also links a comment page as a like whichever is the target', async () => {

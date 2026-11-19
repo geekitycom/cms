@@ -76,7 +76,14 @@ answers:
    names. Otherwise it uses UTF-8.
 2. It checks that the source links to the target. Fragments do not count on
    either side, so a link to `POST#comments` verifies a webmention sent to
-   `POST`, and a link to `POST` verifies one sent to `POST#comments`.
+   `POST`, and a link to `POST` verifies one sent to `POST#comments`. A source
+   that is not HTML has no links, so the site looks for the target's whole URL.
+   In JSON (`application/json` or any `application/*+json` type), a string
+   value must be exactly that URL; a longer string that contains it does not
+   count. In plain text and other types, the URL must stand alone, ended by a
+   space, a quote, a bracket, or the end of the text. A full stop or comma
+   straight after it is allowed. A JSON body that does not parse is read as
+   plain text.
 3. It reads the source's microformats: `h-entry`, `h-card`, and whether it is a
    reply, a like, a repost, or a plain mention. It reads at most 1,000
    microformats from one page and at most 16 property classes from one

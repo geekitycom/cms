@@ -866,12 +866,12 @@ function baseOf(root: HtmlElement, sourceUrl: string): string {
   return sourceUrl;
 }
 
-/** One href as an absolute URL, or `undefined` when it is not one. */
 function withoutFragment(url: string): string {
   const hash = url.indexOf('#');
   return hash === -1 ? url : url.slice(0, hash);
 }
 
+/** One href as an absolute URL, or `undefined` when it is not one. */
 function normalize(href: string, base: string): string | undefined {
   const trimmed = href.trim();
   if (trimmed === '') return undefined;
