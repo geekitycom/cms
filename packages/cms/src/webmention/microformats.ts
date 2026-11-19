@@ -462,6 +462,14 @@ function authorOf(
   for (const holder of [entry, feed]) {
     const named = holder === undefined ? undefined : first(holder, 'author');
     if (named?.item !== undefined) return cardOf(named.item);
+    if (named !== undefined && isWebUrl(named.text)) {
+      const label = named.label ?? '';
+      return {
+        name: label === '' || isWebUrl(label) ? hostOf(named.text) : label,
+        url: named.text,
+        photo: null,
+      };
+    }
     if (named !== undefined && named.text !== '') {
       return { name: named.text, url: null, photo: null };
     }
@@ -573,6 +581,8 @@ export interface MicroformatItem {
 export interface MicroformatValue {
   /** The value as text, or as a URL for a `u-` property. */
   readonly text: string;
+  /** The text a `u-` property's element shows, which can name the link. */
+  readonly label?: string;
   /** The markup, for an `e-` property. */
   readonly html?: string;
   /** The microformat the value was, when it was one. */
@@ -772,7 +782,7 @@ function valueOf(
       attributeFor(element, ['video'], 'poster') ??
       attributeFor(element, ['data'], 'value') ??
       textIn(element, reading);
-    return { text: normalize(raw, base) ?? raw.trim() };
+    return { text: normalize(raw, base) ?? raw.trim(), label: textIn(element, reading) };
   }
 
   if (prefix === 'dt') {

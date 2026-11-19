@@ -240,6 +240,49 @@ describe('sourceEntry', () => {
     assert.equal(entry.author.url, null);
   });
 
+  it('reads a plain u-author link as the author page, named by its text', () => {
+    const html = `
+      <article class="h-entry">
+        <a class="u-author" href="https://ada.example/">Ada</a>
+        <a class="u-in-reply-to" href="${TARGET}">in reply to</a>
+      </article>`;
+
+    const { author } = sourceEntry(html, SOURCE, isTarget);
+    assert.deepEqual(author, { name: 'Ada', url: 'https://ada.example/', photo: null });
+  });
+
+  it('names a u-author link by its host when the link has no text of its own', () => {
+    const html = `
+      <article class="h-entry">
+        <a class="u-author" href="https://ada.example/"></a>
+        <a class="u-in-reply-to" href="${TARGET}">re</a>
+      </article>`;
+
+    const { author } = sourceEntry(html, SOURCE, isTarget);
+    assert.deepEqual(author, { name: 'ada.example', url: 'https://ada.example/', photo: null });
+  });
+
+  it('reads a p-author that is a URL as the author page, named by its host', () => {
+    const html = `
+      <article class="h-entry">
+        <span class="p-author">https://ada.example/</span>
+        <a class="u-in-reply-to" href="${TARGET}">re</a>
+      </article>`;
+
+    const { author } = sourceEntry(html, SOURCE, isTarget);
+    assert.deepEqual(author, { name: 'ada.example', url: 'https://ada.example/', photo: null });
+  });
+
+  it('reads a u-author on the h-feed that holds the entry', () => {
+    const html = `
+      <div class="h-feed"><a class="u-author" href="https://ada.example/">Ada</a>
+        <div class="h-entry"><a class="u-in-reply-to" href="${TARGET}">re</a></div>
+      </div>`;
+
+    const { author } = sourceEntry(html, SOURCE, isTarget);
+    assert.deepEqual(author, { name: 'Ada', url: 'https://ada.example/', photo: null });
+  });
+
   it('decodes named character references in the author and the content', () => {
     const html = `
       <article class="h-entry">

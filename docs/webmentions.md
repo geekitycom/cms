@@ -93,8 +93,11 @@ answers:
    `h-feed` that holds the entry, or else the page's representative `h-card`:
    an `h-card` that is not inside another microformat and whose `u-url` is the
    source URL or a link marked `rel="me"`. An `h-card` inside the entry, such as
-   the author of the post it replies to, is not used. When there is no author,
-   the site shows the source's host.
+   the author of the post it replies to, is not used. An author written as a
+   URL with no `h-card`, such as `<a class="u-author" href="…">Ada</a>`, is the
+   author's page, and the link text, or else that page's host, is the name. The
+   site does not fetch that page. When there is no author, the site shows the
+   source's host.
 4. It files the result as a **pending comment** with `source: "webmention"`.
 
 The comment goes in the same file, the same thread, and the same moderation
