@@ -688,10 +688,10 @@ function textIn(element: HtmlElement, reading: Reading): string {
 }
 
 /** An element's inner markup, read once per page and no longer than a value is kept. */
-function markupIn(element: HtmlElement, reading: Reading): string {
+function markupIn(element: HtmlElement, base: string, reading: Reading): string {
   let markup = reading.markup.get(element);
   if (markup === undefined) {
-    markup = innerHtmlOf(element, MICROFORMAT_VALUE_LENGTH);
+    markup = innerHtmlOf(element, MICROFORMAT_VALUE_LENGTH, base);
     reading.markup.set(element, markup);
   }
   return markup;
@@ -795,7 +795,8 @@ function valueOf(
     };
   }
 
-  if (prefix === 'e') return { text: textIn(element, reading), html: markupIn(element, reading) };
+  if (prefix === 'e')
+    return { text: textIn(element, reading), html: markupIn(element, base, reading) };
 
   return {
     text:

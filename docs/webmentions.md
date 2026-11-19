@@ -88,7 +88,10 @@ answers:
    reply, a like, a repost, or a plain mention. It reads at most 1,000
    microformats from one page and at most 16 property classes from one
    element. It keeps the first 64 KiB of the text and of the markup of each
-   property value, so a longer `e-content` is cut short.
+   property value, so a longer `e-content` is cut short. Relative `href` and
+   `src` values in the `e-content` markup are resolved against the source URL,
+   or against the page's `<base href>`, so links in a reply still work on this
+   site.
    The author is the entry's own `p-author`, or else the `p-author` of the
    `h-feed` that holds the entry, or else the page's representative `h-card`:
    an `h-card` that is not inside another microformat and whose `u-url` is the

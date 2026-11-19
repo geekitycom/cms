@@ -210,6 +210,26 @@ describe('reading part of an element', () => {
     assert.equal(innerHtmlOf(section, 3), 'one');
     assert.equal(innerHtmlOf(section), 'one <b>two &amp; three</b> four<br>');
   });
+
+  it('resolves href and src against a base, and counts the resolved URL toward the limit', () => {
+    const [div] = [
+      ...elementsIn(
+        parseHtml('<div><a href="/x">x</a><img src="y.png"><a href="http://[bad">z</a></div>'),
+      ),
+    ];
+    assert.ok(div !== undefined);
+    const base = 'https://them.example/a/';
+    assert.equal(
+      innerHtmlOf(div, Infinity, base),
+      '<a href="https://them.example/x">x</a><img src="https://them.example/a/y.png">' +
+        '<a href="http://[bad">z</a>',
+    );
+    assert.equal(innerHtmlOf(div, 40, base), '<a href="https://them.example/x">x</a>');
+    assert.equal(
+      innerHtmlOf(div),
+      '<a href="/x">x</a><img src="y.png"><a href="http://[bad">z</a>',
+    );
+  });
 });
 
 describe('walking a deep tree', () => {

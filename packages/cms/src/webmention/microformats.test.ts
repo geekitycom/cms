@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { sanitizeCommentHtml } from '../content/sanitize.ts';
 import { parseHtml } from '../util/html-tree.ts';
 import {
   MICROFORMAT_ITEMS_PER_PAGE,
@@ -96,6 +97,43 @@ describe('sourceEntry', () => {
     assert.equal(entry.content.html, '<p>Good <em>post</em>.</p>');
     assert.equal(entry.published, '2026-09-21T10:30:00.000Z');
     assert.equal(entry.url, SOURCE);
+  });
+
+  it('resolves relative links and images in e-content against the source', () => {
+    const html = `
+      <article class="h-entry">
+        <a class="u-in-reply-to" href="${TARGET}">in reply to</a>
+        <div class="e-content"><p>See <a href="/other-post/">my other post</a>.</p><img src="pic.jpg" alt=""></div>
+      </article>`;
+
+    const entry = sourceEntry(html, SOURCE, isTarget);
+
+    assert.equal(
+      entry.content.html,
+      '<p>See <a href="https://them.example/other-post/">my other post</a>.</p>' +
+        '<img src="https://them.example/2026/09/reply/pic.jpg" alt="">',
+    );
+    assert.match(
+      sanitizeCommentHtml(entry.content.html),
+      /<a [^>]*href="https:\/\/them\.example\/other-post\/"[^>]*>my other post<\/a>/,
+    );
+  });
+
+  it('resolves e-content links against the base the page declares', () => {
+    const html = `
+      <head><base href="https://cdn.them.example/posts/"></head>
+      <article class="h-entry">
+        <a class="u-in-reply-to" href="${TARGET}">in reply to</a>
+        <div class="e-content"><a href="next/">next</a> <a href="#notes">notes</a></div>
+      </article>`;
+
+    const entry = sourceEntry(html, SOURCE, isTarget);
+
+    assert.equal(
+      entry.content.html,
+      '<a href="https://cdn.them.example/posts/next/">next</a> ' +
+        '<a href="https://cdn.them.example/posts/#notes">notes</a>',
+    );
   });
 
   it('reads a reply to an anchor on the target as a reply', () => {

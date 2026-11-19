@@ -335,8 +335,11 @@ export function rawTextOf(node: HtmlNode, limit = Infinity): string {
  * module trusts: an unclosed element in the page cannot leave a stray closing
  * tag in the result. It goes through `sanitizeCommentHtml` before it is stored
  * either way, so this only has to be close enough for that to read.
+ *
+ * Given a `base`, every `href` and `src` that resolves against it is written
+ * as the absolute URL, as microformats2 reads an `e-*` property's markup.
  */
-export function innerHtmlOf(element: HtmlElement, limit = Infinity): string {
+export function innerHtmlOf(element: HtmlElement, limit = Infinity, base?: string): string {
   const parts: string[] = [];
   const pending: (HtmlNode | string)[] = [];
   let length = 0;
@@ -351,7 +354,7 @@ export function innerHtmlOf(element: HtmlElement, limit = Infinity): string {
       parts.push(text);
       length += text.length;
     } else {
-      const open = `<${next.name}${attributesOf(next)}>`;
+      const open = `<${next.name}${attributesOf(next, base)}>`;
       if (length + open.length > limit) continue;
       parts.push(open);
       length += open.length;
@@ -372,10 +375,21 @@ function escapedWithin(text: string, room: number): string {
 }
 
 /** An element's attributes as markup, each with a leading space. */
-function attributesOf(element: HtmlElement): string {
+function attributesOf(element: HtmlElement, base: string | undefined): string {
   return Object.entries(element.attributes)
-    .map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`)
+    .map(([name, value]) => {
+      const written =
+        base !== undefined && URL_ATTRIBUTES.has(name) ? resolved(value, base) : value;
+      return ` ${name}="${escapeAttribute(written)}"`;
+    })
     .join('');
+}
+
+const URL_ATTRIBUTES: ReadonlySet<string> = new Set(['href', 'src']);
+
+/** A URL resolved against `base`, or as written when it does not resolve. */
+function resolved(value: string, base: string): string {
+  return URL.parse(value.trim(), base)?.href ?? value;
 }
 
 /** The classes an element carries, in the order it wrote them. */
