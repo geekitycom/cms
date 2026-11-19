@@ -24,6 +24,7 @@ export type ToolSite = Readonly<
     | 'siteRecords'
     | 'announce'
     | 'learnHandles'
+    | 'delivery'
   >
 >;
 

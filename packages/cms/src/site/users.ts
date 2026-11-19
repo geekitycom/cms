@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
 import { adminTheme } from './admin-theme.ts';
@@ -493,6 +493,38 @@ export async function setUserProfile(input: {
     return { profile };
   });
   return changed;
+}
+
+export function profileVersion(profile: UserProfile | undefined): string {
+  return createHash('sha256')
+    .update(JSON.stringify(profile ?? null))
+    .digest('hex');
+}
+
+export type ProfileEdit =
+  | { readonly outcome: 'stale' }
+  | { readonly outcome: 'saved'; readonly user: User; readonly changed: boolean };
+
+export async function editUserProfile(input: {
+  dataDir: string;
+  userId: number;
+  version: string;
+  changes: UserProfile;
+}): Promise<ProfileEdit> {
+  let stale = false;
+  let changed = false;
+  const found = await updateUser(input.dataDir, input.userId, (user) => {
+    if (profileVersion(user.profile) !== input.version) {
+      stale = true;
+      return {};
+    }
+    const profile = cleanProfile({ ...user.profile, ...input.changes });
+    changed = !isDeepStrictEqual(user.profile, profile);
+    return { profile };
+  });
+  const user = found ? findUserById(input.dataDir, input.userId) : undefined;
+  if (user === undefined) throw new Error(`There is no user ${String(input.userId)}.`);
+  return stale ? { outcome: 'stale' } : { outcome: 'saved', user, changed };
 }
 
 /**

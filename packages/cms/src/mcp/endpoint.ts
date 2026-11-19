@@ -27,6 +27,7 @@ import { createToolRegistry } from './tools.ts';
 import type { McpTool, RegisteredTools, ToolGuards } from './tools.ts';
 import { activePluginTools } from './plugin-tools.ts';
 import { whoami } from './whoami.ts';
+import { getProfile, updateProfile } from './profile.ts';
 import { createDraft } from './authoring/create.ts';
 import { publishPost } from './authoring/publish.ts';
 import { getPostSource } from './authoring/source.ts';
@@ -45,6 +46,8 @@ import { retryDeliveries } from './repair/retry.ts';
 
 const CORE_TOOLS: readonly McpTool[] = [
   whoami,
+  getProfile,
+  updateProfile,
   federationStatus,
   inboxSearch,
   postFederation,

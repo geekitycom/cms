@@ -34,7 +34,7 @@ export const SCOPE_LABELS: Readonly<Record<Scope, string>> = {
   profile: 'Your name, URL and photo',
   email: 'Your email address',
   create: 'Create posts as you',
-  update: 'Edit your posts',
+  update: 'Edit your posts and your profile',
   delete: 'Delete your posts',
   media: 'Upload media to your site',
   publish: 'Publish drafts and change published posts',
