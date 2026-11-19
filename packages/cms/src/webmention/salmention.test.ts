@@ -16,7 +16,7 @@ import { createMemoryMailProvider } from '../mail/memory.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { sourceEntry } from './microformats.ts';
+import { readSourcePage, sourceEntry } from './microformats.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
 import { SALMENTION_LIMIT } from './service.ts';
 
@@ -755,7 +755,11 @@ describe('sending a salmention (TASK-320)', () => {
     assert.deepEqual(sent, [TO_UPSTREAM], 'a reply came');
 
     const page = await (await cms.app.request('/2026/09/re-upstream/')).text();
-    const carried = sourceEntry(page, REPLY_POST_URL, (url) => url === UPSTREAM, NOW).replies;
+    const carried = sourceEntry(
+      readSourcePage(page, REPLY_POST_URL),
+      (url) => url === UPSTREAM,
+      NOW,
+    ).replies;
     assert.deepEqual(
       carried.map((one) => one.url),
       [`${BASE_URL}/comment/${reply.id}/`],

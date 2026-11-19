@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -171,6 +171,46 @@ describe('mail templates', () => {
       });
 
       assert.ok(text.includes('From: Grace\nWhen: 4 September 2026\n\nGood post.'), text);
+    });
+
+    const bodies: Record<string, Record<string, unknown>> = {
+      'comment-digest': { total: 1, items: [{ ...pending, comment }], queueUrl: pending.queueUrl },
+      'comment-pending': { ...pending, comment },
+      'comment-reply': {
+        post: pending.post,
+        reply: { author: 'Ada', url: 'https://blog.example/hello/#c2', text: 'Thanks.' },
+        comment: { text: 'Good post.' },
+        unsubscribeUrl: 'https://blog.example/u',
+      },
+      'contact-message': {
+        from: { name: 'Grace', email: 'grace@example.com' },
+        page: { title: 'Contact', url: 'https://blog.example/contact/' },
+        message: { received: '4 September 2026', text: 'Hi.' },
+        messagesUrl: 'https://blog.example/admin/messages',
+      },
+      'email-changed': { username: 'ada', email: 'ada@example.com' },
+      'password-changed': { username: 'ada' },
+      'password-reset': {
+        username: 'ada',
+        resetUrl: 'https://blog.example/r',
+        expiresInHours: 1,
+      },
+      test: {},
+    };
+    for (const [name, context] of Object.entries(bodies)) {
+      it(`starts the ${name} body on its first line of text`, async () => {
+        const text = await packaged(name, context);
+
+        assert.match(text, /^\S/, JSON.stringify(text.slice(0, 40)));
+      });
+    }
+
+    it('has a body test for every packaged plain text template', async () => {
+      const names = (await readdir(path.join(import.meta.dirname, '../../themes/default/mail')))
+        .filter((file) => file.endsWith('.txt.njk'))
+        .map((file) => file.slice(0, -'.txt.njk'.length));
+
+      assert.deepEqual(names.sort(), Object.keys(bodies).sort());
     });
 
     for (const subject of ['Hello there', undefined]) {

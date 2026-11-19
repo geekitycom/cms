@@ -29,11 +29,29 @@ describe('decodeEntities', () => {
     assert.equal(decodeEntities('&amp;lt;'), '&lt;');
   });
 
-  it('leaves an unknown name or an invalid code point as written', () => {
+  it('leaves an unknown name as written', () => {
+    assert.equal(decodeEntities('&bogus; &Amp; &#; &#x;'), '&bogus; &Amp; &#; &#x;');
+  });
+
+  it('reads a numeric reference HTML cannot hold as the replacement character', () => {
     assert.equal(
-      decodeEntities('&bogus; &#xD800; &#1114112; &Amp;'),
-      '&bogus; &#xD800; &#1114112; &Amp;',
+      decodeEntities('&#0; &#x0; &#xD800; &#xDFFF; &#1114112; &#99999999999999999999;'),
+      '\ufffd \ufffd \ufffd \ufffd \ufffd \ufffd',
     );
+  });
+
+  it('reads a numeric reference in 0x80 to 0x9F as the windows-1252 character', () => {
+    assert.equal(decodeEntities('&#128;&#x92;&#x93;&#x94;&#150;&#x9F;'), '€’“”–Ÿ');
+    assert.equal(decodeEntities('&#x81;&#x9D;'), '\u0081\u009d');
+  });
+
+  it('reads a numeric reference with no semicolon, as HTML does', () => {
+    assert.equal(decodeEntities('&#38 &#x3C&#169x'), '& <©x');
+    assert.equal(decodeAttribute('?a=&#38b'), '?a=&b');
+  });
+
+  it('keeps a noncharacter reference as the character it names', () => {
+    assert.equal(decodeEntities('&#xFFFE;&#xFDD0;'), '\ufffe\ufdd0');
   });
 
   it('resolves every name in the HTML table', () => {

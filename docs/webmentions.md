@@ -114,8 +114,12 @@ answers:
    the author of the post it replies to, is not used. An author written as a
    URL with no `h-card`, such as `<a class="u-author" href="…">Ada</a>`, is the
    author's page, and the link text, or else that page's host, is the name. The
-   site does not fetch that page. When there is no author, the site shows the
-   source's host. The author's name is put on one line and cut to 80
+   site does not fetch that page. An `h-card` with no `p-name` takes its name
+   as mf2 implies it: the alt of the card's only `img` or `area`, or the title
+   of its only `abbr`, at most one element down, else the card's text. So a
+   card that is only an avatar, `<a class="h-card" href="…"><img alt="Ada"
+src="…"></a>`, is named Ada. When there is no author or no name, the site
+   shows the source's host. The author's name is put on one line and cut to 80
    characters, the comment form's limit. An author link or photo longer than
    500 characters, the form's limit for a website, is left out.
 4. It files the result as a **pending comment** with `source: "webmention"`.
@@ -293,7 +297,12 @@ read, the string does not say why; the site writes the reason to its log:
 | `0x0021` | The target takes no pingbacks.                                                                                                                                                                                                                                                                                          |
 | `0x0030` | The ping was sent before. The site still rewrites the entry from the source as it reads now.                                                                                                                                                                                                                            |
 | `0x0032` | The source could not be read this time: it timed out, the server failed, it answered any 4xx status other than 404 and 410, its host resolves to a private address, or it is larger than a megabyte and has no link in the part that was read. Nothing stored changes, and the site checks the source again later.      |
-| `-32700` | The body is over 16 KB, the XML is not well formed, or it has a document type declaration. The site refuses these before it resolves anything.                                                                                                                                                                          |
+| `-32700` | The body is over 16 KB, the XML is not well formed, or it has a document type or entity declaration, a processing instruction other than the XML declaration, or an entity other than XML's five predefined ones and numeric references. The site refuses these before it resolves anything.                            |
+
+The parser takes any well-formed spelling of the call: attributes on elements,
+space before `>`, comments, an empty `<params/>`, and a string value in a CDATA
+section. Each value is a `<string>` or untyped text; any other XML-RPC type is
+refused with `-32700`.
 
 The CMS does not send pingbacks.
 

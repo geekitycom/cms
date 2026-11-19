@@ -442,7 +442,7 @@ function parseObject(
   return isRecord(parsed) ? { raw: parsed } : { problem: 'it is not a JSON object' };
 }
 
-/** A front matter value as a list of strings: a lone string is a list of one. */
+/** The value as an absolute http or https URL, or `undefined` when it is not one. */
 function webUrl(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   try {

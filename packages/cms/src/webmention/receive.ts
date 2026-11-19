@@ -20,8 +20,8 @@ import { sanitizeCommentHtml } from '../content/sanitize.ts';
 import type { AcceptedWebmention } from './checks.ts';
 import { DISCOVERY_MAX_BYTES } from './discovery.ts';
 import { decodeBody, fetchPublic } from './fetch-public.ts';
-import { linksIn, linksTo, sourceEntry } from './microformats.ts';
-import type { NestedReply, SourceEntry } from './microformats.ts';
+import { linksIn, linksTo, readSourcePage, sourceEntry } from './microformats.ts';
+import type { NestedReply, SourceEntry, SourcePage } from './microformats.ts';
 import { handSyndicationOf, syndicationCopies } from './syndication.ts';
 import { isPrivateHost } from '../util/public-address.ts';
 import type { HostLookup } from '../util/public-address.ts';
@@ -316,12 +316,7 @@ async function verifyAndStore(options: VerifyWebmentionOptions): Promise<Webment
   const isUrlOfPost = urlOfPost(options);
   const entry =
     fetched.format === 'html'
-      ? sourceEntry(
-          fetched.body,
-          fetched.url,
-          (url) => url === incoming.target || isUrlOfPost(url),
-          now,
-        )
+      ? sourceEntry(fetched.page, (url) => url === incoming.target || isUrlOfPost(url), now)
       : // A source that is not HTML — plain text, JSON, anything — has no
         // microformats to read, so all that can be said about it is that it
         // links here.
@@ -544,11 +539,14 @@ function carriedComment(
  */
 export type NotStored = 'gone' | 'unlinked' | 'discarded';
 
-type SourceFormat = 'html' | 'json' | 'text';
+/** A source that was read: HTML parsed once, anything else kept as text. */
+type ReadSource = { kind: 'read'; url: string; truncated: boolean } & (
+  { format: 'html'; page: SourcePage } | { format: 'json' | 'text'; body: string }
+);
 
 /** What reading a source page came to. */
 type FetchedSource =
-  | { kind: 'read'; body: string; url: string; format: SourceFormat; truncated: boolean }
+  | ReadSource
   | { kind: 'gone' }
   /** Not readable this time, which is not the same thing at all. */
   | { kind: 'unreachable'; reason: string };
@@ -570,19 +568,13 @@ async function readSource(source: string, lookup: HostLookup): Promise<FetchedSo
     return { kind: 'unreachable', reason: fetched.reason };
   }
 
-  return {
-    kind: 'read',
-    body: decodeBody(fetched.body, fetched.type),
-    url: fetched.url,
-    format: formatOf(fetched.type),
-    truncated: fetched.truncated,
-  };
-}
-
-function formatOf(type: string): SourceFormat {
-  if (/^\s*(text\/html|application\/xhtml\+xml)/i.test(type)) return 'html';
-  if (/^\s*application\/([\w.-]+\+)?json\s*(;|$)/i.test(type)) return 'json';
-  return 'text';
+  const body = decodeBody(fetched.body, fetched.type);
+  const read = { kind: 'read', url: fetched.url, truncated: fetched.truncated } as const;
+  if (/^\s*(text\/html|application\/xhtml\+xml)/i.test(fetched.type)) {
+    return { ...read, format: 'html', page: readSourcePage(body, fetched.url) };
+  }
+  const json = /^\s*application\/([\w.-]+\+)?json\s*(;|$)/i.test(fetched.type);
+  return { ...read, format: json ? 'json' : 'text', body };
 }
 
 /**
@@ -592,21 +584,14 @@ function formatOf(type: string): SourceFormat {
  * prose is not one. Anything else has no links, so it is read for the URLs it
  * names, as {@link urlsNamedIn} finds them.
  */
-function mentions(
-  fetched: { body: string; url: string; format: SourceFormat },
-  incoming: IncomingWebmention,
-): boolean {
-  if (fetched.format === 'html') return linksTo(fetched.body, fetched.url, incoming.target);
+function mentions(fetched: ReadSource, incoming: IncomingWebmention): boolean {
+  if (fetched.format === 'html') return linksTo(fetched.page, incoming.target);
   const wanted = webUrl(incoming.target);
   return wanted !== undefined && urlsNamedIn(fetched).has(wanted.href);
 }
 
-function namesThePost(
-  fetched: { body: string; url: string; format: SourceFormat },
-  options: VerifyWebmentionOptions,
-): boolean {
-  const named =
-    fetched.format === 'html' ? linksIn(fetched.body, fetched.url) : urlsNamedIn(fetched);
+function namesThePost(fetched: ReadSource, options: VerifyWebmentionOptions): boolean {
+  const named = fetched.format === 'html' ? linksIn(fetched.page) : urlsNamedIn(fetched);
   return [...named].some(urlOfPost(options));
 }
 
@@ -618,7 +603,7 @@ function namesThePost(
  * to parse, names a URL that stands on its own between spaces, quotes or
  * brackets, less any full stop or comma that ends the sentence.
  */
-function urlsNamedIn(fetched: { body: string; format: SourceFormat }): Set<string> {
+function urlsNamedIn(fetched: { body: string; format: 'json' | 'text' }): Set<string> {
   const candidates =
     (fetched.format === 'json' ? jsonStrings(fetched.body) : undefined) ??
     (fetched.body.match(/https?:\/\/[^\s"'`<>()\\]+/gi) ?? []).map((url) =>
