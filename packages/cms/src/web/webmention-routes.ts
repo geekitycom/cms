@@ -10,6 +10,7 @@ import {
 import { checkWebmentionRequest } from '../webmention/receive.ts';
 import { postSyndicatedAt, syndicationCopies } from '../webmention/syndication.ts';
 import type { SyndicationCopies } from '../webmention/syndication.ts';
+import { messageOf } from '../util/errors.ts';
 import { readBounded } from './bounded-body.ts';
 import type { GeekityEnv } from './env.ts';
 import { clientAddress } from './throttle.ts';
@@ -63,16 +64,18 @@ export function mountWebmentions(app: Hono<GeekityEnv>, syndicatedAt: Syndicated
 
     if (!checked.ok) return c.text(checked.message, 400);
 
-    // Nothing waits for the check: the sender is answered now and the source
-    // is fetched afterwards, and `receive` never rejects.
-    void webmentions.receive({
-      source: checked.source,
-      target: checked.target,
-      document: checked.document,
-      address: clientAddress(c, config),
-      userAgent: c.req.header('user-agent'),
-      referrer: c.req.header('referer'),
-    });
+    try {
+      await webmentions.receive({
+        source: checked.source,
+        target: checked.target,
+        address: clientAddress(c, config),
+        userAgent: c.req.header('user-agent'),
+        referrer: c.req.header('referer'),
+      });
+    } catch (thrown) {
+      console.warn(`A webmention from ${checked.source} was not recorded: ${messageOf(thrown)}`);
+      return c.text('The webmention could not be recorded. Send it again later.', 503);
+    }
 
     return c.text('Accepted. The source will be checked shortly.', 202);
   });

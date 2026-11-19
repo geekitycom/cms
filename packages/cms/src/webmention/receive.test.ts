@@ -16,6 +16,7 @@ import type { MemoryMailProvider } from '../mail/memory.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
+import { nextEvent } from '../__testing__/wait.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
 import { verifyWebmention } from './receive.ts';
@@ -83,6 +84,8 @@ interface Page {
   body?: string | Uint8Array;
   redirectTo?: string;
   contentType?: string;
+  /** The answer waits until this settles, or the request is aborted. */
+  gate?: Promise<void>;
 }
 
 const pages = new Map<string, Page>();
@@ -93,10 +96,13 @@ const lookup: HostLookup = (hostname) =>
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
+const gates: (() => void)[] = [];
+const hearing = new Set<() => void>();
 
 const restoreFetch = routeTheWeb();
 
 after(async () => {
+  for (const open of gates) open();
   restoreFetch();
   for (const instance of started) await instance.close();
   await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
@@ -110,16 +116,25 @@ beforeEach(() => {
 function routeTheWeb(): () => void {
   const original = globalThis.fetch;
 
-  globalThis.fetch = ((input: string | URL | Request) =>
-    Promise.resolve(answer(input))) as typeof fetch;
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) =>
+    answer(input, init?.signal ?? undefined)) as typeof fetch;
 
   /** What the make-believe web answers, with no network anywhere near it. */
-  function answer(input: string | URL | Request): Response {
+  async function answer(input: string | URL | Request, signal?: AbortSignal): Promise<Response> {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     requested.push(url);
+    for (const hear of hearing) hear();
 
     const page = pages.get(url.split('#')[0] ?? url);
     if (page === undefined) return new Response('missing', { status: 404 });
+    if (page.gate !== undefined) {
+      await new Promise<void>((resolve, reject) => {
+        void page.gate?.then(resolve);
+        signal?.addEventListener('abort', () => {
+          reject(signal.reason as Error);
+        });
+      });
+    }
     if (page.redirectTo !== undefined) {
       return new Response(null, { status: 302, headers: { location: page.redirectTo } });
     }
@@ -179,6 +194,68 @@ async function site(
   started.push(instance);
   await instance.sync();
   return instance;
+}
+
+/** Another CMS on the directories `cms` uses, as the next process would be. */
+async function nextProcess(cms: Cms, config: GeekityConfig = {}): Promise<Cms> {
+  const instance = createCms({
+    contentDir: cms.config.contentDir,
+    dataDir: cms.config.dataDir,
+    baseUrl: BASE_URL,
+    watch: false,
+    now: () => NOW,
+    hostLookup: lookup,
+    port: 0,
+    ...config,
+  });
+  started.push(instance);
+  await instance.sync();
+  return instance;
+}
+
+/** A gate that opens when `open` is called, or once the file has run. */
+function gate(): { promise: Promise<void>; open: () => void } {
+  let open = (): void => {};
+  const promise = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  gates.push(open);
+  return { promise, open };
+}
+
+/** Resolve once `url` has been fetched `times` times. */
+function fetched(url: string, times = 1): Promise<void> {
+  return nextEvent(`fetch ${String(times)} of ${url}`, (done) => {
+    const hear = (): void => {
+      if (requested.filter((one) => one === url).length >= times) done();
+    };
+    hearing.add(hear);
+    hear();
+    return () => hearing.delete(hear);
+  });
+}
+
+/** Resolve once a webmention from `url` is stored on the post. */
+function storedFrom(cms: Cms, url: string): Promise<void> {
+  return nextEvent(`a webmention from ${url}`, (done) => {
+    const look = (): void => {
+      if (stored(cms).some((one) => one.url === url)) done();
+    };
+    look();
+    return cms.admin.onConversationWrite(look);
+  });
+}
+
+/** The checks the site has accepted and not finished, as its data file holds them. */
+async function waitingChecks(cms: Cms): Promise<unknown[]> {
+  try {
+    return JSON.parse(
+      await readFile(path.join(cms.config.dataDir, 'webmention-checks.json'), 'utf8'),
+    ) as unknown[];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
 }
 
 /** Send one webmention the way a remote server would. */
@@ -763,6 +840,93 @@ describe('a webmention that comes again', () => {
       assert.equal(held[0]?.status, 'approved');
     });
   }
+});
+
+describe('an accepted webmention that has not been checked yet', () => {
+  const SOURCE = 'https://them.example/late';
+  const linking = (): Page => ({
+    body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+  });
+
+  it('is checked by the next process on the same directories without being sent again', async () => {
+    const first = await site();
+    const hang = gate();
+    pages.set(SOURCE, { ...linking(), gate: hang.promise });
+
+    assert.equal((await send(first, { source: SOURCE, target: POST_URL })).status, 202);
+    await fetched(SOURCE);
+
+    pages.set(SOURCE, linking());
+    const second = await nextProcess(first);
+    await second.serve();
+    await storedFrom(second, SOURCE);
+
+    pages.set(SOURCE, { status: 503 });
+    hang.open();
+    await first.webmentions.settled();
+    await second.webmentions.settled();
+
+    assert.ok(stored(second).some((one) => one.url === SOURCE));
+    assert.deepEqual(await waitingChecks(second), [], 'nothing is left waiting once it is stored');
+  });
+
+  it('is forgotten once its check is done', async () => {
+    const cms = await site();
+    pages.set(SOURCE, linking());
+
+    await sendAndSettle(cms, SOURCE);
+
+    assert.equal(stored(cms).length, 1);
+    assert.deepEqual(await waitingChecks(cms), []);
+  });
+
+  it('is checked again later when its source could not be read the first time', async () => {
+    const cms = await site({ webmentions: { retryDelaysMs: [50, 50] } });
+    pages.set(SOURCE, { status: 503 });
+
+    await sendAndSettle(cms, SOURCE);
+    assert.deepEqual(stored(cms), []);
+    assert.equal((await waitingChecks(cms)).length, 1, 'it waits for another try');
+
+    pages.set(SOURCE, linking());
+    await storedFrom(cms, SOURCE);
+    await cms.webmentions.settled();
+    assert.deepEqual(await waitingChecks(cms), []);
+  });
+
+  it('is given up on after the last try', async () => {
+    const cms = await site({ webmentions: { retryDelaysMs: [20, 20] } });
+    pages.set(SOURCE, { status: 503 });
+
+    await sendAndSettle(cms, SOURCE);
+
+    await fetched(SOURCE, 3);
+    await cms.webmentions.settled();
+
+    assert.deepEqual(await waitingChecks(cms), [], 'nothing is left to try again');
+    assert.equal(requested.filter((url) => url === SOURCE).length, 3);
+  });
+
+  it('is filed on the post as the index has it when the check runs', async () => {
+    const cms = await site();
+    const hang = gate();
+    pages.set('https://slow.example/first', { ...linking(), gate: hang.promise });
+    pages.set(SOURCE, linking());
+
+    await send(cms, { source: 'https://slow.example/first', target: POST_URL });
+    assert.equal((await send(cms, { source: SOURCE, target: POST_URL })).status, 202);
+
+    await rm(path.join(cms.config.contentDir, 'posts', '2026-09-19-hello-world.md'));
+    await cms.sync();
+    hang.open();
+    await cms.webmentions.settled();
+
+    assert.ok(
+      !cms.admin.listCommentsFor('hello-world').some((one) => one.url === SOURCE),
+      'a post gone before the check gets nothing from it',
+    );
+    assert.deepEqual(await waitingChecks(cms), []);
+  });
 });
 
 describe('a source in another character encoding', () => {

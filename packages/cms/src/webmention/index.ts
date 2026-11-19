@@ -34,6 +34,7 @@ export type {
   WebmentionOutcome,
   WebmentionRequest,
 } from './receive.ts';
+export type { AcceptedWebmention } from './checks.ts';
 export { WEBMENTION_FIELDS, WEBMENTION_PATH, webmentionEndpointFor } from './endpoint.ts';
 export {
   PINGBACK_FAULTS,
@@ -59,6 +60,7 @@ export type {
 export { createWebmentionService, followMovedWebmentions, SEND_TIMEOUT_MS } from './service.ts';
 export type {
   CreateWebmentionServiceOptions,
+  ReceivedWebmention,
   WebmentionLogger,
   WebmentionReport,
   WebmentionService,

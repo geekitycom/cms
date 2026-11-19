@@ -791,6 +791,7 @@ describe('what the environment and config may say', () => {
       watchDebounce: defaultWatchDebounce,
       federation: {},
       jobs: {},
+      webmentions: {},
       hostLookup: systemHostLookup,
       plugins: [],
       pluginsDir: undefined,

@@ -166,6 +166,19 @@ export interface IndexNowOverrides {
 }
 
 /**
+ * How the CMS treats a webmention whose source could not be read. A test names
+ * short delays so that it waits for none of the defaults.
+ */
+export interface WebmentionOverrides {
+  /**
+   * How long to wait before each further check, in milliseconds. Defaults to
+   * one minute, then ten, then an hour, then six hours; after the last, the
+   * webmention is given up.
+   */
+  retryDelaysMs?: readonly number[] | undefined;
+}
+
+/**
  * What a site writes in `geekity.config.ts`. Every field is optional; see
  * {@link DEFAULT_PORT} and friends for what each one falls back to.
  */
@@ -461,6 +474,8 @@ export interface GeekityConfig {
    * field has a default; see {@link JobOverrides}.
    */
   jobs?: JobOverrides;
+  /** How a webmention whose source could not be read is tried again. See {@link WebmentionOverrides}. */
+  webmentions?: WebmentionOverrides;
   /**
    * How a host name is resolved before the CMS fetches a page a reply answers,
    * so a name that resolves to this network is refused. Defaults
@@ -596,6 +611,8 @@ export interface ResolvedConfig {
   readonly federation: FederationOverrides;
   /** Job queue overrides, empty when the site named none. */
   readonly jobs: JobOverrides;
+  /** Webmention overrides, empty when the site named none. */
+  readonly webmentions: WebmentionOverrides;
   /** How host names are resolved before a stranger's page is fetched. */
   readonly hostLookup: HostLookup;
   /** The installed plugins, empty when the site named none. */
@@ -747,6 +764,7 @@ export function resolveConfig(
     watchDebounce: config.watchDebounce ?? defaultWatchDebounce,
     federation: config.federation ?? {},
     jobs: config.jobs ?? {},
+    webmentions: config.webmentions ?? {},
     hostLookup: config.hostLookup ?? systemHostLookup,
     plugins: config.plugins ?? [],
   });

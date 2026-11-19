@@ -59,6 +59,8 @@ export function pingbackAnswerFor(outcome: WebmentionOutcome): string | Pingback
       return outcome.created
         ? 'Thanks. The pingback is waiting for a moderator.'
         : { code: PINGBACK_FAULTS.alreadyRegistered, message: 'That pingback is already here.' };
+    case 'refused':
+      return { code: PINGBACK_REQUEST_FAULTS[outcome.problem], message: outcome.message };
     case 'unreachable':
       return {
         code: PINGBACK_FAULTS.generic,

@@ -11,6 +11,7 @@ import { escapeText } from '../util/html.ts';
 import { commentKeyAt } from '../comments/conversation.ts';
 import type { ConversationReader, ConversationSite } from '../comments/conversation.ts';
 import { sanitizeCommentHtml } from '../content/sanitize.ts';
+import type { AcceptedWebmention } from './checks.ts';
 import { DISCOVERY_MAX_BYTES } from './discovery.ts';
 import { decodeBody, fetchPublic } from './fetch-public.ts';
 import { linksIn, linksTo, sourceEntry } from './microformats.ts';
@@ -53,20 +54,9 @@ import { decodedPath } from '../util/url.ts';
 /** How long the source is given to answer before it is abandoned. */
 export const VERIFY_TIMEOUT_MS = 15_000;
 
-/** One webmention as it arrived, before anything has been fetched. */
-export interface IncomingWebmention {
-  /** The page claiming to link here. */
-  readonly source: string;
-  /** The page on this site it claims to link to. */
-  readonly target: string;
-  /** The post that target names. */
+/** One accepted webmention, with the post its target names when it is checked. */
+export interface IncomingWebmention extends AcceptedWebmention {
   readonly document: Document;
-  /** Where the request came from, **unhashed**, for the checker. */
-  readonly address?: string | undefined;
-  /** The `User-Agent` the sender sent. */
-  readonly userAgent?: string | undefined;
-  /** The `Referer` the sender sent. */
-  readonly referrer?: string | undefined;
 }
 
 /** What one submitted pair turned out to be. */
@@ -198,7 +188,9 @@ export type WebmentionOutcome =
   /** Nothing is stored from the source, and there was nothing to remove. */
   | { readonly kind: 'ignored'; readonly why: NotStored }
   /** The source could not be read this time; whatever is stored stands. */
-  | { readonly kind: 'unreachable'; readonly reason: string };
+  | { readonly kind: 'unreachable'; readonly reason: string }
+  /** By the time it was checked, the target was no longer a page here that takes them. */
+  | { readonly kind: 'refused'; readonly problem: RequestProblem; readonly message: string };
 
 /**
  * Go and look at the source, and put what it says in the queue.

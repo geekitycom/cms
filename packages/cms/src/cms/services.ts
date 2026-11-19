@@ -587,7 +587,14 @@ export function createServices({
         federationQueue?.close();
       },
     },
-    { name: 'webmentions', settled: () => webmentions.settled() },
+    {
+      name: 'webmentions',
+      start: () => webmentions.start(),
+      stop: () => {
+        webmentions.stop();
+      },
+      settled: () => webmentions.settled(),
+    },
     {
       name: 'reply contexts',
       start: () => {

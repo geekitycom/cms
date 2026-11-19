@@ -110,6 +110,33 @@ answers:
    source's host.
 4. It files the result as a **pending comment** with `source: "webmention"`.
 
+**Accepted webmentions are recorded before the answer.** Before the endpoint
+answers `202`, it writes the webmention to `data/webmention-checks.json` with
+the source, the target, and the sender's address, user agent and referrer for
+the spam checker. If the site cannot write the record, the endpoint answers
+`503` and the sender can try again. The site makes the check from the record
+and removes the record when the check is done. When the site starts, it checks
+each webmention still in the file, so a restart, a reload or a deploy between
+the `202` and the end of the check loses nothing. A check that a reload cuts
+off is made again by the next process.
+
+The check finds the post from the target when it runs, not when the webmention
+arrives. A post that is trashed, unpublished or moved in between gets nothing,
+and the same is true when `webmentionsReceive` is turned off in between.
+
+When the site cannot read the source, as for a timeout, a 5xx answer or a 401,
+it keeps the record and checks again after one minute, ten minutes, one hour
+and six hours. After the fifth failed check, it logs a warning and removes the
+record. A site config can set other delays:
+
+```ts
+export default defineConfig({
+  webmentions: {
+    retryDelaysMs: [60_000, 600_000, 3_600_000, 21_600_000],
+  },
+});
+```
+
 The comment goes in the same file, the same thread, and the same moderation
 queue as every other comment. It goes through the same `commentChecker` seam.
 A checker can tell a webmention from a form submission by its `source`. The
@@ -171,11 +198,12 @@ site advertises the endpoint as an absolute URL in an `X-Pingback` header and
 a `<link rel="pingback">` on every post and page.
 
 A `pingback.ping(source, target)` XML-RPC call goes through the same check,
-verification, spam checker, and moderation queue as a webmention. The site
+record, verification, spam checker, and moderation queue as a webmention. The site
 files it as the same comment, so a link that was pinged and mentioned is one
 entry. A ping whose target is a recorded syndicated copy of a post is filed on
 that post, as a webmention to the copy is. XML-RPC expects an answer, so the endpoint reads the source before it
-replies. A failure returns one of the spec's fault codes:
+replies. The answer reports the first check; a source that could not be read
+is checked again later, as for a webmention. A failure returns one of the spec's fault codes:
 
 | Code     | Meaning                                                                                                                                                                                                                                                                     |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

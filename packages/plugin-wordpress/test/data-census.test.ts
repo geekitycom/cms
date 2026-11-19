@@ -29,6 +29,7 @@ import { wxr } from './wxr.ts';
  */
 
 const BASE = 'https://blog.example';
+const MENTION = 'https://grace.example/2026/more/';
 const ADA = { username: 'ada', password: 'correct horse battery', email: 'ada@blog.example' };
 const APP = 'https://app.example/';
 const CALLBACK = `${APP}callback`;
@@ -68,6 +69,7 @@ before(async () => {
       ),
     [FONT_FILE]: () =>
       new Response(Buffer.from('wOF2 bold'), { headers: { 'content-type': 'font/woff2' } }),
+    [MENTION]: () => new Response('busy', { status: 503 }),
   };
   globalThis.fetch = (input, init) => {
     const answer = web[new Request(input, init).url];
@@ -582,6 +584,16 @@ describe('the data census', () => {
       assert.equal(actor.status, 200, "ada's actor was drawn, minting her keys");
       await discuss(site);
       await contact(cms);
+      const mention = await cms.app.request('/_geekity/webmention', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          source: MENTION,
+          target: `${BASE}/hello-world/`,
+        }).toString(),
+      });
+      assert.equal(mention.status, 202, 'a webmention was accepted');
+      await cms.webmentions.settled();
       await pluginSite({ admin: cms.admin, config: cms.config }).addFollower(ADA.username, {
         actorId: 'https://remote.example/users/bob',
         inboxId: 'https://remote.example/users/bob/inbox',

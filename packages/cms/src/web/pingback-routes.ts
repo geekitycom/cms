@@ -12,6 +12,8 @@ import {
 } from '../webmention/pingback.ts';
 import type { PingbackFault } from '../webmention/pingback.ts';
 import { checkWebmentionRequest } from '../webmention/receive.ts';
+import type { ReceivedWebmention } from '../webmention/service.ts';
+import { messageOf } from '../util/errors.ts';
 import { readBounded } from './bounded-body.ts';
 import type { SyndicatedAt } from './webmention-routes.ts';
 import type { GeekityEnv } from './env.ts';
@@ -75,15 +77,20 @@ async function answerPing(
     return { code: PINGBACK_FAULTS.notATarget, message: 'That page takes no pingbacks.' };
   }
 
-  const outcome = await webmentions.receive({
-    source: checked.source,
-    target: checked.target,
-    document: checked.document,
-    address: clientAddress(c, config),
-    userAgent: c.req.header('user-agent'),
-    referrer: c.req.header('referer'),
-  });
-  return pingbackAnswerFor(outcome);
+  let received: ReceivedWebmention;
+  try {
+    received = await webmentions.receive({
+      source: checked.source,
+      target: checked.target,
+      address: clientAddress(c, config),
+      userAgent: c.req.header('user-agent'),
+      referrer: c.req.header('referer'),
+    });
+  } catch (thrown) {
+    console.warn(`A pingback from ${checked.source} was not recorded: ${messageOf(thrown)}`);
+    return { code: PINGBACK_FAULTS.generic, message: 'The ping could not be recorded.' };
+  }
+  return pingbackAnswerFor(await received.checked);
 }
 
 function success(message: string): string {
