@@ -790,6 +790,22 @@ describe('an approved webmention that comes again', () => {
 
     assert.equal(stored(cms)[0]?.submitted, first.submitted);
   });
+
+  it('takes the site’s clock, then keeps it, when the page gives a date far in the future', async () => {
+    let now = new Date('2026-09-20T12:00:00.000Z');
+    const cms = await site({ now: () => now });
+    const future = reply(LOVELY).replace(
+      /<time class="dt-published"[^>]*>/,
+      '<time class="dt-published" datetime="9999-01-01T00:00:00Z">',
+    );
+    const first = await approvedReply(cms, future);
+    assert.equal(first.submitted, '2026-09-20T12:00:00.000Z');
+
+    now = new Date('2026-10-20T12:00:00.000Z');
+    await sendAndSettle(cms, NOTE);
+
+    assert.equal(stored(cms)[0]?.submitted, first.submitted);
+  });
 });
 
 describe('a webmention sent again to another URL of the same post', () => {

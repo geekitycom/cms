@@ -175,6 +175,7 @@ export function sourceEntry(
   html: string,
   sourceUrl: string,
   isTarget: (url: string) => boolean,
+  now: Date,
 ): SourceEntry {
   const root = parseHtml(html);
   const base = baseOf(root, sourceUrl);
@@ -195,9 +196,9 @@ export function sourceEntry(
     ...(rsvp === undefined ? {} : { rsvp }),
     author,
     content,
-    published: chosen === undefined ? null : instantOf(first(chosen, 'published')),
+    published: chosen === undefined ? null : instantOf(first(chosen, 'published'), now),
     url,
-    replies: chosen === undefined ? [] : nestedReplies(chosen, url, sourceUrl),
+    replies: chosen === undefined ? [] : nestedReplies(chosen, url, sourceUrl, now),
     inReplyTo:
       chosen === undefined
         ? []
@@ -219,7 +220,12 @@ export function sourceEntry(
  * way in turn. A reply is known by its page, so one with no `u-url`, or one
  * already read on this page, is passed over.
  */
-function nestedReplies(entry: MicroformatItem, url: string, sourceUrl: string): NestedReply[] {
+function nestedReplies(
+  entry: MicroformatItem,
+  url: string,
+  sourceUrl: string,
+  now: Date,
+): NestedReply[] {
   const seen = new Set<string>([url, sourceUrl]);
 
   const read = (item: MicroformatItem, itsUrl: string, depth: number): NestedReply[] => {
@@ -247,7 +253,7 @@ function nestedReplies(entry: MicroformatItem, url: string, sourceUrl: string): 
             ? cardOf(author.item)
             : { name: author?.text ?? '', url: null, photo: null },
         content: nestedContent(reply),
-        published: instantOf(first(reply, 'published')),
+        published: instantOf(first(reply, 'published'), now),
         replies: read(reply, at, depth + 1),
       });
     }
@@ -548,12 +554,59 @@ function titleOf(root: HtmlElement): string {
   return '';
 }
 
-/** A `dt-published` as an ISO instant, or `null` when it is not a date. */
-function instantOf(value: MicroformatValue | undefined): string | null {
-  if (value === undefined || value.text === '') return null;
+const DATETIME =
+  /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?)?$/i;
 
-  const at = new Date(value.text);
-  return Number.isNaN(at.getTime()) ? null : at.toISOString();
+const EARLIEST_PUBLISHED = Date.UTC(1990, 0, 1);
+
+const PUBLISHED_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A `dt-published` as an ISO instant, or `null` when it is not a date, is
+ * older than the web, or is more than a day after `now`. A time with no
+ * offset is UTC.
+ */
+function instantOf(value: MicroformatValue | undefined, now?: Date): string | null {
+  const match = DATETIME.exec(value?.text.trim() ?? '');
+  if (match === null) return null;
+
+  const [
+    ,
+    year = '',
+    month = '',
+    day = '',
+    hour = '0',
+    minute = '0',
+    second = '0',
+    fraction = '',
+    zone,
+  ] = match;
+  const y = Number(year);
+  const mo = Number(month) - 1;
+  const d = Number(day);
+  const h = Number(hour);
+  const mi = Number(minute);
+  const s = Number(second);
+  const local = Date.UTC(y, mo, d, h, mi, s, Number(fraction.padEnd(3, '0').slice(0, 3)));
+  const date = new Date(local);
+  const sameDay =
+    date.getUTCFullYear() === y && date.getUTCMonth() === mo && date.getUTCDate() === d;
+  if (!sameDay || h > 23 || mi > 59 || s > 59) return null;
+
+  const offset = offsetMinutes(zone);
+  if (offset === null) return null;
+  const at = local - offset * 60 * 1000;
+  if (at < EARLIEST_PUBLISHED) return null;
+  if (now !== undefined && at > now.getTime() + PUBLISHED_CLOCK_SKEW_MS) return null;
+  return new Date(at).toISOString();
+}
+
+function offsetMinutes(zone: string | undefined): number | null {
+  if (zone === undefined || zone.toUpperCase() === 'Z') return 0;
+  const hours = Number(zone.slice(1, 3));
+  const minutes = Number(zone.slice(-2));
+  if (hours > 23 || minutes > 59) return null;
+  return (zone.startsWith('-') ? -1 : 1) * (hours * 60 + minutes);
 }
 
 /** The host a source is on, for a page that never says who wrote it. */

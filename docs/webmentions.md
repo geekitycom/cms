@@ -148,6 +148,13 @@ comment is no longer shown. A pending entry stays pending and sends no new
 notice. A spam entry stays spam. When the page gives no `dt-published`, the
 entry keeps the date it was first stored with.
 
+The site reads `dt-published` as an ISO 8601 date and time, with `T` or a
+space between the two, an offset such as `Z`, `+01:00` or `+0100`, or a date
+alone. A time with no offset is read as UTC. The site ignores a value it
+cannot read, a date before 1990, and a date more than a day after it reads
+the page. A new entry with no usable date takes the time the site read the
+page as its date; an entry already stored keeps the date it has.
+
 Closing rules do not apply. A post that no longer takes comments still receives
 webmentions, as it still receives fediverse replies.
 

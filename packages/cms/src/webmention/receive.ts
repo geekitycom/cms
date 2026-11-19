@@ -245,7 +245,12 @@ export async function verifyWebmention(
   const isUrlOfPost = urlOfPost(options);
   const entry =
     fetched.format === 'html'
-      ? sourceEntry(fetched.body, fetched.url, (url) => url === incoming.target || isUrlOfPost(url))
+      ? sourceEntry(
+          fetched.body,
+          fetched.url,
+          (url) => url === incoming.target || isUrlOfPost(url),
+          now,
+        )
       : // A source that is not HTML — plain text, JSON, anything — has no
         // microformats to read, so all that can be said about it is that it
         // links here.
