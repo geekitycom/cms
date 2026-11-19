@@ -63,10 +63,14 @@ future-dated, unlisted, private, or trashed post is never a backlink. See
 - a `Link` header on every representation of a document
 - a `<link rel="webmention">` in the head
 
-The endpoint takes a form `POST` of `source` and `target`. It answers `202`
-for a request worth checking and `400` for one that is not. A source on the
-site's own origin gets `400`, as does a source that names the target page, with
-or without a fragment. The site does not fetch its own pages, and a link
+The endpoint takes a `POST` of `source` and `target` as an
+`application/x-www-form-urlencoded` form, the type the Webmention spec has
+senders use. Any other content type, `multipart/form-data` included, gets
+`400`. A body longer than 16 KiB gets `413`, by its `Content-Length` or by the
+bytes that arrive, and the endpoint reads no further. The endpoint queues
+nothing for a request it refuses. It answers `202` for a request worth checking
+and `400` for one that is not. A source on the site's own origin gets `400`, as
+does a source that names the target page, with or without a fragment. The site does not fetch its own pages, and a link
 between them is a backlink, not a comment. It does the checks after it
 answers:
 

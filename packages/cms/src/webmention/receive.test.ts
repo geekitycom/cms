@@ -308,6 +308,79 @@ describe('what the endpoint refuses', () => {
     assert.deepEqual(requested, []);
   });
 
+  it('refuses a body of megabytes with 413 and queues nothing', async () => {
+    const cms = await site();
+    pages.set('https://them.example/big', { body: reply(`<a href="${POST_URL}">yes</a>`) });
+    const body =
+      new URLSearchParams({ source: 'https://them.example/big', target: POST_URL }).toString() +
+      '&pad=' +
+      'x'.repeat(4 * 1024 * 1024);
+
+    const response = await cms.app.request(WEBMENTION_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'content-length': String(body.length),
+      },
+      body,
+    });
+    await cms.webmentions.settled();
+
+    assert.equal(response.status, 413);
+    assert.deepEqual(requested, []);
+    assert.deepEqual(stored(cms), []);
+  });
+
+  it('refuses a body over the limit that does not say its length', async () => {
+    const cms = await site();
+    pages.set('https://them.example/big', { body: reply(`<a href="${POST_URL}">yes</a>`) });
+    const form = new URLSearchParams({ source: 'https://them.example/big', target: POST_URL });
+    const chunks = [form.toString(), '&pad=', 'x'.repeat(64 * 1024)];
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const next = chunks.shift();
+        if (next === undefined) controller.close();
+        else controller.enqueue(new TextEncoder().encode(next));
+      },
+    });
+
+    const response = await cms.app.request(WEBMENTION_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+    await cms.webmentions.settled();
+
+    assert.equal(response.status, 413);
+    assert.deepEqual(requested, []);
+  });
+
+  it('refuses a malformed multipart body with 400', async () => {
+    const cms = await site();
+
+    const response = await cms.app.request(WEBMENTION_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=xyz' },
+      body: '--xyz\r\nnot a part at all',
+    });
+
+    assert.equal(response.status, 400);
+  });
+
+  it('refuses a multipart form, which is not the type a webmention is sent as', async () => {
+    const cms = await site();
+    const form = new FormData();
+    form.set('source', 'https://them.example/a');
+    form.set('target', POST_URL);
+
+    const response = await cms.app.request(WEBMENTION_PATH, { method: 'POST', body: form });
+    await cms.webmentions.settled();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(requested, []);
+  });
+
   it('refuses a source on a private address, which is not somebody else’s page', async () => {
     const cms = await site();
 

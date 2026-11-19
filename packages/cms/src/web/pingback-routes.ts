@@ -12,6 +12,7 @@ import {
 } from '../webmention/pingback.ts';
 import type { PingbackFault } from '../webmention/pingback.ts';
 import { checkWebmentionRequest } from '../webmention/receive.ts';
+import { readBounded } from './bounded-body.ts';
 import type { GeekityEnv } from './env.ts';
 import { escapeXml } from './feed-xml.ts';
 import { clientAddress } from './throttle.ts';
@@ -78,28 +79,6 @@ async function answerPing(c: Context<GeekityEnv>): Promise<string | PingbackFaul
     referrer: c.req.header('referer'),
   });
   return pingbackAnswerFor(outcome);
-}
-
-async function readBounded(request: Request, max: number): Promise<string | undefined> {
-  if (Number(request.headers.get('content-length') ?? 0) > max) return undefined;
-  if (request.body === null) return '';
-
-  const reader = (request.body as ReadableStream<Uint8Array>).getReader();
-  const decoder = new TextDecoder();
-  let text = '';
-  let read = 0;
-  try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      read += chunk.value.length;
-      if (read > max) return undefined;
-      text += decoder.decode(chunk.value, { stream: true });
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined);
-  }
-  return text + decoder.decode();
 }
 
 function success(message: string): string {

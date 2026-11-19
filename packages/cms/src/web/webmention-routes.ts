@@ -1,10 +1,14 @@
 import type { Hono } from 'hono';
 
 import { publicDocumentAt } from '../content/permalinks.ts';
-import { stringOrEmpty } from '../util/forms.ts';
-import { WEBMENTION_FIELDS, WEBMENTION_PATH } from '../webmention/endpoint.ts';
+import {
+  WEBMENTION_FIELDS,
+  WEBMENTION_MAX_BYTES,
+  WEBMENTION_PATH,
+} from '../webmention/endpoint.ts';
 import { checkWebmentionRequest } from '../webmention/receive.ts';
 import { postSyndicatedAt, syndicationCopies } from '../webmention/syndication.ts';
+import { readBounded } from './bounded-body.ts';
 import type { GeekityEnv } from './env.ts';
 import { clientAddress } from './throttle.ts';
 
@@ -25,10 +29,17 @@ export function mountWebmentions(app: Hono<GeekityEnv>): void {
       return c.text('This site does not take webmentions.', 404);
     }
 
-    const body = await c.req.parseBody();
+    const mediaType = (c.req.header('content-type') ?? '').split(';')[0]?.trim().toLowerCase();
+    if (mediaType !== 'application/x-www-form-urlencoded') {
+      return c.text('Send source and target as an application/x-www-form-urlencoded form.', 400);
+    }
+    const text = await readBounded(c.req.raw, WEBMENTION_MAX_BYTES);
+    if (text === undefined) return c.text('The request is too large.', 413);
+
+    const form = new URLSearchParams(text);
     const checked = checkWebmentionRequest(
-      stringOrEmpty(body[WEBMENTION_FIELDS.source]),
-      stringOrEmpty(body[WEBMENTION_FIELDS.target]),
+      form.get(WEBMENTION_FIELDS.source) ?? '',
+      form.get(WEBMENTION_FIELDS.target) ?? '',
       {
         baseUrl: config.baseUrl,
         documentAt: (pathname) => publicDocumentAt(store, pathname),

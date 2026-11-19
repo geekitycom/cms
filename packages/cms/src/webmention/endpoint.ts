@@ -11,6 +11,9 @@
 /** Where a webmention is sent. */
 export const WEBMENTION_PATH = '/_geekity/webmention';
 
+/** The longest body the endpoint reads. Two URLs never need more. */
+export const WEBMENTION_MAX_BYTES = 16 * 1024;
+
 /** The fields a webmention carries, which the spec fixes. */
 export const WEBMENTION_FIELDS = { source: 'source', target: 'target' } as const;
 
