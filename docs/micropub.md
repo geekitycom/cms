@@ -23,13 +23,13 @@ endpoint answer 503.
 3. The consent screen names the app and lists what it asks for. A Micropub app
    asks for some of these scopes:
 
-   | Scope     | The consent screen says   | What it allows                                       |
-   | --------- | ------------------------- | ---------------------------------------------------- |
-   | `create`  | Create posts as you       | A `POST` that creates a post, and an upload.         |
-   | `update`  | Edit your posts           | `action=update`.                                     |
-   | `delete`  | Delete your posts         | `action=delete` and `action=undelete`.               |
-   | `media`   | Upload media to your site | An upload to the media endpoint, but no post.        |
-   | `profile` | Your name, URL and photo  | Nothing on the endpoint. The app learns who you are. |
+   | Scope     | The consent screen says          | What it allows                                       |
+   | --------- | -------------------------------- | ---------------------------------------------------- |
+   | `create`  | Create posts as you              | A `POST` that creates a post, and an upload.         |
+   | `update`  | Edit your posts and your profile | `action=update`.                                     |
+   | `delete`  | Delete your posts                | `action=delete` and `action=undelete`.               |
+   | `media`   | Upload media to your site        | An upload to the media endpoint, but no post.        |
+   | `profile` | Your name, URL and photo         | Nothing on the endpoint. The app learns who you are. |
 
    Untick any scope you do not want the app to have. The screen does not show a
    scope the site does not offer, such as `draft`, and the site does not grant

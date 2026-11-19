@@ -173,15 +173,15 @@ Each tool needs one scope. The registry checks the scope before the tool runs.
 The scopes are fixed by the CMS. A plugin's tool picks one of them and cannot
 add its own. decision-64 records the set.
 
-| Scope     | What it allows                                                                 |
-| --------- | ------------------------------------------------------------------------------ |
-| `profile` | Your name, URL and photo. `whoami` needs it.                                   |
-| `create`  | Create drafts as you.                                                          |
-| `update`  | Read and edit your posts. Editing a published post also needs `publish`.       |
-| `media`   | Upload media.                                                                  |
-| `publish` | Publish drafts and change posts that are already public.                       |
-| `inspect` | Read the site's federation and delivery records, inbox and followers included. |
-| `repair`  | Resend any post, retry failed deliveries and refresh remote actors.            |
+| Scope     | What it allows                                                                    |
+| --------- | --------------------------------------------------------------------------------- |
+| `profile` | Your name, URL and photo. `whoami` needs it.                                      |
+| `create`  | Create drafts as you.                                                             |
+| `update`  | Read and edit your posts and your profile. A published post also needs `publish`. |
+| `media`   | Upload media.                                                                     |
+| `publish` | Publish drafts and change posts that are already public.                          |
+| `inspect` | Read the site's federation and delivery records, inbox and followers included.    |
+| `repair`  | Resend any post, retry failed deliveries and refresh remote actors.               |
 
 A tool call whose token lacks the scope gets 403 with
 `WWW-Authenticate: Bearer error="insufficient_scope"`. Its `scope` names the
@@ -212,6 +212,8 @@ them in one sign-in. The body is a JSON-RPC error that names the missing scope.
 | `create_wiki_page`  | `create`  | Writes a new wiki page from a title, a Markdown body, an optional slug and optional aliases. A draft unless `draft` is false, which also needs `publish`.                     |
 | `get_wiki_page`     | `update`  | One of your wiki pages: its title, its aliases, its Markdown body, whether it is a draft, and the `hash` that `update_wiki_page` needs.                                       |
 | `update_wiki_page`  | `update`  | Changes the title, the aliases, the body or the draft state of one of your wiki pages. A published page, or publishing one, also needs `publish`.                             |
+| `get_profile`       | `update`  | Your own profile: display name, given and family name, bio, avatar, job title, location and links, and the `version` that `update_profile` needs.                             |
+| `update_profile`    | `update`  | Changes the named fields of your own profile and leaves the others. An empty value clears a field. A change goes to your followers as an `Update`.                            |
 
 ### The inspect tools
 
@@ -392,6 +394,25 @@ page is named by its slug or its address:
   page changed after it was read, the tool writes nothing and answers with an
   error. Changing a published page, or setting `draft` to false, needs the
   `publish` scope as well as `update`.
+
+The profile tools read and change the profile of the user the token belongs
+to, the same profile as the form on the admin's Users screen. They cannot
+change the username, password, role or email address:
+
+- `get_profile` answers `username`, each profile field that is filled in, and
+  the profile's `version`. The fields are `displayName`, `givenName`,
+  `familyName`, `bio`, `avatar`, `jobTitle`, `location` and `links`. Each link
+  is an object with `label`, `href` and an optional `rel`.
+- `update_profile` takes the `version` from `get_profile` and any of those
+  fields. A field that is not given stays as it is. An empty string clears a
+  field, and an empty `links` list clears the links. A `links` list replaces
+  the whole list, and a link without a `label` is labelled with its URL.
+  Values are trimmed and checked as the admin form checks them: the avatar
+  and each link's `href` must be a path on the site or an `http` or `https`
+  URL. When the profile changed after it was read, the tool writes nothing
+  and answers with an error. Read the profile again and retry. A change is
+  sent to your followers as an ActivityPub `Update`, as a save from the
+  admin is.
 
 Words written through these tools do not count toward anyone's writing
 goal. See [Writing goals](writing-goals.md#what-counts-as-writing).
