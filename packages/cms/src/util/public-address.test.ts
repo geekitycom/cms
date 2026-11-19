@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { isLocalAddress, isPrivateHost, pinnedLookup, publicHost } from './public-address.ts';
+import {
+  isLocalAddress,
+  isPrivateHost,
+  pinnedLookup,
+  publicHost,
+  withDeniedAddresses,
+} from './public-address.ts';
+import type { HostLookup } from './public-address.ts';
 
 describe('isLocalAddress', () => {
   it('is true for loopback, private and link-local peers, written plainly or IPv4-mapped', () => {
@@ -116,5 +123,97 @@ describe('publicHost with a signal', () => {
   it('gives up on a name that never resolves once the signal fires', async () => {
     const never = (): Promise<readonly string[]> => new Promise(() => {});
     await assert.rejects(publicHost('slow-dns.example', never, AbortSignal.timeout(50)));
+  });
+});
+
+describe('a name or address only this network can reach', () => {
+  it('is private when a local name ends in the root dot', () => {
+    for (const host of ['localhost.', 'foo.localhost.', 'printer.local.', 'LOCALHOST.']) {
+      assert.equal(isPrivateHost(host), true, host);
+    }
+    assert.equal(isPrivateHost('example.com.'), false);
+  });
+
+  it('is refused at the socket when a local name ends in the root dot', async () => {
+    const lookup = pinnedLookup(() => Promise.resolve(['203.0.113.10']));
+    const error = await new Promise<Error | null>((done) => {
+      lookup('printer.local.', { all: true }, (failed) => {
+        done(failed);
+      });
+    });
+    assert.match(error?.message ?? '', /not a public address/);
+  });
+
+  const SPECIAL = [
+    '::ffff:0:a00:1',
+    '::ffff:0:7f00:1',
+    '192.88.99.1',
+    '100::1',
+    '100:0:0:1::1',
+    '2001:2::1',
+    '2001:10::1',
+    '5f00::1',
+  ];
+
+  it('is private as written on a special-purpose range', () => {
+    for (const address of SPECIAL) {
+      const host = address.includes(':') ? `[${address}]` : address;
+      assert.equal(isPrivateHost(host), true, address);
+    }
+  });
+
+  it('is refused when a name resolves to a special-purpose range', async () => {
+    for (const address of SPECIAL) {
+      assert.equal(
+        await publicHost('cdn.example', () => Promise.resolve([address])),
+        false,
+        address,
+      );
+    }
+  });
+});
+
+describe('addresses the operator denies', () => {
+  const resolving =
+    (addresses: readonly string[]): HostLookup =>
+    () =>
+      Promise.resolve(addresses);
+
+  it('refuses a listed address, written as a literal or resolved from a name', async () => {
+    const lookup = withDeniedAddresses(resolving(['198.51.100.20']), ['198.51.100.20']);
+    assert.equal(await publicHost('198.51.100.20', lookup), false);
+    assert.equal(await publicHost('self.example', lookup), false);
+    assert.equal(await publicHost('[::ffff:198.51.100.20]', lookup), false);
+  });
+
+  it('refuses an address inside a listed range, IPv4 or IPv6', async () => {
+    const lookup = withDeniedAddresses(resolving([]), ['198.51.100.0/24', '2001:db8:1::/48']);
+    assert.equal(await publicHost('198.51.100.77', lookup), false);
+    assert.equal(await publicHost('[2001:db8:1::5]', lookup), false);
+    assert.equal(await publicHost('[2001:db8:2::5]', lookup), true);
+  });
+
+  it('refuses the connection when the checked answer is listed', async () => {
+    const lookup = pinnedLookup(
+      withDeniedAddresses(resolving(['198.51.100.20']), ['198.51.100.20']),
+    );
+    const error = await new Promise<Error | null>((done) => {
+      lookup('self.example', { all: true }, (failed) => {
+        done(failed);
+      });
+    });
+    assert.match(error?.message ?? '', /not a public address/);
+  });
+
+  it('leaves every other public address alone, and denies nothing by default', async () => {
+    const lookup = withDeniedAddresses(resolving(['203.0.113.10']), ['198.51.100.20']);
+    assert.equal(await publicHost('other.example', lookup), true);
+    assert.equal(await publicHost('198.51.100.20', resolving([])), true);
+  });
+
+  it('rejects an entry that is not an address or a range', () => {
+    for (const entry of ['self.example', '198.51.100.0/33', '2001:db8::/129', '1.2.3']) {
+      assert.throws(() => withDeniedAddresses(resolving([]), [entry]), /not an IP address/, entry);
+    }
   });
 });

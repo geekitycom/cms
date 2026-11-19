@@ -13,7 +13,7 @@ import type { GeekityConfig } from './config.ts';
 import { KNOWN_UPLOAD_TYPES } from './files/upload-types.ts';
 import { defaultWatchDebounce } from './content/watch-debounce.ts';
 import { systemClock } from './util/clock.ts';
-import { systemHostLookup } from './util/public-address.ts';
+import { publicHost, systemHostLookup } from './util/public-address.ts';
 
 describe('resolveConfig', () => {
   it('falls back to documented defaults when nothing is supplied', () => {
@@ -412,6 +412,38 @@ describe('resolveConfig', () => {
     );
   });
 
+  it('refuses to fetch from the addresses the operator denies, from the config or the env', async () => {
+    const lookup = (): Promise<readonly string[]> => Promise.resolve(['198.51.100.20']);
+    const configured = resolveConfig(
+      { deniedAddresses: ['198.51.100.20', ' 2001:db8:1::/48 '], hostLookup: lookup },
+      { cwd: '/srv/site', env: {} },
+    );
+    assert.deepEqual(configured.deniedAddresses, ['198.51.100.20', '2001:db8:1::/48']);
+    assert.equal(await publicHost('self.example', configured.hostLookup), false);
+    assert.equal(await publicHost('[2001:db8:1::9]', configured.hostLookup), false);
+
+    const fromEnv = resolveConfig(
+      { hostLookup: lookup },
+      { cwd: '/srv/site', env: { GEEKITY_DENIED_ADDRESSES: '198.51.100.0/24' } },
+    );
+    assert.equal(await publicHost('self.example', fromEnv.hostLookup), false);
+
+    const none = resolveConfig({ hostLookup: lookup }, { cwd: '/srv/site', env: {} });
+    assert.equal(await publicHost('self.example', none.hostLookup), true);
+  });
+
+  it('refuses a denied address that is not an address or a range', () => {
+    assert.throws(
+      () => resolveConfig({ deniedAddresses: ['self.example'] }, { cwd: '/srv/site', env: {} }),
+      /deniedAddresses/,
+    );
+    assert.throws(
+      () =>
+        resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_DENIED_ADDRESSES: '10.0.0.0/40' } }),
+      /GEEKITY_DENIED_ADDRESSES/,
+    );
+  });
+
   it('optimises images by default, at the widths 11ty/image uses, in WebP alone', () => {
     const config = resolveConfig({}, { cwd: '/srv/site', env: {} });
 
@@ -773,6 +805,7 @@ describe('what the environment and config may say', () => {
       loginAttempts: 5,
       loginLockout: 900,
       trustProxy: false,
+      deniedAddresses: [],
       accessLog: false,
       accessLogAddress: false,
       accessLogWriter: undefined,

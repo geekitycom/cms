@@ -14,7 +14,7 @@ import type { MailProvider, MailLogger } from './mail/provider.ts';
 import type { JobDefinition, JobRecords, MessageTransport } from './jobs/types.ts';
 import type { Plugin } from './plugin.ts';
 import { withoutTrailingSlash } from './util/url.ts';
-import { systemHostLookup } from './util/public-address.ts';
+import { isAddressOrRange, systemHostLookup, withDeniedAddresses } from './util/public-address.ts';
 import type { HostLookup } from './util/public-address.ts';
 
 /**
@@ -502,6 +502,14 @@ export interface GeekityConfig {
    */
   hostLookup?: HostLookup;
   /**
+   * Addresses the CMS refuses to fetch from besides the private and reserved
+   * ranges, each an IP address or a CIDR range: the server's own public
+   * addresses, which a request from inside reaches without passing the
+   * firewall in front of them. Default none. Overridden by
+   * `GEEKITY_DENIED_ADDRESSES`, a comma-separated list.
+   */
+  deniedAddresses?: string[];
+  /**
    * The plugins installed on this site. Each is registered at
    * boot and runs only while the `plugins` key of `content/_data/site.json`
    * enables it, so installing one here changes nothing until it is enabled.
@@ -592,6 +600,8 @@ export interface ResolvedConfig {
   readonly loginAttempts: number;
   readonly loginLockout: number;
   readonly trustProxy: boolean;
+  /** Trimmed, each an IP address or a CIDR range. */
+  readonly deniedAddresses: readonly string[];
   readonly accessLog: boolean;
   readonly accessLogAddress: boolean;
   /** The sink, when the site named one; otherwise the log writes to stdout. */
@@ -783,7 +793,7 @@ export function resolveConfig(
     federation: config.federation ?? {},
     jobs: config.jobs ?? {},
     webmentions: config.webmentions ?? {},
-    hostLookup: config.hostLookup ?? systemHostLookup,
+    hostLookup: deniedOn(config.hostLookup ?? systemHostLookup, settings.deniedAddresses),
     plugins: config.plugins ?? [],
   });
 }
@@ -892,6 +902,7 @@ const IMAGE_WIDTHS = listKind(
   checkedImageWidths,
 );
 const IMAGE_FORMATS = listKind((text) => text.split(','), checkedImageFormats);
+const DENIED_ADDRESSES = listKind((text) => text.split(','), checkedDeniedAddresses);
 
 interface EnvSetting<In, Out> {
   readonly env: readonly [string, ...string[]];
@@ -929,6 +940,7 @@ const ENV_SETTINGS = {
   loginAttempts: setting('GEEKITY_LOGIN_ATTEMPTS', COUNT, DEFAULT_LOGIN_ATTEMPTS),
   loginLockout: setting('GEEKITY_LOGIN_LOCKOUT', COUNT, DEFAULT_LOGIN_LOCKOUT),
   trustProxy: setting('GEEKITY_TRUST_PROXY', BOOLEAN, false),
+  deniedAddresses: setting('GEEKITY_DENIED_ADDRESSES', DENIED_ADDRESSES, []),
   accessLog: setting('GEEKITY_ACCESS_LOG', BOOLEAN, false),
   accessLogAddress: setting('GEEKITY_ACCESS_LOG_ADDRESS', BOOLEAN, false),
   seedContent: setting('GEEKITY_SEED_CONTENT', BOOLEAN, false),
@@ -1037,6 +1049,21 @@ function checkedUploadTypes(values: string[], source: string): string[] {
     if (!types.includes(normalized)) types.push(normalized);
   }
   return types;
+}
+
+function deniedOn(lookup: HostLookup, entries: readonly string[]): HostLookup {
+  return entries.length === 0 ? lookup : withDeniedAddresses(lookup, entries);
+}
+
+function checkedDeniedAddresses(values: string[], source: string): string[] {
+  const entries = values.map((value) => value.trim()).filter((value) => value !== '');
+  const wrong = entries.find((entry) => !isAddressOrRange(entry));
+  if (wrong !== undefined) {
+    throw new TypeError(
+      `${source} must list IP addresses or CIDR ranges, received ${JSON.stringify(wrong)}`,
+    );
+  }
+  return entries;
 }
 
 /**
