@@ -8,6 +8,7 @@ import {
 } from '../webmention/endpoint.ts';
 import { checkWebmentionRequest } from '../webmention/receive.ts';
 import { postSyndicatedAt, syndicationCopies } from '../webmention/syndication.ts';
+import type { SyndicationCopies } from '../webmention/syndication.ts';
 import { readBounded } from './bounded-body.ts';
 import type { GeekityEnv } from './env.ts';
 import { clientAddress } from './throttle.ts';
@@ -20,6 +21,8 @@ import { clientAddress } from './throttle.ts';
  * `webmention/receive.ts` for why that split is the whole design.
  */
 export function mountWebmentions(app: Hono<GeekityEnv>): void {
+  let copies: SyndicationCopies | undefined;
+
   app.post(WEBMENTION_PATH, async (c) => {
     const { store, config, webmentions, conversation } = c.var;
 
@@ -43,7 +46,8 @@ export function mountWebmentions(app: Hono<GeekityEnv>): void {
       {
         baseUrl: config.baseUrl,
         documentAt: (pathname) => publicDocumentAt(store, pathname),
-        syndicatedAt: (url) => postSyndicatedAt(url, store, syndicationCopies(config.contentDir)),
+        syndicatedAt: (url) =>
+          postSyndicatedAt(url, store, (copies ??= syndicationCopies(config.contentDir))),
         conversation,
         site: c.var.siteAtRequestStart,
       },

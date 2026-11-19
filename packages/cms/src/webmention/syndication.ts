@@ -291,6 +291,8 @@ export function handSyndicationOf(extra: Record<string, unknown>): string[] {
 export interface SyndicationCopies {
   /** The copies one post has, by the target URL that made each. Never touches the network. */
   read(permalink: string): Readonly<Record<string, string>>;
+  /** The permalink of the post a copy is of, or `undefined`. One read of the file, like {@link read}. */
+  postAt(copy: string): string | undefined;
   /** Set or, with `undefined`, remove one target's copy of one post. */
   write(permalink: string, target: string, copy: string | undefined): Promise<void>;
   /** Forget every copy of a post, as when it moves to another permalink. */
@@ -302,13 +304,16 @@ export function syndicationCopies(contentDir: string): SyndicationCopies {
   const file = path.join(contentDir, ...SYNDICATION_FILE.split('/'));
   let cachedText: string | undefined;
   let cached: Record<string, Record<string, string>> = {};
+  let postsByCopy: Map<string, string> | undefined;
 
   function readAll(): Record<string, Record<string, string>> {
     const text = readFileIfPresentSync(file);
     if (text === undefined) {
       cachedText = undefined;
       cached = {};
+      postsByCopy = undefined;
     } else if (text !== cachedText) {
+      postsByCopy = undefined;
       cachedText = text;
       const parsed = parseCopies(text);
       if ('problem' in parsed) {
@@ -347,6 +352,19 @@ export function syndicationCopies(contentDir: string): SyndicationCopies {
       return readAll()[permalink] ?? {};
     },
 
+    postAt(copy) {
+      const all = readAll();
+      if (postsByCopy === undefined) {
+        postsByCopy = new Map();
+        for (const [permalink, copies] of Object.entries(all)) {
+          for (const url of Object.values(copies)) {
+            if (!postsByCopy.has(url)) postsByCopy.set(url, permalink);
+          }
+        }
+      }
+      return postsByCopy.get(copy);
+    },
+
     write(permalink, target, copy) {
       return update((all) => {
         const copies = { ...all[permalink] };
@@ -378,13 +396,12 @@ export function postSyndicatedAt(
   store: CatalogReader & DocumentLookup & IndexClock,
   copies: SyndicationCopies,
 ): Document | undefined {
+  const copied = copies.postAt(url);
+  const fromCopies = copied === undefined ? undefined : publicDocumentAt(store, copied);
+  if (fromCopies !== undefined) return fromCopies;
   const post = store
-    .listAll()
-    .find(
-      (document) =>
-        handSyndicationOf(document.extra).includes(url) ||
-        Object.values(copies.read(document.permalink)).includes(url),
-    );
+    .listAll({ syndicated: true })
+    .find((document) => handSyndicationOf(document.extra).includes(url));
   return post === undefined ? undefined : publicDocumentAt(store, post.permalink);
 }
 
