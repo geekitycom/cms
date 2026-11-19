@@ -70,6 +70,11 @@ describe('linksTo', () => {
     const page = `<title>t</title><textarea>a</textarea><template><b>c</b></template><a href="${TARGET}">x</a>`;
     assert.equal(linksTo(page, SOURCE, TARGET), true);
   });
+
+  it('sees a link to an anchor on the target, and a target sent with one', () => {
+    assert.equal(linksTo(`<a href="${TARGET}#comments">yes</a>`, SOURCE, TARGET), true);
+    assert.equal(linksTo(`<a href="${TARGET}">yes</a>`, SOURCE, `${TARGET}#comments`), true);
+  });
 });
 
 describe('sourceEntry', () => {
@@ -91,6 +96,11 @@ describe('sourceEntry', () => {
     assert.equal(entry.content.html, '<p>Good <em>post</em>.</p>');
     assert.equal(entry.published, '2026-09-21T10:30:00.000Z');
     assert.equal(entry.url, SOURCE);
+  });
+
+  it('reads a reply to an anchor on the target as a reply', () => {
+    const html = `<div class="h-entry"><a class="u-in-reply-to" href="${TARGET}#comments">re</a></div>`;
+    assert.equal(sourceEntry(html, SOURCE, isTarget).kind, 'reply');
   });
 
   it('reads a like', () => {

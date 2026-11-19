@@ -125,14 +125,15 @@ const LINK_ATTRIBUTES: readonly string[] = ['href', 'src', 'data', 'poster', 'ci
  * text: a page that merely writes the target's address out is not talking to
  * it, and one that links to it in an `<img>`, a `<video>` or a `<link>` is.
  * The comparison is on the whole URL after both sides are resolved and
- * normalised, so a link written relative counts and a link to a different page
- * on the same site does not.
+ * normalised, less any fragment, so a link written relative or to an anchor on
+ * the page counts and a link to a different page on the same site does not.
  */
 export function linksTo(html: string, sourceUrl: string, target: string): boolean {
   const root = parseHtml(html);
   const base = baseOf(root, sourceUrl);
-  const wanted = normalize(target, target);
-  if (wanted === undefined) return false;
+  const resolved = normalize(target, target);
+  if (resolved === undefined) return false;
+  const wanted = withoutFragment(resolved);
 
   return linkedFrom(root, base).has(wanted);
 }
@@ -152,7 +153,7 @@ function linkedFrom(root: HtmlElement, base: string): Set<string> {
       const value = element.attributes[attribute];
       if (value === undefined) continue;
       const resolved = normalize(value, base);
-      if (resolved !== undefined) found.add(resolved);
+      if (resolved !== undefined) found.add(withoutFragment(resolved));
     }
   }
 
@@ -180,11 +181,12 @@ export function sourceEntry(
   const items = itemsIn(root, base);
   const entries = itemsOfType(items, 'h-entry');
 
-  const chosen = chooseEntry(root, entries, isTarget, base);
+  const named = (url: string): boolean => isTarget(withoutFragment(url));
+  const chosen = chooseEntry(root, entries, named, base);
   const author = authorOf(chosen, items, sourceUrl);
   const content = contentOf(chosen, root);
 
-  const kind = chosen === undefined ? 'mention' : kindOf(chosen, isTarget);
+  const kind = chosen === undefined ? 'mention' : kindOf(chosen, named);
   const url = (chosen === undefined ? undefined : first(chosen, 'url')?.text) ?? sourceUrl;
   const rsvp =
     chosen === undefined || kind !== 'reply' ? undefined : rsvpValue(first(chosen, 'rsvp')?.text);
@@ -865,6 +867,11 @@ function baseOf(root: HtmlElement, sourceUrl: string): string {
 }
 
 /** One href as an absolute URL, or `undefined` when it is not one. */
+function withoutFragment(url: string): string {
+  const hash = url.indexOf('#');
+  return hash === -1 ? url : url.slice(0, hash);
+}
+
 function normalize(href: string, base: string): string | undefined {
   const trimmed = href.trim();
   if (trimmed === '') return undefined;

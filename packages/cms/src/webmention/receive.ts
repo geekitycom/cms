@@ -121,6 +121,7 @@ export function checkWebmentionRequest(
   if (from === undefined) return refuse('source', 'The source is not an http or https URL.');
   if (to === undefined) return refuse('target', 'The target is not an http or https URL.');
   from.hash = '';
+  to.hash = '';
   if (from.href === to.href) {
     return refuse('same', 'The source and the target are the same page.');
   }

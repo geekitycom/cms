@@ -74,7 +74,9 @@ answers:
    the character encoding that its `Content-Type` names. When the header names
    none, it uses the encoding that a `<meta>` element in the first kilobyte
    names. Otherwise it uses UTF-8.
-2. It checks that the source links to the target.
+2. It checks that the source links to the target. Fragments do not count on
+   either side, so a link to `POST#comments` verifies a webmention sent to
+   `POST`, and a link to `POST` verifies one sent to `POST#comments`.
 3. It reads the source's microformats: `h-entry`, `h-card`, and whether it is a
    reply, a like, a repost, or a plain mention. It reads at most 1,000
    microformats from one page and at most 16 property classes from one

@@ -317,6 +317,28 @@ describe('what the endpoint refuses', () => {
 });
 
 describe('verifying a webmention', () => {
+  it('stores a reply whose source links to an anchor on the post', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}#comments">re</a>`),
+    });
+
+    assert.equal((await sendAndSettle(cms, 'https://them.example/note')).status, 202);
+    assert.equal(stored(cms).length, 1);
+    assert.equal(stored(cms)[0]?.kind, 'reply');
+  });
+
+  it('stores a webmention sent to an anchor on the post from a source that links the post', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+    });
+
+    const response = await sendAndSettle(cms, 'https://them.example/note', `${POST_URL}#comments`);
+    assert.equal(response.status, 202);
+    assert.equal(stored(cms)[0]?.kind, 'reply');
+  });
+
   it('stores a reply, held for moderation, with its author and content', async () => {
     const cms = await site();
     pages.set('https://them.example/note', {
