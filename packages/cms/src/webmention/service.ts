@@ -23,7 +23,11 @@ import type { CatalogReader, DocumentLookup, IndexClock } from '../content/store
 import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../content/served.ts';
 import { messageOf } from '../util/errors.ts';
-import { createSerialQueue } from '../util/queue.ts';
+import {
+  createConcurrencyLimit,
+  createKeyedConcurrencyLimit,
+  createSerialQueue,
+} from '../util/queue.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { permalinkOfObjectId, publicDocumentAt } from '../content/permalinks.ts';
 import { waitingChecks } from './checks.ts';
@@ -85,6 +89,16 @@ export const RETRY_DELAYS_MS: readonly number[] = [
   60 * 60 * 1000,
   6 * 60 * 60 * 1000,
 ];
+
+/** How many accepted webmentions may wait for their check at once. */
+export const MAX_WAITING_CHECKS = 1000;
+
+/**
+ * How many checks run at once, and how many of those read from one host, so
+ * one slow source holds one check and not every check behind it.
+ */
+export const CHECK_LIMIT = 4;
+export const CHECKS_PER_HOST = 1;
 
 /** What one post's links came to. */
 export interface WebmentionReport {
@@ -168,8 +182,14 @@ export interface WebmentionService {
    *
    * Resolves once the record is written, which is what a 202 promises: the
    * check is made from the record, so a restart before it finishes leaves it
-   * for the next start. `checked` is the outcome of the first check, for a
+   * for the next start. `checked` is the outcome of the check, for a
    * pingback, which answers with it, or a test; nothing has to look at it.
+   *
+   * The same source and target sent again while its check waits to start
+   * joins that check. Sent while the source is being read, it has the source
+   * read once more afterwards, since the page may have changed. Sent while
+   * the check waits to try again, it waits for that try. `busy` when
+   * {@link MAX_WAITING_CHECKS} others are waiting and nothing was recorded.
    */
   receive(accepted: AcceptedWebmention): Promise<ReceivedWebmention>;
   /**
@@ -186,10 +206,9 @@ export interface WebmentionService {
   settled(): Promise<void>;
 }
 
-/** An accepted webmention, recorded. */
-export interface ReceivedWebmention {
-  readonly checked: Promise<WebmentionOutcome>;
-}
+/** An accepted webmention, recorded, or not when too many are waiting. */
+export type ReceivedWebmention =
+  { readonly busy: false; readonly checked: Promise<WebmentionOutcome> } | { readonly busy: true };
 
 /** Build the webmention service for one site. */
 export function createWebmentionService(
@@ -205,11 +224,17 @@ export function createWebmentionService(
     dataDir: config.dataDir,
   };
 
-  const checks = createSerialQueue();
-  const waiting = waitingChecks(config.dataDir);
+  const checkSlots = createConcurrencyLimit(CHECK_LIMIT);
+  const hostSlots = createKeyedConcurrencyLimit(CHECKS_PER_HOST);
+  const waiting = waitingChecks(
+    config.dataDir,
+    config.webmentions.maxWaiting ?? MAX_WAITING_CHECKS,
+  );
   const retryDelays = config.webmentions.retryDelaysMs ?? RETRY_DELAYS_MS;
-  const recording = new Set<Promise<WaitingCheck>>();
-  const running = new Set<string>();
+  const recording = new Set<Promise<WaitingCheck | undefined>>();
+  const queued = new Map<string, Promise<WebmentionOutcome>>();
+  const reading = new Set<string>();
+  const sentAgain = new Set<string>();
   const timers = new Map<string, NodeJS.Timeout>();
   let stopped = false;
 
@@ -463,15 +488,39 @@ export function createWebmentionService(
   }
 
   function run(check: WaitingCheck): Promise<WebmentionOutcome> {
-    running.add(check.id);
-    return checks.run(async () => {
+    const known = queued.get(check.id);
+    if (known !== undefined) {
+      if (reading.has(check.id)) sentAgain.add(check.id);
+      return known;
+    }
+    if (timers.has(check.id)) {
+      return Promise.resolve({ kind: 'unreachable', reason: 'it waits to be checked again' });
+    }
+    const job = hostSlots
+      .run(hostOf(check.source), () => checkSlots.run(() => checkUntilCurrent(check)))
+      .finally(() => {
+        queued.delete(check.id);
+      });
+    queued.set(check.id, job);
+    return job;
+  }
+
+  async function checkUntilCurrent(check: WaitingCheck): Promise<WebmentionOutcome> {
+    let outcome: WebmentionOutcome = {
+      kind: 'unreachable',
+      reason: 'the site stopped before checking it',
+    };
+    do {
+      if (stopped) return outcome;
+      sentAgain.delete(check.id);
+      reading.add(check.id);
       try {
-        if (stopped) return { kind: 'unreachable', reason: 'the site stopped before checking it' };
-        return await checkAndRecord(check);
+        outcome = await checkAndRecord(check, () => sentAgain.has(check.id) && !stopped);
       } finally {
-        running.delete(check.id);
+        reading.delete(check.id);
       }
-    });
+    } while (sentAgain.has(check.id));
+    return outcome;
   }
 
   function wait(check: WaitingCheck, delay: number): void {
@@ -483,7 +532,10 @@ export function createWebmentionService(
     timers.set(check.id, timer);
   }
 
-  async function checkAndRecord(check: WaitingCheck): Promise<WebmentionOutcome> {
+  async function checkAndRecord(
+    check: WaitingCheck,
+    again: () => boolean,
+  ): Promise<WebmentionOutcome> {
     let outcome: WebmentionOutcome;
     try {
       outcome = await checkNow(check);
@@ -493,6 +545,7 @@ export function createWebmentionService(
       outcome = { kind: 'unreachable', reason };
     }
     try {
+      if (again()) return outcome;
       if (outcome.kind === 'unreachable') await checkAgainLater(check);
       else await waiting.remove(check.id);
     } catch (thrown) {
@@ -596,7 +649,8 @@ export function createWebmentionService(
       const adding = waiting.add(accepted, config.now());
       recording.add(adding);
       try {
-        return { checked: run(await adding) };
+        const check = await adding;
+        return check === undefined ? { busy: true } : { busy: false, checked: run(check) };
       } finally {
         recording.delete(adding);
       }
@@ -613,7 +667,7 @@ export function createWebmentionService(
       }
       const longest = Math.max(0, ...retryDelays);
       for (const check of held) {
-        if (running.has(check.id) || timers.has(check.id)) continue;
+        if (queued.has(check.id) || timers.has(check.id)) continue;
         const delay = Date.parse(check.dueAt) - config.now().getTime();
         if (delay > 0) wait(check, Math.min(delay, longest));
         else void run(check);
@@ -636,9 +690,18 @@ export function createWebmentionService(
 
     async settled() {
       await Promise.allSettled(recording);
-      await Promise.all([sends.settled(), checks.settled()]);
+      while (queued.size > 0) await Promise.allSettled(queued.values());
+      await sends.settled();
     },
   };
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
 }
 
 /** What a page last told its target, and when it has told it lately. */

@@ -2,6 +2,7 @@ import type { Context, Hono } from 'hono';
 
 import { publicDocumentAt } from '../content/permalinks.ts';
 import {
+  PINGBACK_ANSWER_MS,
   PINGBACK_FAULTS,
   PINGBACK_MAX_BYTES,
   PINGBACK_PATH,
@@ -90,7 +91,37 @@ async function answerPing(
     console.warn(`A pingback from ${checked.source} was not recorded: ${messageOf(thrown)}`);
     return { code: PINGBACK_FAULTS.generic, message: 'The ping could not be recorded.' };
   }
-  return pingbackAnswerFor(await received.checked);
+  if (received.busy) {
+    return {
+      code: PINGBACK_FAULTS.generic,
+      message: 'Too many pings are waiting to be checked. Send it again later.',
+    };
+  }
+  const outcome = await within(
+    config.webmentions.pingbackAnswerMs ?? PINGBACK_ANSWER_MS,
+    received.checked,
+  );
+  if (outcome === undefined) {
+    return {
+      code: PINGBACK_FAULTS.generic,
+      message: 'The source is still being checked. The ping is kept and checked to the end.',
+    };
+  }
+  return pingbackAnswerFor(outcome);
+}
+
+async function within<T>(ms: number, promise: Promise<T>): Promise<T | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(undefined);
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function success(message: string): string {

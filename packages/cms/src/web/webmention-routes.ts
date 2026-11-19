@@ -8,12 +8,16 @@ import {
   WEBMENTION_PATH,
 } from '../webmention/endpoint.ts';
 import { checkWebmentionRequest } from '../webmention/receive.ts';
+import type { ReceivedWebmention } from '../webmention/service.ts';
 import { postSyndicatedAt, syndicationCopies } from '../webmention/syndication.ts';
 import type { SyndicationCopies } from '../webmention/syndication.ts';
 import { messageOf } from '../util/errors.ts';
 import { readBounded } from './bounded-body.ts';
 import type { GeekityEnv } from './env.ts';
 import { clientAddress } from './throttle.ts';
+
+/** How long a sender is asked to wait when too many webmentions are waiting. */
+const BUSY_RETRY_AFTER_SECONDS = 300;
 
 /** The public post that a recorded syndicated copy URL is a copy of. */
 export type SyndicatedAt = (c: Context<GeekityEnv>, url: string) => Document | undefined;
@@ -64,8 +68,9 @@ export function mountWebmentions(app: Hono<GeekityEnv>, syndicatedAt: Syndicated
 
     if (!checked.ok) return c.text(checked.message, 400);
 
+    let received: ReceivedWebmention;
     try {
-      await webmentions.receive({
+      received = await webmentions.receive({
         source: checked.source,
         target: checked.target,
         address: clientAddress(c, config),
@@ -75,6 +80,10 @@ export function mountWebmentions(app: Hono<GeekityEnv>, syndicatedAt: Syndicated
     } catch (thrown) {
       console.warn(`A webmention from ${checked.source} was not recorded: ${messageOf(thrown)}`);
       return c.text('The webmention could not be recorded. Send it again later.', 503);
+    }
+    if (received.busy) {
+      c.header('retry-after', String(BUSY_RETRY_AFTER_SECONDS));
+      return c.text('Too many webmentions are waiting to be checked. Send it again later.', 503);
     }
 
     return c.text('Accepted. The source will be checked shortly.', 202);

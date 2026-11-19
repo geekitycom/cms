@@ -102,9 +102,14 @@ export function isPrivateHost(hostname: string): boolean {
 
 /**
  * Whether a host is on the public internet: not private as written, and every
- * address it resolves to public. A name that does not resolve is not.
+ * address it resolves to public. A name that does not resolve is not. When
+ * `signal` aborts before the name resolves, this rejects with its reason.
  */
-export async function publicHost(hostname: string, lookup: HostLookup): Promise<boolean> {
+export async function publicHost(
+  hostname: string,
+  lookup: HostLookup,
+  signal?: AbortSignal,
+): Promise<boolean> {
   if (isPrivateHost(hostname)) return false;
 
   const host = hostname.replace(/^\[|\]$/g, '');
@@ -112,11 +117,29 @@ export async function publicHost(hostname: string, lookup: HostLookup): Promise<
 
   let addresses: readonly string[];
   try {
-    addresses = await lookup(host);
+    addresses = await untilAborted(lookup(host), signal);
   } catch {
+    signal?.throwIfAborted();
     return false;
   }
   return addresses.length > 0 && !addresses.some(isPrivateAddress);
+}
+
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => {
+      reject(signal.reason as Error);
+    };
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', abort);
+    });
+  });
 }
 
 /**

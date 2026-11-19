@@ -236,14 +236,18 @@ function fetched(url: string, times = 1): Promise<void> {
 }
 
 /** Resolve once a webmention from `url` is stored on the post. */
-function storedFrom(cms: Cms, url: string): Promise<void> {
-  return nextEvent(`a webmention from ${url}`, (done) => {
-    const look = (): void => {
-      if (stored(cms).some((one) => one.url === url)) done();
-    };
-    look();
-    return cms.admin.onConversationWrite(look);
-  });
+function storedFrom(cms: Cms, url: string, timeoutMs?: number): Promise<void> {
+  return nextEvent(
+    `a webmention from ${url}`,
+    (done) => {
+      const look = (): void => {
+        if (stored(cms).some((one) => one.url === url)) done();
+      };
+      look();
+      return cms.admin.onConversationWrite(look);
+    },
+    timeoutMs,
+  );
 }
 
 /** The checks the site has accepted and not finished, as its data file holds them. */
@@ -910,10 +914,10 @@ describe('an accepted webmention that has not been checked yet', () => {
   it('is filed on the post as the index has it when the check runs', async () => {
     const cms = await site();
     const hang = gate();
-    pages.set('https://slow.example/first', { ...linking(), gate: hang.promise });
+    pages.set('https://them.example/first', { ...linking(), gate: hang.promise });
     pages.set(SOURCE, linking());
 
-    await send(cms, { source: 'https://slow.example/first', target: POST_URL });
+    await send(cms, { source: 'https://them.example/first', target: POST_URL });
     assert.equal((await send(cms, { source: SOURCE, target: POST_URL })).status, 202);
 
     await rm(path.join(cms.config.contentDir, 'posts', '2026-09-19-hello-world.md'));
@@ -926,6 +930,105 @@ describe('an accepted webmention that has not been checked yet', () => {
       'a post gone before the check gets nothing from it',
     );
     assert.deepEqual(await waitingChecks(cms), []);
+  });
+});
+
+describe('checks waiting their turn', () => {
+  const SLOW = 'https://slow.example/a';
+  const FAST = 'https://fast.example/b';
+  const linking = (words = 'Good post.'): Page => ({
+    body: reply(
+      `<p class="e-content">${words} <a class="u-in-reply-to" href="${POST_URL}">re</a></p>`,
+    ),
+  });
+
+  it('stores a source that answers at once while another source is still answering', async () => {
+    const cms = await site();
+    const slow = gate();
+    pages.set(SLOW, { ...linking(), gate: slow.promise });
+    pages.set(FAST, linking());
+
+    await send(cms, { source: SLOW, target: POST_URL });
+    await fetched(SLOW);
+    assert.equal((await send(cms, { source: FAST, target: POST_URL })).status, 202);
+    await storedFrom(cms, FAST, 3000);
+
+    slow.open();
+    await cms.webmentions.settled();
+    assert.equal(stored(cms).length, 2);
+  });
+
+  it('fetches a source once for twenty sends of the same pair while its check waits for its host', async () => {
+    const cms = await site();
+    const slow = gate();
+    const same = 'https://slow.example/same';
+    pages.set(SLOW, { ...linking(), gate: slow.promise });
+    pages.set(same, linking());
+
+    await send(cms, { source: SLOW, target: POST_URL });
+    await fetched(SLOW);
+    for (let n = 0; n < 20; n += 1) {
+      assert.equal((await send(cms, { source: same, target: POST_URL })).status, 202);
+    }
+    assert.equal((await waitingChecks(cms)).length, 2, 'one record for the twenty');
+
+    slow.open();
+    await cms.webmentions.settled();
+    assert.equal(requested.filter((url) => url === same).length, 1);
+    assert.deepEqual(await waitingChecks(cms), []);
+  });
+
+  it('reads the source once more after twenty sends that arrive while it is being read', async () => {
+    const cms = await site();
+    const slow = gate();
+    pages.set(SLOW, { ...linking('First words.'), gate: slow.promise });
+
+    await send(cms, { source: SLOW, target: POST_URL });
+    await fetched(SLOW);
+    pages.set(SLOW, linking('Edited words.'));
+    for (let n = 0; n < 20; n += 1) {
+      assert.equal((await send(cms, { source: SLOW, target: POST_URL })).status, 202);
+    }
+
+    slow.open();
+    await cms.webmentions.settled();
+    assert.equal(requested.filter((url) => url === SLOW).length, 2);
+    assert.match(stored(cms)[0]?.content.html ?? '', /Edited words/);
+    assert.deepEqual(await waitingChecks(cms), []);
+  });
+
+  it('leaves a source waiting for another try to that try when it is sent again', async () => {
+    const cms = await site({ webmentions: { retryDelaysMs: [60_000] } });
+    pages.set(SLOW, { status: 503 });
+
+    await sendAndSettle(cms, SLOW);
+    assert.equal((await sendAndSettle(cms, SLOW)).status, 202);
+
+    assert.equal(requested.filter((url) => url === SLOW).length, 1);
+    assert.equal((await waitingChecks(cms)).length, 1);
+  });
+
+  it('answers 503 for a new pair once the waiting checks are full, and still takes a repeat', async () => {
+    const cms = await site({ webmentions: { maxWaiting: 2 } });
+    const slow = gate();
+    pages.set(SLOW, { ...linking(), gate: slow.promise });
+    pages.set(FAST, linking());
+    pages.set('https://other.example/c', linking());
+
+    await send(cms, { source: SLOW, target: POST_URL });
+    await fetched(SLOW);
+    await send(cms, { source: 'https://slow.example/next', target: POST_URL });
+
+    const full = await send(cms, { source: FAST, target: POST_URL });
+    assert.equal(full.status, 503);
+    assert.ok(Number(full.headers.get('retry-after')) > 0, 'it says when to try again');
+    assert.equal((await send(cms, { source: SLOW, target: POST_URL })).status, 202);
+
+    slow.open();
+    await cms.webmentions.settled();
+    assert.equal((await send(cms, { source: FAST, target: POST_URL })).status, 202);
+    await cms.webmentions.settled();
+    assert.ok(stored(cms).some((one) => one.url === FAST));
   });
 });
 

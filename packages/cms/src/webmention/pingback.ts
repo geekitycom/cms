@@ -15,6 +15,13 @@ import { webmentionEndpointFor } from './endpoint.ts';
 /** Where a pingback is sent. */
 export const PINGBACK_PATH = '/_geekity/pingback';
 
+/**
+ * How long a ping waits for its check before it is answered that the check
+ * is still running. Longer than one read of the source may take, so only a
+ * check that waited for others runs past it.
+ */
+export const PINGBACK_ANSWER_MS = 20_000;
+
 /** Far more than two URLs in an XML-RPC envelope could need. */
 export const PINGBACK_MAX_BYTES = 16 * 1024;
 

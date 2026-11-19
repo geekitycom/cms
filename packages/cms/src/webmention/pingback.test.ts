@@ -73,6 +73,8 @@ How this is made.
 interface Page {
   status?: number;
   body?: string;
+  /** The answer waits until this settles, or the request is aborted. */
+  gate?: Promise<void>;
 }
 
 const pages = new Map<string, Page>();
@@ -83,10 +85,12 @@ const lookup: HostLookup = (hostname) =>
 const fetched: string[] = [];
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
+const gates: (() => void)[] = [];
 
 const restoreFetch = routeTheWeb();
 
 after(async () => {
+  for (const open of gates) open();
   restoreFetch();
   for (const instance of started) await instance.close();
   await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
@@ -100,10 +104,19 @@ beforeEach(() => {
 function routeTheWeb(): () => void {
   const original = globalThis.fetch;
 
-  globalThis.fetch = ((input: string | URL | Request) => {
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     fetched.push(url);
     const page = pages.get(url);
+    if (page?.gate !== undefined) {
+      const signal = init?.signal;
+      await new Promise<void>((resolve, reject) => {
+        void page.gate?.then(resolve);
+        signal?.addEventListener('abort', () => {
+          reject(signal.reason as Error);
+        });
+      });
+    }
     const response =
       page === undefined
         ? new Response('missing', { status: 404 })
@@ -112,7 +125,7 @@ function routeTheWeb(): () => void {
             headers: { 'content-type': 'text/html; charset=utf-8' },
           });
     Object.defineProperty(response, 'url', { value: url });
-    return Promise.resolve(response);
+    return response;
   }) as typeof fetch;
 
   return () => {
@@ -185,6 +198,16 @@ async function faultOf(response: Response): Promise<number | undefined> {
   assert.match(text, /^<\?xml version="1.0"\?>\s*<methodResponse>/);
   const code = /<name>faultCode<\/name>\s*<value><int>(-?\d+)<\/int><\/value>/.exec(text)?.[1];
   return code === undefined ? undefined : Number(code);
+}
+
+/** A gate that opens when `open` is called, or once the file has run. */
+function gate(): { promise: Promise<void>; open: () => void } {
+  let open = (): void => {};
+  const promise = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  gates.push(open);
+  return { promise, open };
 }
 
 function mentionsOf(cms: Cms, slug = 'hello-world'): PostComment[] {
@@ -366,6 +389,41 @@ describe('a valid pingback', () => {
     assert.equal(held.length, 1, 'still there');
     assert.equal(held[0]?.id, first?.id);
     assert.equal(held[0]?.status, 'approved');
+  });
+});
+
+describe('a pingback while another source is being checked', () => {
+  it('is answered without waiting for the other source', async () => {
+    const cms = await site();
+    const slow = gate();
+    pages.set('https://slow.example/c', { body: linkingTo(POST_URL), gate: slow.promise });
+    pages.set('https://fast.example/d', { body: linkingTo(POST_URL) });
+
+    const waiting = ping(cms, 'https://slow.example/c');
+    const started = Date.now();
+    const answered = await ping(cms, 'https://fast.example/d');
+    assert.ok(Date.now() - started < 2_000, 'the pingback waited on the other check');
+    assert.equal(await faultOf(answered), undefined);
+
+    slow.open();
+    await waiting;
+    await cms.webmentions.settled();
+  });
+
+  it('answers a generic fault once its deadline passes, and files the pingback when the check ends', async () => {
+    const cms = await site({ webmentions: { pingbackAnswerMs: 100 } });
+    const slow = gate();
+    pages.set('https://slow.example/e', { body: linkingTo(POST_URL), gate: slow.promise });
+
+    const started = Date.now();
+    const text = await (await ping(cms, 'https://slow.example/e')).text();
+    assert.ok(Date.now() - started < 2_000, 'the pingback waited past its deadline');
+    assert.match(text, /<int>0<\/int>/);
+    assert.match(text, /still being checked/);
+
+    slow.open();
+    await cms.webmentions.settled();
+    assert.ok(mentionsOf(cms).some((one) => one.url === 'https://slow.example/e'));
   });
 });
 

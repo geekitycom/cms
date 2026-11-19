@@ -111,3 +111,10 @@ describe('the resolver a public fetch hands its socket', () => {
     assert.match(failed.error?.message ?? '', /ENOTFOUND/);
   });
 });
+
+describe('publicHost with a signal', () => {
+  it('gives up on a name that never resolves once the signal fires', async () => {
+    const never = (): Promise<readonly string[]> => new Promise(() => {});
+    await assert.rejects(publicHost('slow-dns.example', never, AbortSignal.timeout(50)));
+  });
+});

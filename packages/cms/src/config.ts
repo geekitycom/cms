@@ -166,8 +166,10 @@ export interface IndexNowOverrides {
 }
 
 /**
- * How the CMS treats a webmention whose source could not be read. A test names
- * short delays so that it waits for none of the defaults.
+ * How the CMS treats accepted webmentions: how one whose source could not be
+ * read is tried again, how many may wait, and how long a pingback waits for
+ * its answer. A test names short delays so that it waits for none of the
+ * defaults.
  */
 export interface WebmentionOverrides {
   /**
@@ -176,6 +178,16 @@ export interface WebmentionOverrides {
    * webmention is given up.
    */
   retryDelaysMs?: readonly number[] | undefined;
+  /**
+   * How many accepted webmentions and pingbacks may wait for their check at
+   * once. A new one past this is refused with a 503. Defaults to 1,000.
+   */
+  maxWaiting?: number | undefined;
+  /**
+   * How long a pingback waits for its check before it is answered that the
+   * check is still running, in milliseconds. Defaults to twenty seconds.
+   */
+  pingbackAnswerMs?: number | undefined;
 }
 
 /**
@@ -474,7 +486,7 @@ export interface GeekityConfig {
    * field has a default; see {@link JobOverrides}.
    */
   jobs?: JobOverrides;
-  /** How a webmention whose source could not be read is tried again. See {@link WebmentionOverrides}. */
+  /** How accepted webmentions are checked, held and tried again. See {@link WebmentionOverrides}. */
   webmentions?: WebmentionOverrides;
   /**
    * How a host name is resolved before the CMS fetches a page a reply answers,

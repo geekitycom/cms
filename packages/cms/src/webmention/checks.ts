@@ -31,14 +31,18 @@ export interface WaitingCheck extends AcceptedWebmention {
  * under the in-process lock and a lock file beside it.
  */
 export interface WaitingChecks {
-  add(accepted: AcceptedWebmention, at: Date): Promise<WaitingCheck>;
+  /**
+   * The waiting check for the same source and target when there is one,
+   * else a new one; `undefined` when `limit` checks are already waiting.
+   */
+  add(accepted: AcceptedWebmention, at: Date): Promise<WaitingCheck | undefined>;
   list(): Promise<WaitingCheck[]>;
   /** Count one more failure and set when it is next due; `undefined` when it is no longer waiting. */
   postpone(id: string, dueAt: Date): Promise<WaitingCheck | undefined>;
   remove(id: string): Promise<void>;
 }
 
-export function waitingChecks(dataDir: string): WaitingChecks {
+export function waitingChecks(dataDir: string, limit: number): WaitingChecks {
   const file = dataPath(dataDir, WEBMENTION_CHECKS);
   const lockFile = lockFileFor(file);
 
@@ -80,7 +84,14 @@ export function waitingChecks(dataDir: string): WaitingChecks {
         failures: 0,
         dueAt: at.toISOString(),
       };
-      return change((checks) => ({ checks: [...checks, check], value: check }));
+      return change((checks) => {
+        const same = checks.find(
+          (one) => one.source === accepted.source && one.target === accepted.target,
+        );
+        if (same !== undefined) return { value: same };
+        if (checks.length >= limit) return { value: undefined };
+        return { checks: [...checks, check], value: check };
+      });
     },
 
     list: read,

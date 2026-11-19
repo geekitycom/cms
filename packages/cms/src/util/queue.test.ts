@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createConcurrencyLimit, createSerialQueue } from './queue.ts';
+import { createConcurrencyLimit, createKeyedConcurrencyLimit, createSerialQueue } from './queue.ts';
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;
@@ -128,5 +128,27 @@ describe('createConcurrencyLimit', () => {
       /no/,
     );
     assert.equal(await limit.run(() => Promise.resolve('next')), 'next');
+  });
+});
+
+describe('createKeyedConcurrencyLimit', () => {
+  it('holds back a second job on one key without holding back another key', async () => {
+    const limit = createKeyedConcurrencyLimit(1);
+    const gate = deferred();
+    const started: string[] = [];
+    const job = (name: string, wait?: Promise<void>) => async () => {
+      started.push(name);
+      await wait;
+      return name;
+    };
+
+    const first = limit.run('a', job('a1', gate.promise));
+    const second = limit.run('a', job('a2'));
+    const other = limit.run('b', job('b1'));
+
+    assert.equal(await other, 'b1');
+    assert.deepEqual(started, ['a1', 'b1']);
+    gate.resolve();
+    assert.deepEqual(await Promise.all([first, second]), ['a1', 'a2']);
   });
 });
