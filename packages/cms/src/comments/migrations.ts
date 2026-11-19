@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { COMMENT_PAGE_PREFIX, commentPageHref, repliesKey, isKey } from '../content/guids.ts';
 import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.ts';
+import { messageOf } from '../util/errors.ts';
 import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { isRecord } from '../util/guards.ts';
 import {
@@ -71,7 +72,8 @@ export function migrateCommentEmails(
     if (!stripped) continue;
 
     const privateFile = commentEmailsFile(records.dataDir, slug);
-    const contacts = contactsIn(readFileIfPresentSync(privateFile));
+    const contacts = contactsOrSkip(privateFile);
+    if (contacts === undefined) continue;
     for (const [id, contact] of found) if (!contacts.has(id)) contacts.set(id, contact);
     if (contacts.size > 0) {
       writeFileAtomicallySync(privateFile, contactsJson(contacts), {
@@ -152,7 +154,8 @@ export function migrateCommentKeys(
     const changed = JSON.stringify(rekeyed) !== JSON.stringify(entries);
 
     const privateFile = commentEmailsFile(records.dataDir, slug);
-    const contacts = contactsIn(readFileIfPresentSync(privateFile));
+    const contacts = contactsOrSkip(privateFile);
+    if (contacts === undefined) continue;
     const keyed = new Map<string, CommentContact>();
     for (const [id, contact] of contacts) {
       const key = isKey(id) ? id : repliesKey(id);
@@ -176,6 +179,15 @@ export function migrateCommentKeys(
   }
 
   return { comments: keys.size };
+}
+
+function contactsOrSkip(privateFile: string): Map<string, CommentContact> | undefined {
+  try {
+    return contactsIn(privateFile);
+  } catch (error) {
+    console.warn(`Comment emails not migrated: ${messageOf(error)}`);
+    return undefined;
+  }
 }
 
 /**

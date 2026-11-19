@@ -655,6 +655,112 @@ describe('a comment file somebody edited by hand', () => {
   });
 });
 
+describe('a comment or email file that does not parse', () => {
+  async function damage(file: string): Promise<string> {
+    const damaged = (await readFile(file, 'utf8')).replace(/\n}\n$/, ',\n}\n');
+    assert.throws(() => JSON.parse(damaged));
+    await writeFile(file, damaged);
+    return damaged;
+  }
+
+  function warnings<T>(task: () => T): { result: T; warned: string[] } {
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (line: string) => warned.push(line);
+    try {
+      return { result: task(), warned };
+    } finally {
+      console.warn = warn;
+    }
+  }
+
+  const noEmail = (): NewComment => ada({ author: { ...ada().author, email: null } });
+
+  it('refuses a new comment and leaves the comment file as it was', async () => {
+    const site = await records();
+    await addComment(site, ada());
+    const file = commentsFile(site.contentDir, 'hello-world');
+    const damaged = await damage(file);
+
+    await assert.rejects(addComment(site, noEmail()), (error: Error) =>
+      error.message.includes(file),
+    );
+
+    assert.equal(await readFile(file, 'utf8'), damaged);
+  });
+
+  it('keeps a private email file, byte for byte, when another comment lands on the post', async () => {
+    const site = await records();
+    await addComment(site, ada());
+    const privateFile = commentEmailsFile(site.dataDir, 'hello-world');
+    const damaged = await damage(privateFile);
+
+    await assert.rejects(addComment(site, noEmail()), (error: Error) =>
+      error.message.includes(privateFile),
+    );
+
+    assert.equal(await readFile(privateFile, 'utf8'), damaged);
+  });
+
+  it('refuses a comment file that parses but is not an object of comments', async () => {
+    const site = await records();
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, '{"post": "/2026/09/hello-world/", "comments": {}}\n');
+
+    await assert.rejects(addComment(site, noEmail()));
+
+    assert.equal(
+      await readFile(file, 'utf8'),
+      '{"post": "/2026/09/hello-world/", "comments": {}}\n',
+    );
+  });
+
+  it('is skipped by the index rebuild, which indexes every other post and names the file', async () => {
+    const site = await records();
+    await addComment(site, ada());
+    const other = await addComment(
+      site,
+      ada({ slug: 'second-post', permalink: '/2026/09/second-post/' }),
+    );
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await damage(file);
+
+    const { result: report, warned } = warnings(() => rebuildCommentIndexes(site));
+
+    assert.equal(report.comments, 1);
+    assert.deepEqual(
+      site.admin.listComments({}).map((comment) => comment.id),
+      [other.id],
+    );
+    assert.equal(warned.length, 1);
+    assert.ok(warned[0]?.includes(file));
+  });
+
+  it('is left alone by the boot that moves emails out of a comment file', async () => {
+    const site = await records();
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    const legacy = `${JSON.stringify({
+      post: '/2026/09/hello-world/',
+      comments: [{ id: 'c1', author: { name: 'Ada', email: 'ada@example.com' }, notify: true }],
+    })}\n`;
+    await writeFile(file, legacy);
+    const privateFile = commentEmailsFile(site.dataDir, 'hello-world');
+    await mkdir(path.dirname(privateFile), { recursive: true });
+    await writeFile(privateFile, '{"comments": {"c0": {"email": "grace@example.com"},}}\n');
+
+    const { warned } = warnings(() => migrateCommentEmails(site));
+
+    assert.ok(warned[0]?.includes(privateFile));
+    assert.equal(
+      await readFile(privateFile, 'utf8'),
+      '{"comments": {"c0": {"email": "grace@example.com"},}}\n',
+    );
+    assert.equal(await readFile(file, 'utf8'), legacy);
+  });
+});
+
 describe('an author link in a comment file', () => {
   it('is read only when it is an http or https address', async () => {
     const site = await records();
