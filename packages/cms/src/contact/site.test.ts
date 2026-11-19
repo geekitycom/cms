@@ -13,7 +13,13 @@ import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { createUser, setUserProfile } from '../site/users.ts';
-import { CONTACT_ANCHOR, CONTACT_FIELDS, CONTACT_NOTICE_PARAM, CONTACT_POST_PATH } from './form.ts';
+import {
+  CONTACT_ANCHOR,
+  CONTACT_FIELDS,
+  CONTACT_NOTICE_PARAM,
+  CONTACT_POST_PATH,
+  MAXIMUM_CONTACT_MESSAGE_LENGTH,
+} from './form.ts';
 import { listContactMessages } from './records.ts';
 import { CONTACT_RATE_LIMIT, CONTACT_RATE_WINDOW_SECONDS } from './submission.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
@@ -494,6 +500,88 @@ describe('the defences in front of the contact form', () => {
 
     assert.equal((await send(cms, submission())).status, 303);
     assert.equal(listContactMessages(dataDir)[0]?.status, 'received');
+  });
+});
+
+describe('the size of a submitted contact form', () => {
+  const padded = `${new URLSearchParams(submission()).toString()}&pad=${'x'.repeat(1024 * 1024)}`;
+
+  it('refuses a body larger than the limit with 413 and sends nothing', async () => {
+    const provider = createMemoryMailProvider();
+    const { cms, contentDir, dataDir } = await site(PAGES, mailing(provider));
+    await writeContactEmail(contentDir, 'me@blog.example');
+
+    const response = await cms.app.request(CONTACT_POST_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'content-length': String(padded.length),
+      },
+      body: padded,
+    });
+    await cms.mail.settled();
+
+    assert.equal(response.status, 413);
+    assert.equal(listContactMessages(dataDir).length, 0);
+    assert.equal(provider.sent.length, 0);
+  });
+
+  it('refuses a body over the limit that does not say its length', async () => {
+    const { cms, dataDir } = await site();
+    const chunks = [padded.slice(0, 1024), padded.slice(1024)];
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const next = chunks.shift();
+        if (next === undefined) controller.close();
+        else controller.enqueue(new TextEncoder().encode(next));
+      },
+    });
+
+    const response = await cms.app.request(CONTACT_POST_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+
+    assert.equal(response.status, 413);
+    assert.equal(listContactMessages(dataDir).length, 0);
+  });
+
+  it('takes the longest message allowed, every character percent-encoded', async () => {
+    const { cms, dataDir } = await site();
+
+    const response = await send(
+      cms,
+      submission({ [CONTACT_FIELDS.message]: '\u20ac'.repeat(MAXIMUM_CONTACT_MESSAGE_LENGTH) }),
+    );
+
+    assert.equal(response.status, 303);
+    assert.equal(listContactMessages(dataDir).length, 1);
+  });
+
+  it('takes a message posted as a multipart form', async () => {
+    const { cms, dataDir } = await site();
+    const form = new FormData();
+    for (const [name, value] of Object.entries(submission())) form.set(name, value);
+
+    const response = await cms.app.request(CONTACT_POST_PATH, { method: 'POST', body: form });
+
+    assert.equal(response.status, 303);
+    assert.equal(listContactMessages(dataDir).length, 1);
+  });
+
+  it('refuses a malformed multipart body with 400', async () => {
+    const { cms, dataDir } = await site();
+
+    const response = await cms.app.request(CONTACT_POST_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=xyz' },
+      body: '--xyz\r\nnot a part at all',
+    });
+
+    assert.equal(response.status, 400);
+    assert.equal(listContactMessages(dataDir).length, 0);
   });
 });
 

@@ -152,8 +152,17 @@ reply, a like or a boost from the fediverse arrives because a remote server
 sent it, whatever these settings say.
 
 The server holds a comment for a moderator unless the same **name and email**
-had a comment approved before. WordPress uses the same rule. Before that check,
-a stranger's submission meets these defences, in order:
+had a comment approved before. WordPress uses the same rule.
+
+The form posts to `/_geekity/comments` as an
+`application/x-www-form-urlencoded` form, which is what the default theme's
+form sends. A theme may post it as `multipart/form-data` instead. A body longer
+than 256 KiB gets `413`, by its `Content-Length` or by the bytes that arrive,
+and the server reads no further and stores nothing. A body that does not parse
+as its content type gets `400`.
+
+Before the name and email check, a stranger's submission meets these defences,
+in order:
 
 - a honeypot field
 - a minimum time between rendering the form and submitting it
@@ -504,7 +513,9 @@ hCaptcha on, the page loads hCaptcha's script, and a message sent with
 JavaScript off is still stored, on the Spam list. The form posts to
 `/_geekity/contact`. When the server stores a message, it redirects back to the
 page with `?contact=sent`, which shows a thank-you in place of the form. A
-refresh does not send the message twice.
+refresh does not send the message twice. The size limit and the content types
+are the ones the comment form has: urlencoded or multipart, and `413` for a
+body longer than 256 KiB, with nothing stored or sent.
 
 **The destination address never appears in the HTML.** The server reads the
 contact address when a submission arrives. The address is not in any render

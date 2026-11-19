@@ -23,3 +23,31 @@ export async function readBounded(request: Request, max: number): Promise<string
   }
   return text + decoder.decode();
 }
+
+/**
+ * Read a form body, urlencoded or multipart, as its text fields. `too-large`
+ * when it is longer than `max` bytes, and `malformed` when it does not parse
+ * as the type it says it is.
+ */
+export async function readBoundedForm(
+  request: Request,
+  max: number,
+): Promise<Record<string, string> | 'too-large' | 'malformed'> {
+  const text = await readBounded(request, max);
+  if (text === undefined) return 'too-large';
+
+  let parsed: FormData;
+  try {
+    parsed = await new Response(text, {
+      headers: { 'content-type': request.headers.get('content-type') ?? '' },
+    }).formData();
+  } catch {
+    return 'malformed';
+  }
+
+  const fields: Record<string, string> = {};
+  for (const [name, value] of parsed) {
+    if (typeof value === 'string') fields[name] = value;
+  }
+  return fields;
+}

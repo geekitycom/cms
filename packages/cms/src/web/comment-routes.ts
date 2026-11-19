@@ -24,6 +24,8 @@ import type { CommentForm, CommentRefusal, CommentThrottle } from '../comments/s
 import { commenterOf } from '../comments/viewer.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { challengeTokenOf } from '../forms/challenge.ts';
+import { FORM_MAX_BYTES } from '../forms/protection.ts';
+import { readBoundedForm } from './bounded-body.ts';
 import { documentSite } from './document-site.ts';
 import type { GeekityEnv } from './env.ts';
 import { CROSS_SITE_REFUSAL, crossSiteWrite, csrfTokenMatches } from './session.ts';
@@ -62,7 +64,9 @@ export function mountComments(app: Hono<GeekityEnv>): void {
 
   app.post(COMMENT_POST_PATH, async (c) => {
     const { store, admin, renderer, config } = c.var;
-    const body = await c.req.parseBody();
+    const body = await readBoundedForm(c.req.raw, FORM_MAX_BYTES);
+    if (body === 'too-large') return c.text('The form is too large.', 413);
+    if (body === 'malformed') return c.text('That form could not be read.', 400);
     const form = formOf(body);
     // Who the session says this is, read before anything else is decided: it
     // settles the token, the attribution and where the comment lands.

@@ -11,7 +11,7 @@ import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { COMMENT_FIELDS, MINIMUM_SUBMIT_SECONDS } from './submission.ts';
+import { COMMENT_FIELDS, MAXIMUM_BODY_LENGTH, MINIMUM_SUBMIT_SECONDS } from './submission.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { commentEmailsFile, commentsFile, updateComment } from './records.ts';
@@ -459,6 +459,84 @@ describe('the defences in front of the form', () => {
 
     // A different address is untouched by somebody else's flooding.
     assert.equal((await submit(cms, submission())).status, 303);
+  });
+});
+
+describe('the size of a submitted form', () => {
+  const padded = `${new URLSearchParams(submission()).toString()}&pad=${'x'.repeat(1024 * 1024)}`;
+
+  it('refuses a body larger than the limit with 413 and stores nothing', async () => {
+    const { cms } = await site();
+
+    const response = await cms.app.request(COMMENT_POST_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'content-length': String(padded.length),
+      },
+      body: padded,
+    });
+
+    assert.equal(response.status, 413);
+    assert.equal(cms.admin.listComments({}).length, 0);
+  });
+
+  it('refuses a body over the limit that does not say its length', async () => {
+    const { cms } = await site();
+    const chunks = [padded.slice(0, 1024), padded.slice(1024)];
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const next = chunks.shift();
+        if (next === undefined) controller.close();
+        else controller.enqueue(new TextEncoder().encode(next));
+      },
+    });
+
+    const response = await cms.app.request(COMMENT_POST_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+
+    assert.equal(response.status, 413);
+    assert.equal(cms.admin.listComments({}).length, 0);
+  });
+
+  it('takes the longest comment allowed, every character percent-encoded', async () => {
+    const { cms } = await site();
+
+    const response = await submit(
+      cms,
+      submission({ [COMMENT_FIELDS.body]: '\u20ac'.repeat(MAXIMUM_BODY_LENGTH) }),
+    );
+
+    assert.equal(response.status, 303);
+    assert.equal(cms.admin.listComments({}).length, 1);
+  });
+
+  it('takes a comment posted as a multipart form', async () => {
+    const { cms } = await site();
+    const form = new FormData();
+    for (const [name, value] of Object.entries(submission())) form.set(name, value);
+
+    const response = await cms.app.request(COMMENT_POST_PATH, { method: 'POST', body: form });
+
+    assert.equal(response.status, 303);
+    assert.equal(cms.admin.listComments({}).length, 1);
+  });
+
+  it('refuses a malformed multipart body with 400', async () => {
+    const { cms } = await site();
+
+    const response = await cms.app.request(COMMENT_POST_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=xyz' },
+      body: '--xyz\r\nnot a part at all',
+    });
+
+    assert.equal(response.status, 400);
+    assert.equal(cms.admin.listComments({}).length, 0);
   });
 });
 
