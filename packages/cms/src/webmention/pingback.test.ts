@@ -51,6 +51,16 @@ permalink: /2026/09/café/
 
 Coffee.
 `,
+  'posts/2026-09-18-copied.md': `---
+title: Copied
+date: '2026-09-18T09:00:00Z'
+permalink: /2026/09/copied/
+syndication:
+  - https://social.example/@me/1
+---
+
+Shared elsewhere too.
+`,
   'pages/colophon.md': `---
 title: Colophon
 permalink: /colophon/
@@ -321,6 +331,19 @@ describe('a valid pingback', () => {
 
     assert.deepEqual(
       mentionsOf(cms, 'café').map((one) => one.url),
+      ['https://them.example/note'],
+    );
+  });
+
+  it('is filed on the original post when the target is a recorded syndicated copy', async () => {
+    const cms = await site();
+    const copy = 'https://social.example/@me/1';
+    pages.set('https://them.example/note', { body: linkingTo(copy) });
+
+    assert.equal(await faultOf(await ping(cms, 'https://them.example/note', copy)), undefined);
+
+    assert.deepEqual(
+      mentionsOf(cms, 'copied').map((one) => one.url),
       ['https://them.example/note'],
     );
   });

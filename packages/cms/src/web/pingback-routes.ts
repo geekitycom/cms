@@ -13,18 +13,19 @@ import {
 import type { PingbackFault } from '../webmention/pingback.ts';
 import { checkWebmentionRequest } from '../webmention/receive.ts';
 import { readBounded } from './bounded-body.ts';
+import type { SyndicatedAt } from './webmention-routes.ts';
 import type { GeekityEnv } from './env.ts';
 import { escapeXml } from './feed-xml.ts';
 import { clientAddress } from './throttle.ts';
 
 /** Register the pingback endpoint. Mounted by the public site. */
-export function mountPingbacks(app: Hono<GeekityEnv>): void {
+export function mountPingbacks(app: Hono<GeekityEnv>, syndicatedAt: SyndicatedAt): void {
   app.post(PINGBACK_PATH, async (c) => {
     if (!c.var.siteAtRequestStart.webmentions_receive) {
       return c.text('This site does not take pingbacks.', 404);
     }
 
-    const answer = await answerPing(c);
+    const answer = await answerPing(c, syndicatedAt);
     return c.body(typeof answer === 'string' ? success(answer) : fault(answer), 200, {
       'content-type': 'text/xml; charset=utf-8',
     });
@@ -36,7 +37,10 @@ export function mountPingbacks(app: Hono<GeekityEnv>): void {
   });
 }
 
-async function answerPing(c: Context<GeekityEnv>): Promise<string | PingbackFault> {
+async function answerPing(
+  c: Context<GeekityEnv>,
+  syndicatedAt: SyndicatedAt,
+): Promise<string | PingbackFault> {
   const { store, config, webmentions, renderer, conversation } = c.var;
 
   const xml = await readBounded(c.req.raw, PINGBACK_MAX_BYTES);
@@ -60,6 +64,7 @@ async function answerPing(c: Context<GeekityEnv>): Promise<string | PingbackFaul
   const checked = checkWebmentionRequest(source, target, {
     baseUrl: config.baseUrl,
     documentAt: (pathname) => publicDocumentAt(store, pathname),
+    syndicatedAt: (url) => syndicatedAt(c, url),
     conversation,
     site: c.var.siteAtRequestStart,
   });

@@ -1,5 +1,6 @@
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 
+import type { Document } from '../content/document.ts';
 import { publicDocumentAt } from '../content/permalinks.ts';
 import {
   WEBMENTION_FIELDS,
@@ -13,6 +14,16 @@ import { readBounded } from './bounded-body.ts';
 import type { GeekityEnv } from './env.ts';
 import { clientAddress } from './throttle.ts';
 
+/** The public post that a recorded syndicated copy URL is a copy of. */
+export type SyndicatedAt = (c: Context<GeekityEnv>, url: string) => Document | undefined;
+
+/** A {@link SyndicatedAt} that reads the copies file on first use and keeps the reader. */
+export function syndicatedAtLookup(): SyndicatedAt {
+  let copies: SyndicationCopies | undefined;
+  return (c, url) =>
+    postSyndicatedAt(url, c.var.store, (copies ??= syndicationCopies(c.var.config.contentDir)));
+}
+
 /**
  * Register the webmention endpoint. Mounted by the public site.
  *
@@ -20,9 +31,7 @@ import { clientAddress } from './throttle.ts';
  * anything that is not, and the looking happens afterwards — see
  * `webmention/receive.ts` for why that split is the whole design.
  */
-export function mountWebmentions(app: Hono<GeekityEnv>): void {
-  let copies: SyndicationCopies | undefined;
-
+export function mountWebmentions(app: Hono<GeekityEnv>, syndicatedAt: SyndicatedAt): void {
   app.post(WEBMENTION_PATH, async (c) => {
     const { store, config, webmentions, conversation } = c.var;
 
@@ -46,8 +55,7 @@ export function mountWebmentions(app: Hono<GeekityEnv>): void {
       {
         baseUrl: config.baseUrl,
         documentAt: (pathname) => publicDocumentAt(store, pathname),
-        syndicatedAt: (url) =>
-          postSyndicatedAt(url, store, (copies ??= syndicationCopies(config.contentDir))),
+        syndicatedAt: (url) => syndicatedAt(c, url),
         conversation,
         site: c.var.siteAtRequestStart,
       },

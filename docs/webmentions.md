@@ -173,7 +173,8 @@ a `<link rel="pingback">` on every post and page.
 A `pingback.ping(source, target)` XML-RPC call goes through the same check,
 verification, spam checker, and moderation queue as a webmention. The site
 files it as the same comment, so a link that was pinged and mentioned is one
-entry. XML-RPC expects an answer, so the endpoint reads the source before it
+entry. A ping whose target is a recorded syndicated copy of a post is filed on
+that post, as a webmention to the copy is. XML-RPC expects an answer, so the endpoint reads the source before it
 replies. A failure returns one of the spec's fault codes:
 
 | Code     | Meaning                                                                                                                                                                                                                                                                     |
