@@ -64,8 +64,11 @@ future-dated, unlisted, private, or trashed post is never a backlink. See
 - a `<link rel="webmention">` in the head
 
 The endpoint takes a form `POST` of `source` and `target`. It answers `202`
-for a request worth checking and `400` for one that is not. It does the checks
-after it answers:
+for a request worth checking and `400` for one that is not. A source on the
+site's own origin gets `400`, as does a source that names the target page, with
+or without a fragment. The site does not fetch its own pages, and a link
+between them is a backlink, not a comment. It does the checks after it
+answers:
 
 1. It fetches the source, up to its first megabyte. It decodes the source in
    the character encoding that its `Content-Type` names. When the header names
@@ -136,7 +139,7 @@ replies. A failure returns one of the spec's fault codes:
 | Code     | Meaning                                                                                                                                                                                                                                                                     |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `0x0000` | The source could not be read this time: it timed out, the server failed, or it answered any 4xx status other than 404 and 410, or it is larger than a megabyte and has no link in the part that was read. Nothing stored changes. Also sent when the ping was not accepted. |
-| `0x0010` | The source answers 404 or 410, or its URL is not a public `http` or `https` page.                                                                                                                                                                                           |
+| `0x0010` | The source answers 404 or 410, its URL is not a public `http` or `https` page, or it is a page on this site.                                                                                                                                                                |
 | `0x0011` | The source does not link here.                                                                                                                                                                                                                                              |
 | `0x0020` | The target does not exist.                                                                                                                                                                                                                                                  |
 | `0x0021` | The target takes no pingbacks.                                                                                                                                                                                                                                              |

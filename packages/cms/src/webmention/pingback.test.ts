@@ -330,6 +330,15 @@ describe('the faults a pingback is answered with', () => {
     assert.equal(mentionsOf(cms).length, 0);
   });
 
+  it('0x0010, and nothing fetched, for a source on this site', async () => {
+    const cms = await site();
+    pages.set(`${BASE_URL}/`, { body: `<a href="${POST_URL}">Hello world</a>` });
+
+    assert.equal(await faultOf(await ping(cms, `${BASE_URL}/`)), 0x0010);
+    assert.deepEqual(fetched, []);
+    assert.equal(mentionsOf(cms).length, 0);
+  });
+
   it('0x0000 for a source that refuses to be read but has not gone', async () => {
     const cms = await site();
     pages.set('https://them.example/locked', { status: 403, body: 'no' });

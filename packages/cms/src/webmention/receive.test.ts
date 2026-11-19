@@ -287,6 +287,23 @@ describe('what the endpoint refuses', () => {
     assert.equal(response.status, 400);
   });
 
+  it('refuses a source on this site, and stores nothing from it', async () => {
+    const cms = await site();
+    pages.set(`${BASE_URL}/`, {
+      body: `<div class="h-card"><a class="u-url p-name" href="${BASE_URL}/">Site Owner</a></div>
+        <a href="${POST_URL}">Hello world</a>`,
+    });
+    pages.set(POST_URL, {
+      body: `<article class="h-entry"><a class="u-url" href="${POST_URL}">self</a></article>`,
+    });
+
+    assert.equal((await sendAndSettle(cms, `${BASE_URL}/`)).status, 400);
+    assert.equal((await sendAndSettle(cms, `${POST_URL}#x`)).status, 400);
+    assert.equal((await sendAndSettle(cms, `${BASE_URL}/2026/09/camp/#top`)).status, 400);
+    assert.deepEqual(stored(cms), []);
+    assert.deepEqual(requested, []);
+  });
+
   it('refuses a source on a private address, which is not somebody else’s page', async () => {
     const cms = await site();
 
@@ -350,11 +367,13 @@ describe('verifying a webmention', () => {
     const cms = await site();
     pages.set('https://them.example/img', { body: `<img src="${POST_URL}" alt="">` });
     pages.set('https://them.example/video', { body: `<video src="${POST_URL}"></video>` });
-    pages.set(`${BASE_URL}/elsewhere/`, { body: '<a href="/2026/09/hello-world/">mine</a>' });
+    pages.set('https://them.example/relative', {
+      body: '<a href="//blog.example/2026/09/hello-world/">yours</a>',
+    });
 
     await sendAndSettle(cms, 'https://them.example/img');
     await sendAndSettle(cms, 'https://them.example/video');
-    await sendAndSettle(cms, `${BASE_URL}/elsewhere/`);
+    await sendAndSettle(cms, 'https://them.example/relative');
 
     assert.equal(stored(cms).length, 3, 'all three link to the target');
   });

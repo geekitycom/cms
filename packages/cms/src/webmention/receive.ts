@@ -128,7 +128,10 @@ export function checkWebmentionRequest(
   if (isPrivateHost(from.hostname)) return refuse('source', 'The source is not a public URL.');
 
   const site = webUrl(options.baseUrl);
-  if (site === undefined || to.origin !== site.origin) {
+  if (site !== undefined && isThisSite(from, site)) {
+    return refuse('source', 'The source is a page on this site.');
+  }
+  if (site === undefined || !isThisSite(to, site)) {
     const original = options.syndicatedAt?.(to.href);
     if (original !== undefined) {
       return { ok: true, source: from.href, target: to.href, document: original };
@@ -149,6 +152,10 @@ export function checkWebmentionRequest(
   if (document === undefined) return refuse('target', 'There is no page here at that address.');
 
   return { ok: true, source: from.href, target: to.href, document };
+}
+
+function isThisSite(url: URL, site: URL): boolean {
+  return url.origin === site.origin;
 }
 
 /** What {@link verifyWebmention} needs around it. */
