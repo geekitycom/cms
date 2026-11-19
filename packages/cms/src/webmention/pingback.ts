@@ -69,10 +69,7 @@ export function pingbackAnswerFor(outcome: WebmentionOutcome): string | Pingback
     case 'refused':
       return { code: PINGBACK_REQUEST_FAULTS[outcome.problem], message: outcome.message };
     case 'unreachable':
-      return {
-        code: PINGBACK_FAULTS.generic,
-        message: `The source could not be read: ${outcome.reason}`,
-      };
+      return { code: PINGBACK_FAULTS.generic, message: 'The source could not be read this time.' };
     case 'deleted':
     case 'ignored':
       switch (outcome.why) {

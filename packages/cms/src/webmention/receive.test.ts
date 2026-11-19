@@ -468,6 +468,30 @@ describe('what the endpoint refuses', () => {
     const response = await send(cms, { source: 'http://127.0.0.1/x', target: POST_URL });
     assert.equal(response.status, 400);
   });
+
+  it('refuses a source on a port other than the default, and fetches nothing', async () => {
+    const cms = await site();
+    pages.set('https://them.example:8443/note', { body: reply(`<a href="${POST_URL}">there</a>`) });
+
+    const response = await send(cms, {
+      source: 'https://them.example:8443/note',
+      target: POST_URL,
+    });
+    await cms.webmentions.settled();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(requested, []);
+    assert.equal(stored(cms).length, 0);
+  });
+
+  it('takes a source that names its default port', async () => {
+    const cms = await site();
+
+    const response = await send(cms, { source: 'https://them.example:443/note', target: POST_URL });
+    await cms.webmentions.settled();
+
+    assert.equal(response.status, 202);
+  });
 });
 
 describe('verifying a webmention', () => {
@@ -683,6 +707,17 @@ describe('verifying a webmention', () => {
     pages.set('http://wiki.internal.example/note', {
       body: reply(`<a href="${POST_URL}">there</a>`),
     });
+
+    await sendAndSettle(cms, 'https://them.example/moved');
+
+    assert.deepEqual(requested, ['https://them.example/moved']);
+    assert.equal(stored(cms).length, 0);
+  });
+
+  it('stops at a redirect to a port other than the default', async () => {
+    const cms = await site();
+    pages.set('https://them.example/moved', { redirectTo: 'https://them.example:8443/note' });
+    pages.set('https://them.example:8443/note', { body: reply(`<a href="${POST_URL}">there</a>`) });
 
     await sendAndSettle(cms, 'https://them.example/moved');
 

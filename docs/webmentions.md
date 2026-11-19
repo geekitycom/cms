@@ -70,7 +70,10 @@ senders use. Any other content type, `multipart/form-data` included, gets
 bytes that arrive, and the endpoint reads no further. The endpoint queues
 nothing for a request it refuses. It answers `202` for a request worth checking
 and `400` for one that is not. A source on the site's own origin gets `400`, as
-does a source that names the target page, with or without a fragment. The site does not fetch its own pages, and a link
+does a source that names the target page, with or without a fragment. A
+source on a port other than 80 for `http` or 443 for `https` also gets `400`,
+and the site does not fetch it. When the source redirects, the site follows a
+redirect only to a URL on one of those ports. The site does not fetch its own pages, and a link
 between them is a backlink, not a comment. It does the checks after it
 answers:
 
@@ -244,12 +247,14 @@ first check; a source that could not be read is checked again later, as for a
 webmention. When the check is still running at the deadline, the endpoint
 answers `0x0000` with "The source is still being checked". The record keeps
 the ping, and the check runs to the end and files it as usual. When 1,000
-checks are waiting, a new ping gets `0x0000` and is not recorded. A failure returns one of the spec's fault codes:
+checks are waiting, a new ping gets `0x0000` and is not recorded. A failure returns one of the spec's fault codes.
+The fault string is fixed text for each case. When the source could not be
+read, the string does not say why; the site writes the reason to its log:
 
 | Code     | Meaning                                                                                                                                                                                                                                                                                                                                                                                                |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `0x0000` | The source could not be read this time: it timed out, the server failed, or it answered any 4xx status other than 404 and 410, or it is larger than a megabyte and has no link in the part that was read. Nothing stored changes. Also sent when the ping was not accepted, when its address has sent too many, when too many checks are waiting, and when the check is still running at the deadline. |
-| `0x0010` | The source answers 404 or 410, its URL is not a public `http` or `https` page, or it is a page on this site.                                                                                                                                                                                                                                                                                           |
+| `0x0010` | The source answers 404 or 410, its URL is not a public `http` or `https` page, it is on a port other than 80 or 443, or it is a page on this site.                                                                                                                                                                                                                                                     |
 | `0x0011` | The source does not link here.                                                                                                                                                                                                                                                                                                                                                                         |
 | `0x0020` | The target does not exist.                                                                                                                                                                                                                                                                                                                                                                             |
 | `0x0021` | The target takes no pingbacks.                                                                                                                                                                                                                                                                                                                                                                         |

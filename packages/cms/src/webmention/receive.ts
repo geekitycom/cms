@@ -118,6 +118,9 @@ export function checkWebmentionRequest(
   }
 
   if (isPrivateHost(from.hostname)) return refuse('source', 'The source is not a public URL.');
+  if (!onDefaultPort(from)) {
+    return refuse('source', 'The source is not on the default port for http or https.');
+  }
 
   const site = webUrl(options.baseUrl);
   if (site !== undefined && isThisSite(from, site)) {
@@ -143,6 +146,10 @@ export function checkWebmentionRequest(
   if (document === undefined) return refuse('target', 'There is no page here at that address.');
 
   return { ok: true, source: from.href, target: to.href, document };
+}
+
+function onDefaultPort(url: URL): boolean {
+  return url.port === '';
 }
 
 function isThisSite(url: URL, site: URL): boolean {
@@ -495,6 +502,7 @@ async function readSource(source: string, lookup: HostLookup): Promise<FetchedSo
     overflow: 'truncate',
     accept: 'text/html, */*;q=0.8',
     contentType: { pattern: /^/, name: 'anything' },
+    allowed: onDefaultPort,
   });
 
   if (!fetched.ok) {

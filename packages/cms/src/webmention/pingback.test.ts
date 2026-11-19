@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
 import type { PostComment } from '../store/admin-store.ts';
-import { updateComment } from '../comments/records.ts';
+import { commentsDirectory, updateComment } from '../comments/records.ts';
 import type { CommentVerdict } from '../forms/checker.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -208,6 +208,12 @@ function gate(): { promise: Promise<void>; open: () => void } {
   });
   gates.push(open);
   return { promise, open };
+}
+
+function faultStringOf(text: string): string {
+  return (
+    /<name>faultString<\/name>\s*<value><string>([^<]*)<\/string><\/value>/.exec(text)?.[1] ?? ''
+  );
 }
 
 function mentionsOf(cms: Cms, slug = 'hello-world'): PostComment[] {
@@ -484,6 +490,15 @@ describe('the faults a pingback is answered with', () => {
     assert.equal(await faultOf(await ping(cms, 'https://them.example/note')), 0);
   });
 
+  it('0x0010, and nothing fetched or stored, for a source on a port other than the default', async () => {
+    const cms = await site();
+    pages.set('https://them.example:8443/note', { body: linkingTo(POST_URL) });
+
+    assert.equal(await faultOf(await ping(cms, 'https://them.example:8443/note')), 0x0010);
+    assert.deepEqual(fetched, []);
+    assert.equal(mentionsOf(cms).length, 0);
+  });
+
   it('a generic fault, and nothing fetched, for a source that resolves to a private address', async () => {
     const cms = await site();
     pages.set('https://wiki.internal.example/note', { body: linkingTo(POST_URL) });
@@ -498,6 +513,33 @@ describe('the faults a pingback is answered with', () => {
 
     assert.equal(await faultOf(await post(cms, call('pingback.extensions.getPingbacks'))), -32601);
     assert.equal(await faultOf(await post(cms, call('pingback.ping', POST_URL))), -32602);
+  });
+});
+
+describe('the words of a fault for a source that could not be read', () => {
+  it('say nothing of how the source answered', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', { status: 503 });
+
+    const message = faultStringOf(await (await ping(cms, 'https://them.example/note')).text());
+
+    assert.doesNotMatch(message, /503|answered/);
+  });
+
+  it('say nothing of an error the site hit while filing it', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', { body: linkingTo(POST_URL) });
+    const directory = commentsDirectory(cms.config.contentDir);
+    await mkdir(directory, { recursive: true });
+    await chmod(directory, 0o500);
+    try {
+      const message = faultStringOf(await (await ping(cms, 'https://them.example/note')).text());
+
+      assert.notEqual(message, '');
+      assert.ok(!message.includes('/'), `fault string: ${message}`);
+    } finally {
+      await chmod(directory, 0o700);
+    }
   });
 });
 
