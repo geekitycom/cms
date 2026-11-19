@@ -170,6 +170,12 @@ an IP address or a CIDR range. Any other entry stops the site at startup. A
 host that resolves to a listed address is refused in the same way as a
 private one.
 
+The list also covers ActivityPub fetches: an actor, a key or any other object
+whose URL names a listed address, or a host that resolves to one, is not
+fetched. For ActivityPub, the list is checked against the first URL only. A
+redirect from another host, and a WebFinger lookup of an `@user@host` handle,
+are checked only against the private and reserved ranges.
+
 ## The Gemini certificate
 
 Gemini is off until `site.gemini` is on. Turn it on with **Serve over

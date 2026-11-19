@@ -47,6 +47,8 @@ import {
   SHARED_INBOX_PATH,
 } from './paths.ts';
 import { quoteAuthorization, readQuoteAuthorizations } from './quotes.ts';
+import { publicLoaders } from './public-loaders.ts';
+import type { HostLookup } from '../util/public-address.ts';
 
 /** The `software.name` this CMS reports in NodeInfo. Lower case, as the schema demands. */
 export const SOFTWARE_NAME = 'geekity-cms';
@@ -96,6 +98,8 @@ export interface CreateSiteFederationOptions extends FederationOverrides {
   queue: MessageQueue | null;
   /** Where a delivery refused for its signature is logged. */
   refusals: InboxRefusals;
+  /** How a remote document's host is resolved, and the addresses refused besides the private ones. */
+  hostLookup: HostLookup;
   /** Anything else Fedify takes, for a site that needs to reach past this factory. */
   federationOptions?: Partial<FederationOptions<FederationContextData>> | undefined;
 }
@@ -109,14 +113,16 @@ export interface CreateSiteFederationOptions extends FederationOverrides {
  * because Fedify's own cannot publish the aliases every user's actor needs.
  */
 export function createSiteFederation(options: CreateSiteFederationOptions): SiteFederation {
+  const kv = options.kv ?? new MemoryKvStore();
+  const allowPrivateAddress = options.allowPrivateAddress ?? false;
   const federation = createFederation<FederationContextData>({
-    kv: options.kv ?? new MemoryKvStore(),
+    kv,
     origin: federationOrigin(options.baseUrl),
     // `null` asks for no queue at all, so an activity is handled and delivered
     // inside the request that carried it. Fedify is told that by leaving the
     // key off, which is why this is a spread rather than a value.
     ...(options.queue === null ? {} : { queue: options.queue }),
-    allowPrivateAddress: options.allowPrivateAddress ?? false,
+    ...(allowPrivateAddress ? { allowPrivateAddress } : publicLoaders(options.hostLookup, kv)),
     ...options.federationOptions,
   });
 

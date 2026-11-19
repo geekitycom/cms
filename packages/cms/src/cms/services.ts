@@ -320,6 +320,7 @@ export function createServices({
     queue: federationQueue ?? null,
     kv: federationKv,
     refusals: inboxRefusals,
+    hostLookup: resolved.hostLookup,
     federationOptions: {
       manuallyStartQueue: true,
       ...(outbox === undefined ? {} : { onOutboxError: outbox.onOutboxError }),
