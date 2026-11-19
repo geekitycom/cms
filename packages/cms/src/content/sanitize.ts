@@ -313,8 +313,8 @@ export function cleanPostHtml(html: string): string {
       at = afterElement(html, tag.name, at);
       continue;
     }
-    const rules = POST_ALLOWED[tag.name];
-    if (rules === undefined) continue;
+    if (!Object.hasOwn(POST_ALLOWED, tag.name)) continue;
+    const rules = POST_ALLOWED[tag.name] ?? {};
     if (tag.closing) {
       if (!POST_VOID_ELEMENTS.includes(tag.name)) out.push(`</${tag.name}>`);
       continue;
@@ -356,8 +356,7 @@ function postUrl(value: string, schemes: readonly string[]): string | undefined 
  * they pointed at.
  */
 function keptAttributes(tag: Tag): string | undefined {
-  const allowed = ALLOWED[tag.name];
-  if (allowed === undefined) return undefined;
+  if (!Object.hasOwn(ALLOWED, tag.name)) return undefined;
 
   if (tag.name !== 'a') return '';
 

@@ -438,3 +438,22 @@ describe('how much of one element is kept', () => {
     assert.ok(ms < 500, `sourceEntry took ${Math.round(ms)} ms for ${page.length} bytes`);
   });
 });
+
+describe('property names that are Object.prototype properties', () => {
+  it('reads p-constructor, p-__proto__ and p-toString as ordinary properties', () => {
+    const [item] = itemsIn(
+      parseHtml(
+        '<div class="h-entry"><span class="p-constructor">a</span>' +
+          '<span class="p-__proto__">b</span><span class="p-toString">c</span>' +
+          '<span class="p-constructor">d</span></div>',
+      ),
+      SOURCE,
+    );
+
+    assert.deepEqual(Object.entries(item?.properties ?? {}), [
+      ['constructor', [{ text: 'a' }, { text: 'd' }]],
+      ['__proto__', [{ text: 'b' }]],
+      ['toString', [{ text: 'c' }]],
+    ]);
+  });
+});

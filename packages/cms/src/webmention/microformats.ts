@@ -653,14 +653,16 @@ function markupIn(element: HtmlElement, reading: Reading): string {
  */
 function parseItem(element: HtmlElement, base: string, reading: Reading): MicroformatItem {
   reading.left -= 1;
-  const properties: Record<string, MicroformatValue[]> = {};
+  const found = new Map<string, MicroformatValue[]>();
   const children: MicroformatItem[] = [];
   // Whether anything inside is a `p-` or `e-` property or a microformat of its
   // own, which is when mf2 stops implying a name from the whole text.
   let textual = false;
 
   const add = (name: string, value: MicroformatValue): void => {
-    (properties[name] ??= []).push(value);
+    const values = found.get(name);
+    if (values === undefined) found.set(name, [value]);
+    else values.push(value);
   };
 
   const walk = (parent: HtmlElement): void => {
@@ -692,6 +694,7 @@ function parseItem(element: HtmlElement, base: string, reading: Reading): Microf
   };
 
   walk(element);
+  const properties: Record<string, MicroformatValue[]> = Object.fromEntries(found);
   implied(element, properties, base, reading, !textual);
   return { types: rootTypesOf(element), properties, children, element };
 }

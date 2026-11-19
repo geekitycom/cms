@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { sanitizeCommentHtml } from './sanitize.ts';
+import { cleanPostHtml, sanitizeCommentHtml } from './sanitize.ts';
 
 describe('sanitising a comment', () => {
   it('keeps the markup a fediverse note is made of', () => {
@@ -120,5 +120,17 @@ describe('sanitising a comment', () => {
     const once = sanitizeCommentHtml('<p onclick="x">Hi <a href="https://a.test">a</a></p>');
 
     assert.equal(sanitizeCommentHtml(once), once);
+  });
+});
+
+describe('tag names that are Object.prototype properties', () => {
+  it('unwraps a <constructor> element in a comment and keeps its words', () => {
+    assert.equal(sanitizeCommentHtml('<constructor onclick="x">hi</constructor>'), 'hi');
+    assert.equal(sanitizeCommentHtml('<tostring>a</tostring><valueof>b</valueof>'), 'ab');
+  });
+
+  it('drops a <constructor> element from a post and keeps its words', () => {
+    assert.equal(cleanPostHtml('<constructor>hi</constructor>'), 'hi');
+    assert.equal(cleanPostHtml('<tostring>a</tostring><valueof>b</valueof>'), 'ab');
   });
 });

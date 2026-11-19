@@ -6,14 +6,14 @@ export function escapeAttribute(value: string): string {
   return escapeText(value).replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 
-const ENTITIES: Readonly<Record<string, string>> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: '\u00a0',
-};
+const ENTITIES: ReadonlyMap<string, string> = new Map([
+  ['amp', '&'],
+  ['lt', '<'],
+  ['gt', '>'],
+  ['quot', '"'],
+  ['apos', "'"],
+  ['nbsp', '\u00a0'],
+]);
 
 export function decodeEntities(value: string): string {
   if (!value.includes('&')) return value;
@@ -25,7 +25,7 @@ export function decodeEntities(value: string): string {
         return codePoint(Number.parseInt(body.slice(2), 16)) ?? whole;
       }
       if (body.startsWith('#')) return codePoint(Number.parseInt(body.slice(1), 10)) ?? whole;
-      return ENTITIES[body] ?? whole;
+      return ENTITIES.get(body) ?? whole;
     },
   );
 }

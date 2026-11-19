@@ -36,6 +36,12 @@ describe('decodeEntities', () => {
     );
   });
 
+  for (const name of ['constructor', 'toString', 'valueOf', '__proto__', 'hasOwnProperty']) {
+    it(`keeps &${name}; as written`, () => {
+      assert.equal(decodeEntities(`a &${name}; b`), `a &${name}; b`);
+    });
+  }
+
   it('round-trips through escapeAttribute', () => {
     const value = `Fish & "chips" <b>'s</b>`;
     assert.equal(decodeEntities(escapeAttribute(value)), value);
