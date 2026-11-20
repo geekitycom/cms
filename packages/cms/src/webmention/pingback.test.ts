@@ -433,6 +433,33 @@ describe('a pingback while another source is being checked', () => {
   });
 });
 
+describe('a pingback the site keeps without reading its source', () => {
+  it('answers a generic fault while the same ping waits to be checked again', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', { status: 503 });
+    assert.equal(await faultOf(await ping(cms, 'https://them.example/note')), 0x0032);
+    fetched.length = 0;
+
+    const text = await (await ping(cms, 'https://them.example/note')).text();
+
+    assert.match(text, /<int>0<\/int>/);
+    assert.match(faultStringOf(text), /kept and checked later/);
+    assert.deepEqual(fetched, []);
+  });
+
+  it('answers a generic fault while the site is stopping', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', { body: linkingTo(POST_URL) });
+    cms.webmentions.stop();
+
+    const text = await (await ping(cms, 'https://them.example/note')).text();
+
+    assert.match(text, /<int>0<\/int>/);
+    assert.match(faultStringOf(text), /kept and checked later/);
+    assert.deepEqual(fetched, []);
+  });
+});
+
 describe('the faults a pingback is answered with', () => {
   it('0x0010 for a source that does not exist or is not somebody else’s page', async () => {
     const cms = await site();

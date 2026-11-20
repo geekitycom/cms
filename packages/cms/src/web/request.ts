@@ -9,7 +9,6 @@ import type { FeedFormat } from './feeds.ts';
 import { selectRepresentation } from './negotiate.ts';
 import type { ConditionalHeaders, Representation } from './negotiate.ts';
 
-/** The requested path, percent-decoded as {@link decodedPath} decodes it. */
 export function requestPath(c: Context<GeekityEnv>): string {
   return decodedPath(new URL(c.req.url).pathname);
 }

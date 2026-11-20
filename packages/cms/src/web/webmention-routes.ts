@@ -17,7 +17,6 @@ import type { GeekityEnv } from './env.ts';
 import { addressKey, clientAddress, createRequestLimit } from './throttle.ts';
 import type { RequestLimit } from './throttle.ts';
 
-/** How long a sender is asked to wait when too many webmentions are waiting. */
 const BUSY_RETRY_AFTER_SECONDS = 300;
 
 /** How many webmentions and pingbacks one address may send in a window, unless the config says. */

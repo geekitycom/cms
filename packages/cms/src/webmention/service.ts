@@ -184,11 +184,12 @@ export interface WebmentionService {
    * check is made from the record, so a restart before it finishes leaves it
    * for the next start. `checked` is the outcome of the check, for a
    * pingback, which answers with it, or a test; nothing has to look at it.
+   * It is `undefined` when the source is not read now: the site is stopping,
+   * or the check waits to try again. The record waits for that try.
    *
    * The same source and target sent again while its check waits to start
    * joins that check. Sent while the source is being read, it has the source
-   * read once more afterwards, since the page may have changed. Sent while
-   * the check waits to try again, it waits for that try. `busy` when
+   * read once more afterwards, since the page may have changed. `busy` when
    * {@link MAX_WAITING_CHECKS} others are waiting and nothing was recorded.
    */
   receive(accepted: AcceptedWebmention): Promise<ReceivedWebmention>;
@@ -208,7 +209,8 @@ export interface WebmentionService {
 
 /** An accepted webmention, recorded, or not when too many are waiting. */
 export type ReceivedWebmention =
-  { readonly busy: false; readonly checked: Promise<WebmentionOutcome> } | { readonly busy: true };
+  | { readonly busy: false; readonly checked: Promise<WebmentionOutcome | undefined> }
+  | { readonly busy: true };
 
 /** Build the webmention service for one site. */
 export function createWebmentionService(
@@ -232,7 +234,7 @@ export function createWebmentionService(
   );
   const retryDelays = config.webmentions.retryDelaysMs ?? RETRY_DELAYS_MS;
   const recording = new Set<Promise<WaitingCheck | undefined>>();
-  const queued = new Map<string, Promise<WebmentionOutcome>>();
+  const queued = new Map<string, Promise<WebmentionOutcome | undefined>>();
   const reading = new Set<string>();
   const sentAgain = new Set<string>();
   const timers = new Map<string, NodeJS.Timeout>();
@@ -487,15 +489,13 @@ export function createWebmentionService(
       });
   }
 
-  function run(check: WaitingCheck): Promise<WebmentionOutcome> {
+  function run(check: WaitingCheck): Promise<WebmentionOutcome | undefined> {
     const known = queued.get(check.id);
     if (known !== undefined) {
       if (reading.has(check.id)) sentAgain.add(check.id);
       return known;
     }
-    if (timers.has(check.id)) {
-      return Promise.resolve({ kind: 'unreachable', reason: 'it waits to be checked again' });
-    }
+    if (timers.has(check.id)) return Promise.resolve(undefined);
     const job = hostSlots
       .run(hostOf(check.source), () => checkSlots.run(() => checkUntilCurrent(check)))
       .finally(() => {
@@ -505,11 +505,8 @@ export function createWebmentionService(
     return job;
   }
 
-  async function checkUntilCurrent(check: WaitingCheck): Promise<WebmentionOutcome> {
-    let outcome: WebmentionOutcome = {
-      kind: 'unreachable',
-      reason: 'the site stopped before checking it',
-    };
+  async function checkUntilCurrent(check: WaitingCheck): Promise<WebmentionOutcome | undefined> {
+    let outcome: WebmentionOutcome | undefined;
     do {
       if (stopped) return outcome;
       sentAgain.delete(check.id);

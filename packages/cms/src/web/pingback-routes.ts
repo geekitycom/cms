@@ -111,20 +111,28 @@ async function answerPing(
     config.webmentions.pingbackAnswerMs ?? PINGBACK_ANSWER_MS,
     received.checked,
   );
-  if (outcome === undefined) {
+  if (outcome === LATE) {
     return {
       code: PINGBACK_FAULTS.generic,
       message: 'The source is still being checked. The ping is kept and checked to the end.',
     };
   }
+  if (outcome === undefined) {
+    return {
+      code: PINGBACK_FAULTS.generic,
+      message: 'The source was not read this time. The ping is kept and checked later.',
+    };
+  }
   return pingbackAnswerFor(outcome);
 }
 
-async function within<T>(ms: number, promise: Promise<T>): Promise<T | undefined> {
+const LATE = Symbol('late');
+
+async function within<T>(ms: number, promise: Promise<T>): Promise<T | typeof LATE> {
   let timer: NodeJS.Timeout | undefined;
-  const late = new Promise<undefined>((resolve) => {
+  const late = new Promise<typeof LATE>((resolve) => {
     timer = setTimeout(() => {
-      resolve(undefined);
+      resolve(LATE);
     }, ms);
   });
   try {
