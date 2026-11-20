@@ -851,8 +851,9 @@ function valueOf(
     };
   }
 
-  if (prefix === 'e')
+  if (prefix === 'e') {
     return { text: textIn(element, reading), html: markupIn(element, base, reading) };
+  }
 
   return {
     text:

@@ -559,8 +559,9 @@ function jsonStrings(body: string): string[] | undefined {
   while (pending.length > 0) {
     const value = pending.pop();
     if (typeof value === 'string') strings.push(value);
-    else if (typeof value === 'object' && value !== null)
-      pending.push(...Object.values(value as Record<string, unknown>));
+    else if (typeof value === 'object' && value !== null) {
+      for (const inner of Object.values(value)) pending.push(inner);
+    }
   }
   return strings;
 }

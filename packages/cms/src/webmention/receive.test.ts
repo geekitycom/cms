@@ -488,6 +488,18 @@ describe('verifying a webmention', () => {
     assert.equal(stored(cms).length, 1);
   });
 
+  it('accepts a JSON source whose array holds hundreds of thousands of values', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note.json', {
+      body: `[${'0,'.repeat(300_000)}"${POST_URL}"]`,
+      contentType: 'application/json',
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note.json');
+
+    assert.equal(stored(cms).length, 1);
+  });
+
   it('follows a redirect and verifies the page it lands on', async () => {
     const cms = await site();
     pages.set('https://them.example/old', { redirectTo: 'https://them.example/new' });
