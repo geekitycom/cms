@@ -423,6 +423,15 @@ describe('pendingWork', () => {
 
     assert.equal((await pendingWork(dataDir)).webmentionChecks, 2);
   });
+
+  it('refuses a checks file that is not a list, as the webmention service does', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-export-checks-'));
+    dirs.push(dataDir);
+    await writeFile(path.join(dataDir, 'webmention-checks.json'), '{"checks":[]}\n');
+
+    await assert.rejects(pendingWork(dataDir), /not a list of webmention checks/);
+    await assert.rejects(waitingChecks(dataDir, 10).list(), /not a list of webmention checks/);
+  });
 });
 
 describe('exportFileName', () => {

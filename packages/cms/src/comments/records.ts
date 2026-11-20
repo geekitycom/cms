@@ -322,9 +322,8 @@ function fileContents(file: string): {
   const uninterpreted: KeptEntry[] = [];
   for (const entry of entries) {
     const comment = commentFrom(entry);
-    if (comment === undefined) {
-      uninterpreted.push({ entry, after: comments.map((before) => before.id).reverse() });
-    } else comments.push(comment);
+    if (comment !== undefined) comments.push(comment);
+    else uninterpreted.push({ entry, after: comments.map((before) => before.id).reverse() });
   }
   return {
     post: typeof parsed['post'] === 'string' ? parsed['post'] : '',

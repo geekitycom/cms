@@ -47,19 +47,7 @@ export interface WaitingChecks {
 export function waitingChecks(dataDir: string, limit: number): WaitingChecks {
   const file = dataPath(dataDir, WEBMENTION_CHECKS);
   const lockFile = lockFileFor(file);
-
-  async function read(): Promise<WaitingCheck[]> {
-    let text: string;
-    try {
-      text = await readFile(file, 'utf8');
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-      throw error;
-    }
-    const parsed: unknown = JSON.parse(text);
-    if (!Array.isArray(parsed)) throw new Error(`${file} is not a list of webmention checks.`);
-    return parsed.filter(isWaitingCheck);
-  }
+  const read = (): Promise<WaitingCheck[]> => readChecks(file);
 
   function change<T>(edit: (checks: WaitingCheck[]) => { checks?: WaitingCheck[]; value: T }) {
     return withFileLock(file, () =>
@@ -131,18 +119,24 @@ export function waitingChecks(dataDir: string, limit: number): WaitingChecks {
 
 /**
  * How many checks `data/webmention-checks.json` holds, read without taking its
- * lock, for a reader that must write nothing under `data/`.
+ * lock, for a reader that must write nothing under `data/`. A file the
+ * service could not read throws here too.
  */
 export async function countWaitingChecks(dataDir: string): Promise<number> {
+  return (await readChecks(dataPath(dataDir, WEBMENTION_CHECKS))).length;
+}
+
+async function readChecks(file: string): Promise<WaitingCheck[]> {
   let text: string;
   try {
-    text = await readFile(dataPath(dataDir, WEBMENTION_CHECKS), 'utf8');
+    text = await readFile(file, 'utf8');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
   const parsed: unknown = JSON.parse(text);
-  return Array.isArray(parsed) ? parsed.filter(isWaitingCheck).length : 0;
+  if (!Array.isArray(parsed)) throw new Error(`${file} is not a list of webmention checks.`);
+  return parsed.filter(isWaitingCheck);
 }
 
 function isWaitingCheck(value: unknown): value is WaitingCheck {
