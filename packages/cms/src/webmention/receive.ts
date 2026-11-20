@@ -2,7 +2,7 @@ import { rsvpField } from '../store/admin-store.ts';
 import type { PostComment } from '../store/admin-store.ts';
 import { heldWebmention, intakeComment } from '../comments/intake.ts';
 import type { CommentNotices, ProposedComment } from '../comments/intake.ts';
-import { deleteComment } from '../comments/records.ts';
+import { deleteComment, isCarried } from '../comments/records.ts';
 import type { CommentRecords } from '../comments/records.ts';
 import type { CommentChecker } from '../forms/checker.ts';
 import type { Document } from '../content/document.ts';
@@ -231,15 +231,12 @@ export async function verifyWebmention(
   }
 
   if (fetched.kind === 'gone' || !mentions(fetched, incoming)) {
-    // Another URL of the same post says nothing about what was stored from
-    // the source, so only a source that names none of them takes it away.
     if (fetched.kind === 'read' && namesThePost(fetched, options)) {
       return { kind: 'ignored', why: 'unlinked' };
     }
     const why = fetched.kind === 'gone' ? 'gone' : 'unlinked';
     await dropCarried(records, incoming, new Set());
-    // Only the page that carries a reply can take it away.
-    if (held === undefined || held.via !== undefined) return { kind: 'ignored', why };
+    if (held === undefined || isCarried(held)) return { kind: 'ignored', why };
     await deleteComment(records, held.id);
     return { kind: 'deleted', why };
   }
@@ -252,7 +249,7 @@ export async function verifyWebmention(
       // links here.
       undefined;
 
-  if (held?.via !== undefined && !isOwnPage(incoming.source, fetched.url, entry)) {
+  if (held !== undefined && isCarried(held) && !isOwnPage(incoming.source, fetched.url, entry)) {
     return { kind: 'stored', comment: held, created: false };
   }
 
@@ -290,8 +287,6 @@ export async function verifyWebmention(
     kind,
     author,
     content: { markdown: text, html },
-    // A page that gives no date keeps the one it was first stored with, so it
-    // does not move in the thread each time it is sent.
     submitted: entry?.published ?? held?.submitted ?? now.toISOString(),
     inReplyTo,
     // The URL it was sent from rather than the entry's own `u-url`: this is
@@ -332,11 +327,7 @@ export async function verifyWebmention(
     : { kind: 'ignored', why: 'discarded' };
 }
 
-/**
- * Whether the page read from `source` is the reply that lives there, which is
- * what lets it take over a reply another page carried. The source has lost
- * any fragment by now, so a reply the carrier holds under one is never it.
- */
+/** Whether `source` (which has no fragment by now) is the reply's own page. */
 function isOwnPage(source: string, fetchedUrl: string, entry: SourceEntry | undefined): boolean {
   return fetchedUrl === source || entry?.url === source;
 }
@@ -455,7 +446,6 @@ export type NotStored = 'gone' | 'unlinked' | 'discarded';
 /** What reading a source page came to. */
 type FetchedSource =
   | { kind: 'read'; body: string; url: string; html: boolean; truncated: boolean }
-  /** Definitely not there: a 404 or a 410. */
   | { kind: 'gone' }
   /** Not readable this time, which is not the same thing at all. */
   | { kind: 'unreachable'; reason: string };
@@ -472,9 +462,6 @@ async function readSource(source: string, lookup: HostLookup): Promise<FetchedSo
   });
 
   if (!fetched.ok) {
-    // Only a 404 or a 410 says the page is not there. Every other refusal —
-    // bot protection, a rate limit, a timeout, a broken server — says only
-    // that it could not be read this time, and takes nothing with it.
     if (fetched.status === 404 || fetched.status === 410) return { kind: 'gone' };
     return { kind: 'unreachable', reason: fetched.reason };
   }
@@ -488,12 +475,12 @@ async function readSource(source: string, lookup: HostLookup): Promise<FetchedSo
   };
 }
 
-/**
- * The text of a body, in the encoding its `Content-Type` names, or failing that
- * the one a `<meta>` in its first kilobyte names, or failing both, UTF-8.
- */
+/** How far into a body to look for a `<meta>` charset: the WHATWG prescan window. */
+const META_PRESCAN_BYTES = 1024;
+
+/** The body's text, in the charset its Content-Type or a `<meta>` names, else UTF-8. */
 function decode(body: Uint8Array, type: string): string {
-  const head = new TextDecoder('latin1').decode(body.subarray(0, 1024));
+  const head = new TextDecoder('latin1').decode(body.subarray(0, META_PRESCAN_BYTES));
   const label =
     /;\s*charset\s*=\s*["']?([^"';\s]+)/i.exec(type)?.[1] ??
     /<meta[^>]+charset\s*=\s*["']?([^"'\s/>;]+)/i.exec(head)?.[1];
@@ -521,7 +508,6 @@ function mentions(
     : fetched.body.includes(incoming.target);
 }
 
-/** Whether what was read links to any URL of the post the webmention was sent to. */
 function namesThePost(
   fetched: { body: string; url: string; html: boolean },
   options: VerifyWebmentionOptions,
@@ -532,10 +518,6 @@ function namesThePost(
   return [...named].some(urlOfPost(options));
 }
 
-/**
- * Whether a URL is the post's page, a former one, a comment page on it, or a
- * syndicated copy. The copies are read once, however many URLs are asked about.
- */
 function urlOfPost(options: VerifyWebmentionOptions): (href: string) => boolean {
   const { document } = options.incoming;
   const origin = new URL(options.baseUrl).origin;

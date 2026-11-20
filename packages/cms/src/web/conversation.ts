@@ -163,7 +163,6 @@ function replyNamed(context: Reading, document: Document, url: string): Interact
   return namedIn(context, document, everything, url);
 }
 
-/** The entry among these a URL names. */
 function namedIn(
   context: Reading,
   document: Document,

@@ -71,11 +71,7 @@ export function eraseCommentAuthor(comment: CommentRecord): CommentRecord {
   };
 }
 
-/**
- * `visit` run on every post with a comment file, and the posts it threw on:
- * one file that does not parse costs its own post, not every post after it.
- */
-async function eachPost(
+async function eachReadablePost(
   contentDir: string,
   visit: (slug: string) => Promise<void> | void,
 ): Promise<string[]> {
@@ -98,7 +94,7 @@ export async function findPersonalData(
 ): Promise<PersonalDataReport> {
   const wanted = folded(email);
   let comments = 0;
-  const unreadable = await eachPost(stores.records.contentDir, (slug) => {
+  const unreadable = await eachReadablePost(stores.records.contentDir, (slug) => {
     comments += readComments(stores.records, slug).filter((comment) =>
       isTheirs(comment, wanted),
     ).length;
@@ -123,7 +119,7 @@ export async function erasePersonalData(
   if (wanted === '') return { comments: 0, messages: 0, optedOut: false, unreadable: [] };
 
   let comments = 0;
-  const unreadable = await eachPost(stores.records.contentDir, async (slug) => {
+  const unreadable = await eachReadablePost(stores.records.contentDir, async (slug) => {
     const changed = await rewriteComments(stores.records, slug, (comment) =>
       isTheirs(comment, wanted) ? eraseCommentAuthor(comment) : undefined,
     );

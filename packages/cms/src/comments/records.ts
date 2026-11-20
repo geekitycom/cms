@@ -149,8 +149,7 @@ export interface CommentRecords {
  * entry without an id or a name is left out, and every write puts it back as
  * it was. A file that does not parse throws, naming it: every writer reads
  * before it writes, and a file read as empty would be written back holding
- * only the new comment. The index rebuild skips such a post with a warning
- * rather than stopping the boot.
+ * only the new comment.
  */
 export function readComments(
   records: Pick<CommentRecords, 'contentDir' | 'dataDir'>,
@@ -188,18 +187,17 @@ function readPost(records: Pick<CommentRecords, 'contentDir' | 'dataDir'>, slug:
   };
 }
 
-/** One post's file as read: its comments, and what it holds that is not one. */
+export function isCarried(comment: { readonly via?: string | null | undefined }): boolean {
+  return comment.via !== undefined;
+}
+
 interface HeldPost {
   post: string;
   comments: CommentRecord[];
   uninterpreted: Uninterpreted;
 }
 
-/**
- * The entries of a comment file that are not a comment this version can read,
- * as the JSON they are, and the emails `data/` holds under their ids. Every
- * write puts them back, so the next comment on the post does not delete them.
- */
+/** Entries this version cannot read, and their emails, kept on every write. */
 interface Uninterpreted {
   entries: unknown[];
   contacts: ReadonlyMap<string, CommentContact>;
@@ -288,11 +286,6 @@ export function contactsJson(contacts: ReadonlyMap<string, CommentContact>): str
   return `${JSON.stringify({ comments: Object.fromEntries(contacts) }, null, 2)}\n`;
 }
 
-/**
- * One post's comment file as the post it names and the comments it holds. A
- * missing file holds none; one that is not JSON of that shape throws, naming
- * the file, so the next write cannot replace it with only the new comment.
- */
 function fileContents(file: string): {
   post: string;
   comments: CommentRecord[];

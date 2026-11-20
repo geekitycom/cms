@@ -908,6 +908,36 @@ describe('the spam checker seam', () => {
       [['https://them.example/one', 'spam']],
     );
   });
+
+  it('tells whoever a reply answers once, though it comes back changed and still approved', async () => {
+    const cms = await site({
+      commentChecker: {
+        check(): CommentVerdict {
+          return 'ham';
+        },
+      },
+    });
+    const approved: PostComment[] = [];
+    cms.notifications.replyApproved = (reply) => {
+      approved.push(reply);
+    };
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a><p class="e-content">Hi.</p>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+    assert.equal(stored(cms)[0]?.status, 'approved');
+
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a><p class="e-content">Bye.</p>`,
+      ),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms)[0]?.status, 'approved');
+    assert.equal(stored(cms)[0]?.content.html.includes('Bye.'), true);
+    assert.equal(approved.length, 1);
+  });
 });
 
 describe('a webmention on the page', () => {

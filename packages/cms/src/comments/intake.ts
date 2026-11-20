@@ -3,7 +3,7 @@ import { hashClientAddress } from '../forms/protection.ts';
 import { messageOf } from '../util/errors.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { webmentionKey } from '../content/guids.ts';
-import { addComment, deleteComment, updateComment } from './records.ts';
+import { addComment, deleteComment, isCarried, updateComment } from './records.ts';
 import type { CommentRecords } from './records.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import type { ChallengeVerdict } from '../forms/challenge.ts';
@@ -149,7 +149,7 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
 
   const held =
     origin === 'webmention' ? heldWebmention(records, comment.slug, comment.url) : undefined;
-  if (held !== undefined && comment.via !== undefined && held.via !== comment.via) {
+  if (held !== undefined && isCarried(comment) && held.via !== comment.via) {
     return { kind: 'stored', comment: held, created: false };
   }
 
@@ -161,11 +161,7 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
     return { kind: 'discarded', removed: true };
   }
 
-  // A reply's own page taking over the copy another page carried is new to
-  // the moderators, and so is an approved entry that now says something else:
-  // what was decided about the old words does not pass to the new ones.
-  const handedOver = held?.via !== undefined && comment.via === undefined;
-  const fresh = handedOver || (held?.status === 'approved' && saysSomethingElse(held, comment));
+  const fresh = held !== undefined && decisionLapses(held, comment);
   const status =
     options.challenge === 'fail'
       ? 'spam'
@@ -186,7 +182,7 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
       via: comment.via ?? null,
     });
     if (moved === undefined) return { kind: 'gone' };
-    if (fresh) announce(options.notices, moved);
+    if (fresh && moved.status === 'pending') announce(options.notices, moved);
     return { kind: 'stored', comment: moved, created: false };
   }
 
@@ -219,7 +215,11 @@ export function heldWebmention(
     .find((comment) => comment.source === 'webmention' && comment.url === source);
 }
 
-/** Whether a re-sent webmention changes what a reader of the post would see. */
+function decisionLapses(held: PostComment, comment: ProposedComment): boolean {
+  const handedOver = isCarried(held) && !isCarried(comment);
+  return handedOver || (held.status === 'approved' && saysSomethingElse(held, comment));
+}
+
 function saysSomethingElse(held: PostComment, comment: ProposedComment): boolean {
   return (
     held.kind !== comment.kind ||

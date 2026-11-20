@@ -126,7 +126,6 @@ export function erasedMessage(report: PersonalDataReport): string {
   return `${said}${optedOut}${unreadable === undefined ? '' : ` ${unreadable}`}`;
 }
 
-/** What to say about posts whose comment files could not be read, if there are any. */
 function unreadableMessage(slugs: readonly string[]): string | undefined {
   if (slugs.length === 0) return undefined;
   return (

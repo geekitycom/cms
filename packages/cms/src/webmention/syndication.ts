@@ -326,8 +326,7 @@ export function syndicationCopies(contentDir: string): SyndicationCopies {
   /**
    * Change the file under its lock, and write it only when something changed:
    * a resend that gets the same copy back must not churn a file that is in the
-   * site's git history. A file that does not parse is left alone, since
-   * rewriting it would keep only the new copy.
+   * site's git history.
    */
   function update(change: (all: Record<string, Record<string, string>>) => boolean): Promise<void> {
     return withFileLock(file, () => {
@@ -391,8 +390,7 @@ export function postSyndicatedAt(
 
 /**
  * The copies file's entries, each checked, since a person may edit it by hand.
- * An entry that is not a URL is dropped rather than failing a render; a file
- * that is not a JSON object answers why.
+ * An entry that is not a URL is dropped rather than failing a render.
  */
 function parseCopies(
   text: string,
