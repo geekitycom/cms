@@ -147,7 +147,7 @@ export async function handleUndo(context: SiteInboxContext, undo: Undo): Promise
     await withdrawUndone(context, undoer, undone);
   }
 
-  const object = await undo.getObject(dereference(context));
+  const object = await undo.getObject({ ...dereference(context), suppressError: true });
   const followed = object instanceof Follow ? followedUser(context, object) : undefined;
   await logActivity(context, undo, followed?.username);
 

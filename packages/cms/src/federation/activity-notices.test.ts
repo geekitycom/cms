@@ -17,6 +17,7 @@ import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { listUsers, setUserNotification, setUserNotificationMode } from '../site/users.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
+import { readAllQuoteAuthorizations } from './quotes.ts';
 
 const BASE_URL = 'https://blog.example';
 const NOW = new Date('2026-09-20T12:00:00.000Z');
@@ -27,6 +28,7 @@ const PERMALINK = '/2026/09/hello-world/';
 const POST_ID = `${BASE_URL}${PERMALINK}`;
 
 const REMOTE_ORIGIN = 'https://remote.example';
+const OTHER_ORIGIN = 'https://other.example';
 
 interface Peer {
   readonly id: string;
@@ -37,11 +39,11 @@ interface Peer {
 }
 
 const ADA: Peer = peer('ada', 'Ada Lovelace');
-const RELAY: Peer = peer('relay', 'A Relay');
+const RELAY: Peer = peer('relay', 'A Relay', OTHER_ORIGIN);
 
-function peer(username: string, name: string): Peer {
+function peer(username: string, name: string, origin = REMOTE_ORIGIN): Peer {
   return {
-    id: `${REMOTE_ORIGIN}/users/${username}`,
+    id: `${origin}/users/${username}`,
     username,
     name,
     keys: undefined as unknown as CryptoKeyPair,
@@ -97,9 +99,11 @@ function routeRemoteHost(): () => void {
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
-    if (url.origin !== REMOTE_ORIGIN) return await original(input, init);
+    if (url.origin !== REMOTE_ORIGIN && url.origin !== OTHER_ORIGIN) {
+      return await original(input, init);
+    }
     if (request.method === 'POST') return new Response('', { status: 202 });
-    const found = [ADA, RELAY].find((one) => new URL(one.id).pathname === url.pathname);
+    const found = [ADA, RELAY].find((one) => one.id === `${url.origin}${url.pathname}`);
     if (found === undefined) return new Response('Not found.', { status: 404 });
     return new Response(JSON.stringify(found.document), {
       headers: { 'content-type': 'application/activity+json' },
@@ -112,6 +116,7 @@ function routeRemoteHost(): () => void {
 
 interface Site {
   cms: Cms;
+  contentDir: string;
   provider: MemoryMailProvider;
   dataDir: string;
   userId: number;
@@ -145,7 +150,7 @@ async function site(): Promise<Site> {
   await cms.sync();
   const [user] = listUsers(dataDir);
   assert.ok(user !== undefined);
-  return { cms, provider, dataDir, userId: user.id };
+  return { cms, contentDir, provider, dataDir, userId: user.id };
 }
 
 async function choose(box: Site, event: string, mode: string): Promise<void> {
@@ -440,5 +445,68 @@ describe('new followers', () => {
 
     assert.equal(box.provider.sent.length, 0);
     assert.equal(await digest(box), undefined);
+  });
+});
+
+describe('an Undo that names its object by an id the site cannot fetch', () => {
+  function undoById(from: Peer, objectId: string): Record<string, unknown> {
+    return {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      id: `${from.id}/undos/1`,
+      type: 'Undo',
+      actor: from.id,
+      object: objectId,
+    };
+  }
+
+  function loggedUndos(box: Site): number {
+    return box.cms.admin.searchInboxActivities({ type: 'Undo' }, { limit: 10 }).items.length;
+  }
+
+  async function page(box: Site): Promise<string> {
+    const response = await box.cms.app.request(PERMALINK);
+    assert.equal(response.status, 200);
+    return await response.text();
+  }
+
+  it('is logged and takes a like off the page', async () => {
+    const box = await site();
+    const liked = new Like({
+      id: new URL(`${ADA.id}/likes/1`),
+      actor: new URL(ADA.id),
+      object: new URL(POST_ID),
+    });
+    await deliver(box, ADA, liked);
+    assert.match(await page(box), /Ada Lovelace/);
+
+    await deliver(box, ADA, undoById(ADA, `${ADA.id}/likes/1`));
+
+    assert.equal(loggedUndos(box), 1);
+    assert.doesNotMatch(await page(box), /Ada Lovelace/);
+  });
+
+  it('is logged and withdraws a quote approval', async () => {
+    const box = await site();
+    await deliver(box, ADA, quoteRequest());
+    assert.equal(readAllQuoteAuthorizations(box.contentDir).length, 1);
+
+    await deliver(box, ADA, undoById(ADA, REQUEST));
+
+    assert.equal(loggedUndos(box), 1);
+    assert.equal(readAllQuoteAuthorizations(box.contentDir).length, 0);
+  });
+
+  it('changes nothing when it comes from another server', async () => {
+    const box = await site();
+    const liked = new Like({
+      id: new URL(`${ADA.id}/likes/1`),
+      actor: new URL(ADA.id),
+      object: new URL(POST_ID),
+    });
+    await deliver(box, ADA, liked);
+
+    await deliver(box, RELAY, undoById(RELAY, `${ADA.id}/likes/1`));
+
+    assert.match(await page(box), /Ada Lovelace/);
   });
 });
