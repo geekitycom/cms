@@ -1,5 +1,67 @@
 # Changelog
 
+## [0.57.0](https://github.com/geekitycom/cms/compare/v0.56.1...v0.57.0) (2026-11-21)
+
+
+### Features
+
+* **cms:** read and edit your own profile over MCP ([41ae819](https://github.com/geekitycom/cms/commit/41ae8190d882cf57e6ed61a78e35abe745782876))
+* **cms:** refuse more special-purpose and operator-listed addresses before fetching ([f469630](https://github.com/geekitycom/cms/commit/f4696303896e488fa62722c05012a0f9e5fa7c48))
+
+
+### Bug Fixes
+
+* **cms:** answer a pingback that is kept unread with a generic fault ([0e3767e](https://github.com/geekitycom/cms/commit/0e3767e994eda8c906335d788281f3dbffd804ab))
+* **cms:** answer pingbacks with fault 0x0032 when the source cannot be read ([1dc2907](https://github.com/geekitycom/cms/commit/1dc2907c6d338fd32e71d9487727555de330ff58))
+* **cms:** answer pingbacks with fixed fault text and read sources only on default ports ([b429a22](https://github.com/geekitycom/cms/commit/b429a22bdfa3d0f557d11699e29c8fe2bf8fc29c))
+* **cms:** bound webmention checks, run them per host and answer pingbacks by a deadline ([f460f3e](https://github.com/geekitycom/cms/commit/f460f3e95de02b68758c8b2c62303c6a3f832075))
+* **cms:** check remote document hosts against the denied-address list ([1e2b5e5](https://github.com/geekitycom/cms/commit/1e2b5e5c59992f18a0d9fc28c1f805b6e833a3e1))
+* **cms:** collect microformat items in one pass and cap how many one page yields ([4c1bc95](https://github.com/geekitycom/cms/commit/4c1bc958017657dffcdf345bc52ca187c0286be6))
+* **cms:** count waiting webmention checks with the service's own reader ([4b1631f](https://github.com/geekitycom/cms/commit/4b1631f026c0e22541bb0edf2c6a620658ccafcf))
+* **cms:** credit an entry with no author only to a top-level h-card ([98c96f7](https://github.com/geekitycom/cms/commit/98c96f77b8eacdaf670d16739747843cb3014fe7))
+* **cms:** decode a webmention target's path before looking up the post ([ff5639a](https://github.com/geekitycom/cms/commit/ff5639a2226c32c31a9774aa12420475c47e9649))
+* **cms:** decode every fetched remote page by its declared character set ([1a3330c](https://github.com/geekitycom/cms/commit/1a3330ca721f0480923299f0938bcc4f67428e61))
+* **cms:** decode every named character reference in search text ([118ae07](https://github.com/geekitycom/cms/commit/118ae07992305a4ccb3f258350e81890437bdbdf))
+* **cms:** decode the full table of HTML named character references ([25707d5](https://github.com/geekitycom/cms/commit/25707d579c734f6d3f6ae662ad01ce41f7f67023))
+* **cms:** delete a held webmention only when its source answers 404 or 410 ([182585b](https://github.com/geekitycom/cms/commit/182585be5a78145b3270df908ce2fa14aa1612be))
+* **cms:** file pingbacks to a syndicated copy on the original post ([ffce9b8](https://github.com/geekitycom/cms/commit/ffce9b8ab732081574ddebaf505224dba4243ebb))
+* **cms:** follow redirects and own-site spellings and track every carrier of a reply ([cb03601](https://github.com/geekitycom/cms/commit/cb03601d69abae309b71f6ed8894e93b09936e65))
+* **cms:** hold a changed webmention for moderation when it is sent again ([486a383](https://github.com/geekitycom/cms/commit/486a3836fc1f0ac19494578ee6808cf91d8577eb))
+* **cms:** imply an item's url from an inner link only when it has no u- property ([dece390](https://github.com/geekitycom/cms/commit/dece390ca10ebbb6a7bf6509ad1189eba8fd92b3))
+* **cms:** keep a carried reply unless its own page sends the webmention ([bf58ef0](https://github.com/geekitycom/cms/commit/bf58ef03ea90837582008420be0fc64faa0202e8))
+* **cms:** keep a stored webmention when a re-send names another url of the same post ([47f15b7](https://github.com/geekitycom/cms/commit/47f15b7d37adaadafdfcb8e87397adb4c3af3844))
+* **cms:** keep a webmention when its source is cut off and decode the source by its charset ([5c9a9ae](https://github.com/geekitycom/cms/commit/5c9a9ae67683b142a84e17dd58a635b457fc0860))
+* **cms:** keep moderator decisions and unread entries, count waiting checks, fix mail headers ([7d7589a](https://github.com/geekitycom/cms/commit/7d7589aee7b819e46eae9c34842c58ddc0f9e6d7))
+* **cms:** keep only http and https author links on stored comments ([581257a](https://github.com/geekitycom/cms/commit/581257a838e0431286ad438fc4fe25049d5dc76c))
+* **cms:** keep only http and https links from remote actors and notes ([9f2cc99](https://github.com/geekitycom/cms/commit/9f2cc99abf70bab25eba7607b3a8fc4a26f5b663))
+* **cms:** keep sweeping past a damaged comment file and keep entries it cannot read ([9fcbbf0](https://github.com/geekitycom/cms/commit/9fcbbf0d5cb71b2422b22fb41ce53870d0e147eb))
+* **cms:** keep the comment sanitizer linear on closing tags and cap its nesting depth ([bfa3bb5](https://github.com/geekitycom/cms/commit/bfa3bb5acd357db24b586cb3e023a81b18379d9e))
+* **cms:** keep the html tree parser linear on closing tags and cap its nesting depth ([891ccd7](https://github.com/geekitycom/cms/commit/891ccd76b75f812998f36cd376a7d551874386fe))
+* **cms:** limit webmentions per address and send one moderator notice per source ([ba58523](https://github.com/geekitycom/cms/commit/ba5852396dff2e248eae3ede6b9aeadb32eced77))
+* **cms:** look up a syndicated copy from one read of the copies file ([bebfa28](https://github.com/geekitycom/cms/commit/bebfa28b17d82b3269483d194a6fc6ec7755cc06))
+* **cms:** look up entity, tag and microformat property names as own entries only ([042cb8e](https://github.com/geekitycom/cms/commit/042cb8e82aa5b099e61af70225d7c4de64d5ed4d))
+* **cms:** look up every earlier webmention when placing a carried reply ([094057d](https://github.com/geekitycom/cms/commit/094057d01283fbe7d8ed4cddfb4188cdda3f3b46))
+* **cms:** match non-HTML webmention sources on the whole target URL ([f8c2515](https://github.com/geekitycom/cms/commit/f8c2515045be038924dcca0e6cf357014a6684d2))
+* **cms:** read a few distinct in-reply-to values from a webmention source ([2fbbf6f](https://github.com/geekitycom/cms/commit/2fbbf6ff372da5301c2a6d824c9bbc3edea22b8a))
+* **cms:** read a json webmention source of any length without overflowing the stack ([97a805d](https://github.com/geekitycom/cms/commit/97a805d2e5a489dd8eab88e044cdf71f0eb747b7))
+* **cms:** read a u-author link as the author's url, not the name ([217f423](https://github.com/geekitycom/cms/commit/217f4231afd6493412d94d5b78089b4f2af54c79))
+* **cms:** read a webmention's kind against every url of the post ([583b7ed](https://github.com/geekitycom/cms/commit/583b7ed6f6938ffe29bf9fc89d473d35fb97e49f))
+* **cms:** read at most 16 KiB of a urlencoded webmention body ([e80f6c5](https://github.com/geekitycom/cms/commit/e80f6c512cc0cee5709961728a15f779cffb2fe4))
+* **cms:** read dt-published as a UTC instant between 1990 and a day from now ([f8b0b00](https://github.com/geekitycom/cms/commit/f8b0b0007785efdaf29fc83c3b89091de5f880b8))
+* **cms:** read each property class once and share element text across values ([9925949](https://github.com/geekitycom/cms/commit/9925949abfcf7d4d0d641022b427a2c35f982996))
+* **cms:** read the comment and contact forms through a bounded body reader ([a6b1eb8](https://github.com/geekitycom/cms/commit/a6b1eb89a9d5c53b497c1e81b05cc45de066248f))
+* **cms:** read well-formed pingback calls and parse each webmention source once ([96ed13e](https://github.com/geekitycom/cms/commit/96ed13e8613a8ee4609a1b77336d353f1eb7dcd3))
+* **cms:** record accepted webmentions before answering and check them from the record ([62c6f3b](https://github.com/geekitycom/cms/commit/62c6f3b029f9a5a1ec044c0822db4f846b4ced74))
+* **cms:** refuse a webmention source on the site's own origin ([012a5da](https://github.com/geekitycom/cms/commit/012a5da6496b5f132ae533dcc1e6fce38c92b2e0))
+* **cms:** refuse to write over a comment or email file that does not parse ([37778d3](https://github.com/geekitycom/cms/commit/37778d35e3a3a350479725bc8a4ac5bac5ef6968))
+* **cms:** refuse to write over a syndication copies file that does not parse ([ec38c3c](https://github.com/geekitycom/cms/commit/ec38c3cafa69e1e364db2243feac49aee1e8cc6e))
+* **cms:** resolve relative links in webmention e-content against the source ([dbac3a0](https://github.com/geekitycom/cms/commit/dbac3a013dec4881163e3305d2feeb281df126a6))
+* **cms:** take a webmention source without its fragment ([5c14132](https://github.com/geekitycom/cms/commit/5c141320a9087e56ac9fef2b8692bd32979eef80))
+* **cms:** tell a reply's author once when a re-sent webmention stays approved ([e0264e2](https://github.com/geekitycom/cms/commit/e0264e2b0bad899b445ae923b210ba2796609349))
+* **cms:** verify a source link to the target that carries a fragment ([fd19e26](https://github.com/geekitycom/cms/commit/fd19e26157f01a12bb9fc87cf38c055a59babb87))
+* **cms:** verify only links a reader can see ([1bcb7fc](https://github.com/geekitycom/cms/commit/1bcb7fce8e46082b5bbf4a8beef377ec3446c431))
+* **cms:** walk html trees iteratively and imply microformat properties from direct children ([c64a349](https://github.com/geekitycom/cms/commit/c64a349784f830c3720774eb3280f01806f2d661))
+
 ## [0.56.1](https://github.com/geekitycom/cms/compare/v0.56.0...v0.56.1) (2026-11-18)
 
 
