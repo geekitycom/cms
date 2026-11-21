@@ -71,15 +71,15 @@ function sha256(text: string): string {
 
 const BEFORE_RECORDINGS: Record<string, { etag: string; sha256: string }> = {
   '/feed/': {
-    etag: '"5d01db89136bbdc975a68de7ad42c9fe"',
+    etag: '"85531d1fe548549dcb130ac71103b904"',
     sha256: '2a4483cff3ec3391a5c2e930a1818afc7a685030c01512b40c33600e66420d96',
   },
   '/feed/atom/': {
-    etag: '"ce276412bda7eefad128e8b142c7102f"',
+    etag: '"16522c276724ad9152c4b2cf2ff13ff2"',
     sha256: '068155ec31baa8cc43d33a45254256144da2e997975dc841745e7e87df848b4f',
   },
   '/feed/json/': {
-    etag: '"60b5636affb1e6499d37d222a3c9749d"',
+    etag: '"3169022ecc4d8ed8aada5224ea14d5cc"',
     sha256: 'e7c8117a31ce46f35a0ccc60779e6840d5bb5c1a28c9082d4679568f09dc4683',
   },
 };
@@ -129,7 +129,7 @@ describe('a feed with no recording in it (TASK-213 AC #8)', () => {
   it('prints the bytes and the validator it printed before recordings existed', async () => {
     assert.equal(
       FEED_ITEM_REVISION,
-      15,
+      16,
       'a revision bump moves every ETag; refresh these fixtures',
     );
     const cms = await site(PLAIN);

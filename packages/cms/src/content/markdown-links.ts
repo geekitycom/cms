@@ -18,9 +18,25 @@ interface LinkAt {
   readonly href: string;
   readonly bare?: string | undefined;
   readonly wiki?: true;
+  readonly image?: true;
 }
 
-type LinkEnv = WikiLinkEnv & { found: LinkAt[] };
+/** Where raw HTML, a block or an inline tag, is written in the source. */
+interface HtmlAt {
+  readonly start: number;
+  readonly end: number;
+}
+
+type LinkEnv = WikiLinkEnv & { found: LinkAt[]; html: HtmlAt[] };
+
+export interface MarkdownLinkOptions {
+  /** Where a wiki link's page is, under the site root. */
+  readonly wikiBase?: string | undefined;
+  /** Rewrite each image's source too. */
+  readonly images?: boolean;
+  /** What each piece of raw HTML is replaced by. */
+  readonly html?: (html: string) => string;
+}
 
 /**
  * The same parse the site renders a body with (`html`, schemed linkify,
@@ -39,24 +55,33 @@ parser.core.ruler.disable(['inline', 'linkify', 'replacements', 'smartquotes', '
 /**
  * A Markdown body with every link destination `rewrite` answers for replaced
  * by its answer: inline links, autolinks, bare URLs and reference definitions.
- * Images, code, raw HTML and every link `rewrite` returns `undefined` for are
- * left as written. A wiki link, which no Markdown reader knows, always becomes
- * an inline link: to `rewrite`'s answer, or to its path under `wikiBase`.
+ * Code, every link `rewrite` returns `undefined` for, and images and raw HTML
+ * unless `options` asks for them, are left as written. A wiki link, which no
+ * Markdown reader knows, always becomes an inline link: to `rewrite`'s answer,
+ * or to its path under `wikiBase`.
  *
  * `rewrite` gets the href as the rendered page would carry it.
  */
 export function rewriteMarkdownLinks(
   body: string,
   rewrite: (href: string) => string | undefined,
-  wikiBase?: string,
+  { wikiBase, images = false, html }: MarkdownLinkOptions = {},
 ): string {
   const source = body.replace(/\r\n?/g, '\n');
   const edits: { start: number; end: number; text: string }[] = [];
+  const found = linksIn(source, wikiBase);
 
-  for (const link of linksIn(source, wikiBase)) {
+  if (html !== undefined) {
+    for (const { start, end } of found.html) {
+      edits.push({ start, end, text: html(source.slice(start, end)) });
+    }
+  }
+
+  for (const link of found.links) {
+    if (link.image && !images) continue;
     const target = rewrite(link.href) ?? (link.wiki ? link.href : undefined);
     if (target === undefined) continue;
-    const destination = /[\s()<>]/.test(target) ? `<${target}>` : target;
+    const destination = markdownDestination(target);
     const text =
       link.bare === undefined ? destination : `[${escapeLinkText(link.bare)}](${destination})`;
     edits.push({ start: link.start, end: link.end, text });
@@ -67,30 +92,43 @@ export function rewriteMarkdownLinks(
     .reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
 }
 
-function linksIn(source: string, wikiBase: string | undefined): LinkAt[] {
-  const env: LinkEnv = { found: [], wikiBase };
+function linksIn(
+  source: string,
+  wikiBase: string | undefined,
+): { links: LinkAt[]; html: HtmlAt[] } {
+  const env: LinkEnv = { found: [], html: [], wikiBase };
   const tokens = parser.parse(source, env);
-  const blockLinks = env.found;
   const lines = lineStarts(source);
-  const inline: LinkAt[] = [];
+  const links = env.found;
+  const html: HtmlAt[] = [];
   const cursors = new Map<number, number>();
 
   for (const token of tokens) {
-    if (token.type !== 'inline' || token.map === null) continue;
+    if (token.map === null) continue;
+    if (token.type === 'html_block') {
+      const start = lines[token.map[0]] ?? source.length;
+      const end = (lines[token.map[1]] ?? source.length + 1) - 1;
+      html.push({ start, end });
+      continue;
+    }
+    if (token.type !== 'inline') continue;
     const offsets = contentOffsets(source, lines, token.map[0], token.content, cursors);
     if (offsets === undefined) continue;
 
-    const found: LinkAt[] = [];
-    parser.inline.parse(token.content, parser, { found, wikiBase } satisfies LinkEnv, []);
-    for (const link of found) {
-      const start = toSource(offsets, link.start);
-      const end = toSource(offsets, link.end);
-      if (source.slice(start, end) !== token.content.slice(link.start, link.end)) continue;
-      inline.push({ ...link, start, end });
-    }
+    const inline: LinkEnv = { found: [], html: [], wikiBase };
+    parser.inline.parse(token.content, parser, inline, []);
+    const placed = <T extends HtmlAt>(at: T): T | undefined => {
+      const start = toSource(offsets, at.start);
+      const end = toSource(offsets, at.end);
+      return source.slice(start, end) === token.content.slice(at.start, at.end)
+        ? { ...at, start, end }
+        : undefined;
+    };
+    links.push(...inline.found.flatMap((link) => placed(link) ?? []));
+    html.push(...inline.html.flatMap((tag) => placed(tag) ?? []));
   }
 
-  return [...blockLinks, ...inline];
+  return { links, html };
 }
 
 function lineStarts(source: string): number[] {
@@ -155,6 +193,11 @@ function toSource(offsets: readonly { at: number; offset: number }[], position: 
   return line.offset + position - line.at;
 }
 
+/** A URL as a link destination, in angle brackets when it holds a space, a bracket or an angle. */
+export function markdownDestination(url: string): string {
+  return /[\s()<>]/.test(url) ? `<${url}>` : url;
+}
+
 export function escapeLinkText(text: string): string {
   return text.replace(/[\\[\]]/g, (character) => `\\${character}`);
 }
@@ -177,6 +220,36 @@ function recordLinks(md: MarkdownItInstance): void {
     if (parsed.ok && typeof href === 'string' && parsed.pos > pos) {
       record(state, { start: pos, end: parsed.pos, href });
     }
+    return true;
+  });
+
+  wrapInline(md, 'image', (state, silent, original) => {
+    const start = state.pos;
+    const labelEnd =
+      state.src.charCodeAt(start) === 0x21 && state.src.charCodeAt(start + 1) === 0x5b
+        ? md.helpers.parseLinkLabel(state, start + 1, false)
+        : -1;
+    const before = state.tokens.length;
+    if (!original(state, silent)) return false;
+    if (silent || labelEnd < 0 || state.src.charCodeAt(labelEnd + 1) !== 0x28) return true;
+
+    let pos = labelEnd + 2;
+    while (pos < state.posMax && /\s/.test(state.src[pos] ?? '')) pos += 1;
+    const parsed = md.helpers.parseLinkDestination(state.src, pos, state.posMax);
+    const src = state.tokens
+      .slice(before)
+      .find((token) => token.type === 'image')
+      ?.attrGet('src');
+    if (parsed.ok && typeof src === 'string' && parsed.pos > pos) {
+      record(state, { start: pos, end: parsed.pos, href: src, image: true });
+    }
+    return true;
+  });
+
+  wrapInline(md, 'html_inline', (state, silent, original) => {
+    const start = state.pos;
+    if (!original(state, silent)) return false;
+    if (!silent) (state.env as LinkEnv).html.push({ start, end: state.pos });
     return true;
   });
 

@@ -23,6 +23,7 @@ import { lastModifiedOf } from './negotiate.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import type { AnsweredFeed, ReplyContext } from '../webmention/reply-context.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
+import { feedMarkdown } from './feed-markdown.ts';
 
 /**
  * One post as a feed shows it, in one shape whatever format the feed is.
@@ -114,7 +115,10 @@ export interface FeedItem {
    * JSON Feed writes it as `image`; the XML formats have no such field.
    */
   image?: string | undefined;
-  /** The Markdown the body was written from, for `source:markdown`. */
+  /**
+   * What `source:markdown` prints: the same lead as {@link FeedItem.html} in
+   * Markdown, then the body it was written from, every URL absolute.
+   */
   markdown: string;
   /**
    * Where this item's comments are, and how many there are, or `undefined`
@@ -177,7 +181,9 @@ export interface FeedItem {
  * nothing was read from by its host and a cited image as one, and revision 12
  * kept the title of a titled post with no words,
  * and revision 13 escaped the RSS description as HTML text, and revision 14
- * pointed RSS `source:comments` at the direct replies' feed —
+ * pointed RSS `source:comments` at the direct replies' feed, and revision 16
+ * opened `source:markdown` with the post's citations, review and photos and
+ * made its URLs absolute —
  * would leave the validator where it was, and a reader polling with
  * `If-None-Match` would be handed a 304 that hides the new bytes.
  *
@@ -186,7 +192,7 @@ export interface FeedItem {
  * a comment is not a {@link FeedItem}, and their validator has a label of its
  * own in `commentsFeedResponse`.
  */
-export const FEED_ITEM_REVISION = 15;
+export const FEED_ITEM_REVISION = 16;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -247,7 +253,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
       reviewHtml(review, { library: context.altTexts, baseUrl }) +
       photosHtml(photos, context.altTexts ?? new Map(), baseUrl) +
       absoluteHtmlUrls(document.html, link, baseUrl),
-    markdown: document.body,
+    markdown: feedMarkdown(document, context, link),
     creator: author ?? siteAuthorName(context.users, context.site),
   };
 

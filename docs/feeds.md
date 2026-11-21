@@ -174,7 +174,7 @@ An item carries:
 - one `category` per term
 - `description`, holding the summary
 - `content:encoded`, holding the whole rendered post
-- `source:markdown`, holding the Markdown the post was written from
+- `source:markdown`, holding the post as Markdown
 - `source:inReplyTo`, holding the URL it answers, on a reply only
 
 The `guid`, the terms, and the summary are the ones described above.
@@ -201,8 +201,22 @@ status pages link no RSS feed, so a reply to a toot carries neither.
 
 `source:markdown` is from Dave Winer's [source namespace][source-ns]. A feed
 reader that understands Markdown should render from it, not from
-`content:encoded`. It is the same text the ActivityStreams `Article` carries as
-its `source`.
+`content:encoded`. It holds what `content:encoded` holds, in the same order:
+
+1. A line for each page the post answers or cites, as the page's own Markdown
+   prints it: the verb, the linked name, the author or site, and the date. An
+   RSVP's line says what its author will do, such as `Going to`.
+2. For a review, `Review of` the linked item with its kind, year, creator and
+   identifier, then its details, then `Rated 4 out of 5`.
+3. The post's photos as Markdown images with their alt text.
+4. The Markdown the post was written from.
+
+Every URL in it is absolute on the site's base URL, with the same rule as
+`content:encoded`: relative links, images, wiki links, reference definitions
+and the `src`, `href` and `srcset` in raw HTML. A link to a page of this site
+stays the page's HTML URL, because a feed reader opens it in a browser. A post
+with none of the lead parts carries its Markdown as written, apart from those
+URLs.
 
 Every item also says where its comments are:
 

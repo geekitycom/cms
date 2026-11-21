@@ -99,7 +99,11 @@ export function documentMarkdown(
     format,
     namedAuthor(documentFrontMatter({ ...document, permalink: url }), writer),
     chrome,
-    [rewriteMarkdownLinks(body, siteHrefFor(c, url, format), siteView(c).bases.wiki)],
+    [
+      rewriteMarkdownLinks(body, siteHrefFor(c, url, format), {
+        wikiBase: siteView(c).bases.wiki,
+      }),
+    ],
     {
       frontPage: url === '/' ? document : undefined,
       document,
@@ -169,7 +173,7 @@ export function listingMarkdown(
         : rewriteMarkdownLinks(
             normalizeBody(document.body),
             siteHrefFor(c, document.permalink, format),
-            siteView(c).bases.wiki,
+            { wikiBase: siteView(c).bases.wiki },
           ),
       entries.length === 0 ? '' : `## Posts\n\n${entryList(entries, linkUrl)}`,
       pager.length === 0 ? '' : `## More posts\n\n${linkList(pager, linkUrl)}`,

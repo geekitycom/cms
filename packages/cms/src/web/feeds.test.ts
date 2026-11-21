@@ -1074,9 +1074,18 @@ describe('a reply in the feeds', () => {
     assert.equal(body.includes('<thr:'), false);
     const line = `<p class="cite-line">In reply to <a href="${TARGET}">a page on ${new URL(TARGET).hostname}</a></p>`;
     const element = `<source:inReplyTo>${TARGET}</source:inReplyTo>`;
+    const markdownLine = `In reply to [a page on ${new URL(TARGET).hostname}](${TARGET})`;
     assert.ok(body.includes(line), 'the post’s HTML names its target (TASK-252)');
+    assert.ok(body.includes(markdownLine), 'and so does its Markdown');
     assert.equal(body.split(element).length - 1, 1, 'and source:inReplyTo names it once');
-    assert.equal(body.replaceAll(line, '').replaceAll(element, '').includes(TARGET), false);
+    assert.equal(
+      body
+        .replaceAll(line, '')
+        .replaceAll(markdownLine, '')
+        .replaceAll(element, '')
+        .includes(TARGET),
+      false,
+    );
   });
 
   it('names the feed the target is in, from its stored context (RSS.chat)', async () => {
