@@ -138,7 +138,7 @@ describe('a site whose homepage is a page', () => {
   it('names itself / in its Markdown and its JSON, as its HTML does (TASK-345)', async () => {
     const { cms } = await sharedSite({
       ...CONTENT,
-      '_data/site.json': siteJson({ homepage: 'welcome' }),
+      '_data/site.json': siteJson({ homepage: 'welcome', commentsOnPages: true }),
     });
 
     for (const request of [

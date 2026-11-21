@@ -16,7 +16,7 @@ const box = sandbox();
 after(() => box.cleanup());
 
 const FILES: Record<string, string> = {
-  '_data/site.json': JSON.stringify({ title: 'A Site' }),
+  '_data/site.json': JSON.stringify({ title: 'A Site', commentsCloseAfterDays: 0 }),
   'posts/2026-09-10-coffee.md': [
     '---',
     "date: '2026-09-10T09:00:00Z'",

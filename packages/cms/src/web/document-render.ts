@@ -96,6 +96,9 @@ function documentPageContext(
   const settings = requestSite();
   const either = options.neighbours?.(document) ?? {};
   const shared = options.location?.(document, settings);
+  const responses = responseContext(deps, document, settings, viewer, stamps);
+  const answerable =
+    responses['conversation'] !== undefined || responses['commentForm'] !== undefined;
 
   const drawn: Record<string, unknown> = {
     ...context,
@@ -109,9 +112,11 @@ function documentPageContext(
     page: { ...context.page, url },
     ...contexts.capsuleContext(url),
     ...(objectId === undefined ? {} : { activityStreams: objectId }),
-    ...(isServed(document, now) ? { commentsFeed: commentsFeedPath(document.permalink) } : {}),
+    ...(answerable && isServed(document, now)
+      ? { commentsFeed: commentsFeedPath(document.permalink) }
+      : {}),
     ...contexts.archiveContext(document),
-    ...responseContext(deps, document, settings, viewer, stamps),
+    ...responses,
     ...contexts.citedBy(document),
     ...syndicationContext(deps, document, settings),
     ...(shared === undefined ? {} : { location: locationContext(shared) }),
