@@ -1,0 +1,1 @@
+{% if comment.source == 'webmention' %}New webmention{% elif comment.source == 'activitypub' %}New reply{% else %}New comment{% endif %} published on “{{ post.title }}”

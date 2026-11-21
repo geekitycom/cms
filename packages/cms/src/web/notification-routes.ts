@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
 
+import { forgetDeletedReply } from '../federation/reply-review.ts';
 import { isModerationAction, moderateComment } from '../comments/moderate.ts';
 import type { ModerationAction } from '../comments/moderate.ts';
 import type { GeekityEnv } from './env.ts';
@@ -89,13 +90,15 @@ async function moderationLanding(c: Context<GeekityEnv>, act: boolean): Promise<
   // A good moment to sweep: this is the one handler that writes such a row.
   admin.pruneSpentTokens(config.now());
 
+  const records = { admin, contentDir: config.contentDir, dataDir: config.dataDir };
   const outcome = await moderateComment({
-    records: { admin, contentDir: config.contentDir, dataDir: config.dataDir },
+    records,
     id: claim.subject,
     action,
     checker: config.commentChecker,
     baseUrl: config.baseUrl,
   });
+  if (outcome.kind === 'deleted') await forgetDeletedReply(records, outcome.comment);
 
   if (outcome.kind === 'gone') return done(c, 'That comment is not here any more.');
   if (outcome.kind === 'unchanged') {

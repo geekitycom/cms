@@ -14,8 +14,6 @@ import {
   listUsers,
   setUserAdminTheme,
   setUserEmail,
-  setUserNotification,
-  setUserNotificationMode,
   setUserPassword,
   cleanProfile,
   setUserProfile,
@@ -25,12 +23,6 @@ import type { ProfileLink, User, UserProfile, UserRemovalRefusal } from '../site
 import type { FlashKind } from '../store/admin-store.ts';
 import { authorHref } from '../content/authors.ts';
 import { isLinkUrl, LINK_REL_RULE, LINK_URL_RULE, splitLinkRel } from '../site/navigation.ts';
-import {
-  DEFAULT_DELIVERY_MODE,
-  deliveryMode,
-  notificationEvent,
-  notificationSwitches,
-} from '../site/notification-preferences.ts';
 import { ACTOR_KEY_ALGORITHMS, actorKeyFile } from '../federation/keys.ts';
 import { revokeTokensForUser } from '../indieauth/tokens.ts';
 import { autosaveCopies } from '../autosave/index.ts';
@@ -45,6 +37,7 @@ import type { AdminRender } from './documents.ts';
 import { flashAndRedirect } from './flash.ts';
 import { appsDisconnectedPhrase } from './recovery.ts';
 import { editUserPath, USERS_PATH } from '../site/admin-paths.ts';
+import { NOTIFICATIONS_SETTINGS } from './settings-notifications.ts';
 import { toldFollowers } from './settings-page.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
@@ -71,10 +64,6 @@ export const USER_EMAIL_PATH = `${USERS_PATH}/email`;
 
 export const USER_PROFILE_PATH = `${USERS_PATH}/profile`;
 
-export const USER_NOTIFICATIONS_PATH = `${USERS_PATH}/notifications`;
-
-export const USER_NOTIFICATION_MODE_PATH = `${USER_NOTIFICATIONS_PATH}/mode`;
-
 export const USER_THEME_PATH = `${USERS_PATH}/theme`;
 
 const EMAIL_CHANGED_TEMPLATE = 'email-changed';
@@ -90,11 +79,6 @@ export const USER_FIELDS = {
   newPassword: 'new_password',
   newPasswordConfirmation: 'new_password_confirmation',
   userId: 'user_id',
-  event: 'event',
-  // A browser sends no field for an unticked box, so each event's switch is a
-  // form of its own.
-  on: 'on',
-  mode: 'mode',
   displayName: 'display_name',
   givenName: 'given_name',
   familyName: 'family_name',
@@ -122,8 +106,6 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
   app.post(CHANGE_PASSWORD_PATH, (c) => changePassword(c, options));
   app.post(USER_EMAIL_PATH, (c) => saveEmail(c, options));
   app.post(USER_PROFILE_PATH, (c) => saveProfile(c, render));
-  app.post(USER_NOTIFICATIONS_PATH, saveNotification);
-  app.post(USER_NOTIFICATION_MODE_PATH, saveNotificationMode);
   app.post(USER_THEME_PATH, saveTheme);
   app.post(DELETE_USER_PATH, removeUser);
   app.get(`${USERS_PATH}/:id`, (c) => showUser(c, render));
@@ -393,65 +375,6 @@ function typedProfile(body: Readonly<Record<string, unknown>>) {
   };
 }
 
-async function saveNotification(c: Context<GeekityEnv>): Promise<Response> {
-  const named = await namedUser(c);
-  if (named instanceof Response) return named;
-  const { dataDir, body, target } = named;
-
-  const name = stringOrEmpty(body[USER_FIELDS.event]);
-  const event = notificationEvent(name);
-  if (event === undefined) {
-    return backToUser(
-      c,
-      'error',
-      'That is not something this site can tell anybody about.',
-      target,
-    );
-  }
-
-  // An unticked checkbox submits no field at all, so its absence is the
-  // answer rather than a missing one.
-  const on = stringOrEmpty(body[USER_FIELDS.on]) !== '';
-  await setUserNotification({ dataDir, userId: target.id, event: name, on });
-
-  return backToUser(
-    c,
-    'notice',
-    on
-      ? `${target.username} will be emailed about ${event.label.toLowerCase()}.`
-      : `${target.username} will not be emailed about ${event.label.toLowerCase()}.`,
-    target,
-  );
-}
-
-async function saveNotificationMode(c: Context<GeekityEnv>): Promise<Response> {
-  const named = await namedUser(c);
-  if (named instanceof Response) return named;
-  const { dataDir, body, target } = named;
-
-  const name = stringOrEmpty(body[USER_FIELDS.event]);
-  const event = notificationEvent(name);
-  if (event === undefined || !event.batched) {
-    return backToUser(c, 'error', 'That is not a notice this site can batch up.', target);
-  }
-
-  const wanted = deliveryMode(stringOrEmpty(body[USER_FIELDS.mode]));
-  if (wanted === undefined)
-    return backToUser(c, 'error', 'That is not one of the choices.', target);
-
-  await setUserNotificationMode({ dataDir, userId: target.id, event: name, mode: wanted });
-
-  return backToUser(
-    c,
-    'notice',
-    wanted === DEFAULT_DELIVERY_MODE
-      ? `${target.username} will hear about ${event.label.toLowerCase()} as they arrive.`
-      : `${target.username} will get one ${wanted === 'daily' ? 'daily' : 'hourly'} digest of ` +
-          `${event.label.toLowerCase()}.`,
-    target,
-  );
-}
-
 async function saveTheme(c: Context<GeekityEnv>): Promise<Response> {
   const user = signedInUser(c);
   if (user === undefined) return c.redirect(USERS_PATH, 303);
@@ -671,8 +594,7 @@ function userScreen(
     changePasswordUrl: CHANGE_PASSWORD_PATH,
     deleteUserUrl: DELETE_USER_PATH,
     userEmailUrl: USER_EMAIL_PATH,
-    userNotificationsUrl: USER_NOTIFICATIONS_PATH,
-    userNotificationModeUrl: USER_NOTIFICATION_MODE_PATH,
+    notificationsUrl: NOTIFICATIONS_SETTINGS.path,
     connectedAppsUrl: CONNECTED_APPS_PATH,
     userThemeUrl: USER_THEME_PATH,
     themeChoices: themeChoices(user),
@@ -800,7 +722,6 @@ function row(
     emailHash: storedVersion(user.email),
     archiveUrl: authorHref(user.username),
     storedActorId: user.actorId ?? '',
-    notifications: notificationSwitches(user),
     createdAt: user.createdAt,
     you,
     deletable: !you && context.total > 1,

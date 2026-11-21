@@ -15,32 +15,52 @@ If no theme on the search path has the message's `.txt.njk`, sending fails
 with an error. A typo in a template name is reported, and no empty email goes
 out.
 
-The package ships seven messages:
+The package ships nine messages:
 
-| Name               | When it goes                                                          | What `data` carries                                                                                                                                                                                                                                        |
-| ------------------ | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `test`             | Send test email, on Settings.                                         | Nothing.                                                                                                                                                                                                                                                   |
-| `password-reset`   | A user asked to reset a password.                                     | `username`, `resetUrl`, `expiresAt`, `expiresInHours`.                                                                                                                                                                                                     |
-| `password-changed` | A reset link was used.                                                | `username`, `signedOut` (how many sessions ended), `appsDisconnected` (how many app connections were revoked).                                                                                                                                             |
-| `email-changed`    | An account's email address was changed. Sent to the previous address. | `username`, `email` (the new address, empty when it was removed).                                                                                                                                                                                          |
-| `comment-pending`  | A comment or webmention is waiting for approval.                      | `comment`, `post` (`title`, `url`), `actions` (one `{ action, label, url }` each for approve, spam and delete), `carried` (the waiting replies that the same webmention source carried, each a comment with its own `actions`; usually empty), `queueUrl`. |
-| `comment-digest`   | An hourly or daily digest of what is waiting.                         | `items` (one `{ comment, post, actions }` each), `total` waiting, `more` beyond the ones listed, the `mode` that asked for it, `queueUrl`.                                                                                                                 |
-| `comment-reply`    | A reply to a visitor's comment was approved.                          | `reply`, `comment` (the one it answers), `post`, `unsubscribeUrl`.                                                                                                                                                                                         |
-| `contact-message`  | A visitor sent a page's contact form.                                 | `message` (`id`, `subject`, `text`, `received`), `from` (`name`, `email`), `page` (`slug`, `permalink`, `title`, `url`), `messagesUrl`.                                                                                                                    |
+| Name                | When it goes                                                                              | What `data` carries                                                                                                                                                                                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test`              | Send test email, on Settings.                                                             | Nothing.                                                                                                                                                                                                                                                   |
+| `password-reset`    | A user asked to reset a password.                                                         | `username`, `resetUrl`, `expiresAt`, `expiresInHours`.                                                                                                                                                                                                     |
+| `password-changed`  | A reset link was used.                                                                    | `username`, `signedOut` (how many sessions ended), `appsDisconnected` (how many app connections were revoked).                                                                                                                                             |
+| `email-changed`     | An account's email address was changed. Sent to the previous address.                     | `username`, `email` (the new address, empty when it was removed).                                                                                                                                                                                          |
+| `comment-pending`   | A comment or webmention is waiting for approval.                                          | `comment`, `post` (`title`, `url`), `actions` (one `{ action, label, url }` each for approve, spam and delete), `carried` (the waiting replies that the same webmention source carried, each a comment with its own `actions`; usually empty), `queueUrl`. |
+| `comment-published` | A comment, webmention or fediverse reply went on a page without a moderator approving it. | `comment`, `post` (`title`, `url`), `link` (the comment on the page).                                                                                                                                                                                      |
+| `fediverse-notice`  | A like, boost, quote or new follower, for a user who takes that notice as it arrives.     | `event` (`reactions`, `quotes` or `followers`), `notice` (see below), `settingsUrl`.                                                                                                                                                                       |
+| `comment-digest`    | An hourly or daily digest of what is waiting and what happened.                           | `sections` (see below), `count` across them, the `mode` of the message (`hourly` when any part is hourly), `settingsUrl`. Also `items`, `total`, `more` and `queueUrl` of the waiting-for-review part, for themes written before `sections`.               |
+| `comment-reply`     | A reply to a visitor's comment was approved.                                              | `reply`, `comment` (the one it answers), `post`, `unsubscribeUrl`.                                                                                                                                                                                         |
+| `contact-message`   | A visitor sent a page's contact form.                                                     | `message` (`id`, `subject`, `text`, `received`), `from` (`name`, `email`), `page` (`slug`, `permalink`, `title`, `url`), `messagesUrl`.                                                                                                                    |
 
-### Digest items
+### Digest sections
 
-The `comment` in each of a digest's `items` has the same shape as in
-`comment-pending`. Its `actions` are the same three links. The CMS mints the
-links for each recipient, because each link stops working after its first
-use. The CMS builds a digest from the queue at send time. An item moderated
-before then is not in the digest. A recipient with an empty queue gets no
-digest.
+A digest has one entry in `sections` for each notice that had something in the
+user's window, in the order Settings > Notifications lists them. Each section
+has `event` (the notice's name), `label`, `mode`, `total`, `more` (how many are
+not listed) and `items`. The waiting-for-review section has `event` set to
+`comments` and `url` set to the moderation queue.
+
+Each item of the `comments` section is `{ comment, post, actions }`. The
+`comment` has the same shape as in `comment-pending`, and `actions` are the same
+three links. The CMS mints the links for each recipient, because each link
+stops working after its first use. The CMS builds this section from the queue at
+send time. An item moderated before then is not in the digest.
+
+Each item of any other section is `{ actor, action, post, text, url, at }`:
+`actor` is `{ name, url }`, `action` is the words after the name (`quoted`,
+`liked`), `post` is `{ title, url }` when there is one, `text` is
+plain text, `url` links to the thing itself, and `at` is when it was recorded.
+
+The `notice` of a `fediverse-notice` has the same shape, without `at`. Its
+`action` is `liked`, `boosted`, `quoted` or `followed`. For `followed`, `post`
+names the account that was followed: its handle as `title` and its actor URL
+as `url`. For `quoted`, `text` is what the quote says and `url` is the quote.
+
+A recipient with nothing in any section gets no digest.
 
 ### Comment fields
 
 `comment` and `reply` have the same shape: `author`, `website`, `source`
-(`comment` or `webmention`), `kind`, `text`, `html`, `submitted`, and `url`.
+(`comment`, `webmention` or `activitypub`), `kind`, `text`, `html`,
+`submitted`, and `url`.
 The commenter's email address is **not** in it. Why: the message goes to a
 moderator, but it also passes through a mail provider's servers, and the
 moderator does not need the address.

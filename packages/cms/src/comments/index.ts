@@ -58,6 +58,7 @@ export type {
   CommentOrigin,
   IntakeCommentOptions,
   ProposedComment,
+  PublishedComment,
 } from './intake.ts';
 export { migrateCommentEmails, migrateCommentKeys } from './migrations.ts';
 export type { CommentEmailMigrationReport, CommentKeyMigrationReport } from './migrations.ts';

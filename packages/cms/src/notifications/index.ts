@@ -1,10 +1,20 @@
 export {
   COMMENT_PENDING_TEMPLATE,
+  COMMENT_PUBLISHED_TEMPLATE,
   COMMENT_REPLY_TEMPLATE,
   COMMENTS_NOTIFICATION,
   createCommentNotifier,
+  PUBLISHED_NOTIFICATION,
 } from './comments.ts';
 export type { CommentNotifier, CreateCommentNotifierOptions } from './comments.ts';
+export {
+  createActivityNotices,
+  FEDIVERSE_NOTICE_TEMPLATE,
+  FOLLOWERS_NOTIFICATION,
+  QUOTES_NOTIFICATION,
+  REACTIONS_NOTIFICATION,
+} from './activity.ts';
+export type { ActivityNotices, CreateActivityNoticesOptions } from './activity.ts';
 export {
   COMMENT_DIGEST_TEMPLATE,
   createCommentDigest,
@@ -21,6 +31,16 @@ export type {
   DigestLogger,
   NotificationTimers,
 } from './digest.ts';
+export {
+  markNoticesSent,
+  NOTICE_RETENTION_MS,
+  noticeLogFile,
+  noticesFor,
+  readNoticeLog,
+  recordNotice,
+  withdrawNotice,
+} from './notice-log.ts';
+export type { LoggedNotice, NoticeItem } from './notice-log.ts';
 export {
   MODERATE_PATH,
   MODERATION_TOKEN_LIFETIME_SECONDS,

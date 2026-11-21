@@ -93,12 +93,12 @@ export async function authorizeQuote(
   username: string,
   asked: QuoteAsked,
   now: Date,
-): Promise<QuoteAuthorizationRecord> {
+): Promise<{ record: QuoteAuthorizationRecord; created: boolean }> {
   const file = quotesFile(contentDir, username);
   return await withFileLock(file, () => {
     const held = readQuoteAuthorizations(contentDir, username);
     const existing = held.find((entry) => entry.quote === asked.quote && entry.post === asked.post);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) return { record: existing, created: false };
 
     const stored: QuoteAuthorizationRecord = {
       id: randomUUID(),
@@ -106,7 +106,7 @@ export async function authorizeQuote(
       authorizedAt: now.toISOString(),
     };
     writeFileAtomicallySync(file, quotesJson([...held, stored]));
-    return stored;
+    return { record: stored, created: true };
   });
 }
 
@@ -118,15 +118,19 @@ export async function authorizeQuote(
 export async function revokeQuotes(
   contentDir: string,
   taken: (record: QuoteAuthorizationRecord) => boolean,
-): Promise<void> {
+): Promise<QuoteAuthorizationRecord[]> {
+  const revoked: QuoteAuthorizationRecord[] = [];
   for (const username of federatedUsernames(contentDir)) {
     const file = quotesFile(contentDir, username);
     await withFileLock(file, () => {
       const held = readQuoteAuthorizations(contentDir, username);
-      const kept = held.filter((record) => !taken(record));
-      if (kept.length !== held.length) writeFileAtomicallySync(file, quotesJson(kept));
+      const gone = held.filter(taken);
+      if (gone.length === 0) return;
+      writeFileAtomicallySync(file, quotesJson(held.filter((record) => !gone.includes(record))));
+      revoked.push(...gone);
     });
   }
+  return revoked;
 }
 
 /** One approval as the `QuoteAuthorization` a peer dereferences. */

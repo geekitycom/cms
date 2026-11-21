@@ -57,7 +57,8 @@ themes/default/
     password-changed.*.njk  the notice sent once a password has been set
     email-changed.*.njk     the notice sent to an address that was replaced
     comment-pending.*.njk   the moderation notice
-    comment-digest.*.njk    the hourly or daily digest of what is waiting
+    comment-published.*.njk the notice that something went public unmoderated
+    comment-digest.*.njk    the hourly or daily digest of every batched notice
     comment-reply.*.njk     the notice a commenter gets about a reply
     contact-message.*.njk   a message from a page's contact form
   src/

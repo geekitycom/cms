@@ -18,6 +18,7 @@
 
 {% block settingsProblems %}
   {{ field.problem('settings-comments-close', problems.comments_close_after_days) }}
+  {{ field.problem('settings-fediverse-replies', problems.fediverse_replies) }}
   {{ field.problem('settings-comment-email-retention', problems.comment_email_retention_days) }}
   {{ field.problem('settings-address-hash-retention', problems.address_hash_retention_days) }}
   {{ field.problem('settings-contact-message-retention', problems.contact_message_retention_days) }}
@@ -28,8 +29,8 @@
 
   {% set commentsHint %}
     Clear this and nothing shows a comment form and every submission is
-    refused. What was already said stays under its post or page. Fediverse replies keep arriving and keep being shown either way:
-    a remote server sends those, and nothing here can stop it.
+    refused. What was already said stays under its post or page. Fediverse replies keep arriving either way:
+    a remote server sends those, and the rule under Fediverse replies decides which of them show.
   {% endset %}
   {{ field.checkbox('settings-comments', fields.comments, 'Take comments on this site',
        checked=form.comments, hintHtml=commentsHint) }}
@@ -77,6 +78,25 @@
   {% endset %}
   {{ field.checkbox('settings-webmentions-receive', fields.webmentions_receive,
        'Accept webmentions sent here', checked=form.webmentions_receive, hintHtml=receiveHint) }}
+
+  <h2 class="mt-6 text-lg font-semibold">Fediverse replies</h2>
+
+  {% set fediverseHint %}
+    A reply that waits goes into the comment queue and sends the waiting for
+    review notice, with the same approve, spam and delete links as a comment.
+    Under the middle choice, an account whose reply was approved, or is
+    already on a page, has its later replies shown at once. The rule applies to replies that
+    arrive from now on: a reply already on a page stays there.
+  {% endset %}
+  {% call field.select('settings-fediverse-replies', fields.fediverse_replies, 'Show fediverse replies',
+       error=problems.fediverse_replies, hintHtml=fediverseHint) %}
+    {% for option in [
+         ['show', 'Show every reply at once'],
+         ['known', 'Show replies from followers and accounts already shown or approved; hold the rest'],
+         ['hold', 'Hold every reply for review']] %}
+      <option value="{{ option[0] }}"{% if option[0] == form.fediverse_replies %} selected{% endif %}>{{ option[1] }}</option>
+    {% endfor %}
+  {% endcall %}
 
   <h2 class="mt-6 text-lg font-semibold">Keeping personal data</h2>
 

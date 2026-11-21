@@ -25,6 +25,7 @@ import { isFederatedDocument } from '../content/served.ts';
 import type { FederationContextData } from './federation.ts';
 import { appendInboxActivity, removeInboxActivities } from './records.ts';
 import type { FederationRecords } from './records.ts';
+import type { ReplyReview } from './reply-review.ts';
 import { siteLoaders } from './site-loaders.ts';
 import { SITE } from '../site/namespace.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
@@ -241,6 +242,7 @@ export interface CreateReplyBackfillOptions {
   readonly config: Pick<ResolvedConfig, 'now' | 'contentDir' | 'dataDir'>;
   readonly settings: Pick<SettingsRegistry, 'values'>;
   readonly load: RepliesLoader;
+  readonly review?: Pick<ReplyReview, 'received'> | undefined;
   /** Told the author of every reply logged, so the thread can name them. */
   readonly heard?: ((actorId: string) => void) | undefined;
   /** Defaults to the real interval timer. */
@@ -335,10 +337,11 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
 
       for (const note of found.notes) {
         if (createsOf(note.id).length > 0 || heldComment(admin, note.id) !== undefined) continue;
-        await appendInboxActivity(records, createOf(note), {
+        const logged = await appendInboxActivity(records, createOf(note), {
           fetched: true,
           receivedAt: config.now().toISOString(),
         });
+        if (logged !== undefined) await options.review?.received(logged);
         options.heard?.(note.actorId);
         if (parent.depth < BACKFILL_DEPTH) queue.push({ id: note.id, depth: parent.depth + 1 });
       }

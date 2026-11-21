@@ -1,0 +1,22 @@
+{{ notice.actor.name }} {{ notice.action }}{{ ' “' + notice.post.title + '”' if notice.post else '' }}.
+
+{% if notice.actor.url %}
+Who: {{ notice.actor.url }}
+{% endif %}
+{% if notice.post %}
+Post: {{ notice.post.url }}
+{% endif %}
+{% if notice.url %}
+Link: {{ notice.url }}
+{% endif %}
+{% if notice.text %}
+
+{{ notice.text | trim }}
+{% endif %}
+
+--
+Change which of these you get, and how often, on {{ settingsUrl }}
+
+--
+{{ site.title }}
+{{ baseUrl }}

@@ -18,15 +18,25 @@ import {
   QuoteRequest,
   Reject,
   Undo,
+  Update,
 } from '@fedify/vocab';
 import type { Actor } from '@fedify/vocab';
 
-import type { NewFollower } from '../store/admin-store.ts';
+import type { InboxActivity, NewFollower } from '../store/admin-store.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import { listUsers, primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { actorId, senderKeyPairs, userByUsername } from './actor.ts';
+import {
+  noticeFollower,
+  noticeQuote,
+  noticeReaction,
+  withdrawQuotes,
+  withdrawUndone,
+} from './activity-notices.ts';
 import { articleObjectId, documentAuthor, postByObjectId } from './article.ts';
+import { postLabel } from '../content/post-type.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { isFederatedDocument } from '../content/served.ts';
 import type { FederationContextData } from './federation.ts';
 import { authorizeQuote, quoteAuthorization, revokeQuotes } from './quotes.ts';
@@ -64,7 +74,9 @@ export async function handleFollow(context: SiteInboxContext, follow: Follow): P
   const follower = await followerFrom(actor, dereference(context));
   if (follower === undefined) return;
 
+  const already = context.data.admin.getFollower(followed.username, follower.actorId);
   await addFollower(recordsOf(context), followed.username, follower);
+  if (already === undefined) await noticeFollower(context, follow.id.href, followed, follower);
 
   await reply(
     context,
@@ -127,10 +139,12 @@ export async function handleUndo(context: SiteInboxContext, undo: Undo): Promise
   const undoer = undo.actorId?.href;
   const undone = undo.objectId?.href;
   if (undoer !== undefined && undone !== undefined) {
-    await revokeQuotes(
+    const revoked = await revokeQuotes(
       context.data.config.contentDir,
       (record) => record.request === undone && record.actor === undoer,
     );
+    await withdrawQuotes(context, revoked);
+    await withdrawUndone(context, undoer, undone);
   }
 
   const object = await undo.getObject(dereference(context));
@@ -152,10 +166,10 @@ export async function handleUndo(context: SiteInboxContext, undo: Undo): Promise
 /**
  * Handle a `Delete`: an actor deleting itself stops being a follower.
  *
- * The only `Delete` acted on is the one whose object is its own actor, which
- * is how an instance announces that an account is gone. A `Delete` of a note
- * or an article is logged and left alone; the site holds no copy of a remote
- * object to remove.
+ * A `Delete` whose object is its own actor is how an instance announces that
+ * an account is gone. A `Delete` of a note is logged, which is what takes it
+ * off a page, and a note of the sender's that was waiting for review leaves
+ * the queue with it.
  */
 export async function handleDelete(context: SiteInboxContext, activity: Delete): Promise<void> {
   await logActivity(context, activity, context.recipient ?? undefined);
@@ -166,10 +180,12 @@ export async function handleDelete(context: SiteInboxContext, activity: Delete):
 
   if (actor.href !== object.href) {
     // A quote its author deleted is no longer one this site vouches for.
-    await revokeQuotes(
+    const revoked = await revokeQuotes(
       context.data.config.contentDir,
       (record) => record.quote === object.href && record.actor === actor.href,
     );
+    await withdrawQuotes(context, revoked);
+    await context.data.replies?.deleted(actor.href, object.href);
     return;
   }
 
@@ -281,7 +297,7 @@ export async function handleQuoteRequest(
     return;
   }
 
-  const record = await authorizeQuote(
+  const { record, created } = await authorizeQuote(
     config.contentDir,
     author.username,
     {
@@ -292,6 +308,13 @@ export async function handleQuoteRequest(
     },
     config.now(),
   );
+  if (created) {
+    const quoted = {
+      title: postLabel(post, context.data.cited),
+      url: absoluteUrl(post.permalink, config.baseUrl),
+    };
+    await noticeQuote(context, record, quoted, requester, request);
+  }
   const stamp = quoteAuthorization(context, author, record);
   await reply(
     context,
@@ -351,8 +374,25 @@ export async function handleLoggedActivity(
   context: SiteInboxContext,
   activity: Like | Announce | Create,
 ): Promise<void> {
-  await logActivity(context, activity);
+  const seen =
+    activity.id !== null &&
+    context.data.admin.searchInboxActivities({ activityId: activity.id.href }, { limit: 1 }).items
+      .length > 0;
+  const logged = await logActivity(context, activity);
+  if (logged !== undefined && !seen && !(activity instanceof Create)) {
+    await noticeReaction(context, activity);
+  }
   if (activity.actorId !== null) context.data.actorProfiles.capture(activity.actorId.href);
+  if (logged !== undefined && activity instanceof Create) {
+    await context.data.replies?.received(logged);
+  }
+}
+
+export async function handleUpdate(context: SiteInboxContext, update: Update): Promise<void> {
+  const actor = update.actorId;
+  if (actor === null || context.data.replies === undefined) return;
+  const json = await update.toJsonLd({ format: 'compact', contextLoader: context.contextLoader });
+  await context.data.replies.edited(actor.href, JSON.stringify(json));
 }
 
 /**
@@ -374,16 +414,16 @@ export async function logActivity(
   context: SiteInboxContext,
   activity: Activity,
   recipient: string | undefined = context.recipient ?? undefined,
-): Promise<void> {
+): Promise<InboxActivity | undefined> {
   const sender = activity.actorId;
-  if (sender === null) return;
+  if (sender === null) return undefined;
 
   const json = await activity.toJsonLd({
     format: 'compact',
     contextLoader: context.contextLoader,
   });
 
-  await appendInboxActivity(recordsOf(context), JSON.stringify(json), { recipient });
+  return await appendInboxActivity(recordsOf(context), JSON.stringify(json), { recipient });
 }
 
 /** The files this inbox writes, and the index over them. */
@@ -451,6 +491,7 @@ export const INBOX_LISTENERS: readonly InboxListener[] = [
   listener(Like, handleLoggedActivity),
   listener(Announce, handleLoggedActivity),
   listener(Create, handleLoggedActivity),
+  listener(Update, handleUpdate),
   listener(QuoteRequest, handleQuoteRequest),
 ];
 

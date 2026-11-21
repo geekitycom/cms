@@ -305,6 +305,12 @@ export const NOTIFICATION_DIGESTS = declareDataFile({
   lost: 'When each user last had a digest, so one digest may come a window early.',
 });
 
+export const NOTIFICATION_LOG = declareDataFile({
+  pattern: 'notification-log.json',
+  dataClass: PENDING,
+  lost: 'Likes, quotes, followers and the like not yet carried by an hourly or daily digest, which are then never sent.',
+});
+
 export const FOLLOWING_LIST = declareDataFile({
   pattern: 'following.json',
   dataClass: REBUILDABLE,
@@ -399,6 +405,7 @@ export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   INDIEAUTH_ACTIVITY,
   MCP_ACTIVITY,
   NOTIFICATION_DIGESTS,
+  NOTIFICATION_LOG,
   FOLLOWING_LIST,
   MICROPUB_MEDIA,
   DATABASE,

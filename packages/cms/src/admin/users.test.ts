@@ -4,11 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { after, describe, it } from 'node:test';
 
-import {
-  NOTIFICATION_EVENTS,
-  notificationMode,
-  notificationWanted,
-} from '../site/notification-preferences.ts';
+import { notificationMode, notificationWanted } from '../site/notification-preferences.ts';
 import { settingsOver } from '../__testing__/settings.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
@@ -307,7 +303,7 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     assert.match(html, /about them, in Markdown: \[words\]\(url\) makes a link/);
   });
 
-  it('holds the account, the profile and what this person is emailed about', async () => {
+  it('holds the account and the profile', async () => {
     const cms = await siteSendingMail();
     const agent = await signedIn(cms);
     const ada = idOf(cms.config.dataDir, 'ada');
@@ -326,11 +322,6 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
 
     assert.match(html, /<h2\b[^>]*>Account<\/h2>/);
     assert.match(html, /<h2\b[^>]*>Profile<\/h2>/);
-    assert.match(
-      html,
-      /<h2\b[^>]*>Email ada about<\/h2>/,
-      'the notices are headed with whose they are',
-    );
 
     // The username is shown, not offered as a box: it is the author URL, the
     // login and the actor, and nothing here may change it.
@@ -348,45 +339,44 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     ]) {
       assert.match(html, new RegExp(`<label[^>]*>${label}`), `${label} is a visible label`);
     }
-
-    const [notice] = NOTIFICATION_EVENTS;
-    assert.ok(notice !== undefined);
-    assert.match(html, new RegExp(notice.label), 'the notices are on this screen');
-    assert.match(html, new RegExp(notice.description.slice(0, 40)), 'with what each one sends');
-    assert.match(html, /<label[^>]*>How often/, 'and a labelled select for a batched one');
   });
 
-  it('offers no notice switches until there is an address to send to', async () => {
+  it('carries no notice switches, and points the signed-in user at Settings > Notifications', async () => {
     const cms = await siteSendingMail();
     const agent = await signedIn(cms);
     const ada = idOf(cms.config.dataDir, 'ada');
+    addUser({ dataDir: cms.config.dataDir, username: 'grace', password: 'a password of hers' });
 
-    const { html } = await editScreen(agent, ada);
-    const [notice] = NOTIFICATION_EVENTS;
-    assert.ok(notice !== undefined);
+    const { html } = await withEmail(agent, ada, 'ada@example.com');
+    assert.doesNotMatch(html, /name="event"/, 'no switch');
+    assert.doesNotMatch(html, /name="mode"/, 'and no how-often');
+    assert.doesNotMatch(html, /action="\/admin\/users\/notifications/);
+    assert.match(html, /href="\/admin\/settings\/notifications"/);
 
-    assert.match(html, /<h2\b[^>]*>Email ada about<\/h2>/, 'the panel still says what it is for');
-    assert.doesNotMatch(html, /name="event"/, 'a switch is offered with nowhere to write to');
-    assert.match(html, /Nothing, while the box above is empty/, 'and nothing says why');
-
-    const after = (await withEmail(agent, ada, 'ada@example.com')).html;
-    assert.match(after, new RegExp(notice.label), 'the switches come back with the address');
-    assert.match(after, /<code>ada@example\.com<\/code>/, 'named with where they are sent');
+    const other = (await editScreen(agent, idOf(cms.config.dataDir, 'grace'))).html;
+    assert.doesNotMatch(other, /href="\/admin\/settings\/notifications"/, 'not on somebody else’s');
   });
 
-  it('offers none either while the site has no way of sending mail', async () => {
+  it('no longer takes a notice switch posted to it', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
     const ada = idOf(cms.config.dataDir, 'ada');
+    const { token } = await editScreen(agent, ada);
 
-    // An address, and still nothing to send with: the switches would decide
-    // what goes out of a site that cannot put anything out at all.
-    const { html } = await withEmail(agent, ada, 'ada@example.com');
-
-    assert.match(html, /<h2\b[^>]*>Email ada about<\/h2>/, 'the panel still says what it is for');
-    assert.doesNotMatch(html, /name="event"/, 'a switch is offered with nothing to send with');
-    assert.match(html, /no mail provider/, 'and nothing says which piece is missing');
-    assert.match(html, /href="\/admin\/settings\/email"/, 'or where to go and fix it');
+    for (const url of ['/admin/users/notifications', '/admin/users/notifications/mode']) {
+      const response = await agent.post(url, {
+        csrf_token: token,
+        user_id: String(ada),
+        event: 'comments',
+        mode: 'daily',
+      });
+      assert.equal(response.status, 404, url);
+    }
+    assert.equal(notificationWanted(findUserById(cms.config.dataDir, ada), 'comments'), true);
+    assert.equal(
+      notificationMode(findUserById(cms.config.dataDir, ada), 'comments'),
+      'immediately',
+    );
   });
 
   it('shows what is already stored, in the boxes that hold it', async () => {
@@ -481,44 +471,6 @@ describe('saving from the edit user screen (TASK-97 AC #3)', () => {
     const { html } = await editScreen(agent, ada);
     assert.match(html, /Saved ada’s profile\./);
     assert.match(html, /value="Ada Lovelace"/);
-  });
-
-  it('puts a notice switch and a how-often back on that page', async () => {
-    const cms = await siteSendingMail();
-    const agent = await signedIn(cms);
-    const ada = idOf(cms.config.dataDir, 'ada');
-    const { token } = await withEmail(agent, ada);
-
-    const off = await agent.post('/admin/users/notifications', {
-      csrf_token: token,
-      user_id: String(ada),
-      event: 'comments',
-    });
-
-    assert.equal(off.status, 303);
-    assert.equal(off.headers.get('location'), `/admin/users/${String(ada)}`);
-
-    const after = await editScreen(agent, ada);
-    assert.match(after.html, /will not be emailed about new comments\./);
-    assert.match(
-      after.html,
-      /<button type="submit"[^>]*>Turn on<\/button>/,
-      'the switch shows as off',
-    );
-
-    const daily = await agent.post('/admin/users/notifications/mode', {
-      csrf_token: token,
-      user_id: String(ada),
-      event: 'comments',
-      mode: 'daily',
-    });
-
-    assert.equal(daily.status, 303);
-    assert.equal(daily.headers.get('location'), `/admin/users/${String(ada)}`);
-
-    const { html } = await editScreen(agent, ada);
-    assert.match(html, /one daily digest of new comments/);
-    assert.match(html, /<option value="daily" selected>/, 'and the select holds the choice');
   });
 
   it('lands on the list when the user the form named is already gone', async () => {
@@ -983,144 +935,6 @@ describe('a stored actor id (TASK-69 AC #5)', () => {
     const other = await signedIn(plain);
     const { html } = await editScreen(other, idOf(plain.config.dataDir, FIRST_ADMIN.username));
     assert.doesNotMatch(html, /the fediverse knows/i);
-  });
-});
-
-describe('notification preferences (AC #3)', () => {
-  it('offers a switch for every event the registry knows', async () => {
-    const cms = await siteSendingMail();
-    const agent = await signedIn(cms);
-
-    const { html } = await withEmail(agent, idOf(cms.config.dataDir, 'ada'));
-
-    for (const event of NOTIFICATION_EVENTS) {
-      assert.match(html, new RegExp(`value="${event.name}"`), `${event.name} has a switch`);
-      assert.match(html, new RegExp(event.label));
-    }
-  });
-
-  it('is on until somebody turns it off, and stays off', async () => {
-    const cms = await box.site();
-    const agent = await signedIn(cms);
-    const ada = findUser(cms.config.dataDir, 'ada');
-    assert.ok(ada !== undefined);
-    const { token } = await usersScreen(agent);
-
-    assert.equal(notificationWanted(findUserById(cms.config.dataDir, ada.id), 'comments'), true);
-
-    const off = await agent.post('/admin/users/notifications', {
-      csrf_token: token,
-      user_id: String(ada.id),
-      event: 'comments',
-    });
-
-    assert.equal(off.status, 303);
-    assert.equal(notificationWanted(findUserById(cms.config.dataDir, ada.id), 'comments'), false);
-
-    await agent.post('/admin/users/notifications', {
-      csrf_token: token,
-      user_id: String(ada.id),
-      event: 'comments',
-      on: '1',
-    });
-    assert.equal(notificationWanted(findUserById(cms.config.dataDir, ada.id), 'comments'), true);
-  });
-
-  it('ignores an event nothing in this version has ever heard of', async () => {
-    const cms = await box.site();
-    const agent = await signedIn(cms);
-    const ada = findUser(cms.config.dataDir, 'ada');
-    assert.ok(ada !== undefined);
-    const { token } = await usersScreen(agent);
-
-    const response = await agent.post('/admin/users/notifications', {
-      csrf_token: token,
-      user_id: String(ada.id),
-      event: 'a-future-event',
-    });
-
-    assert.equal(response.status, 303);
-    assert.deepEqual(findUserById(cms.config.dataDir, ada.id)?.notifications, undefined);
-  });
-});
-
-describe('how often a notice arrives (AC #1)', () => {
-  it('offers immediately, hourly and daily for an event that can be batched', async () => {
-    const cms = await siteSendingMail();
-    const agent = await signedIn(cms);
-
-    const { html } = await withEmail(agent, idOf(cms.config.dataDir, 'ada'));
-
-    for (const event of NOTIFICATION_EVENTS.filter((candidate) => candidate.batched)) {
-      assert.match(html, new RegExp(`value="${event.name}"`), `${event.name} has a mode form`);
-    }
-    for (const mode of ['immediately', 'hourly', 'daily']) {
-      assert.match(html, new RegExp(`value="${mode}"`), `${mode} is offered`);
-    }
-  });
-
-  it('is immediate until somebody chooses otherwise, and stores only the difference', async () => {
-    const cms = await box.site();
-    const agent = await signedIn(cms);
-    const ada = findUser(cms.config.dataDir, 'ada');
-    assert.ok(ada !== undefined);
-    const { token } = await usersScreen(agent);
-
-    assert.equal(
-      notificationMode(findUserById(cms.config.dataDir, ada.id), 'comments'),
-      'immediately',
-    );
-
-    const daily = await agent.post('/admin/users/notifications/mode', {
-      csrf_token: token,
-      user_id: String(ada.id),
-      event: 'comments',
-      mode: 'daily',
-    });
-
-    assert.equal(daily.status, 303);
-    assert.equal(notificationMode(findUserById(cms.config.dataDir, ada.id), 'comments'), 'daily');
-    assert.deepEqual(findUserById(cms.config.dataDir, ada.id)?.notificationModes, {
-      comments: 'daily',
-    });
-
-    await agent.post('/admin/users/notifications/mode', {
-      csrf_token: token,
-      user_id: String(ada.id),
-      event: 'comments',
-      mode: 'immediately',
-    });
-
-    assert.equal(
-      notificationMode(findUserById(cms.config.dataDir, ada.id), 'comments'),
-      'immediately',
-    );
-    assert.deepEqual(
-      findUserById(cms.config.dataDir, ada.id)?.notificationModes,
-      undefined,
-      'the default is not written down',
-    );
-  });
-
-  it('reads a mode this version has never heard of as immediately, and drops it', async () => {
-    const cms = await box.site();
-    const agent = await signedIn(cms);
-    const ada = findUser(cms.config.dataDir, 'ada');
-    assert.ok(ada !== undefined);
-    const { token } = await usersScreen(agent);
-
-    await agent.post('/admin/users/notifications/mode', {
-      csrf_token: token,
-      user_id: String(ada.id),
-      event: 'comments',
-      mode: 'every-third-tuesday',
-    });
-
-    assert.equal(
-      notificationMode(findUserById(cms.config.dataDir, ada.id), 'comments'),
-      'immediately',
-    );
-    assert.deepEqual(findUserById(cms.config.dataDir, ada.id)?.notificationModes, undefined);
   });
 });
 
@@ -1929,8 +1743,6 @@ describe('a form naming a user who is already gone', () => {
   const forms: { path: string; fields: Record<string, string> }[] = [
     { path: '/admin/users/email', fields: { email: 'nobody@example.com' } },
     { path: '/admin/users/profile', fields: { display_name: 'Nobody' } },
-    { path: '/admin/users/notifications', fields: { event: 'comments', on: 'on' } },
-    { path: '/admin/users/notifications/mode', fields: { event: 'comments', mode: 'daily' } },
   ];
 
   for (const { path, fields } of forms) {

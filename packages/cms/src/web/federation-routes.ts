@@ -333,7 +333,8 @@ export function federationContextData(
     | 'actorProfiles'
     | 'siteAtRequestStart'
     | 'replyContexts'
-  >,
+  > &
+    Partial<Pick<GeekityEnv['Variables'], 'replyReview' | 'activityNotices'>>,
 ): FederationContextData {
   return {
     admin: vars.admin,
@@ -343,5 +344,7 @@ export function federationContextData(
     actorProfiles: vars.actorProfiles,
     site: vars.siteAtRequestStart,
     cited: (url) => vars.replyContexts.read(url, vars.siteAtRequestStart),
+    replies: vars.replyReview,
+    notices: vars.activityNotices,
   };
 }

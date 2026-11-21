@@ -272,6 +272,9 @@ export async function verifyWebmention(
         replyApproved: (reply) => {
           told.replyApproved(reply);
         },
+        published: (comment) => {
+          told.published(comment);
+        },
       },
     });
   } finally {

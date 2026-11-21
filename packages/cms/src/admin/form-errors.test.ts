@@ -150,6 +150,7 @@ function syndicationRefused(key: string): Record<string, unknown> {
  */
 const NEVER_REFUSED: ReadonlySet<string> = new Set([
   'pages/comments/all.njk',
+  'pages/settings/notifications.njk',
   'pages/indieauth/consent.njk',
   'pages/documents/conflict.njk',
 ]);

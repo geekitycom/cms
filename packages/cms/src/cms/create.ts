@@ -199,8 +199,8 @@ export interface Cms {
    */
   readonly notifications: CommentNotifier;
   /**
-   * The batched half of the same notice: what writes to a user who
-   * chose an hourly or a daily digest instead of a message per comment.
+   * The batched half of every notice: what writes to a user who chose an
+   * hourly or a daily digest instead of a message per thing.
    *
    * It is started by {@link Cms.serve} and stopped by {@link Cms.close}; a
    * site reaches for it to send what is due without waiting for the tick,

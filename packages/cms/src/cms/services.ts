@@ -18,6 +18,10 @@ import { followAllMovedComments, followMovedComments } from '../comments/index.t
 import { createReplyNotices } from '../comments/reply-notices.ts';
 import { createContentSync, createScheduler } from '../content/index.ts';
 import type { ContentEventListener, ContentSync, Scheduler } from '../content/index.ts';
+import { createReplyReview } from '../federation/reply-review.ts';
+import type { ReplyReview } from '../federation/reply-review.ts';
+import { createActivityNotices } from '../notifications/activity.ts';
+import type { ActivityNotices } from '../notifications/activity.ts';
 import { createReplyBackfill, signedRepliesLoader } from '../federation/backfill.ts';
 import type { ReplyBackfill } from '../federation/backfill.ts';
 import type { ConversationSite } from '../comments/conversation.ts';
@@ -129,6 +133,8 @@ export interface Services {
   readonly avatars: AvatarService;
   readonly fonts: FontStore;
   readonly actorProfiles: ActorProfileService;
+  readonly replyReview: ReplyReview;
+  readonly activityNotices: ActivityNotices;
   readonly replyBackfill: ReplyBackfill;
   readonly retention: RetentionService;
   readonly notifier: FeedNotifier;
@@ -343,7 +349,28 @@ export function createServices({
     load: signedProfileLoader(() => federationContext()),
   });
 
-  const federated = { ...site, actorProfiles, cited: citedWith };
+  // Who hears about a comment. It reads the users file and the mail
+  // settings per message rather than at boot, so an address added on the users
+  // screen is written to by the very next comment.
+  const notifications = createCommentNotifier({ ...site, mail, cited });
+
+  const replyReview = createReplyReview({
+    admin,
+    config: resolved,
+    settings,
+    conversation,
+    notices: notifications,
+  });
+
+  const activityNotices = createActivityNotices({ mail, config: resolved });
+
+  const federated = {
+    ...site,
+    actorProfiles,
+    cited: citedWith,
+    replies: replyReview,
+    notices: activityNotices,
+  };
   const federationData = async () => {
     const settled = await settings.values(SITE);
     return { ...federated, site: settled, cited: citedWith(settled) };
@@ -357,6 +384,7 @@ export function createServices({
     ...site,
     conversation,
     load: signedRepliesLoader(federationContext),
+    review: replyReview,
     heard: (actorId) => {
       actorProfiles.capture(actorId);
     },
@@ -370,22 +398,18 @@ export function createServices({
     citedPagesRead: (document) => replyContexts.whenRead(document),
   });
 
-  // Who hears about a comment. It reads the users file and the mail
-  // settings per message rather than at boot, so an address added on the users
-  // screen is written to by the very next comment.
-  const notifications = createCommentNotifier({ ...site, mail, cited });
-
   const replyNotices = createReplyNotices({
     ...site,
     conversation,
     notices: notifications,
   });
 
-  // And the other half of it: a user who asked for an hourly or a
-  // daily digest hears nothing above and one message per window from here,
-  // listing whatever is still pending when their window comes up. It reads the
-  // users file and the record of what it has sent per run, for the same
-  // reason: a mode chosen on the users screen takes effect at the next tick.
+  // A user who asked for an hourly or a daily digest hears nothing from the
+  // notifiers and one message per window from here,
+  // listing whatever is still pending when their window comes up and whatever
+  // else they batch that happened since. It reads the users file, the notice
+  // log and the record of what it has sent per run, for the same reason: a
+  // mode chosen on Settings > Notifications takes effect at the next tick.
   const digests = createCommentDigest({ ...site, mail, cited });
 
   // And so does the webmention sender: telling the pages a post links to is
@@ -653,6 +677,8 @@ export function createServices({
     avatars,
     fonts,
     actorProfiles,
+    replyReview,
+    activityNotices,
     replyBackfill,
     retention,
     notifier,

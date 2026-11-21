@@ -23,8 +23,9 @@ export const COMMENT_SOURCES = ['comment', 'webmention', 'activitypub'] as const
  * `comment` is the form under the post. `webmention` is another site's post
  * pointing at this one, which lands in the same file with the same
  * shape and is told apart only by this. `activitypub` is a fediverse reply or
- * reaction a site received before it ran Geekity, brought across by an import:
- * one this site receives itself is logged in the inbox instead.
+ * reaction a site received before it ran Geekity, brought across by an import,
+ * or a fediverse reply this site received and held for review. Every other
+ * one this site receives is logged in the inbox only.
  */
 export type CommentSource = (typeof COMMENT_SOURCES)[number];
 
@@ -188,7 +189,8 @@ export interface CommentRecord {
   migrated?: true;
   /**
    * The name it has where it was first published, for a migrated comment
-   * that has one: a fediverse note or activity id, or a webmention's source.
+   * that has one or a fediverse reply held for review: a fediverse note or
+   * activity id, or a webmention's source.
    * What the feeds call it when a native reply answers it, and what a later
    * delivery of the same thing is recognised by. Absent for every other comment.
    */
@@ -202,7 +204,7 @@ export interface CommentRecord {
   user?: string;
   /**
    * The fediverse actor who wrote it, by id, for a migrated fediverse comment
-   * whose actor the export named. What tells their like here from
+   * whose actor the export named or a fediverse reply held for review. What tells their like here from
    * the same person's like delivered since, whatever profile page each names.
    * Absent for every other comment.
    */
@@ -331,6 +333,7 @@ export interface CommentStore {
    * match, so a stranger typing a regular's name is still held.
    */
   hasApprovedAuthor(name: string, email: string | null): boolean;
+  hasApprovedActor(actorId: string): boolean;
   /** Store a comment, replacing whatever was known about that id. */
   putComment(comment: PostComment): PostComment;
   /** Forget a comment. Returns `false` when there was nothing to forget. */
@@ -374,6 +377,11 @@ export function openCommentStore(
       SELECT 1 FROM comments
       WHERE status = 'approved' AND author_name = ? AND author_email IS ?
         AND NOT EXISTS (SELECT 1 FROM json_each(comments.redacted) WHERE value = 'email')
+      LIMIT 1
+    `),
+    hasApprovedActor: db.prepare(`
+      SELECT 1 FROM comments
+      WHERE status = 'approved' AND kind = 'reply' AND actor = ?
       LIMIT 1
     `),
     putComment: db.prepare(`
@@ -468,6 +476,10 @@ export function openCommentStore(
       // `IS` rather than `=`, so an author who gave no email is matched by the
       // rows that gave none either instead of matching nothing.
       return statements.hasApprovedAuthor.get(name, email) !== undefined;
+    },
+
+    hasApprovedActor(actorId) {
+      return statements.hasApprovedActor.get(actorId) !== undefined;
     },
 
     putComment(comment) {

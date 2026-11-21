@@ -89,6 +89,29 @@ describe('the Discussion settings page', () => {
     assert.doesNotMatch(form, /<input[^>]*name="comments_on_pages"[^>]*checked/);
   });
 
+  it('offers the three fediverse reply rules, the middle one by default, and saves one', async () => {
+    const contentDir = await box.dir('geekity-settings-fediverse-replies-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const form = await (await agent.get(settingsPageUrl('discussion'))).text();
+    assert.match(form, /<option value="show">Show every reply at once</);
+    assert.match(form, /<option value="known" selected>Show replies from followers/);
+    assert.match(form, /<option value="hold">Hold every reply for review</);
+
+    const saved = await saveSettings(agent, 'discussion', { fediverse_replies: 'hold' });
+    assert.equal(saved.status, 303);
+    assert.equal((await siteSettingsIn(contentDir)).fediverse_replies, 'hold');
+    const written = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.equal(written['fediverseReplies'], 'hold');
+
+    const refused = await saveSettings(agent, 'discussion', { fediverse_replies: 'everyone' });
+    assert.notEqual(refused.status, 303);
+    assert.equal((await siteSettingsIn(contentDir)).fediverse_replies, 'hold');
+  });
+
   it('keeps the closing window and both webmention switches', async () => {
     const contentDir = await box.dir('geekity-settings-webmentions-');
     const cms = await box.site({ contentDir });

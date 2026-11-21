@@ -3,13 +3,13 @@
  *
  * This module is the list. What a page is made of is `settings-page.ts`, what
  * each page carries is its own module, and what a setting means is
- * `settings.ts`; the only thing that has to know all seven exists is the mount
+ * `settings.ts`; the only thing that has to know all eight exists is the mount
  * and the menu.
  *
  * The order is the order the menu shows them, General first: the Settings
  * heading lands on its first child, and General is `/admin/settings` itself.
  *
- * Six of the seven are Settings' own children. Federation's is a settings page
+ * Seven of the eight are Settings' own children. Federation's is a settings page
  * in every other respect — the same fields, the same save, the same refusals —
  * but the menu files it under the Federation section, beside the followers it
  * is about, so it is in {@link ALL_SETTINGS_PAGES} and not in
@@ -26,6 +26,7 @@ import { DISCUSSION_SETTINGS } from './settings-discussion.ts';
 import { EMAIL_SETTINGS } from './settings-email.ts';
 import { FEDERATION_SETTINGS } from './settings-federation.ts';
 import { GENERAL_SETTINGS } from './settings-general.ts';
+import { NOTIFICATIONS_SETTINGS } from './settings-notifications.ts';
 import { mountSettingsPage } from './settings-page.ts';
 import type { MountSettingsOptions, SettingsPage } from './settings-page.ts';
 import { PERMALINKS_SETTINGS } from './settings-permalinks.ts';
@@ -39,6 +40,7 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
   PERMALINKS_SETTINGS,
   DISCUSSION_SETTINGS,
   EMAIL_SETTINGS,
+  NOTIFICATIONS_SETTINGS,
   PRIVACY_SETTINGS,
 ];
 

@@ -13,45 +13,18 @@ import { COMMENTS_NOTIFICATION } from './comments.ts';
 import { moderationLink } from './links.ts';
 import {
   DELIVERY_WINDOW_MS,
+  NOTIFICATION_EVENTS,
   isBatchedMode,
   notificationMode,
-  notificationRecipients,
+  notificationWanted,
 } from '../site/notification-preferences.ts';
+import type {
+  NotificationDeliveryMode,
+  NotificationEvent,
+} from '../site/notification-preferences.ts';
+import { markNoticesSent, noticesFor, readNoticeLog } from './notice-log.ts';
 import { NOTIFICATION_DIGESTS, dataPath } from '../files/data-files.ts';
 
-/**
- * One message a window instead of one message a comment.
- *
- * The moderation notice emails every moderator the moment something enters the
- * queue, which is right for a quiet site and wrong for a spam wave that Akismet
- * let through. A user who has chosen `hourly` or `daily` on `/admin/users` is
- * sent nothing when a comment arrives; instead this sends them one message per
- * window listing everything still waiting, each item with its own approve, spam
- * and delete links.
- *
- * Three decisions hold the whole thing up:
- *
- * - **A digest is derived, not queued.** It is built from what
- *   `admin.listComments({ status: 'pending' })` says right now, so an item
- *   somebody approved before the run is simply absent and there is no queue to
- *   keep true across a restart, a crash or a `geekity rebuild`. Nothing has to
- *   remember what it meant to send.
- * - **The only new state is when each user was last written to**, and it lives
- *   in `data/notification-digests.json` rather than in the database, because
- *   the database is a cache that may be deleted whenever the site is stopped —
- *   and a forgotten timestamp would mean either a window silently skipped or a
- *   digest sent twice. It is its own file rather than a field in
- *   `data/users.json` because that file is the answer to "who may sign in",
- *   and a timestamp the sender rewrites every hour is bookkeeping rather than
- *   anything about the person.
- * - **Nothing is sent for an empty queue, and an empty run records nothing.**
- *   A user with nothing waiting is never emailed, and because their timestamp
- *   does not move, the first thing that does arrive goes out on the very next
- *   tick rather than waiting out a window that had nothing in it. The promise
- *   a mode makes is "at most one message per window", and that is kept.
- */
-
-/** The message a batched user gets: everything still waiting, in one. */
 export const COMMENT_DIGEST_TEMPLATE = 'comment-digest';
 
 /** Nobody but the site's own user reads it. */
@@ -87,12 +60,11 @@ export function digestTimesFile(dataDir: string): string {
  * When each user last had a digest of each event, as
  * `{ [event]: { [userId]: instant } }`.
  *
- * Keyed by event as well as by user because the registry may grow a second
- * batched notice, and the two would then be on windows of their own. A file
- * that is missing, damaged or the wrong shape reads as nobody having had
- * anything — the same direction {@link readCommentOptOuts} fails in, and for
- * the same reason: the cost is a duplicate digest, and the alternative is a
- * site whose timer throws over a stray comma.
+ * Keyed by event as well as by user because each event is on a window of its
+ * own. A file that is missing, damaged or the wrong shape reads as nobody
+ * having had anything — the same direction {@link readCommentOptOuts} fails
+ * in, and for the same reason: the cost is a duplicate digest, and the
+ * alternative is a site whose timer throws over a stray comma.
  */
 export function readDigestTimes(dataDir: string): Record<string, Record<string, string>> {
   return digestTimesIn(readFileIfPresentSync(digestTimesFile(dataDir)));
@@ -173,12 +145,24 @@ export interface CreateCommentDigestOptions {
   maxItems?: number | undefined;
   /** Where failures are reported. Defaults to `console`. */
   logger?: DigestLogger | undefined;
+  events?: readonly NotificationEvent[] | undefined;
+}
+
+interface DigestSection {
+  event: string;
+  label: string;
+  mode: NotificationDeliveryMode;
+  total: number;
+  more: number;
+  items: Record<string, unknown>[];
+  url: string | undefined;
+  keys: readonly string[];
 }
 
 /** Sends the batched notices. Never throws, and never waits on a provider. */
 export interface CommentDigest {
   /**
-   * Send a digest to every user who is due one and has something waiting.
+   * Send a digest to every user who is due one and has something in it.
    * Resolves with how many messages were handed to the mail service.
    */
   run(): Promise<number>;
@@ -197,6 +181,7 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
   const tickMs = options.tickMs ?? DIGEST_TICK_MS;
   const maxItems = options.maxItems ?? DIGEST_MAX_ITEMS;
   const logger = options.logger ?? console;
+  const events = (options.events ?? NOTIFICATION_EVENTS).filter((event) => event.batched);
 
   let handle: unknown;
   let running: Promise<unknown> = Promise.resolve();
@@ -258,55 +243,111 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
     const now = config.now();
     // Read per run rather than held, so a record written by another process —
     // or one restored with the rest of `data/` — is what this run goes on.
-    const sentAt = readDigestTimes(config.dataDir)[COMMENTS_NOTIFICATION] ?? {};
-    const due = notificationRecipients(listUsers(config.dataDir), COMMENTS_NOTIFICATION).filter(
-      (recipient) => {
-        const mode = notificationMode(recipient.user, COMMENTS_NOTIFICATION);
-        if (!isBatchedMode(mode)) return false;
-        return elapsed(sentAt[String(recipient.user.id)], now) >= DELIVERY_WINDOW_MS[mode];
-      },
-    );
-    if (due.length === 0) return 0;
-
-    // One query for the whole run: everybody due is due the same list, because
-    // a digest is what is waiting rather than what has happened since.
-    const pending = admin.listComments({ status: 'pending' });
-    if (pending.length === 0) return 0;
-
-    const listed = pending.slice(0, maxItems);
+    const sentAt = readDigestTimes(config.dataDir);
+    const log = readNoticeLog(config.dataDir);
     const queueUrl = absoluteUrl('/admin/comments', config.baseUrl);
-    const cited = await options.cited?.();
+    const settingsUrl = absoluteUrl('/admin/settings/notifications', config.baseUrl);
 
-    for (const recipient of due) {
-      void mail.send({
-        to: recipient.email,
-        template: COMMENT_DIGEST_TEMPLATE,
-        data: {
-          items: listed.map((comment) => itemFor(comment, now, cited)),
+    let queue: { pending: PostComment[]; cited: CitedPageReader | undefined } | undefined;
+    async function waiting() {
+      queue ??= {
+        pending: admin.listComments({ status: 'pending' }),
+        cited: await options.cited?.(),
+      };
+      return queue;
+    }
+
+    async function sectionOf(
+      event: NotificationEvent,
+      userId: number,
+      mode: NotificationDeliveryMode,
+    ): Promise<DigestSection | undefined> {
+      if (event.name === COMMENTS_NOTIFICATION) {
+        const { pending, cited } = await waiting();
+        if (pending.length === 0) return undefined;
+        const listed = pending.slice(0, maxItems);
+        return {
+          event: event.name,
+          label: event.label,
+          mode,
           total: pending.length,
           more: pending.length - listed.length,
-          mode: notificationMode(recipient.user, COMMENTS_NOTIFICATION),
+          items: listed.map((comment) => itemFor(comment, now, cited)),
+          url: queueUrl,
+          keys: [],
+        };
+      }
+
+      const happened = noticesFor(log, event.name, userId);
+      if (happened.length === 0) return undefined;
+      const listed = happened.slice(0, maxItems);
+      return {
+        event: event.name,
+        label: event.label,
+        mode,
+        total: happened.length,
+        more: happened.length - listed.length,
+        items: listed.map(({ key: _key, for: _for, ...shown }) => shown),
+        url: undefined,
+        keys: listed.map((item) => item.key),
+      };
+    }
+
+    const recorded = new Map<string, number[]>();
+    const carried: { userId: number; event: string; keys: readonly string[] }[] = [];
+    let messages = 0;
+
+    for (const user of listUsers(config.dataDir)) {
+      if (user.email === undefined || user.email === '') continue;
+
+      const sections: DigestSection[] = [];
+      for (const event of events) {
+        if (!notificationWanted(user, event.name, events)) continue;
+        const mode = notificationMode(user, event.name, events);
+        if (!isBatchedMode(mode)) continue;
+        if (elapsed(sentAt[event.name]?.[String(user.id)], now) < DELIVERY_WINDOW_MS[mode])
+          continue;
+        const section = await sectionOf(event, user.id, mode);
+        if (section !== undefined) sections.push(section);
+      }
+      if (sections.length === 0) continue;
+
+      const comments = sections.find((section) => section.event === COMMENTS_NOTIFICATION);
+      void mail.send({
+        to: user.email,
+        template: COMMENT_DIGEST_TEMPLATE,
+        data: {
+          sections: sections.map(({ keys: _keys, ...shown }) => shown),
+          count: sections.reduce((sum, section) => sum + section.total, 0),
+          mode: busiestWindow(sections),
+          settingsUrl,
+          items: comments?.items ?? [],
+          total: comments?.total ?? 0,
+          more: comments?.more ?? 0,
           queueUrl,
         },
       });
+      messages += 1;
+
+      for (const section of sections) {
+        recorded.set(section.event, [...(recorded.get(section.event) ?? []), user.id]);
+        carried.push({ userId: user.id, event: section.event, keys: section.keys });
+      }
     }
 
     // After the sends rather than before, because `send` never rejects: a
     // message the provider refuses is retried by the mail service itself, and
     // a run that recorded nothing would send the whole digest again next tick.
-    await recordDigestTimes(
-      config.dataDir,
-      COMMENTS_NOTIFICATION,
-      due.map((recipient) => recipient.user.id),
-      now,
-    );
+    for (const [event, users] of recorded) {
+      await recordDigestTimes(config.dataDir, event, users, now);
+    }
+    await markNoticesSent(config.dataDir, carried, now);
 
-    return due.length;
+    return messages;
   }
 
-  /** One run, and the thing `settled()` waits on. */
   function runOnce(): Promise<number> {
-    const started = send();
+    const started = running.catch(ignore).then(send);
     running = started;
     return started;
   }
@@ -376,4 +417,10 @@ function digestTimesIn(source: string | undefined): Record<string, Record<string
 
 function ignore(): void {
   // A failed run is already logged; waiting for it must not throw.
+}
+
+function busiestWindow(
+  sections: readonly { mode: NotificationDeliveryMode }[],
+): 'hourly' | 'daily' {
+  return sections.some((section) => section.mode === 'hourly') ? 'hourly' : 'daily';
 }

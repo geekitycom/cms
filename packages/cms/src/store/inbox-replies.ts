@@ -105,6 +105,14 @@ export function quoteFrom(activity: InboxActivity): Quote | undefined {
   return undefined;
 }
 
+export function editedNoteOf(json: string): { id: string; html: string } | undefined {
+  const object = activityObject(json);
+  if (object === undefined) return undefined;
+  const id = uriOf(object['id']);
+  if (id === null) return undefined;
+  return { id, html: textOf(object['content']) ?? languageText(object['contentMap']) ?? '' };
+}
+
 /** What every note somebody created says, whatever else it is. */
 function noteFrom(activity: InboxActivity):
   | {

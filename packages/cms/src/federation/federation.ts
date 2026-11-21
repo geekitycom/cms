@@ -34,6 +34,8 @@ import { acceptGoneActorDelete, INBOX_LISTENERS } from './inbox.ts';
 import { loadActorKeyPairs } from './keys.ts';
 import type { InboxRefusals } from './refusals.ts';
 import type { ActorProfileService } from './profiles.ts';
+import type { ReplyReview } from './reply-review.ts';
+import type { ActivityNotices } from '../notifications/activity.ts';
 import {
   ACTOR_PATH,
   FEATURED_PATH,
@@ -77,6 +79,17 @@ export interface FederationContextData {
   readonly site: SiteSettings;
   /** The stored contexts a note names the pages it cites by. */
   readonly cited: CitedPageReader;
+  /**
+   * What decides whether a fediverse reply the inbox is sent shows at once or
+   * waits for review. Absent from a context that only sends, such as a relay
+   * subscription's.
+   */
+  readonly replies?: ReplyReview | undefined;
+  /**
+   * Who hears about a like, a boost, a quote or a new follower. Absent from a
+   * context that only sends.
+   */
+  readonly notices?: ActivityNotices | undefined;
 }
 
 /** A CMS federation object, with the context data its dispatchers expect. */

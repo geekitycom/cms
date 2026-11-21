@@ -1,0 +1,18 @@
+{% if comment.source == 'webmention' %}A page has linked to{% elif comment.source == 'activitypub' %}A fediverse reply is on{% else %}A comment is on{% endif %} “{{ post.title }}”, published without waiting for you.
+
+{{ link }}
+
+From: {{ comment.author }}
+{% if comment.website %}
+Site: {{ comment.website }}
+{% endif %}
+{% if comment.url %}
+Page: {{ comment.url }}
+{% endif %}
+When: {{ comment.submitted }}
+
+{{ comment.text | trim if comment.text | trim else '(nothing was said — it is a ' + comment.kind + ')' }}
+
+--
+{{ site.title }}
+{{ baseUrl }}

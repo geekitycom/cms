@@ -1937,6 +1937,36 @@ describe('telling the moderators about it (TASK-55)', () => {
   });
 });
 
+describe('a webmention the checker lets straight through', () => {
+  it('tells the admin it is published, naming the author, the post, the words and the link', async () => {
+    const provider = createMemoryMailProvider();
+    const cms = await site({
+      commentChecker: { check: (): CommentVerdict => 'ham' },
+      mail: { provider, backoffMs: () => 0, logger: { info: () => {}, warn: () => {} } },
+    });
+    writeUsers(cms.config.dataDir, [{ username: 'ada', email: 'ada@example.com' }]);
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a>` +
+          '<div class="e-content"><p>Straight through.</p></div>',
+      ),
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note');
+    await cms.notifications.settled();
+    await cms.mail.settled();
+
+    const [published] = stored(cms);
+    assert.equal(published?.status, 'approved');
+    assert.equal(provider.sent.length, 1);
+    const text = provider.sent[0]?.text ?? '';
+    assert.match(provider.sent[0]?.subject ?? '', /Hello world/);
+    assert.match(text, /Ada Lovelace/);
+    assert.match(text, /Straight through\./);
+    assert.ok(text.includes(`${POST_URL}#comment-${published.id}`), text);
+  });
+});
+
 describe('a webmention that answers a reply on the post (TASK-319)', () => {
   const NOTE = 'https://remote.example/notes/1';
   const NOTE_URL = 'https://remote.example/@ada/1';

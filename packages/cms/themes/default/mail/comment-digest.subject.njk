@@ -1,3 +1,4 @@
 {# The subject of the digest a batched user gets. One line, and it says how
-   many, because the count is the thing that decides whether to open it now. #}
-{{ total }} comment{% if total != 1 %}s{% endif %} waiting on {{ site.title }}
+   many of each, because the counts decide whether to open it now. A digest of
+   the queue alone keeps the subject it always had. #}
+{% if sections.length == 1 and sections[0].event == 'comments' %}{{ total }} comment{% if total != 1 %}s{% endif %} waiting on {{ site.title }}{% else %}Your digest from {{ site.title }}: {% for section in sections %}{{ section.label }} ({{ section.total }}){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}

@@ -135,6 +135,7 @@ async function site(settings: Partial<typeof DEFAULT_SITE_SETTINGS> = {}): Promi
       base_url: BASE_URL,
       timezone: 'UTC',
       author: LOCAL_USER,
+      fediverse_replies: 'show',
       ...settings,
     },
   });

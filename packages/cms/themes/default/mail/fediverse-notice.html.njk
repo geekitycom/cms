@@ -1,0 +1,15 @@
+<p>
+  {% if notice.actor.url %}<a href="{{ notice.actor.url }}" rel="nofollow ugc">{{ notice.actor.name }}</a>{% else %}<strong>{{ notice.actor.name }}</strong>{% endif %}
+  {{ notice.action }}{% if notice.post %} <a href="{{ notice.post.url }}">{{ notice.post.title }}</a>{% endif %}.
+</p>
+
+{% if notice.text %}<blockquote><p>{{ notice.text }}</p></blockquote>{% endif %}
+
+{% if notice.url %}<p><a href="{{ notice.url }}" rel="nofollow ugc">See it</a></p>{% endif %}
+
+<p>
+  Change which of these you get, and how often, on
+  <a href="{{ settingsUrl }}">Settings &rsaquo; Notifications</a>.
+</p>
+
+<p>&mdash; {{ site.title }}</p>

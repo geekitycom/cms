@@ -4,6 +4,7 @@ import { LANGUAGE_TAG_PATTERN } from '../content/language.ts';
 import { classifyLicense, isLicenseUrl, NO_LICENSE } from '../content/license.ts';
 import { canonicalLocale } from '../content/locale.ts';
 import { LOCATION_SHARING } from '../content/location.ts';
+import { FEDIVERSE_REPLY_RULES } from './fediverse-replies.ts';
 import {
   DEFAULT_PERMALINK_BASES,
   permalinkBaseProblems,
@@ -395,6 +396,14 @@ export const SITE = declareNamespace({
       type: boolean,
       default: true,
       description: 'Whether the site accepts webmentions.',
+    },
+    fediverse_replies: {
+      fileKey: 'fediverseReplies',
+      type: oneOf(FEDIVERSE_REPLY_RULES),
+      default: 'known',
+      description:
+        'Which fediverse replies show at once: show (every one), known (followers and accounts ' +
+        'with an approved or shown reply) or hold (none); the rest wait for review.',
     },
     notify_server: {
       fileKey: 'notifyServer',

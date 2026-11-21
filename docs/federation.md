@@ -43,6 +43,12 @@ beside the posts. An Eleventy build of the same content directory sees them as
 - An `Undo(Follow)`, or an actor's own `Delete`, removes the entry.
 - A like, a boost, or a reply appends a line to the inbox log.
 
+A reply from an account the site does not know may also wait for review before
+it shows. See
+[Fediverse replies that wait for review](comments.md#fediverse-replies-that-wait-for-review).
+Likes, boosts, quotes and new followers can each send users an email; see
+[Being told about one](comments.md#being-told-about-one).
+
 A delivery whose HTTP signature does not verify is answered 401 and is not
 logged in the inbox log. The server writes one warning for it instead. This
 applies to the personal inbox, the shared inbox, and a plugin's inbox, such as
@@ -544,7 +550,8 @@ Approvals are files, like followers.
 that user's posts. Each approval is served unsigned, as ActivityStreams JSON, at
 `{baseUrl}/author/{username}/quotes/{id}/`, while the post is still published.
 An `Undo` of the `QuoteRequest`, or a `Delete` of the quoting post, removes the
-approval. Its URL then answers 404. A quote does not notify the author.
+approval. Its URL then answers 404. A new approval sends the
+[Quotes notice](comments.md#being-told-about-one).
 
 Mastodon keeps the copy of a post it fetched first. A post federated before the
 quote policy existed cannot be quoted until its followers receive an `Update`.
