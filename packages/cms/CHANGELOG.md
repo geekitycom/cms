@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.58.0](https://github.com/geekitycom/cms/compare/v0.57.0...v0.58.0) (2026-11-21)
+
+
+### Features
+
+* **cms:** choose notices on a settings notifications page ([a1bbf58](https://github.com/geekitycom/cms/commit/a1bbf58b435659e4dc32f31ad56bc2947690c21c))
+* **cms:** hold fediverse replies from strangers for review ([8a29dee](https://github.com/geekitycom/cms/commit/8a29dee91c83c79f303405286c4626fe6b20fd60))
+* **cms:** list a page's feeds in its Markdown front matter ([19e0903](https://github.com/geekitycom/cms/commit/19e09031e5bc67cc6323a1baf37a9ff4275942d4))
+* **cms:** list every batched notice in the hourly and daily digest ([fed1131](https://github.com/geekitycom/cms/commit/fed1131e8ee49fb716c639bad8eb7a085a2caeb9))
+* **cms:** tell admins about likes, boosts, quotes and new followers ([d54f0b8](https://github.com/geekitycom/cms/commit/d54f0b839b6aba535d4a1db635d9af1a9b277db7))
+* **cms:** tell admins when a comment or reply goes public without review ([1a614da](https://github.com/geekitycom/cms/commit/1a614da10439d2a2a8dd7406378ff1335313bf23))
+
+
+### Bug Fixes
+
+* **cms:** advertise a page's comments feed only when it takes or has comments ([49d764f](https://github.com/geekitycom/cms/commit/49d764f9d500a9bf3178b7e3615dfa95315ce7f4))
+* **cms:** log an undo whose object the site cannot fetch ([f2c5c42](https://github.com/geekitycom/cms/commit/f2c5c42ccdbf8f96809367c30f68e4fd689ccbea))
+
 ## [0.57.0](https://github.com/geekitycom/cms/compare/v0.56.1...v0.57.0) (2026-11-21)
 
 

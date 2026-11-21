@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.15.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.14.1...plugin-wordpress-v0.15.0) (2026-11-21)
+
+
+### Features
+
+* **cms:** choose notices on a settings notifications page ([a1bbf58](https://github.com/geekitycom/cms/commit/a1bbf58b435659e4dc32f31ad56bc2947690c21c))
+* **cms:** list every batched notice in the hourly and daily digest ([fed1131](https://github.com/geekitycom/cms/commit/fed1131e8ee49fb716c639bad8eb7a085a2caeb9))
+* **cms:** tell admins when a comment or reply goes public without review ([1a614da](https://github.com/geekitycom/cms/commit/1a614da10439d2a2a8dd7406378ff1335313bf23))
+
 ## [0.14.1](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.14.0...plugin-wordpress-v0.14.1) (2026-11-21)
 
 
