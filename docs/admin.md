@@ -1138,8 +1138,10 @@ background, and the request that starts it returns at once.
 
 Before you start an export, the screen shows how many deliveries are waiting
 in `data/queue.sqlite`. The archive never holds them. Before you move a site,
-wait until the number is 0. The number is read when the page loads, so load
-the page again to see it change.
+wait until the number is 0. When webmentions or pingbacks are waiting to be
+checked, the screen also shows how many are in `data/webmention-checks.json`;
+these are not in the archive either. The numbers are read when the page
+loads, so load the page again to see them change.
 
 To start an export:
 

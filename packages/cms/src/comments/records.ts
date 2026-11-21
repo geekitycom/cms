@@ -3,15 +3,22 @@ import { readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import {
+  carriersField,
   COMMENT_KINDS,
   COMMENT_SOURCES,
   COMMENT_STATUSES,
   importedFields,
   REDACTED_FIELDS,
   rsvpField,
+  stringListOf,
   viaField,
 } from '../store/admin-store.ts';
-import type { AdminStore, CommentRecord, PostComment } from '../store/admin-store.ts';
+import type {
+  AdminStore,
+  CommentRecord,
+  CommentStatus,
+  PostComment,
+} from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import { isWebUrl } from '../content/enclosure.ts';
 import { slugForPermalink } from '../content/parser.ts';
@@ -168,7 +175,7 @@ export function readComments(
 function readPost(records: Pick<CommentRecords, 'contentDir' | 'dataDir'>, slug: string): HeldPost {
   const held = fileContents(commentsFile(records.contentDir, slug));
   const contacts = contactsIn(commentEmailsFile(records.dataDir, slug));
-  const uninterpretedIds = new Set(held.uninterpreted.flatMap(idOf));
+  const uninterpretedIds = new Set(held.uninterpreted.flatMap((kept) => idOf(kept.entry)));
   return {
     post: held.post,
     uninterpreted: {
@@ -197,21 +204,38 @@ interface HeldPost {
   uninterpreted: Uninterpreted;
 }
 
-/** Entries this version cannot read, and their emails, kept on every write. */
+/** Entries this version cannot read, and their emails, kept in place on every write. */
 interface Uninterpreted {
-  entries: unknown[];
+  entries: KeptEntry[];
   contacts: ReadonlyMap<string, CommentContact>;
+}
+
+/**
+ * One entry kept as written, and the ids of the comments before it in the
+ * file, nearest first: it is written back after the nearest one still there.
+ */
+interface KeptEntry {
+  entry: unknown;
+  after: readonly string[];
 }
 
 function idOf(entry: unknown): string[] {
   return isRecord(entry) && typeof entry['id'] === 'string' ? [entry['id']] : [];
 }
 
-function mergedUninterpreted(...held: Uninterpreted[]): Uninterpreted {
-  return {
-    entries: held.flatMap((one) => one.entries),
-    contacts: new Map(held.flatMap((one) => [...one.contacts])),
-  };
+/** The comments and the kept entries in one list, each kept one in its place. */
+function laidOut(comments: readonly CommentRecord[], kept: readonly KeptEntry[]): unknown[] {
+  const at = new Map(comments.map((comment, index) => [comment.id, index]));
+  const placed = kept.map(({ entry, after }) => ({
+    entry,
+    behind: after.map((id) => at.get(id)).find((index) => index !== undefined) ?? -1,
+  }));
+  const keptBehind = (index: number): unknown[] =>
+    placed.filter((one) => one.behind === index).map((one) => one.entry);
+  return [
+    ...keptBehind(-1),
+    ...comments.flatMap((comment, index) => [publishedEntryOf(comment), ...keptBehind(index)]),
+  ];
 }
 
 /**
@@ -255,11 +279,9 @@ function writePost(
     rmSync(privateFile, { force: true });
   }
 
-  writeFileAtomicallySync(
-    file,
-    commentsJson(permalink, [...comments.map(publishedEntryOf), ...uninterpreted.entries]),
-    { durable: true },
-  );
+  writeFileAtomicallySync(file, commentsJson(permalink, laidOut(comments, uninterpreted.entries)), {
+    durable: true,
+  });
 }
 
 /**
@@ -289,7 +311,7 @@ export function contactsJson(contacts: ReadonlyMap<string, CommentContact>): str
 function fileContents(file: string): {
   post: string;
   comments: CommentRecord[];
-  uninterpreted: unknown[];
+  uninterpreted: KeptEntry[];
 } {
   const parsed = parsedFile(file);
   if (parsed === undefined) return { post: '', comments: [], uninterpreted: [] };
@@ -297,11 +319,11 @@ function fileContents(file: string): {
   const entries: unknown = parsed['comments'] ?? [];
   if (!Array.isArray(entries)) throw unreadable(file, '"comments" is not a list');
   const comments: CommentRecord[] = [];
-  const uninterpreted: unknown[] = [];
+  const uninterpreted: KeptEntry[] = [];
   for (const entry of entries) {
     const comment = commentFrom(entry);
-    if (comment === undefined) uninterpreted.push(entry);
-    else comments.push(comment);
+    if (comment !== undefined) comments.push(comment);
+    else uninterpreted.push({ entry, after: comments.map((before) => before.id).reverse() });
   }
   return {
     post: typeof parsed['post'] === 'string' ? parsed['post'] : '',
@@ -378,6 +400,7 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     ...redactedIn(value['redacted']),
     ...rsvpField(rsvpValue(value['rsvp'])),
     ...viaField(nonEmptyStringOrNull(value['via'])),
+    ...carriersField(nonEmptyStringOrNull(value['via']), stringListOf(value['carriers'])),
     ...importedFields({
       migrated: value['migrated'] === true,
       origin: nonEmptyStringOrNull(value['origin']),
@@ -467,8 +490,12 @@ export async function renameComments(
     const ids = new Set(held.comments.map((comment) => comment.id));
     const moved = new Map([...renames].filter(([from, to]) => from !== to && ids.has(from)));
     if (moved.size === 0) return;
+    const taken = new Set([
+      ...ids,
+      ...held.uninterpreted.entries.flatMap(({ entry }) => idOf(entry)),
+    ]);
     for (const [from, to] of moved) {
-      if (ids.has(to)) {
+      if (taken.has(to)) {
         throw new Error(`${file}: comment "${from}" cannot take id "${to}", which another has.`);
       }
     }
@@ -483,11 +510,22 @@ export async function renameComments(
       changed.push(renamed);
       return renamed;
     });
-    writePost(records, slug, held.post, next, held.uninterpreted);
+    const kept = held.uninterpreted.entries.map(({ entry, after }) => ({
+      entry: withInReplyToRenamed(entry, moved),
+      after: after.map((id) => moved.get(id) ?? id),
+    }));
+    writePost(records, slug, held.post, next, { ...held.uninterpreted, entries: kept });
     for (const from of moved.keys()) records.admin.deleteComment(from);
     for (const comment of changed)
       records.admin.putComment({ ...comment, slug, permalink: held.post });
   });
+}
+
+/** A kept entry naming a renamed comment as what it answers, naming the new id. */
+function withInReplyToRenamed(entry: unknown, moved: ReadonlyMap<string, string>): unknown {
+  if (!isRecord(entry) || typeof entry['inReplyTo'] !== 'string') return entry;
+  const to = moved.get(entry['inReplyTo']);
+  return to === undefined ? entry : { ...entry, inReplyTo: to };
 }
 
 /**
@@ -508,12 +546,19 @@ export async function updateComment(
   records: CommentRecords,
   id: string,
   change: Partial<
-    Pick<CommentRecord, 'status' | 'content' | 'author' | 'kind' | 'submitted' | 'inReplyTo'>
+    Pick<CommentRecord, 'content' | 'author' | 'kind' | 'submitted' | 'inReplyTo'>
   > & {
+    /**
+     * Where it stands now, or how to decide that from the entry as the file
+     * holds it, read inside the lock so a moderator's move is never written over.
+     */
+    readonly status?: CommentStatus | ((current: CommentRecord) => CommentStatus);
     /** What the comment now says it is going to, or `null` when it no longer says. */
     readonly rsvp?: RsvpValue | null;
     /** The page now carrying it, or `null` once it is sent on its own. */
     readonly via?: string | null;
+    /** Every page carrying it now, `via` among them. */
+    readonly carriers?: readonly string[] | null;
   },
 ): Promise<PostComment | undefined> {
   const known = records.admin.getComment(id);
@@ -526,21 +571,30 @@ export async function updateComment(
     const at = held.findIndex((entry) => entry.id === id);
     if (at === -1) return undefined;
 
-    const { rsvp, via, ...fields } = change;
+    const current = held[at] as CommentRecord;
+    const { rsvp, via, carriers, status, ...fields } = change;
     const {
       rsvp: was,
       via: carried,
+      carriers: carrying,
       ...merged
     }: PostComment = {
       ...known,
-      ...(held[at] as CommentRecord),
+      ...current,
       ...fields,
+      ...(status === undefined
+        ? {}
+        : { status: typeof status === 'function' ? status(current) : status }),
       ...(fields.author === undefined ? {} : { author: withWebLinks(fields.author) }),
     };
     const moved: PostComment = {
       ...merged,
       ...rsvpField(rsvp === undefined ? was : (rsvp ?? undefined)),
       ...viaField(via === undefined ? carried : via),
+      ...carriersField(
+        via === undefined ? carried : via,
+        carriers === undefined ? carrying : carriers,
+      ),
     };
     writePost(records, known.slug, known.permalink, held.with(at, moved), uninterpreted);
     records.admin.putComment(moved);
@@ -656,13 +710,17 @@ function followFile(records: CommentRecords, store: DocumentLookup, from: string
   const held = readPost(records, owner.slug);
   const known = new Set(held.comments.map((comment) => comment.id));
   const merged = [...held.comments, ...left.comments.filter((comment) => !known.has(comment.id))];
-  writePost(
-    records,
-    owner.slug,
-    owner.permalink,
-    merged,
-    mergedUninterpreted(held.uninterpreted, left.uninterpreted),
-  );
+  const heldIds = held.comments.map((comment) => comment.id).reverse();
+  writePost(records, owner.slug, owner.permalink, merged, {
+    entries: [
+      ...held.uninterpreted.entries,
+      ...left.uninterpreted.entries.map((kept) => ({
+        ...kept,
+        after: [...kept.after, ...heldIds],
+      })),
+    ],
+    contacts: new Map([...held.uninterpreted.contacts, ...left.uninterpreted.contacts]),
+  });
   rmSync(commentEmailsFile(records.dataDir, from), { force: true });
   rmSync(commentsFile(records.contentDir, from), { force: true });
 
@@ -777,6 +835,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
+    ...carriersField(comment.via, comment.carriers),
     ...importedFields(comment),
   };
 }
@@ -800,6 +859,7 @@ function publishedEntryOf(comment: CommentRecord): PublishedComment {
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
+    ...carriersField(comment.via, comment.carriers),
     ...importedFields(comment),
   };
 }

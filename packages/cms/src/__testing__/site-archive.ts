@@ -33,7 +33,7 @@ export function siteManifest(overrides: Partial<ExportManifest> = {}): ExportMan
     credentialsLeftOut: [],
     plugins: [],
     overrides: [],
-    pending: { deliveries: 0, jobs: { queued: 0, running: 0 } },
+    pending: { deliveries: 0, jobs: { queued: 0, running: 0 }, webmentionChecks: 0 },
     ...overrides,
   };
 }

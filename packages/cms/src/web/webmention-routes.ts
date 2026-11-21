@@ -1,13 +1,13 @@
 import type { Context, Hono } from 'hono';
 
 import type { Document } from '../content/document.ts';
-import { publicDocumentAt } from '../content/permalinks.ts';
 import {
   WEBMENTION_FIELDS,
   WEBMENTION_MAX_BYTES,
   WEBMENTION_PATH,
 } from '../webmention/endpoint.ts';
 import { checkWebmentionRequest } from '../webmention/receive.ts';
+import { siteView } from './site-view.ts';
 import type { ReceivedWebmention } from '../webmention/service.ts';
 import { postSyndicatedAt, syndicationCopies } from '../webmention/syndication.ts';
 import type { SyndicationCopies } from '../webmention/syndication.ts';
@@ -93,7 +93,9 @@ export function mountWebmentions(
       form.get(WEBMENTION_FIELDS.target) ?? '',
       {
         baseUrl: config.baseUrl,
-        documentAt: (pathname) => publicDocumentAt(store, pathname),
+        store,
+        redirects: c.var.redirects.current(),
+        home: siteView(c).pages.home,
         syndicatedAt: (url) => syndicatedAt(c, url),
         conversation,
         site: c.var.siteAtRequestStart,

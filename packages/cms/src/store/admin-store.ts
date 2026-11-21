@@ -28,12 +28,15 @@ import { openWebmentionStore } from './webmentions.ts';
 import type { WebmentionStore } from './webmentions.ts';
 
 export {
+  carriersField,
+  carriersOf,
   COMMENT_KINDS,
   COMMENT_SOURCES,
   COMMENT_STATUSES,
   importedFields,
   REDACTED_FIELDS,
   rsvpField,
+  stringListOf,
   viaField,
 } from './comments.ts';
 export type {

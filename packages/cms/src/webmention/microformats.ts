@@ -128,20 +128,27 @@ const LINK_ATTRIBUTES: readonly string[] = ['href', 'src', 'data', 'poster', 'ci
  * normalised, less any fragment, so a link written relative or to an anchor on
  * the page counts and a link to a different page on the same site does not.
  */
-export function linksTo(html: string, sourceUrl: string, target: string): boolean {
-  const root = parseHtml(html);
-  const base = baseOf(root, sourceUrl);
+export function linksTo(page: SourcePage, target: string): boolean {
   const resolved = normalize(target, target);
   if (resolved === undefined) return false;
-  const wanted = withoutFragment(resolved);
-
-  return linkedFrom(root, base).has(wanted);
+  return linkedFrom(page.root, page.base).has(withoutFragment(resolved));
 }
 
 /** Every URL a source page links to, resolved and normalised as {@link linksTo} reads them. */
-export function linksIn(html: string, sourceUrl: string): Set<string> {
+export function linksIn(page: SourcePage): Set<string> {
+  return linkedFrom(page.root, page.base);
+}
+
+/** A source page parsed once, with the base its relative URLs resolve against. */
+export interface SourcePage {
+  readonly root: HtmlElement;
+  readonly url: string;
+  readonly base: string;
+}
+
+export function readSourcePage(html: string, sourceUrl: string): SourcePage {
   const root = parseHtml(html);
-  return linkedFrom(root, baseOf(root, sourceUrl));
+  return { root, url: sourceUrl, base: baseOf(root, sourceUrl) };
 }
 
 /** Every URL an element and everything under it links to, normalised. */
@@ -172,13 +179,11 @@ function linkedFrom(root: HtmlElement, base: string): Set<string> {
  * its host.
  */
 export function sourceEntry(
-  html: string,
-  sourceUrl: string,
+  page: SourcePage,
   isTarget: (url: string) => boolean,
   now: Date,
 ): SourceEntry {
-  const root = parseHtml(html);
-  const base = baseOf(root, sourceUrl);
+  const { root, base, url: sourceUrl } = page;
   const items = itemsIn(root, base);
   const entries = itemsOfType(items, 'h-entry');
 
@@ -903,6 +908,7 @@ function implied(
     const name =
       attributeFor(element, ['img', 'area'], 'alt') ??
       attributeFor(element, ['abbr'], 'title') ??
+      impliedChildName(element) ??
       textIn(element, reading);
     if (name !== '') properties['name'] = [{ text: name }];
   }
@@ -920,6 +926,25 @@ function implied(
     const photo = src === undefined ? undefined : normalize(src, base);
     if (photo !== undefined) properties['photo'] = [{ text: photo }];
   }
+}
+
+/**
+ * The name an item implies from what is directly inside it, as mf2 reads it:
+ * the alt of its only child `img` or `area`, or the title of an only `abbr`,
+ * else the same of its only child's only child. An empty one does not count,
+ * so a card that is an avatar with a blank alt still reads its text.
+ */
+function impliedChildName(element: HtmlElement): string | undefined {
+  const child = onlyChild(element);
+  const grandchild = child === undefined ? undefined : onlyChild(child);
+  for (const sole of [child, grandchild]) {
+    if (sole === undefined) continue;
+    const name = (
+      attributeFor(sole, ['img', 'area'], 'alt') ?? attributeFor(sole, ['abbr'], 'title')
+    )?.trim();
+    if (name !== undefined && name !== '') return name;
+  }
+  return undefined;
 }
 
 /**

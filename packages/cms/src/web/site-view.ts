@@ -87,7 +87,7 @@ function createSiteView(c: Context<GeekityEnv>): SiteView {
  * the pick is kept rather than cleared: publishing the page again puts the
  * front page back.
  */
-function frontPages(
+export function frontPages(
   store: DocumentLookup & IndexClock,
   slugs: { homepage: string; postsPage: string },
 ): FrontPages {

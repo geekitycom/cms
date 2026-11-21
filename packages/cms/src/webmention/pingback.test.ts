@@ -736,3 +736,121 @@ describe('reading a pingback call', () => {
     });
   }
 });
+
+describe('reading a well-formed call written another way', () => {
+  const source = 'https://them.example/a?b=1&c=2';
+  const target = 'https://blog.example/2026/09/hello/';
+  const refused = { code: PINGBACK_FAULTS.notWellFormed, message: 'The call is not well formed.' };
+
+  it('reads tags with space before the closing bracket', () => {
+    const xml =
+      '<methodCall ><methodName >pingback.ping</methodName ><params >' +
+      `<param ><value ><string >${source.replace('&', '&amp;')}</string ></value ></param >` +
+      `<param><value>${target}</value></param>` +
+      '</params ></methodCall >';
+
+    assert.deepEqual(readPingbackCall(xml), { method: 'pingback.ping', params: [source, target] });
+  });
+
+  it('reads tags that carry attributes', () => {
+    const xml =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<methodCall xmlns:x="urn:x"><methodName class="m">pingback.ping</methodName>' +
+      `<params><param><value type='string'><string lang="en">${target}</string></value></param>` +
+      '</params></methodCall>';
+
+    assert.deepEqual(readPingbackCall(xml), { method: 'pingback.ping', params: [target] });
+  });
+
+  it('reads an empty params and empty values', () => {
+    assert.deepEqual(
+      readPingbackCall(
+        '<methodCall><methodName>system.listMethods</methodName><params/></methodCall>',
+      ),
+      { method: 'system.listMethods', params: [] },
+    );
+    assert.deepEqual(
+      readPingbackCall(
+        '<methodCall><methodName>m</methodName><params><param><value/></param>' +
+          '<param><value><string/></value></param></params></methodCall>',
+      ),
+      { method: 'm', params: ['', ''] },
+    );
+  });
+
+  it('reads a string held in CDATA as written, entities and all', () => {
+    const xml =
+      '<methodCall><methodName>pingback.ping</methodName><params>' +
+      `<param><value><string><![CDATA[${source}]]></string></value></param>` +
+      `<param><value><string>${target}</string></value></param>` +
+      '</params></methodCall>';
+
+    assert.deepEqual(readPingbackCall(xml), { method: 'pingback.ping', params: [source, target] });
+  });
+
+  it('reads comments anywhere outside a tag', () => {
+    const xml =
+      '<?xml version="1.0"?><!-- a --><methodCall><!-- b --><methodName>m</methodName>' +
+      '<params><param><value><string>x<!-- c -->y</string></value></param></params></methodCall><!-- d -->';
+
+    assert.deepEqual(readPingbackCall(xml), { method: 'm', params: ['xy'] });
+  });
+
+  for (const [what, xml] of [
+    ['a document type', '<!DOCTYPE methodCall><methodCall><methodName>m</methodName></methodCall>'],
+    [
+      'an entity declaration inside the call',
+      '<methodCall><!ENTITY x "y"><methodName>m</methodName></methodCall>',
+    ],
+    [
+      'a processing instruction after the declaration',
+      '<?xml version="1.0"?><?php echo 1; ?><methodCall><methodName>m</methodName></methodCall>',
+    ],
+    [
+      'an XML declaration that is not first',
+      '<methodCall><?xml version="1.0"?><methodName>m</methodName></methodCall>',
+    ],
+    ['an unknown entity', '<methodCall><methodName>&src;</methodName></methodCall>'],
+    ['an unclosed CDATA', '<methodCall><methodName><![CDATA[m</methodName></methodCall>'],
+    ['an unclosed comment', '<methodCall><methodName>m</methodName></methodCall><!--'],
+    ['mismatched tags', '<methodCall><methodName>m</methodCall></methodName>'],
+    ['an unquoted attribute', '<methodCall a=b><methodName>m</methodName></methodCall>'],
+    ['text beside the call', '<methodCall><methodName>m</methodName></methodCall>x'],
+    ['a second root', '<methodCall><methodName>m</methodName></methodCall><methodCall/>'],
+    ['another root', '<methodResponse><methodName>m</methodName></methodResponse>'],
+    [
+      'text beside a string',
+      '<methodCall><methodName>m</methodName><params><param><value>a<string>b</string></value></param></params></methodCall>',
+    ],
+    [
+      'a value of another type',
+      '<methodCall><methodName>m</methodName><params><param><value><int>1</int></value></param></params></methodCall>',
+    ],
+    [
+      'text between params',
+      '<methodCall><methodName>m</methodName><params>x<param><value>a</value></param></params></methodCall>',
+    ],
+    [
+      'a CDATA outside any element',
+      '<![CDATA[x]]><methodCall><methodName>m</methodName></methodCall>',
+    ],
+  ] as const) {
+    it(`refuses ${what}`, () => {
+      assert.deepEqual(readPingbackCall(xml), refused);
+    });
+  }
+
+  it('reads or refuses a full-size body in linear time', () => {
+    for (const xml of [
+      '<methodCall a="1"'.padEnd(PINGBACK_MAX_BYTES, ' a="1"'),
+      '<!--'.repeat(PINGBACK_MAX_BYTES / 4),
+      '<methodCall>' + '<![CDATA['.repeat(PINGBACK_MAX_BYTES / 10),
+      '<methodCall>' + '&amp'.repeat(PINGBACK_MAX_BYTES / 4),
+      '<methodCall>' + '<a>'.repeat(PINGBACK_MAX_BYTES / 3),
+    ]) {
+      const started = performance.now();
+      assert.deepEqual(readPingbackCall(xml), refused);
+      assert.ok(performance.now() - started < 50, `${xml.slice(0, 20)} took too long`);
+    }
+  });
+});

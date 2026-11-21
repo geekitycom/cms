@@ -89,41 +89,98 @@ export function pingbackAnswerFor(outcome: WebmentionOutcome): string | Pingback
 
 export type PingbackCall = { readonly method: string; readonly params: readonly string[] };
 
-const CALL =
-  /^<methodCall>\s*<methodName>([^<]*)<\/methodName>\s*(?:<params>([^]*)<\/params>\s*)?<\/methodCall>$/;
-const PARAM =
-  /\s*<param>\s*<value>(?:\s*<string>([^<]*)<\/string>\s*|([^<]*))<\/value>\s*<\/param>\s*/y;
+interface XmlElement {
+  readonly name: string;
+  readonly children: XmlElement[];
+  text: string;
+}
+
+const OPEN_TAG =
+  /<([A-Za-z_][\w.:-]*)(?:\s+[A-Za-z_][\w.:-]*\s*=\s*(?:"[^"<]*"|'[^'<]*'))*\s*(\/?)>/y;
+const CLOSE_TAG = /<\/([A-Za-z_][\w.:-]*)\s*>/y;
+const XML_DECLARATION = /^\uFEFF?\s*<\?xml(?:\s[^?]*)?\?>/;
 
 export function readPingbackCall(xml: string): PingbackCall | PingbackFault {
   const refused = { code: PINGBACK_FAULTS.notWellFormed, message: 'The call is not well formed.' };
 
-  const body = xml
-    .replace(/^\s*<\?xml[^?]*\?>/, '')
-    .replaceAll(/<!--[^]*?-->/g, '')
-    .trim();
-  if (hasDeclarationOrInstruction(body)) return refused;
+  const root = parseXml(xml);
+  if (root?.name !== 'methodCall' || !isBlank(root.text)) return refused;
+  const [name, params, ...rest] = root.children;
+  if (name?.name !== 'methodName' || name.children.length > 0 || rest.length > 0) return refused;
+  if (params !== undefined && (params.name !== 'params' || !isBlank(params.text))) return refused;
 
-  const call = CALL.exec(body);
-  if (call === null) return refused;
-
-  const params: string[] = [];
-  const list = (call[2] ?? '').trim();
-  PARAM.lastIndex = 0;
-  while (PARAM.lastIndex < list.length) {
-    const param = PARAM.exec(list);
-    if (param === null) return refused;
-    const value = decodeText(param[1] ?? param[2] ?? '');
+  const values: string[] = [];
+  for (const param of params?.children ?? []) {
+    const value = paramValue(param);
     if (value === undefined) return refused;
-    params.push(value);
+    values.push(value.trim());
   }
-
-  const method = decodeText(call[1] ?? '');
-  if (method === undefined) return refused;
-  return { method: method.trim(), params: params.map((param) => param.trim()) };
+  return { method: name.text.trim(), params: values };
 }
 
-function hasDeclarationOrInstruction(body: string): boolean {
-  return body.includes('<!') || body.includes('<?');
+function paramValue(param: XmlElement): string | undefined {
+  const [value, ...rest] = param.children;
+  if (param.name !== 'param' || !isBlank(param.text) || value?.name !== 'value') return undefined;
+  if (rest.length > 0) return undefined;
+  const [string, ...more] = value.children;
+  if (string === undefined) return value.text;
+  if (string.name !== 'string' || string.children.length > 0 || more.length > 0) return undefined;
+  return isBlank(value.text) ? string.text : undefined;
+}
+
+function parseXml(xml: string): XmlElement | undefined {
+  const stack: XmlElement[] = [];
+  let root: XmlElement | undefined;
+  let at = XML_DECLARATION.exec(xml)?.[0].length ?? 0;
+
+  while (at < xml.length) {
+    const open = xml.indexOf('<', at);
+    if (open !== at) {
+      const end = open === -1 ? xml.length : open;
+      const text = decodeText(xml.slice(at, end));
+      const parent = stack.at(-1);
+      if (text === undefined || (parent === undefined && !isBlank(text))) return undefined;
+      if (parent !== undefined) parent.text += text;
+      at = end;
+      continue;
+    }
+
+    if (xml.startsWith('<!--', at)) {
+      const end = xml.indexOf('-->', at + 4);
+      if (end === -1) return undefined;
+      at = end + 3;
+    } else if (xml.startsWith('<![CDATA[', at)) {
+      const end = xml.indexOf(']]>', at + 9);
+      const parent = stack.at(-1);
+      if (end === -1 || parent === undefined) return undefined;
+      parent.text += xml.slice(at + 9, end);
+      at = end + 3;
+    } else if (xml.startsWith('</', at)) {
+      CLOSE_TAG.lastIndex = at;
+      const tag = CLOSE_TAG.exec(xml);
+      const element = stack.pop();
+      if (tag === null || element?.name !== tag[1]) return undefined;
+      if (stack.length === 0) root = element;
+      at = CLOSE_TAG.lastIndex;
+    } else {
+      OPEN_TAG.lastIndex = at;
+      const tag = OPEN_TAG.exec(xml);
+      if (tag === null || root !== undefined) return undefined;
+      const element: XmlElement = { name: tag[1] ?? '', children: [], text: '' };
+      stack.at(-1)?.children.push(element);
+      if (tag[2] === '/') {
+        if (stack.length === 0) root = element;
+      } else {
+        stack.push(element);
+      }
+      at = OPEN_TAG.lastIndex;
+    }
+  }
+  return stack.length === 0 ? root : undefined;
+}
+
+function isBlank(text: string): boolean {
+  return text.trim() === '';
 }
 
 const PREDEFINED: ReadonlyMap<string, string> = new Map([

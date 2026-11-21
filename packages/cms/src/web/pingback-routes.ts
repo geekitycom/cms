@@ -1,6 +1,5 @@
 import type { Context, Hono } from 'hono';
 
-import { publicDocumentAt } from '../content/permalinks.ts';
 import {
   PINGBACK_ANSWER_MS,
   PINGBACK_FAULTS,
@@ -13,6 +12,7 @@ import {
 } from '../webmention/pingback.ts';
 import type { PingbackFault } from '../webmention/pingback.ts';
 import { checkWebmentionRequest } from '../webmention/receive.ts';
+import { siteView } from './site-view.ts';
 import type { ReceivedWebmention } from '../webmention/service.ts';
 import { messageOf } from '../util/errors.ts';
 import { readBounded } from './bounded-body.ts';
@@ -76,7 +76,9 @@ async function answerPing(
 
   const checked = checkWebmentionRequest(source, target, {
     baseUrl: config.baseUrl,
-    documentAt: (pathname) => publicDocumentAt(store, pathname),
+    store,
+    redirects: c.var.redirects.current(),
+    home: siteView(c).pages.home,
     syndicatedAt: (url) => syndicatedAt(c, url),
     conversation,
     site: c.var.siteAtRequestStart,

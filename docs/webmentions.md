@@ -55,6 +55,9 @@ A link counts for the document the site serves at its URL:
 - A link to a URL the site redirects, such as an imported `/?p=123`, counts for
   the document the redirect leads to.
 
+A link to the site by its `http://` spelling, or with or without `www.` in
+front of the host, is a link to the site's own page and sends no webmention.
+
 The site follows redirects when it reads the backlinks. Editing a redirect file
 moves a backlink without changing the post that holds the link. A draft,
 future-dated, unlisted, private, or trashed post is never a backlink. See
@@ -71,7 +74,7 @@ senders use. Any other content type, `multipart/form-data` included, gets
 `400`. A body longer than 16 KiB gets `413`, by its `Content-Length` or by the
 bytes that arrive, and the endpoint reads no further. The endpoint queues
 nothing for a request it refuses. It answers `202` for a request worth checking
-and `400` for one that is not. A source on the site's own origin gets `400`, as
+and `400` for one that is not. A source on this site gets `400`, as
 does a source that names the target page, with or without a fragment. A
 source on a port other than 80 for `http` or 443 for `https` also gets `400`,
 and the site does not fetch it. When the source redirects, the site follows a
@@ -111,8 +114,14 @@ answers:
    the author of the post it replies to, is not used. An author written as a
    URL with no `h-card`, such as `<a class="u-author" href="…">Ada</a>`, is the
    author's page, and the link text, or else that page's host, is the name. The
-   site does not fetch that page. When there is no author, the site shows the
-   source's host.
+   site does not fetch that page. An `h-card` with no `p-name` takes its name
+   as mf2 implies it: the alt of the card's only `img` or `area`, or the title
+   of its only `abbr`, at most one element down, else the card's text. So a
+   card that is only an avatar, `<a class="h-card" href="…"><img alt="Ada"
+src="…"></a>`, is named Ada. When there is no author or no name, the site
+   shows the source's host. The author's name is put on one line and cut to 80
+   characters, the comment form's limit. An author link or photo longer than
+   500 characters, the form's limit for a website, is left out.
 4. It files the result as a **pending comment** with `source: "webmention"`.
 
 **One address can send only so many.** Each client address can send 60
@@ -195,21 +204,44 @@ page as its URL. It reads at most 20 carried replies from one source, at most
 spam source carries are filed as spam, and the others wait for a moderator.
 The moderators get one notice for the source and the replies it carries. When
 the source stops carrying a reply, the site removes it, unless the reply's own
-page has since sent its own webmention.
+page has since sent its own webmention. When more than one source carries the
+same reply, the site keeps one entry and records every source that carries it,
+in `carriers` in the comment file. The entry shows the words of the source
+that carried it first. When a source stops carrying the reply, the site takes
+that source off the list and removes the reply only when no source is left.
+When the source that the reply is shown under drops it, the reply passes to
+the next source on the list, threads under that source's entry and keeps its
+status, so an approved reply stays approved. The site reads only the source
+that was sent, not the other sources on the list.
 
-The endpoint refuses a target on this site with a query string, because no
-page here has one.
+A target on this site counts for the document a request for it would reach,
+following the site's own redirects:
+
+- The permalink with or without its trailing slash.
+- `/`, for the page that the Reading setting makes the homepage.
+- The `http://` spelling of the site, and the host with or without `www.`.
+- A former permalink in a document's `redirect_from`.
+- A declared redirect in `content/_data/redirects.json` or
+  `content/_data/redirects/`, such as an imported `/?p=123`.
+
+The endpoint refuses any other target on this site with a query string,
+because no page here has one. A check that waits in the record looks the target
+up again when it runs, so a post renamed after the `202` gets the webmention at
+its new permalink, through the `redirect_from` the rename leaves.
 
 The source URL, without any fragment, identifies a webmention: `X` and
 `X#reply` are one source. When a page sends its webmention again, the site updates the earlier entry and does not add a second one. When
 the link is gone from the source, or the source answers 404 or 410, the site
-removes the entry. Any other failure to read the source, such as a 401, 403,
+removes the entry. An entry imported from the old site (`migrated: true`) is
+kept when its source answers 404 or 410: anybody can send that source again,
+and a dead link on an old page is not its author taking the mention back. Any other failure to read the source, such as a 401, 403,
 408, 429, 451 or 5xx answer or a timeout, changes nothing. A source larger
 than a megabyte that has no link to the target in its first megabyte also
 changes nothing, because the link can be in the part that was not read. A source that does
 not link to the target but still links to another URL of the same post keeps
 its entry. Those URLs are the post's page, a former permalink, a comment page
-on the post, and a syndicated copy.
+on the post, a URL that a declared redirect leads to the post, such as an
+imported `/?p=123`, and a syndicated copy.
 
 The kind of a webmention is read against every one of those URLs, not only
 the target the sender named. A page that likes the post and links one of its
@@ -265,7 +297,12 @@ read, the string does not say why; the site writes the reason to its log:
 | `0x0021` | The target takes no pingbacks.                                                                                                                                                                                                                                                                                          |
 | `0x0030` | The ping was sent before. The site still rewrites the entry from the source as it reads now.                                                                                                                                                                                                                            |
 | `0x0032` | The source could not be read this time: it timed out, the server failed, it answered any 4xx status other than 404 and 410, its host resolves to a private address, or it is larger than a megabyte and has no link in the part that was read. Nothing stored changes, and the site checks the source again later.      |
-| `-32700` | The body is over 16 KB, the XML is not well formed, or it has a document type declaration. The site refuses these before it resolves anything.                                                                                                                                                                          |
+| `-32700` | The body is over 16 KB, the XML is not well formed, or it has a document type or entity declaration, a processing instruction other than the XML declaration, or an entity other than XML's five predefined ones and numeric references. The site refuses these before it resolves anything.                            |
+
+The parser takes any well-formed spelling of the call: attributes on elements,
+space before `>`, comments, an empty `<params/>`, and a string value in a CDATA
+section. Each value is a `<string>` or untyped text; any other XML-RPC type is
+refused with `-32700`.
 
 The CMS does not send pingbacks.
 
@@ -385,7 +422,9 @@ A `syndication.json` that cannot be read as a JSON object is read as empty,
 and the site logs a warning that names the file once, so pages show no
 **Also on** links in the meantime. The site does not write over a damaged
 file: recording or dropping a copy fails, and logs why, until the file is
-fixed.
+fixed. An entry in a readable file that is not a web address, or a permalink
+whose value is not an object, is not shown, and the site writes it back as it
+was when it records or drops another copy.
 
 The posts table on `/admin/federation` lists each selected target with the
 result of its last webmention and a link to its copy. **Resend** queues a job

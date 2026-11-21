@@ -173,12 +173,20 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
       : statusFor(verdict, proposed.status, fresh ? undefined : held);
 
   if (held !== undefined) {
+    // A moderator who moved it while the checker was answering decided after
+    // the read above, so that decision stands unless the new words are spam.
+    let overruled = false;
+    const decided = (current: CommentStatus): CommentStatus => {
+      if (status === 'spam' || current === held.status) return status;
+      overruled = true;
+      return current;
+    };
     // Its id, its post and its source never move: that is what makes it the
     // same comment. What the page now says about itself replaces what it said,
     // what it answers included.
     const moved = await updateComment(records, held.id, {
       kind: comment.kind,
-      status,
+      status: (current) => decided(current.status),
       author: comment.author,
       content: comment.content,
       submitted: comment.submitted,
@@ -187,7 +195,7 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
       via: comment.via ?? null,
     });
     if (moved === undefined) return { kind: 'gone' };
-    if (fresh && moved.status === 'pending') announce(options.notices, moved);
+    if (fresh && !overruled && moved.status === 'pending') announce(options.notices, moved);
     return { kind: 'stored', comment: moved, created: false };
   }
 

@@ -211,6 +211,7 @@ export function parseManifest(text: string): ExportManifest {
     pending: {
       deliveries: readCount(pending, 'deliveries'),
       jobs: { queued: readCount(jobs, 'queued'), running: readCount(jobs, 'running') },
+      webmentionChecks: readCount(pending, 'webmentionChecks'),
     },
   };
 }
