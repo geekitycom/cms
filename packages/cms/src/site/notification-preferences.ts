@@ -236,6 +236,19 @@ export function notificationRecipients(
 }
 
 /**
+ * The recipients who take this notice as it happens. A user on an hourly or a
+ * daily digest is left out: the digest tells them when their window comes up.
+ */
+export function immediateRecipients(
+  users: readonly User[],
+  name: string,
+): { user: User; email: string }[] {
+  return notificationRecipients(users, name).filter(
+    (recipient) => !isBatchedMode(notificationMode(recipient.user, name)),
+  );
+}
+
+/**
  * The stored map with one switch moved, or `undefined` when nothing needs
  * storing any more.
  *

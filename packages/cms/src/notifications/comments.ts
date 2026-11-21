@@ -14,6 +14,7 @@ import { absoluteUrl } from '../util/url.ts';
 import { moderationLink, unsubscribeLink } from './links.ts';
 import { hasOptedOut } from './optouts.ts';
 import {
+  immediateRecipients,
   isBatchedMode,
   notificationMode,
   notificationRecipients,
@@ -188,13 +189,7 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
       now: config.now(),
     });
 
-    const recipients = notificationRecipients(
-      listUsers(config.dataDir),
-      PUBLISHED_NOTIFICATION,
-    ).filter(
-      (recipient) => !isBatchedMode(notificationMode(recipient.user, PUBLISHED_NOTIFICATION)),
-    );
-
+    const recipients = immediateRecipients(listUsers(config.dataDir), PUBLISHED_NOTIFICATION);
     const data = { comment: commentIn(comment), post, link };
     for (const recipient of recipients) {
       void mail.send({ to: recipient.email, template: COMMENT_PUBLISHED_TEMPLATE, data });

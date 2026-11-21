@@ -1,9 +1,5 @@
 import type { ResolvedConfig } from '../config.ts';
-import {
-  isBatchedMode,
-  notificationMode,
-  notificationRecipients,
-} from '../site/notification-preferences.ts';
+import { immediateRecipients, notificationRecipients } from '../site/notification-preferences.ts';
 import { listUsers } from '../site/users.ts';
 import type { MailService } from './mail-service.ts';
 import { recordNotice, withdrawNotice } from './notice-log.ts';
@@ -83,10 +79,7 @@ export function createActivityNotices(options: CreateActivityNoticesOptions): Ac
 
         await recordNotice({ dataDir: config.dataDir, event, item, now: config.now() });
 
-        const now = notificationRecipients(listUsers(config.dataDir), event).filter(
-          (recipient) => !isBatchedMode(notificationMode(recipient.user, event)),
-        );
-        for (const recipient of now) {
+        for (const recipient of immediateRecipients(listUsers(config.dataDir), event)) {
           void mail.send({
             to: recipient.email,
             template: FEDIVERSE_NOTICE_TEMPLATE,

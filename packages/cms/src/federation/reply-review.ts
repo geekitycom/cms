@@ -233,8 +233,8 @@ function parentOf(admin: AdminStore, baseUrl: string, target: Reply['inReplyTo']
     return key !== undefined && admin.getComment(key) !== undefined ? key : null;
   }
 
-  const logged = admin.listActivitiesAbout([target]).some((activity) => {
-    return replyFrom(activity)?.id === target;
-  });
+  const logged = admin
+    .listActivitiesAbout([target])
+    .some((activity) => replyFrom(activity)?.id === target);
   return logged ? target : null;
 }
