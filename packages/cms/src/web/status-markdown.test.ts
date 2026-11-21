@@ -97,6 +97,16 @@ function assertHtml(response: Response, status: number): void {
   assert.match(response.headers.get('content-type') ?? '', /^text\/html/);
 }
 
+const FEEDS_YAML = [
+  ['/feed/', 'Field Notes', 'application/rss+xml'],
+  ['/feed/atom/', 'Field Notes', 'application/atom+xml'],
+  ['/feed/json/', 'Field Notes', 'application/feed+json'],
+  ['/comments/feed/', 'Field Notes comments', 'application/rss+xml'],
+].reduce(
+  (yaml, [url, title, type]) => `${yaml}  - url: ${url}\n    title: ${title}\n    type: ${type}\n`,
+  'feeds:\n',
+);
+
 const LINKS = /\[home\]\(\/index\.md\).*\[search the site\]\(\/search\/index\.md\)/s;
 
 describe('a 404 asked for in Markdown (AC #1, #2)', () => {
@@ -108,7 +118,10 @@ describe('a 404 asked for in Markdown (AC #1, #2)', () => {
 
     assertMarkdown(response, 404);
     assert.match(response.headers.get('vary') ?? '', /Accept/);
-    assert.match(text, /^---\ntitle: Not found\nhome: \/index\.md\n---\n\n# Not found\n/);
+    assert.ok(
+      text.startsWith(`---\ntitle: Not found\nhome: /index.md\n${FEEDS_YAML}---\n\n# Not found\n`),
+      text,
+    );
     assert.match(text, /Content not found\./);
     assert.match(text, LINKS);
     assert.match(text, /## Feeds\n\n- \[Field Notes \(RSS\)\]\(\/feed\/\)/);
@@ -208,9 +221,11 @@ describe('the 503 asked for in Markdown (AC #1, #2)', () => {
     assertMarkdown(response, 503);
     assert.equal(response.headers.get('retry-after'), until.toUTCString());
     assert.equal(response.headers.get('cache-control'), 'no-store');
-    assert.match(
+    assert.ok(
+      text.startsWith(
+        `---\ntitle: Down for maintenance\nuntil: '2026-09-28T13:00:00.000Z'\nhome: /index.md\n${FEEDS_YAML}---`,
+      ),
       text,
-      /^---\ntitle: Down for maintenance\nuntil: '2026-09-28T13:00:00\.000Z'\nhome: \/index\.md\n---/,
     );
     assert.match(text, /down for maintenance/);
     assert.match(text, /It should be back by Mon, 28 Sep 2026 13:00:00 GMT\./);

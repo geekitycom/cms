@@ -388,16 +388,36 @@ A document's Markdown has four parts:
 
 The CMS adds these front matter keys:
 
-| Key               | Value                                                                                                |
-| ----------------- | ---------------------------------------------------------------------------------------------------- |
-| `home`            | `/index.md`, on every document and listing.                                                          |
-| `previous`        | A post's older neighbour, the same one the HTML post navigation links. On a listing, its newer page. |
-| `next`            | A post's newer neighbour. On a listing, its older page.                                              |
-| `author`          | The author's display name, when the post's `author` names a user.                                    |
-| `author_username` | That user's username, beside `author`.                                                               |
+| Key               | Value                                                                                                 |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
+| `home`            | `/index.md`, on every document and listing.                                                           |
+| `previous`        | A post's older neighbour, the same one the HTML post navigation links. On a listing, its newer page.  |
+| `next`            | A post's newer neighbour. On a listing, its older page.                                               |
+| `author`          | The author's display name, when the post's `author` names a user.                                     |
+| `author_username` | That user's username, beside `author`.                                                                |
+| `feeds`           | The feeds the page lists, as its HTML head advertises them. Each has a `url`, a `title` and a `type`. |
 
 Each of `previous` and `next` is absent when there is no neighbour on that
 side. A page has neither. All three URLs are root-relative `.md` URLs.
+
+`feeds` lists the same feeds as the footer's Feeds section, in the same order:
+the site's RSS, Atom and JSON feeds, the site's comments feed, a listing's own
+feeds, and a document's comments feed when the document takes comments or has
+some. A feed's `url` is the root-relative URL of the feed itself, and its
+`type` is the media type the HTML `<link>` gives. Two of a site's entries,
+with the Atom and JSON feeds between them left out:
+
+```yaml
+feeds:
+  - url: /feed/
+    title: Andrew Shell's Weblog
+    type: application/rss+xml
+  - url: /comments/feed/
+    title: Andrew Shell's Weblog comments
+    type: application/rss+xml
+```
+
+The status pages carry `feeds` too.
 
 A link in the body is rewritten when the site answers its target with a
 document or a listing. The CMS follows the target the way it answers a

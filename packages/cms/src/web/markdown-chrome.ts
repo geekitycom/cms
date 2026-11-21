@@ -59,6 +59,8 @@ export function createMarkdownChrome(
     const soloAuthor = siteAuthorContext(users(), site.author);
     const responses = markdownConversationContext(deps, document, chrome.url);
     const answerable = 'conversation' in responses || 'commentForm' in responses;
+    const listedFeeds =
+      answerable && commentsFeed !== undefined ? [...chrome.feeds, commentsFeed] : chrome.feeds;
     const context = {
       site,
       menus: navigationMenus({ site, url: chrome.url }),
@@ -75,8 +77,7 @@ export function createMarkdownChrome(
       ...responses,
       home: HOME_LINK,
       ...chrome,
-      feeds:
-        answerable && commentsFeed !== undefined ? [...chrome.feeds, commentsFeed] : chrome.feeds,
+      feeds: listedFeeds,
       bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
       staticFrontPage: frontPage !== undefined,
       markdownUrl,
@@ -88,6 +89,7 @@ export function createMarkdownChrome(
     const layout = layoutSlot(markdown, layouts, format);
     if (layout === undefined) {
       return {
+        listedFeeds,
         header: markdown.renderText(CHROME_TEMPLATES.header, format, context),
         footer: markdown.renderText(CHROME_TEMPLATES.footer, format, context),
       };
@@ -98,6 +100,7 @@ export function createMarkdownChrome(
         ? markdown.renderText(templates, format, context)
         : { format: 'markdown', text: markdown.render(templates.markdown, context) };
     return {
+      listedFeeds,
       header: written(CHROME_TEMPLATES.header),
       footer: written(CHROME_TEMPLATES.footer),
       layout: {

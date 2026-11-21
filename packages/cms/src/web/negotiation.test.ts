@@ -72,6 +72,30 @@ const HELLO_FILE = [
 
 const HELLO = { 'posts/2026-09-02-hello.md': HELLO_FILE };
 
+function feedsYaml(
+  feeds: readonly (readonly [url: string, title: string, type: string])[],
+): string {
+  return [
+    'feeds:',
+    ...feeds.flatMap(([url, title, type]) => [
+      `  - url: ${url}`,
+      `    title: ${title}`,
+      `    type: ${type}`,
+    ]),
+  ].join('\n');
+}
+
+function siteFeeds(title: string): [url: string, title: string, type: string][] {
+  return [
+    ['/feed/', title, 'application/rss+xml'],
+    ['/feed/atom/', title, 'application/atom+xml'],
+    ['/feed/json/', title, 'application/feed+json'],
+    ['/comments/feed/', `${title} comments`, 'application/rss+xml'],
+  ];
+}
+
+const SITE_FEEDS_YAML = feedsYaml(siteFeeds('Geekity'));
+
 const SITE_FEEDS = [
   '- [Geekity (RSS)](/feed/)',
   '- [Geekity (Atom)](/feed/atom/)',
@@ -82,7 +106,7 @@ const SITE_FEEDS = [
 const HELLO_MARKDOWN = [
   HELLO_FILE.replace(
     'series: notebook\n---\n\n',
-    'series: notebook\nhome: /index.md\n---\n\n# Hello, World!\n\n',
+    `series: notebook\nhome: /index.md\n${SITE_FEEDS_YAML}\n---\n\n# Hello, World!\n\n`,
   ),
   '## Filed under',
   '',
@@ -118,7 +142,7 @@ describe('the Markdown representation', () => {
 
     const navigated = (file: string, neighbour: string, footer: string[]): string =>
       [
-        file.replace('\n---\n\n', `\nhome: /index.md\n${neighbour}\n---\n\n`),
+        file.replace('\n---\n\n', `\nhome: /index.md\n${neighbour}\n${SITE_FEEDS_YAML}\n---\n\n`),
         '## More posts',
         '',
         ...footer,
@@ -642,6 +666,12 @@ describe('a listing as Markdown (TASK-289)', () => {
         'permalink: /tag/notes/',
         'home: /index.md',
         'next: /tag/notes/page/2/index.md',
+        feedsYaml([
+          ...siteFeeds('Archive'),
+          ['/tag/notes/feed/', "'Archive: notes'", 'application/rss+xml'],
+          ['/tag/notes/feed/atom/', "'Archive: notes'", 'application/atom+xml'],
+          ['/tag/notes/feed/json/', "'Archive: notes'", 'application/feed+json'],
+        ]),
         '---',
         '',
         '# notes',
@@ -717,6 +747,7 @@ describe('a listing as Markdown (TASK-289)', () => {
         'permalink: /',
         'home: /index.md',
         'next: /page/2/index.md',
+        feedsYaml(siteFeeds('Archive')),
         '---',
         '',
         '# Archive',

@@ -410,7 +410,7 @@
       "content-security-policy": "frame-ancestors 'self'",
       "content-type": "text/markdown; charset=utf-8",
       "cross-origin-opener-policy": "same-origin",
-      "etag": "\"07c092d9f07b3a0c4fe612fefe2b6bf7\"",
+      "etag": "\"cb823a3858ca4bbc60c11de756e46968\"",
       "link": "</2026/09/hello-world/>; rel=\"alternate\"; type=\"text/html\", </2026/09/hello-world/index.gmi>; rel=\"alternate\"; type=\"text/gemini\", </2026/09/hello-world/index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
@@ -421,7 +421,7 @@
       "x-pingback": "https://blog.example/_geekity/pingback",
       "x-robots-tag": "noindex"
     },
-    "body": "---\ntitle: Hello world\ndate: '2026-09-19T09:00:00Z'\npermalink: /2026/09/hello-world/\ntags:\n  - engines\nhome: /index.md\n---\n\n# Hello world\n\nWords about engines.\n\n## Filed under\n\n- [Tag: engines](/tag/engines/index.md)\n\n## Leave a comment\n\n[Leave a comment on the web page](https://blog.example/2026/09/hello-world/#respond)\n\nOr reply from your own site and send a [webmention](https://indieweb.org/Webmention).\n\n## Feeds\n\n- [A Site (RSS)](/feed/)\n- [A Site (Atom)](/feed/atom/)\n- [A Site (JSON Feed)](/feed/json/)\n- [A Site comments (RSS)](/comments/feed/)\n- [Comments on: Hello world (RSS)](/2026/09/hello-world/feed/)\n"
+    "body": "---\ntitle: Hello world\ndate: '2026-09-19T09:00:00Z'\npermalink: /2026/09/hello-world/\ntags:\n  - engines\nhome: /index.md\nfeeds:\n  - url: /feed/\n    title: A Site\n    type: application/rss+xml\n  - url: /feed/atom/\n    title: A Site\n    type: application/atom+xml\n  - url: /feed/json/\n    title: A Site\n    type: application/feed+json\n  - url: /comments/feed/\n    title: A Site comments\n    type: application/rss+xml\n  - url: /2026/09/hello-world/feed/\n    title: 'Comments on: Hello world'\n    type: application/rss+xml\n---\n\n# Hello world\n\nWords about engines.\n\n## Filed under\n\n- [Tag: engines](/tag/engines/index.md)\n\n## Leave a comment\n\n[Leave a comment on the web page](https://blog.example/2026/09/hello-world/#respond)\n\nOr reply from your own site and send a [webmention](https://indieweb.org/Webmention).\n\n## Feeds\n\n- [A Site (RSS)](/feed/)\n- [A Site (Atom)](/feed/atom/)\n- [A Site (JSON Feed)](/feed/json/)\n- [A Site comments (RSS)](/comments/feed/)\n- [Comments on: Hello world (RSS)](/2026/09/hello-world/feed/)\n"
   },
   "feed": {
     "status": 200,

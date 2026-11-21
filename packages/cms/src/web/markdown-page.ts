@@ -113,11 +113,13 @@ export const HOME_LINK: MarkdownLink = { label: 'Home', url: '/' };
 export function navigationFrontMatter(
   chrome: MarkdownChrome,
   markdownUrl: MarkdownUrl,
-): Record<string, string> {
+  feeds: readonly MarkdownFeed[],
+): Record<string, unknown> {
   return {
     home: markdownUrl(HOME_LINK.url),
     ...(chrome.previous === undefined ? {} : { previous: markdownUrl(chrome.previous.url) }),
     ...(chrome.next === undefined ? {} : { next: markdownUrl(chrome.next.url) }),
+    feeds: feeds.map(({ url, label, type }) => ({ url, title: label, type })),
   };
 }
 
