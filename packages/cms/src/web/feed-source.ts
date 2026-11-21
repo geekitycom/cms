@@ -397,7 +397,7 @@ export interface FeedComment {
   markdown?: string | undefined;
   /**
    * The post it answers, on every item of the site-wide feed and on none of a
-   * post's own. The RSS item prints no title, so it does not name it.
+   * post's own.
    */
   post?: { title: string; permalink: string } | undefined;
   /**

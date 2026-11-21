@@ -97,11 +97,6 @@ function reviewLines(document: Document, url: (href: string) => string): string[
   ];
 }
 
-/**
- * A comment's `source:markdown`: what a form comment's author typed, else its
- * sanitised HTML as Markdown. Raw HTML in typed Markdown was text on the page,
- * whose comment renderer escapes it, so it is escaped here too.
- */
 export function feedCommentMarkdown(
   comment: Pick<FeedComment, 'url' | 'markdown'>,
   sanitizedHtml: string,
@@ -119,6 +114,10 @@ export function feedCommentMarkdown(
       })
     : rewriteMarkdownLinks(comment.markdown, absolute, {
         rewriteImages: true,
-        rewriteHtml: (html) => html.replaceAll('<', '\\<'),
+        rewriteHtml: asCommentText,
       });
+}
+
+function asCommentText(html: string): string {
+  return html.replaceAll('<', '\\<');
 }
