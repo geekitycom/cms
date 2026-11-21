@@ -174,7 +174,19 @@ describe('mail templates', () => {
     });
 
     const bodies: Record<string, Record<string, unknown>> = {
-      'comment-digest': { total: 1, items: [{ ...pending, comment }], queueUrl: pending.queueUrl },
+      'comment-digest': {
+        sections: [
+          {
+            event: 'comments',
+            label: 'Waiting for review',
+            total: 1,
+            more: 0,
+            items: [{ ...pending, comment }],
+            url: pending.queueUrl,
+          },
+        ],
+        settingsUrl: 'https://blog.example/admin/settings/notifications',
+      },
       'comment-pending': { ...pending, comment },
       'comment-reply': {
         post: pending.post,

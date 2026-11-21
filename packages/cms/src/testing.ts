@@ -9,5 +9,6 @@ export type {
   ProposedComment,
 } from './comments/index.ts';
 export { documentContent } from './content/index.ts';
+export { recordNotice } from './notifications/notice-log.ts';
 export { pluginDataFolder } from './plugins/data.ts';
 export { pluginSite } from './plugins/site.ts';

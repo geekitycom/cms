@@ -181,12 +181,13 @@ export function deliveryMode(value: unknown): NotificationDeliveryMode | undefin
 export function notificationRecipients(
   users: readonly User[],
   name: string,
+  events: readonly NotificationEvent[] = NOTIFICATION_EVENTS,
 ): { user: User; email: string }[] {
   const wanted: { user: User; email: string }[] = [];
 
   for (const user of users) {
     if (user.email === undefined || user.email === '') continue;
-    if (!notificationWanted(user, name)) continue;
+    if (!notificationWanted(user, name, events)) continue;
     wanted.push({ user, email: user.email });
   }
 

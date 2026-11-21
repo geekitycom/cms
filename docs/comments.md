@@ -345,20 +345,30 @@ nothing changes for a user who does not touch it.
 
 On a digest, a comment entering the queue sends nothing. Instead, after each
 window, the server sends one message that lists every item **still waiting**.
-Each item has its own approve, spam and delete links. The server builds a digest
-from the queue as it is at that moment, not from a list of events. An item
-that someone moderated in the meantime is not in it, and no separate queue has
-to survive a restart.
+Each item has its own approve, spam and delete links. The server builds this
+part of a digest from the queue as it is at that moment, not from a list of
+events. An item that someone moderated in the meantime is not in it, and no
+separate queue has to survive a restart.
 
-A user with nothing waiting gets no message. Their window starts only when
-something is waiting. Each frequency sends at most one message per window, and
-a quiet site sends none.
+Every other batched notice is something that happened, not something waiting,
+so the server writes it to `data/notification-log.json` when it happens, once
+for each user who takes that notice in a digest. A digest lists what that log
+holds for the user and then crosses the user off those items. The log is a
+file, so a restart neither loses an item nor sends it twice. An item recorded
+twice under the same key is listed once, and an item taken back before the
+digest goes, such as an undone like, is not listed. Items are kept for a week.
 
-A digest lists up to a hundred items. A longer queue, such as a spam wave that
-Akismet let through, ends with a line that counts the rest and points to
-`/admin/comments`.
+Each notice keeps its own window. When several of a user's notices are due at
+the same time, they go out in one message, one part for each notice. A user
+with nothing in any due notice gets no message. A window starts only when a
+digest for that notice is sent, so a quiet site sends nothing and the first
+thing that does happen goes out at the next check.
 
-The server records only when each user last got a digest, in
+A digest lists up to a hundred items for each notice. A longer queue, such as a
+spam wave that Akismet let through, ends with a line that counts the rest and
+points to `/admin/comments`. For other notices, the next digest lists the rest.
+
+The server records when each user last got a digest of each notice, in
 `data/notification-digests.json`.
 
 - It is a file, not a database row, because decision-9 lets a site delete the
@@ -382,7 +392,10 @@ Notices are per user and keyed by event name. To add one, such as a new
 follower or a digest of failed deliveries, add one entry to the registry in
 `src/site/notification-preferences.ts`. Its checkbox appears on Settings >
 Notifications automatically. An entry with `batched: true` also gets the
-frequency select and names its `defaultMode`. An event a user has not set is at
+frequency select and names its `defaultMode`. A batched event other than
+Waiting for review reaches the digest through the notice log: the code that
+sees it happen calls `recordNotice` from `src/notifications/notice-log.ts`, and
+`withdrawNotice` when it is undone. An event a user has not set is at
 its default, so turning one on for a site needs no visit to the page, and only
 choices that differ from a default are written to `data/users.json`.
 

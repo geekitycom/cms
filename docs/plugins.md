@@ -845,6 +845,7 @@ import { pluginDataFolder, pluginSite } from '@geekity/cms/testing';
 | `openAdminStore`        | function | Open (and if needed create) the admin tables in `dataDir`, applying every migration the package ships.            |
 | `pluginDataFolder`      | function | Takes the data folder and the plugin. It returns the plugin's `host.data`, holding the files its `data` declares. |
 | `pluginSite`            | function | The `PluginSite` a plugin's host is given, built from a site's admin store and config.                            |
+| `recordNotice`          | function | Log something that happened for every user who takes that notice in an hourly or daily digest.                    |
 | `updateComment`         | function | Move a stored comment: approve it, mark it spam, put it back, or rewrite what it says.                            |
 | `CommentIntakeOutcome`  | type     | What became of one proposed comment.                                                                              |
 | `CommentOrigin`         | type     | Who is proposing a comment, which is the one thing the rules differ on.                                           |

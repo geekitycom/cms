@@ -22,6 +22,16 @@ export type {
   NotificationTimers,
 } from './digest.ts';
 export {
+  markNoticesSent,
+  NOTICE_RETENTION_MS,
+  noticeLogFile,
+  noticesFor,
+  readNoticeLog,
+  recordNotice,
+  withdrawNotice,
+} from './notice-log.ts';
+export type { LoggedNotice, NoticeItem } from './notice-log.ts';
+export {
   MODERATE_PATH,
   MODERATION_TOKEN_LIFETIME_SECONDS,
   moderationLink,

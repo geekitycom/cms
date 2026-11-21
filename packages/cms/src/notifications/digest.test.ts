@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -15,8 +16,12 @@ import type { OutgoingMail } from '../mail/provider.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { createUser, setUserNotification, setUserNotificationMode } from '../site/users.ts';
+import { NOTIFICATION_EVENTS } from '../site/notification-preferences.ts';
+import type { NotificationEvent } from '../site/notification-preferences.ts';
 import { createCommentDigest, readDigestTimes } from './digest.ts';
-import type { NotificationTimers } from './digest.ts';
+import type { CommentDigest, NotificationTimers } from './digest.ts';
+import { noticeLogFile, recordNotice, withdrawNotice } from './notice-log.ts';
+import type { NoticeItem } from './notice-log.ts';
 
 /**
  * The hourly and daily digest: one message per user per window, listing what
@@ -229,6 +234,15 @@ async function confirm(box: Site, link: string): Promise<number> {
   });
   await box.cms.mail.settled();
   return response.status;
+}
+
+/** A file's text, or `undefined` when there is no such file. */
+function readFileIfPresent(file: string): string | undefined {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch {
+    return undefined;
+  }
 }
 
 /** The comments the file holds, which is what a comment really is. */
@@ -556,5 +570,274 @@ describe('a site served under a path', () => {
     assert.ok(links.includes('https://example.com/blog/2026/09/hello-world/'), links.join('\n'));
     assert.ok(links.includes('https://example.com/blog/admin/comments'), links.join('\n'));
     for (const link of links) assert.match(link, /^https:\/\/example\.com\/blog(\/|$)/);
+  });
+});
+
+/**
+ * Two batched events that are not the queue, beside the real registry, so the
+ * digest can be shown carrying what happened rather than only what waits. Both
+ * are on by default and batched by default, so a user needs no stored choice.
+ */
+const QUOTES: NotificationEvent = {
+  name: 'test-quotes',
+  label: 'Quotes',
+  description: 'Somebody quoted a post.',
+  byDefault: true,
+  batched: true,
+  defaultMode: 'hourly',
+};
+const FOLLOWERS: NotificationEvent = {
+  name: 'test-followers',
+  label: 'New followers',
+  description: 'Somebody followed the site.',
+  byDefault: true,
+  batched: true,
+  defaultMode: 'daily',
+};
+const TEST_EVENTS: readonly NotificationEvent[] = [...NOTIFICATION_EVENTS, QUOTES, FOLLOWERS];
+
+/** A digest over the test registry, sharing the booted site's services. */
+function digestOver(box: Site): CommentDigest {
+  return createCommentDigest({
+    admin: box.cms.admin,
+    store: box.cms.store,
+    mail: box.cms.mail,
+    config: box.cms.config,
+    events: TEST_EVENTS,
+  });
+}
+
+/** Run a digest and let whatever it sent settle. */
+async function runOver(box: Site, digest: CommentDigest = digestOver(box)): Promise<number> {
+  const sent = await digest.run();
+  await box.cms.mail.settled();
+  return sent;
+}
+
+/** Add an admin with an address and nothing stored about notices. */
+async function admin(box: Site, username: string, email: string): Promise<number> {
+  const user = await createUser({
+    dataDir: box.dataDir,
+    username,
+    password: 'correct horse battery',
+    email,
+  });
+  return user.id;
+}
+
+/** A quote of the post by somebody. */
+function quote(who: string, key = who): NoticeItem {
+  return {
+    key,
+    actor: { name: who, url: `https://social.example/@${who.toLowerCase()}` },
+    action: 'quoted',
+    post: { title: 'Hello world', url: `${BASE_URL}/2026/09/hello-world/` },
+    text: `${who} says this is good.`,
+    url: `https://social.example/@${who.toLowerCase()}/1`,
+  };
+}
+
+/** Log a notice of one of the test events, as an event source would. */
+async function happened(box: Site, event: NotificationEvent, item: NoticeItem): Promise<void> {
+  await recordNotice({
+    dataDir: box.dataDir,
+    event: event.name,
+    item,
+    now: box.at(),
+    events: TEST_EVENTS,
+  });
+}
+
+describe('a digest of events that are not the queue', () => {
+  it('lists the queue and what happened in one message', async () => {
+    const box = await site();
+    await digestUser(box, 'ada', 'ada@example.com');
+    await comment(box, 'Grace Hopper', 'A thought about this.');
+    await happened(box, QUOTES, quote('Alan'));
+    await happened(box, FOLLOWERS, {
+      key: 'https://social.example/@edsger',
+      actor: { name: 'Edsger', url: 'https://social.example/@edsger' },
+      action: 'followed the site',
+    });
+
+    assert.equal(await runOver(box), 1, 'one message, not one per event');
+
+    const message = onlyMessage(box.provider);
+    assert.match(message.text, /A thought about this\./, 'the queue is in it');
+    assert.equal(linksFor(message, 'approve').length, 1, 'with its moderation links');
+    assert.match(
+      message.text,
+      /Alan quoted “Hello world”\nWho: https:\/\/social\.example\/@alan\n/,
+      'the quote is in it',
+    );
+    assert.match(message.text, /Alan says this is good\./);
+    assert.match(message.text, /https:\/\/social\.example\/@alan\/1/);
+    assert.match(message.text, /Edsger followed the site/, 'and so is the follower');
+    assert.match(message.html ?? '', /Alan<\/a> quoted/);
+  });
+
+  it('lists what happened when nothing is waiting', async () => {
+    const box = await site();
+    await admin(box, 'ada', 'ada@example.com');
+    await happened(box, QUOTES, quote('Alan'));
+
+    assert.equal(await runOver(box), 1);
+    const message = onlyMessage(box.provider);
+    assert.match(message.text, /Alan quoted/);
+    assert.doesNotMatch(message.text, /waiting for you/, 'no empty queue section');
+    assert.match(message.subject, /Quotes \(1\)/);
+  });
+
+  it('sends nothing for an empty window, and records nothing', async () => {
+    const box = await site();
+    await admin(box, 'ada', 'ada@example.com');
+
+    assert.equal(await runOver(box), 0);
+    assert.equal(box.provider.sent.length, 0);
+    assert.deepEqual(readDigestTimes(box.dataDir), {});
+  });
+
+  it('lists a thing once, not again in the next window', async () => {
+    const box = await site();
+    await admin(box, 'ada', 'ada@example.com');
+    await happened(box, QUOTES, quote('Alan'));
+    assert.equal(await runOver(box), 1);
+    box.provider.clear();
+
+    box.advance(HOUR + 1000);
+    assert.equal(await runOver(box), 0, 'nothing new happened');
+
+    await happened(box, QUOTES, quote('Grace'));
+    assert.equal(await runOver(box), 1);
+    const message = onlyMessage(box.provider);
+    assert.match(message.text, /Grace quoted/);
+    assert.doesNotMatch(message.text, /Alan quoted/, 'the one already sent is not sent again');
+  });
+
+  it('lists a thing recorded twice once', async () => {
+    const box = await site();
+    await admin(box, 'ada', 'ada@example.com');
+    await happened(box, QUOTES, quote('Alan', 'activity-1'));
+    await happened(box, QUOTES, quote('Alan', 'activity-1'));
+
+    await runOver(box);
+    assert.equal(onlyMessage(box.provider).text.match(/Alan quoted/g)?.length, 1);
+  });
+
+  it('leaves out a thing taken back before the digest went', async () => {
+    const box = await site();
+    await admin(box, 'ada', 'ada@example.com');
+    await happened(box, QUOTES, quote('Alan', 'activity-1'));
+    await happened(box, QUOTES, quote('Grace', 'activity-2'));
+    await withdrawNotice({ dataDir: box.dataDir, event: QUOTES.name, key: 'activity-1' });
+
+    await runOver(box);
+    const message = onlyMessage(box.provider);
+    assert.doesNotMatch(message.text, /Alan quoted/);
+    assert.match(message.text, /Grace quoted/);
+  });
+
+  it('logs nothing when nobody takes the event in a digest', async () => {
+    const box = await site();
+    await admin(box, 'ada', 'ada@example.com');
+    await recordNotice({
+      dataDir: box.dataDir,
+      event: QUOTES.name,
+      item: quote('Alan'),
+      now: box.at(),
+      events: [{ ...QUOTES, defaultMode: 'immediately' }],
+    });
+
+    assert.equal(readFileIfPresent(noticeLogFile(box.dataDir)), undefined);
+  });
+
+  it('lists a thing only for the users who batched it when it happened', async () => {
+    const box = await site();
+    await admin(box, 'ada', 'ada@example.com');
+    await happened(box, QUOTES, quote('Alan'));
+    await admin(box, 'grace', 'grace.admin@example.com');
+    await happened(box, QUOTES, quote('Edsger'));
+
+    assert.equal(await runOver(box), 2);
+    const to = (address: string) =>
+      box.provider.sent.find((message) => message.to.some((who) => who.address === address));
+    assert.match(to('ada@example.com')?.text ?? '', /Alan quoted[\s\S]*Edsger quoted/);
+    assert.doesNotMatch(to('grace.admin@example.com')?.text ?? '', /Alan quoted/);
+  });
+});
+
+describe('one message per user per window, across events', () => {
+  it('sends each event on its own window, never two messages at once', async () => {
+    const box = await site();
+    await digestUser(box, 'ada', 'ada@example.com');
+    await comment(box, 'Grace Hopper', 'The first thought.');
+    await happened(box, FOLLOWERS, {
+      key: 'edsger',
+      actor: { name: 'Edsger' },
+      action: 'followed the site',
+    });
+    assert.equal(await runOver(box), 1, 'both events were due, in one message');
+    box.provider.clear();
+
+    box.advance(HOUR + 1000);
+    await comment(box, 'Alan Turing', 'The second thought.');
+    await happened(box, FOLLOWERS, {
+      key: 'barbara',
+      actor: { name: 'Barbara' },
+      action: 'followed the site',
+    });
+    assert.equal(await runOver(box), 1);
+    const hourly = onlyMessage(box.provider);
+    assert.match(hourly.text, /The second thought\./, 'the hourly event came up');
+    assert.doesNotMatch(hourly.text, /Barbara/, 'the daily one waits for its day');
+    box.provider.clear();
+
+    box.advance(DAY);
+    await runOver(box);
+    assert.match(onlyMessage(box.provider).text, /Barbara followed the site/);
+  });
+});
+
+describe('a restart mid-window', () => {
+  it('neither loses nor resends what happened', async () => {
+    const first = await site();
+    await admin(first, 'ada', 'ada@example.com');
+    await happened(first, QUOTES, quote('Alan'));
+    assert.equal(await runOver(first), 1);
+    first.advance(HOUR / 4);
+    await happened(first, QUOTES, quote('Grace'));
+    await first.cms.close();
+
+    await rm(path.join(first.dataDir, 'geekity.db'), { force: true });
+    const again = await site({
+      contentDir: first.contentDir,
+      dataDir: first.dataDir,
+      now: new Date(START.getTime() + HOUR / 2),
+    });
+    await happened(again, QUOTES, quote('Edsger'));
+
+    assert.equal(await runOver(again), 0, 'the window it was in is remembered');
+
+    again.advance(HOUR);
+    assert.equal(await runOver(again), 1);
+    const message = onlyMessage(again.provider);
+    assert.doesNotMatch(message.text, /Alan quoted/, 'what went before the restart is not resent');
+    assert.match(message.text, /Grace quoted/, 'what happened before the restart is not lost');
+    assert.match(message.text, /Edsger quoted/, 'nor what happened after it');
+  });
+});
+
+describe('two runs at once', () => {
+  it('send what happened once', async () => {
+    const box = await site();
+    await admin(box, 'ada', 'ada@example.com');
+    await happened(box, QUOTES, quote('Alan'));
+
+    const digest = digestOver(box);
+    const both = await Promise.all([digest.run(), digest.run()]);
+    await box.cms.mail.settled();
+
+    assert.deepEqual(both.sort(), [0, 1]);
+    assert.equal(box.provider.sent.length, 1);
   });
 });

@@ -1,9 +1,16 @@
-{# The plain text body of the digest: everything still waiting, each item with
-   its own three links. The links are the point of the message, exactly as they
-   are in comment-pending — each carries a signed token, works once, and lands
-   on a page with a button rather than acting on being opened. -#}
-{{ total }} comment{% if total != 1 %}s are{% else %} is{% endif %} waiting for you.
-{% for item in items %}
+{# The plain text body of the digest: one part per event that had something
+   in its window. The queue lists everything still waiting, each item with its
+   own three links; those links are the point of it, exactly as they are in
+   comment-pending. Every other event lists what happened: who, what, on which
+   post, and where. -#}
+{% for section in sections -%}
+{% if not loop.first %}
+
+==
+{% endif -%}
+{% if section.event == 'comments' -%}
+{{ section.total }} comment{% if section.total != 1 %}s are{% else %} is{% endif %} waiting for you.
+{% for item in section.items %}
 
 --
 {{ loop.index }}. {% if item.comment.source == 'webmention' %}A page linked to{% else %}A comment on{% endif %} “{{ item.post.title }}”
@@ -24,16 +31,43 @@ When: {{ item.comment.submitted }}
 {{ choice.label }}: {{ choice.url }}
 {% endfor %}
 {% endfor %}
+{% if section.more %}
+
+And {{ section.more }} more waiting, which the queue has:
+{{ section.url }}
+{% endif %}
+
+Each link works once and lasts a week. After that, the queue is at
+{{ section.url }}.
+{% else -%}
+{{ section.label }}: {{ section.total }}
+{% for item in section.items %}
+
+{{ loop.index }}. {{ item.actor.name }} {{ item.action }}{{ ' “' + item.post.title + '”' if item.post else '' }}
+{% if item.actor.url %}
+Who: {{ item.actor.url }}
+{% endif %}
+{% if item.post %}
+Post: {{ item.post.url }}
+{% endif %}
+{% if item.url %}
+Link: {{ item.url }}
+{% endif %}
+{% if item.text %}
+
+{{ item.text | trim }}
+{% endif %}
+{% endfor %}
+{% if section.more %}
+
+And {{ section.more }} more, which the next digest lists.
+{% endif %}
+{% endif %}
+{% endfor %}
 
 --
-{% if more %}
-And {{ more }} more waiting, which the queue has:
-{{ queueUrl }}
-
-{% endif %}
-Each link works once and lasts a week. After that, the queue is at
-{{ queueUrl }}. This is your {% if mode == 'daily' %}daily{% else %}hourly{% endif %} digest;
-you can change that on the users screen.
+This is your {% if mode == 'daily' %}daily{% else %}hourly{% endif %} digest. Change what it
+carries and how often on {{ settingsUrl }}
 
 --
 {{ site.title }}

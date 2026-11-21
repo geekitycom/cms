@@ -97,6 +97,7 @@ describe('the core declarations', () => {
       'queue.sqlite-wal': 'pending',
       'queue.sqlite-shm': 'pending',
       'autosave/1/0123abcd.json': 'pending',
+      'notification-log.json': 'pending',
       'users.json.1a2b-3.tmp': 'scratch',
       'comments/hello-world.json.1a2b-3.tmp': 'scratch',
       'jobs.json.lock': 'scratch',

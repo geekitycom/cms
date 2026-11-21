@@ -10,7 +10,7 @@ import { crc32, deflateSync } from 'node:zlib';
 
 import { classifyFiles, createCms, createMemoryMailProvider, createUser } from '@geekity/cms';
 import type { Cms, DataFileDeclaration, MemoryMailProvider, OutgoingMail } from '@geekity/cms';
-import { pluginDataFolder, pluginSite } from '@geekity/cms/testing';
+import { pluginDataFolder, pluginSite, recordNotice } from '@geekity/cms/testing';
 import llm from '@geekity/plugin-llm';
 import postSummary from '@geekity/plugin-post-summary';
 import tagSuggest from '@geekity/plugin-tag-suggest';
@@ -349,6 +349,25 @@ async function discuss(site: Census): Promise<void> {
   await comment(site, { name: 'Pat Doe', email: 'pat@example.com', body: 'Queued.' });
   assert.ok((await cms.digests.run()) > 0, 'a digest went');
   await settle(cms);
+
+  // Something that is not the queue happening for a user who batches it, as a
+  // like or a new follower is logged until a digest carries it.
+  await recordNotice({
+    dataDir: site.dataDir,
+    event: 'census',
+    item: { key: 'census-1', actor: { name: 'Grace Hopper' }, action: 'followed the site' },
+    now: new Date(),
+    events: [
+      {
+        name: 'census',
+        label: 'Census',
+        description: 'A batched event that is not the queue.',
+        byDefault: true,
+        batched: true,
+        defaultMode: 'daily',
+      },
+    ],
+  });
 }
 
 async function contact(cms: Cms): Promise<void> {

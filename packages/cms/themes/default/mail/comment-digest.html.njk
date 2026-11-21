@@ -1,8 +1,10 @@
 {# The HTML twin of the digest. Deliberately plain: a single column and almost
    no styling is what survives the widest range of mail readers. #}
-<p>{{ total }} comment{% if total != 1 %}s are{% else %} is{% endif %} waiting for you.</p>
+{% for section in sections %}
+{% if section.event == 'comments' %}
+<h2>{{ section.total }} comment{% if section.total != 1 %}s are{% else %} is{% endif %} waiting for you</h2>
 
-{% for item in items %}
+{% for item in section.items %}
   <hr />
   <p>
     {% if item.comment.source == 'webmention' %}A page linked to{% else %}A comment on{% endif %}
@@ -26,12 +28,33 @@
 
 <hr />
 
-{% if more %}<p>And {{ more }} more waiting, which <a href="{{ queueUrl }}">the queue</a> has.</p>{% endif %}
+{% if section.more %}<p>And {{ section.more }} more waiting, which <a href="{{ section.url }}">the queue</a> has.</p>{% endif %}
 
 <p>
   Each link works once and lasts a week. After that, the queue is at
-  <a href="{{ queueUrl }}">{{ queueUrl }}</a>. This is your
-  {% if mode == 'daily' %}daily{% else %}hourly{% endif %} digest; change it on the users screen.
+  <a href="{{ section.url }}">{{ section.url }}</a>.
+</p>
+{% else %}
+<h2>{{ section.label }} ({{ section.total }})</h2>
+
+<ul>
+{% for item in section.items %}
+  <li>
+    {% if item.actor.url %}<a href="{{ item.actor.url }}" rel="nofollow ugc">{{ item.actor.name }}</a>{% else %}<strong>{{ item.actor.name }}</strong>{% endif %} {{ item.action }}{% if item.post %} <a href="{{ item.post.url }}">{{ item.post.title }}</a>{% endif %}{% if item.url %} &middot; <a href="{{ item.url }}" rel="nofollow ugc">see it</a>{% endif %}
+    {% if item.text %}<blockquote><p>{{ item.text }}</p></blockquote>{% endif %}
+  </li>
+{% endfor %}
+</ul>
+
+{% if section.more %}<p>And {{ section.more }} more, which the next digest lists.</p>{% endif %}
+{% endif %}
+{% endfor %}
+
+<hr />
+
+<p>
+  This is your {% if mode == 'daily' %}daily{% else %}hourly{% endif %} digest. Change what it
+  carries and how often on <a href="{{ settingsUrl }}">Settings &rsaquo; Notifications</a>.
 </p>
 
 <p>&mdash; {{ site.title }}</p>

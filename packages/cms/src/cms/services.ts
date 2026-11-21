@@ -383,9 +383,10 @@ export function createServices({
 
   // And the other half of it: a user who asked for an hourly or a
   // daily digest hears nothing above and one message per window from here,
-  // listing whatever is still pending when their window comes up. It reads the
-  // users file and the record of what it has sent per run, for the same
-  // reason: a mode chosen on the users screen takes effect at the next tick.
+  // listing whatever is still pending when their window comes up and whatever
+  // else they batch that happened since. It reads the users file, the notice
+  // log and the record of what it has sent per run, for the same reason: a
+  // mode chosen on Settings > Notifications takes effect at the next tick.
   const digests = createCommentDigest({ ...site, mail, cited });
 
   // And so does the webmention sender: telling the pages a post links to is
