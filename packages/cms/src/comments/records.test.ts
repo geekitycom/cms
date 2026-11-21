@@ -1092,7 +1092,7 @@ describe('the comment intake', () => {
     );
   });
 
-  it('approves an author a moderator has let through before, and says nothing', async () => {
+  it('approves an author a moderator has let through before, and says it is published', async () => {
     const site = await intakeSite();
     await addComment(site, ada({ status: 'approved' }));
     site.provider.clear();
@@ -1100,7 +1100,8 @@ describe('the comment intake', () => {
     const stored = onlyStored(await site.take());
 
     assert.equal(stored.status, 'approved');
-    assert.equal(site.provider.sent.length, 0);
+    assert.equal(site.provider.sent.length, 1);
+    assert.doesNotMatch(site.provider.sent[0]?.text ?? '', /\/_geekity\//, 'nothing to moderate');
   });
 
   it('hashes the address rather than storing it', async () => {
@@ -1122,13 +1123,14 @@ describe('the comment intake', () => {
     assert.equal(site.provider.sent.length, 0);
   });
 
-  it('lets a comment a checker calls ham past the queue, and tells nobody', async () => {
+  it('lets a comment a checker calls ham past the queue, and says it is published', async () => {
     const site = await intakeSite();
 
     const stored = onlyStored(await site.take({ checker: checkerSaying('ham') }));
 
     assert.equal(stored.status, 'approved');
-    assert.equal(site.provider.sent.length, 0);
+    assert.equal(site.provider.sent.length, 1);
+    assert.doesNotMatch(site.provider.sent[0]?.text ?? '', /\/_geekity\//, 'nothing to moderate');
   });
 
   it('tells whoever a comment answers when it is approved on arrival', async () => {
@@ -1148,10 +1150,10 @@ describe('the comment intake', () => {
     );
 
     assert.equal(stored.status, 'approved');
-    assert.equal(site.provider.sent.length, 1);
     assert.deepEqual(
-      site.provider.sent[0]?.to.map((recipient) => recipient.address),
-      ['ada@example.com'],
+      site.provider.sent.flatMap((message) => message.to.map((to) => to.address)).sort(),
+      ['ada@example.com', 'moderator@example.com'],
+      'the commenter it answers, and the moderator who never saw it',
     );
   });
 

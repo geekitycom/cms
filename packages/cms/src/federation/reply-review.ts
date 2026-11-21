@@ -1,6 +1,6 @@
 import { commentKeyAt, heldComment } from '../comments/conversation.ts';
 import type { ConversationReader } from '../comments/conversation.ts';
-import type { CommentNotices } from '../comments/intake.ts';
+import type { CommentNotices, PublishedComment } from '../comments/intake.ts';
 import { addComment, deleteComment, updateComment } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { isWebUrl } from '../content/enclosure.ts';
@@ -39,7 +39,9 @@ import type { FederationRecords } from './records.ts';
  * its links, the digest and moderation are the ones every comment has.
  *
  * The rule is applied as a reply is received, never as a page is drawn, so a
- * reply already on a page stays there whatever the rule becomes.
+ * reply already on a page stays there whatever the rule becomes. A delivered
+ * reply that shows at once sends the published notice; a fetched one does
+ * not, because the backfill finds replies that may be weeks old.
  */
 export interface ReplyReview {
   /** A `Create` has just been logged, delivered or fetched. */
@@ -55,7 +57,7 @@ export interface CreateReplyReviewOptions {
   readonly config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir'>;
   readonly settings: Pick<SettingsRegistry, 'values'>;
   readonly conversation: Pick<ConversationReader, 'documentOf'>;
-  readonly notices: Pick<CommentNotices, 'pending'>;
+  readonly notices: Pick<CommentNotices, 'pending' | 'published'>;
 }
 
 export function createReplyReview(options: CreateReplyReviewOptions): ReplyReview {
@@ -119,22 +121,30 @@ export function createReplyReview(options: CreateReplyReviewOptions): ReplyRevie
       const post = conversation.documentOf(reply.inReplyTo);
       if (post === undefined) return;
 
-      // A reply the rule lets through is on the page now, as it is logged.
-      if (await showsAtOnce(reply.actorId, reply.id)) return;
-
-      const held = await addComment(records, {
+      const comment: PublishedComment = {
         id: repliesKey(reply.id),
         slug: post.slug,
         permalink: post.permalink,
         source: 'activitypub',
         kind: 'reply',
-        status: 'pending',
         author: authorOf(admin, reply.actorId),
         content: contentOf(reply.html),
         submitted: reply.published.toISOString(),
+        url: isWebUrl(reply.url) ? reply.url : null,
+      };
+
+      // A reply the rule lets through is on the page now, as it is logged.
+      // One the backfill fetched is an old reply only now found, not news.
+      if (await showsAtOnce(reply.actorId, reply.id)) {
+        if (!activity.fetched) notices.published(comment);
+        return;
+      }
+
+      const held = await addComment(records, {
+        ...comment,
+        status: 'pending',
         addressHash: null,
         inReplyTo: parentOf(admin, config.baseUrl, reply.inReplyTo),
-        url: isWebUrl(reply.url) ? reply.url : null,
         notify: false,
         origin: reply.id,
         actor: reply.actorId,

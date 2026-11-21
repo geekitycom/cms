@@ -15,7 +15,7 @@ import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { setUserNotification } from '../site/users.ts';
+import { setUserNotification, setUserNotificationMode } from '../site/users.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 
 /**
@@ -315,7 +315,11 @@ describe('a comment waiting for a moderator (AC #1)', () => {
 
     await submit(box, submission({ [COMMENT_FIELDS.body]: 'And another thought.' }));
 
-    assert.equal(box.provider.sent.length, 0, 'nothing is waiting, so nothing was sent');
+    assert.deepEqual(
+      linksIn(onlyMessage(box.provider)),
+      [],
+      'nothing is waiting, so what went is the published notice, with nothing to moderate',
+    );
   });
 });
 
@@ -481,7 +485,7 @@ describe('telling a commenter about a reply (AC #2)', () => {
       );
 
       const queued = box.provider.sent.find((message) =>
-        message.to.some((to) => to.address === 'ada@example.com'),
+        linksIn(message).some((link) => linkAction(link) === 'approve'),
       );
       if (queued === undefined) return;
 
@@ -502,7 +506,13 @@ describe('telling a commenter about a reply (AC #2)', () => {
 
     await replyAndApprove('And another thing.');
 
-    assert.equal(box.provider.sent.length, 0, 'nothing was sent to Grace after she unsubscribed');
+    assert.deepEqual(
+      box.provider.sent.filter((message) =>
+        message.to.some((to) => to.address === 'grace@example.com'),
+      ),
+      [],
+      'nothing was sent to Grace after she unsubscribed',
+    );
   });
 });
 
@@ -567,5 +577,97 @@ describe('a site served under a path', () => {
     assert.ok(links.includes('https://example.com/blog/2026/09/hello-world/'), links.join('\n'));
     assert.ok(links.length > 1, 'the message carries its moderation links');
     for (const link of links) assert.match(link, /^https:\/\/example\.com\/blog(\/|$)/);
+  });
+});
+
+describe('a comment that goes public without a moderator', () => {
+  /** Grace's first comment, approved by the moderator from the notice's link. */
+  async function graceApproved(box: Site): Promise<void> {
+    await submit(box, submission());
+    await confirm(box, linkFor(onlyMessage(box.provider), 'approve'));
+  }
+
+  it('tells the admin when a returning author is approved at once', async () => {
+    const box = await site({ email: 'ada@example.com' });
+    await graceApproved(box);
+    box.provider.clear();
+
+    await submit(box, submission({ [COMMENT_FIELDS.body]: 'And another thought.' }));
+
+    const published = stored(box).find((one) => one.content.markdown === 'And another thought.');
+    assert.equal(published?.status, 'approved');
+    const message = onlyMessage(box.provider);
+    assert.deepEqual(
+      message.to.map((to) => to.address),
+      ['ada@example.com'],
+    );
+    assert.match(message.subject, /Hello world/);
+    assert.match(message.text, /Grace Hopper/);
+    assert.match(message.text, /And another thought\./);
+    assert.ok(
+      message.text.includes(`${BASE_URL}/2026/09/hello-world/#comment-${published.id}`),
+      `the message links the comment on the page:\n${message.text}`,
+    );
+    assert.deepEqual(linksIn(message), [], 'there is nothing to moderate, so no links to do it');
+    assert.doesNotMatch(message.text, /grace@example\.com/);
+    assert.doesNotMatch(message.html ?? '', /grace@example\.com/);
+  });
+
+  it('tells the admin when the checker lets a first comment straight through', async () => {
+    const box = await site({
+      email: 'ada@example.com',
+      config: { commentChecker: { check: () => 'ham' } },
+    });
+
+    await submit(box, submission());
+
+    assert.equal(stored(box)[0]?.status, 'approved');
+    assert.match(onlyMessage(box.provider).text, /A thought about this\./);
+  });
+
+  it('says nothing to the moderator who approved a comment themselves', async () => {
+    const box = await site({ email: 'ada@example.com' });
+    await submit(box, submission());
+    const moderation = onlyMessage(box.provider);
+    box.provider.clear();
+
+    await confirm(box, linkFor(moderation, 'approve'));
+
+    assert.equal(stored(box)[0]?.status, 'approved');
+    assert.equal(box.provider.sent.length, 0, 'approving was their own act');
+  });
+
+  it('says nothing to an admin who turned it off', async () => {
+    const box = await site({ email: 'ada@example.com' });
+    await graceApproved(box);
+    await setUserNotification({ dataDir: box.dataDir, userId: 1, event: 'published', on: false });
+    box.provider.clear();
+
+    await submit(box, submission({ [COMMENT_FIELDS.body]: 'And another thought.' }));
+
+    assert.equal(box.provider.sent.length, 0);
+  });
+
+  it('waits for the digest when the admin chose one, and the digest lists it', async () => {
+    const box = await site({ email: 'ada@example.com' });
+    await graceApproved(box);
+    await setUserNotificationMode({
+      dataDir: box.dataDir,
+      userId: 1,
+      event: 'published',
+      mode: 'daily',
+    });
+    box.provider.clear();
+
+    await submit(box, submission({ [COMMENT_FIELDS.body]: 'And another thought.' }));
+    assert.equal(box.provider.sent.length, 0, 'nothing went as it arrived');
+
+    assert.equal(await box.cms.digests.run(), 1);
+    await box.cms.mail.settled();
+    const digest = onlyMessage(box.provider);
+    assert.match(digest.text, /New published comments and replies: 1/);
+    assert.match(digest.text, /Grace Hopper commented on “Hello world”/);
+    assert.match(digest.text, /And another thought\./);
+    assert.match(digest.text, /#comment-/);
   });
 });

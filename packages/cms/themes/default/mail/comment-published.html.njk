@@ -1,0 +1,20 @@
+{# The HTML twin of the published notice. Deliberately plain: a single column
+   and almost no styling is what survives the widest range of mail readers. #}
+<p>
+  {% if comment.source == 'webmention' %}A page has linked to{% elif comment.source == 'activitypub' %}A fediverse reply is on{% else %}A comment is on{% endif %}
+  <a href="{{ post.url }}">{{ post.title }}</a>, published without waiting for you.
+</p>
+
+<p>
+  <strong>{{ comment.author }}</strong>{% if comment.website %} &mdash; <a href="{{ comment.website }}" rel="nofollow ugc">{{ comment.website }}</a>{% endif %}<br />
+  {% if comment.url %}<a href="{{ comment.url }}" rel="nofollow ugc">{{ comment.url }}</a><br />{% endif %}
+  <span>{{ comment.submitted }}</span>
+</p>
+
+<blockquote>
+  {% if comment.html %}{{ comment.html | safe }}{% else %}<p>(nothing was said &mdash; it is a {{ comment.kind }})</p>{% endif %}
+</blockquote>
+
+<p><a href="{{ link }}">Read it on the page</a></p>
+
+<p>&mdash; {{ site.title }}</p>

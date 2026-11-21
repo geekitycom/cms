@@ -47,7 +47,23 @@ export interface CommentNotices {
   pending(comment: PostComment, carried?: readonly PostComment[]): void;
   /** A reply is on the page, so whoever it answers may want to know. */
   replyApproved(reply: PostComment): void;
+  /**
+   * Something went on a page without a moderator approving it, so the people
+   * who would have moderated it may want to know. Never sent for a
+   * moderator's own approval.
+   */
+  published(comment: PublishedComment): void;
 }
+
+/**
+ * What a published notice needs of the thing that went on the page: a stored
+ * comment, or a fediverse reply the page reads from the inbox log, described
+ * as the comment it would be stored as.
+ */
+export type PublishedComment = Pick<
+  PostComment,
+  'id' | 'slug' | 'permalink' | 'source' | 'kind' | 'author' | 'content' | 'submitted' | 'url'
+>;
 
 /** What {@link intakeComment} needs around a proposed comment. */
 export interface IntakeCommentOptions {
@@ -139,7 +155,8 @@ export type CommentIntakeOutcome =
  * that was merely rewritten sends nothing — the moderators heard the first
  * time — and neither does one that was approved or filed as spam, because
  * neither is waiting for anybody. A new comment that is approved instead
- * tells whoever it answers, when they asked to be told.
+ * tells the moderators it is published, and whoever it answers, when they
+ * asked to be told.
  */
 export async function intakeComment(options: IntakeCommentOptions): Promise<CommentIntakeOutcome> {
   const { records, origin, comment } = options;
@@ -307,6 +324,10 @@ function announce(notices: CommentNotices | undefined, stored: PostComment): voi
   // and one it said to discard was never stored at all.
   if (stored.status === 'pending') notices.pending(stored);
   // A comment the site let straight through is on the page already, so
-  // whoever it answers hears about it now rather than at a moderator's hand.
-  else if (stored.status === 'approved') notices.replyApproved(stored);
+  // whoever it answers hears about it now rather than at a moderator's hand,
+  // and so do the moderators it never reached.
+  else if (stored.status === 'approved') {
+    notices.published(stored);
+    notices.replyApproved(stored);
+  }
 }

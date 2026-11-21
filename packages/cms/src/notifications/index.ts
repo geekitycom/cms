@@ -1,8 +1,10 @@
 export {
   COMMENT_PENDING_TEMPLATE,
+  COMMENT_PUBLISHED_TEMPLATE,
   COMMENT_REPLY_TEMPLATE,
   COMMENTS_NOTIFICATION,
   createCommentNotifier,
+  PUBLISHED_NOTIFICATION,
 } from './comments.ts';
 export type { CommentNotifier, CreateCommentNotifierOptions } from './comments.ts';
 export {

@@ -18,7 +18,8 @@ import { sandbox } from '../admin/__testing__/harness.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { discardDatabase } from '../cache.ts';
-import type { Cms } from '../index.ts';
+import type { Cms, GeekityConfig } from '../index.ts';
+import { createMemoryMailProvider } from '../mail/memory.ts';
 import { createConversation } from '../web/conversation.ts';
 import type { ThreadReply } from '../comments/conversation.ts';
 import type { HostLookup } from '../util/public-address.ts';
@@ -193,6 +194,7 @@ async function site(
   log = deliveredLine(A, ADA, POST),
   clock = { at: new Date('2026-09-29T12:00:00Z') },
   extra: Record<string, string> = {},
+  config: GeekityConfig = {},
 ): Promise<Site> {
   const contentDir = await box.dir('geekity-backfill-content-');
   const dataDir = await box.dir('geekity-backfill-data-');
@@ -223,12 +225,18 @@ async function site(
     await writeFile(file, contents, 'utf8');
   }
   writeUsers(dataDir, [{ username: LOCAL_USER, profile: { displayName: 'Blog' } }]);
-  return { cms: await boot(contentDir, dataDir, clock), contentDir, dataDir, clock };
+  return { cms: await boot(contentDir, dataDir, clock, config), contentDir, dataDir, clock };
 }
 
-async function boot(contentDir: string, dataDir: string, clock: { at: Date }): Promise<Cms> {
+async function boot(
+  contentDir: string,
+  dataDir: string,
+  clock: { at: Date },
+  config: GeekityConfig = {},
+): Promise<Cms> {
   return await box.open(
     {
+      ...config,
       contentDir,
       dataDir,
       baseUrl: BASE_URL,
@@ -291,6 +299,30 @@ describe('a fetched reply under the default review rule', () => {
     assert.equal(held?.origin, B);
     assert.equal(held?.inReplyTo, A);
     assert.doesNotMatch(await (await cms.app.request(PERMALINK)).text(), /Bob answers Ada\./);
+  });
+});
+
+describe('a fetched reply the review rule shows', () => {
+  it('sends no published notice: it is an old reply pulled in, not news', async () => {
+    serveNote(note(A, POST, 'Ada says hello.'), [B]);
+    serveNote(note(B, A, 'Bob answers Ada.'), []);
+    const provider = createMemoryMailProvider();
+    const { cms, contentDir, dataDir } = await site(
+      undefined,
+      undefined,
+      {},
+      {
+        mail: { provider, backoffMs: () => 0, logger: { info: () => {}, warn: () => {} } },
+      },
+    );
+    writeUsers(dataDir, [{ username: LOCAL_USER, email: 'blog@example.com' }]);
+
+    await cms.replyBackfill.sweep();
+    await cms.notifications.settled();
+    await cms.mail.settled();
+
+    assert.deepEqual(tree(cms, contentDir), [{ [A]: [B] }]);
+    assert.equal(provider.sent.length, 0);
   });
 });
 

@@ -188,6 +188,11 @@ describe('mail templates', () => {
         settingsUrl: 'https://blog.example/admin/settings/notifications',
       },
       'comment-pending': { ...pending, comment },
+      'comment-published': {
+        post: pending.post,
+        comment,
+        link: 'https://blog.example/hello/#comment-0123456789abcdef',
+      },
       'comment-reply': {
         post: pending.post,
         reply: { author: 'Ada', url: 'https://blog.example/hello/#c2', text: 'Thanks.' },

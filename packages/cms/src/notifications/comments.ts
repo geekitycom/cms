@@ -6,7 +6,9 @@ import type { ResolvedConfig } from '../config.ts';
 import type { DocumentLookup } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader, CitedPagesNow } from '../content/citation.ts';
+import type { PublishedComment } from '../comments/intake.ts';
 import type { MailService } from './mail-service.ts';
+import { recordNotice } from './notice-log.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { moderationLink, unsubscribeLink } from './links.ts';
@@ -18,10 +20,10 @@ import {
 } from '../site/notification-preferences.ts';
 
 /**
- * The two messages a comment sets off, and the rules about who gets them.
+ * The three messages a comment sets off, and the rules about who gets them.
  *
- * Both go through the mail service and nothing else, so a site with
- * no provider sends nothing and every path through here still works. Neither
+ * All three go through the mail service and nothing else, so a site with
+ * no provider sends nothing and every path through here still works. None
  * is awaited by the request that caused it: a comment is stored, a page is
  * redirected to, and the message goes out behind that.
  *
@@ -32,6 +34,13 @@ import {
  * which is the whole of the "not for spam" rule: a comment Akismet filed as
  * spam is nobody's decision to make today, and one it said to discard was
  * never stored at all.
+ *
+ * **The published notice.** Something went on a page without passing through
+ * a moderator: a form comment from an author approved before, anything a
+ * checker called ham, or a fediverse reply the review rule shows. The people
+ * who would have moderated it hear about it once, with the words and a link to
+ * it on the page. A moderator's own approval sends nothing, because they were
+ * there.
  *
  * **The reply notice.** Somebody ticked "tell me about replies" when they
  * commented, and a reply to that comment has just been approved. That is the
@@ -47,11 +56,17 @@ import {
 /** The message an admin gets when something is waiting. */
 export const COMMENT_PENDING_TEMPLATE = 'comment-pending';
 
+/** The message an admin gets when something went on a page without them. */
+export const COMMENT_PUBLISHED_TEMPLATE = 'comment-published';
+
 /** The message a commenter gets when a reply to them is approved. */
 export const COMMENT_REPLY_TEMPLATE = 'comment-reply';
 
 /** The event name the users screen switches, from the registry. */
 export const COMMENTS_NOTIFICATION = 'comments';
+
+/** The event name of the published notice, from the registry. */
+export const PUBLISHED_NOTIFICATION = 'published';
 
 /** What {@link createCommentNotifier} needs. */
 export interface CreateCommentNotifierOptions {
@@ -82,6 +97,11 @@ export interface CommentNotifier {
    * be told and are still listening.
    */
   replyApproved(reply: PostComment): void;
+  /**
+   * Something went on a page with no moderator's hand on it. Tells whoever
+   * takes the published notice, now or in their digest.
+   */
+  published(comment: PublishedComment): void;
   /** Resolve once every notice asked for so far has been handed to the mail service. */
   settled(): Promise<void>;
 }
@@ -93,7 +113,7 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
 
   /** The post a comment is on, as a message names it. */
   function postOf(
-    comment: PostComment,
+    comment: Pick<PostComment, 'slug' | 'permalink'>,
     cited: CitedPageReader | undefined,
   ): { title: string; url: string } {
     const document = store.getBySlug(comment.slug);
@@ -104,7 +124,7 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
   }
 
   /** What a message says about the comment itself. */
-  function commentIn(comment: PostComment): Record<string, unknown> {
+  function commentIn(comment: PublishedComment): Record<string, unknown> {
     return {
       author: comment.author.name,
       // The website they gave, which is a thing a moderator judges a comment
@@ -136,10 +156,50 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
       void notices.run(() => tellParent(reply, parentId));
     },
 
+    published(comment) {
+      void notices.run(() => tellPublished(comment));
+    },
+
     settled() {
       return notices.settled();
     },
   };
+
+  async function tellPublished(comment: PublishedComment): Promise<void> {
+    if (!(await mail.configured())) return;
+
+    const post = postOf(comment, await options.cited?.());
+    const link = `${post.url}#${commentAnchor(comment.id)}`;
+
+    // A user on an hourly or daily digest is told from the notice log when
+    // their window comes up; the key is the comment's, so a reply received
+    // twice is listed once.
+    await recordNotice({
+      dataDir: config.dataDir,
+      event: PUBLISHED_NOTIFICATION,
+      item: {
+        key: comment.id,
+        actor: { name: comment.author.name, url: comment.author.url ?? undefined },
+        action: publishedAction(comment),
+        post,
+        text: comment.content.markdown,
+        url: link,
+      },
+      now: config.now(),
+    });
+
+    const recipients = notificationRecipients(
+      listUsers(config.dataDir),
+      PUBLISHED_NOTIFICATION,
+    ).filter(
+      (recipient) => !isBatchedMode(notificationMode(recipient.user, PUBLISHED_NOTIFICATION)),
+    );
+
+    const data = { comment: commentIn(comment), post, link };
+    for (const recipient of recipients) {
+      void mail.send({ to: recipient.email, template: COMMENT_PUBLISHED_TEMPLATE, data });
+    }
+  }
 
   async function tellModerators(
     comment: PostComment,
@@ -219,5 +279,21 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
         unsubscribeUrl: unsubscribeLink(context, address),
       },
     });
+  }
+}
+
+/** What a digest says somebody did, as the words after their name. */
+function publishedAction(comment: Pick<PostComment, 'source' | 'kind'>): string {
+  if (comment.source === 'comment') return 'commented on';
+  switch (comment.kind) {
+    case 'reply':
+      return 'replied to';
+    case 'like':
+      return 'liked';
+    case 'boost':
+    case 'repost':
+      return 'reposted';
+    case 'mention':
+      return 'mentioned';
   }
 }

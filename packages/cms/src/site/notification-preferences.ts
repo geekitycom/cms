@@ -120,6 +120,17 @@ export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = [
     batched: true,
     defaultMode: 'immediately',
   },
+  {
+    name: 'published',
+    label: 'New published comments and replies',
+    description:
+      'A comment, a webmention or a fediverse reply went on a page without anybody ' +
+      'approving it: a returning commenter, or a reply the review rule lets through. ' +
+      'Approving something yourself sends nothing.',
+    byDefault: true,
+    batched: true,
+    defaultMode: 'immediately',
+  },
 ];
 
 /** The event of that name, or `undefined` for one nothing here knows. */

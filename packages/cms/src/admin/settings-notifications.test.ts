@@ -29,14 +29,10 @@ async function page(agent: Browser): Promise<{ html: string; token: string }> {
   return { html, token };
 }
 
-/** Save the page the way a browser would: every event shown, the named fields filled. */
+/** Save the form as if it showed only the Waiting for review event, which these tests are about. */
 async function save(agent: Browser, fields: Record<string, string>): Promise<Response> {
   const { token } = await page(agent);
-  return agent.post(PAGE, {
-    csrf_token: token,
-    events: NOTIFICATION_EVENTS.map((event) => event.name).join(' '),
-    ...fields,
-  });
+  return agent.post(PAGE, { csrf_token: token, events: 'comments', ...fields });
 }
 
 /** The stored record for a user, exactly as `data/users.json` holds it. */

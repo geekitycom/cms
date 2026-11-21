@@ -29,6 +29,7 @@ import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { listUsers, setUserNotificationMode } from '../site/users.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
+import { repliesKey } from '../content/guids.ts';
 import { appendInboxActivity, readInboxLog } from './records.ts';
 
 /**
@@ -262,6 +263,15 @@ function onlyMessage(provider: MemoryMailProvider): OutgoingMail {
   return message;
 }
 
+/** The one waiting-for-review notice, among whatever published notices went too. */
+function waitingNotice(provider: MemoryMailProvider): OutgoingMail {
+  const waiting = provider.sent.filter((message) => /\/_geekity\//.test(message.text));
+  assert.equal(waiting.length, 1, `exactly one notice waits, not ${waiting.length}`);
+  const [message] = waiting;
+  assert.ok(message !== undefined);
+  return message;
+}
+
 function linkFor(message: OutgoingMail, action: string): string {
   const found = (message.text.match(/https:\/\/blog\.example\/_geekity\/\S+/g) ?? []).find(
     (link) => new URL(link).searchParams.get('action') === action,
@@ -306,7 +316,7 @@ describe('the default rule: followers and approved accounts show, the rest wait'
 
     assert.deepEqual(stored(box), []);
     assert.equal(times(await page(box), 'A follower says hello.'), 1);
-    assert.equal(box.provider.sent.length, 0);
+    assert.doesNotMatch(onlyMessage(box.provider).text, /\/_geekity\//, 'nothing to moderate');
   });
 
   it('sends the waiting-for-review notice, whose approve link puts it on the page once', async () => {
@@ -337,7 +347,9 @@ describe('the default rule: followers and approved accounts show, the rest wait'
     await reply(box, BOB, 2, 'Second word.');
 
     assert.equal(stored(box).length, 1, 'the second reply was not stored');
-    assert.equal(box.provider.sent.length, 1, 'and sent no second notice');
+    assert.equal(box.provider.sent.length, 2, 'and the second notice says it is published');
+    assert.match(box.provider.sent[1]?.text ?? '', /Second word\./);
+    assert.doesNotMatch(box.provider.sent[1]?.text ?? '', /\/_geekity\//);
     const html = await page(box);
     assert.equal(times(html, 'First word.'), 1);
     assert.equal(times(html, 'Second word.'), 1);
@@ -381,7 +393,7 @@ describe('the default rule: followers and approved accounts show, the rest wait'
     assert.equal(times(waiting, 'The stranger’s point.'), 0);
     assert.equal(times(waiting, 'The follower answers it.'), 1);
 
-    await confirm(box, linkFor(onlyMessage(box.provider), 'approve'));
+    await confirm(box, linkFor(waitingNotice(box.provider), 'approve'));
 
     const html = await page(box);
     assert.equal(times(html, 'The stranger’s point.'), 1);
@@ -402,7 +414,7 @@ describe('the default rule: followers and approved accounts show, the rest wait'
     const [held] = stored(box);
     assert.equal(held?.status, 'pending');
     assert.equal(held?.inReplyTo, noteId(ADA, 1));
-    await confirm(box, linkFor(onlyMessage(box.provider), 'approve'));
+    await confirm(box, linkFor(waitingNotice(box.provider), 'approve'));
     const html = await page(box);
     assert.equal(times(html, 'The stranger answers.'), 1);
     assert.ok(html.indexOf('The follower’s point.') < html.indexOf('The stranger answers.'));
@@ -552,7 +564,7 @@ describe('replies that arrived before the rule', () => {
     await reply(box, BOB, 1, 'After the rule.');
 
     assert.deepEqual(stored(box), []);
-    assert.equal(box.provider.sent.length, 0);
+    assert.doesNotMatch(onlyMessage(box.provider).text, /\/_geekity\//, 'nothing to moderate');
     assert.equal(times(await page(box), 'After the rule.'), 1);
   });
 
@@ -595,5 +607,60 @@ describe('replies that arrived before the rule', () => {
     assert.equal(times(html, 'From before the rule.'), 1);
     assert.equal(times(html, 'After the rule.'), 0);
     assert.equal(stored(again)[0]?.status, 'pending');
+  });
+});
+
+describe('the published notice for a reply shown at once', () => {
+  it('names the author, the post, the words and the reply on the page', async () => {
+    const box = await site('show');
+
+    await reply(box, BOB, 1, 'A stranger, shown.');
+
+    const message = onlyMessage(box.provider);
+    assert.deepEqual(
+      message.to.map((to) => to.address),
+      ['blog@example.com'],
+    );
+    assert.match(message.subject, /Hello world/);
+    assert.match(message.text, /bob/i);
+    assert.match(message.text, /A stranger, shown\./);
+    assert.ok(
+      message.text.includes(`${POST_ID}#comment-${repliesKey(noteId(BOB, 1))}`),
+      message.text,
+    );
+  });
+
+  it('is not sent for a held reply a moderator approves', async () => {
+    const box = await site();
+    await reply(box, BOB, 1, 'A stranger says hello.');
+    const moderation = onlyMessage(box.provider);
+    box.provider.clear();
+
+    await confirm(box, linkFor(moderation, 'approve'));
+
+    assert.equal(stored(box)[0]?.status, 'approved');
+    assert.equal(box.provider.sent.length, 0, 'approving was the moderator’s own act');
+  });
+
+  it('waits for the digest when the user chose one, and the digest lists it', async () => {
+    const box = await site('show');
+    const [user] = listUsers(box.dataDir);
+    assert.ok(user !== undefined);
+    await setUserNotificationMode({
+      dataDir: box.dataDir,
+      userId: user.id,
+      event: 'published',
+      mode: 'hourly',
+    });
+
+    await reply(box, BOB, 1, 'For the digest.');
+
+    assert.equal(box.provider.sent.length, 0, 'nothing went as it arrived');
+    assert.equal(await box.cms.digests.run(), 1);
+    await box.cms.mail.settled();
+    const digest = onlyMessage(box.provider);
+    assert.match(digest.text, /New published comments and replies: 1/);
+    assert.match(digest.text, /replied to “Hello world”/);
+    assert.match(digest.text, /For the digest\./);
   });
 });
