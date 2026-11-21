@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.14.0...plugin-wordpress-v0.14.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* **cms:** record accepted webmentions before answering and check them from the record ([62c6f3b](https://github.com/geekitycom/cms/commit/62c6f3b029f9a5a1ec044c0822db4f846b4ced74))
+
 ## [0.14.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.13.0...plugin-wordpress-v0.14.0) (2026-11-17)
 
 
