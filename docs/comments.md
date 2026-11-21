@@ -205,6 +205,46 @@ service that is down never stops a site from taking comments.
 `/admin/comments` is the moderation queue. The dashboard shows how many
 comments are waiting.
 
+### Fediverse replies that wait for review
+
+A fediverse reply does not pass through the form, so the name and email rule
+does not apply to it. **Show fediverse replies** on Settings > Discussion
+(`fediverseReplies` in `site.json`) decides which replies show on the page as
+they arrive and which wait in the moderation queue:
+
+| Value             | What it does                                                                                                               |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `show`            | Every reply shows at once.                                                                                                 |
+| `known` (default) | A reply shows at once when its author follows the site, or has a reply approved or already shown on a page. The rest wait. |
+| `hold`            | Every reply waits.                                                                                                         |
+
+The server applies the rule when a reply arrives, whether it was delivered to
+the inbox or fetched by the [reply backfill](federation.md#replies-to-fediverse-replies).
+It does not apply it when a page is drawn, so a reply already on a page stays
+there when the rule changes.
+
+A reply that waits is stored as a pending comment in the post's comment file,
+with its note id as its `origin` and its sender as its `actor`. From there it is
+moderated like any other comment:
+
+- It is in `/admin/comments` and sends the Waiting for review notice, with
+  approve, spam and delete links.
+- Approving it shows it once, in its place in the thread. Under `known`, that
+  account's later replies then show at once.
+- Spam or delete keeps it off the page. A moderator's delete also removes the
+  reply's `Create` from the inbox log, so the logged copy does not show in its
+  place.
+- When its author sends an `Update`, the stored copy takes the new words. When
+  its author sends a `Delete`, the stored copy goes.
+
+A fediverse reply is not held like a form comment because it is already public
+on its author's server and in their followers' timelines. Holding it hides
+nothing. It only keeps it out of the thread on the page. The sender is also a
+signed actor, not an anonymous visitor. Spam and pile-ons come from accounts the
+site does not know, so under the default only their first reply waits. The
+site's actor follows nobody, so the rule has no "accounts I follow" choice.
+Backlog decision-68 has the reasoning.
+
 ### A comment's own page
 
 A comment left through the form has its own page at `/comment/{key}/` (see
@@ -294,11 +334,32 @@ decision-47 have the rules.
 
 ### Being told about one
 
-With mail configured, a comment or a webmention entering the queue sends an
-email to every user who has an address and has not turned the notice off on
-their `/admin/users/<id>` screen. The message holds the comment, the post it is
-on, and approve, spam and delete links that work without a login. The server
-sends nothing about a comment that Akismet filed as spam or told the site to
+With mail configured, the site emails each user who has an address about the
+events they have turned on. Each user chooses their own on Settings >
+Notifications (`/admin/settings/notifications`). The page has an on/off switch
+for each event and, for an event that can be batched, how often it arrives:
+as they arrive, an hourly digest or a daily digest. A user who has not changed
+an event gets its default:
+
+| Event                              | Default                   | What it tells you                                                                                                                                                                                                                                                                                 |
+| ---------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Waiting for review                 | On, as they arrive        | A form comment, a webmention or a [held fediverse reply](#fediverse-replies-that-wait-for-review) is in the moderation queue. The message has approve, spam and delete links.                                                                                                                     |
+| New published comments and replies | On, as they arrive        | Something went on a page with no moderator: a form comment or webmention approved on arrival because its author was approved before or a checker said `ham`, or a fediverse reply the review rule shows. A moderator's own approval sends nothing, and neither does a reply the backfill fetched. |
+| Likes and boosts                   | Off, daily when turned on | Someone liked or boosted one of the site's own posts. A relay's boost sends nothing.                                                                                                                                                                                                              |
+| Quotes                             | On, daily                 | The site approved a quote of one of its posts for the first time. The message has what the quoter wrote.                                                                                                                                                                                          |
+| New followers                      | On, daily                 | Someone new followed one of the site's accounts. A relay is not a follower and sends nothing.                                                                                                                                                                                                     |
+
+Across all of them:
+
+- Each activity is told once. A remote server that delivers the same like,
+  follow or reply again sends nothing more.
+- An `Undo` of a like, boost, follow or quote request, or a `Delete` of the
+  quoting post, takes the item out of any digest not yet sent. A message
+  already sent as it arrived cannot be recalled.
+
+The Waiting for review message holds the comment, the post it is on, and
+approve, spam and delete links that work without a login. The server sends
+nothing about a comment that Akismet filed as spam or told the site to
 discard. It sends only about comments that wait for a person. A webmention
 whose source carries replies from other pages sends one message: the first
 new entry, then each carried reply with its own three links.
@@ -332,16 +393,9 @@ and the site never emails it about replies again. The comments are not changed.
 
 ### One message an hour instead of one a comment
 
-Beside each switch on Settings > Notifications (`/admin/settings/notifications`)
-is a frequency setting for that notice:
-
-- as they arrive
-- an hourly digest
-- a daily digest
-
-The setting is per user: the page shows the signed-in user their own. Each
-notice names its own default. Waiting for review starts at "as they arrive", so
-nothing changes for a user who does not touch it.
+An event set to an hourly or a daily digest on Settings > Notifications sends
+one message per user per window instead of one per item. The setting is per
+user, and each event has its own default, listed in the table above.
 
 On a digest, a comment entering the queue sends nothing. Instead, after each
 window, the server sends one message that lists every item **still waiting**.
@@ -388,8 +442,8 @@ With no mail configured, none of this runs and nothing breaks:
 - No digest runs.
 - The moderation screen is the only notification, as before.
 
-Notices are per user and keyed by event name. To add one, such as a new
-follower or a digest of failed deliveries, add one entry to the registry in
+Notices are per user and keyed by event name. To add one, such as a digest of
+failed deliveries, add one entry to the registry in
 `src/site/notification-preferences.ts`. Its checkbox appears on Settings >
 Notifications automatically. An entry with `batched: true` also gets the
 frequency select and names its `defaultMode`. A batched event other than
