@@ -388,8 +388,13 @@ describe('the comments feeds (TASK-318 AC #7, AC #10)', () => {
   it('name the comment an answer replies to in the site’s feed', async () => {
     const feed = await get('/comments/feed/');
 
-    assert.ok(feed.includes('<title>Bob replying to Ada on Hello</title>'), 'a reply');
-    assert.ok(feed.includes('<title>Ada on Hello</title>'), 'a top-level comment');
+    const answering = (which: string): string | undefined =>
+      new RegExp(
+        `<guid[^>]*>${BASE_URL}${pageOf(which)}</guid>(?:(?!</item>)[\\s\\S])*?<source:inReplyTo[^>]*>([^<]*)<`,
+      ).exec(feed)?.[1];
+
+    assert.equal(answering(MIDDLE), `${BASE_URL}${pageOf(TOP)}`, 'a reply');
+    assert.equal(answering(TOP), `${BASE_URL}${POST}`, 'a top-level comment');
   });
 });
 
@@ -430,10 +435,12 @@ describe('a reply under a comment a reader may not see (TASK-325)', () => {
         assert.ok(!feed.includes(`${pageOf(parent)}</link>`), `${pathname} has no placeholder`);
         assert.ok(!feed.includes('no longer shown'), `${pathname} says nothing of it`);
       }
-      assert.ok(
-        (await get('/comments/feed/')).includes(`<title>${shown} on Hello</title>`),
-        'the site feed names no hidden author',
-      );
+      if (hidden !== undefined) {
+        assert.ok(
+          !(await get('/comments/feed/')).includes(hidden),
+          'the site feed names no hidden author',
+        );
+      }
     });
   }
 

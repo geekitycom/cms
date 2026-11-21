@@ -149,7 +149,7 @@ describe('a feed item', () => {
     const item = feedItem(post(), CONTEXT);
 
     assert.equal(item.html, '<p>A <em>file-first</em> CMS.</p>\n');
-    assert.equal(item.markdown, 'A *file-first* CMS.');
+    assert.equal(item.sourceMarkdown, 'A *file-first* CMS.');
   });
 
   it('names what a reply answers, and nothing for a post that answers nothing', () => {
@@ -166,8 +166,8 @@ describe('a feed item', () => {
     }
   });
 
-  it('is at revision 15, so feeds cached before photo-only posts had a summary are refetched', () => {
-    assert.equal(FEED_ITEM_REVISION, 15);
+  it('is at revision 16, so feeds cached before source:markdown carried the lead are refetched', () => {
+    assert.equal(FEED_ITEM_REVISION, 16);
   });
 
   it('titles a titled repost, like or bookmark with no words (TASK-256)', () => {

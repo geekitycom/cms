@@ -1074,9 +1074,18 @@ describe('a reply in the feeds', () => {
     assert.equal(body.includes('<thr:'), false);
     const line = `<p class="cite-line">In reply to <a href="${TARGET}">a page on ${new URL(TARGET).hostname}</a></p>`;
     const element = `<source:inReplyTo>${TARGET}</source:inReplyTo>`;
+    const markdownLine = `In reply to [a page on ${new URL(TARGET).hostname}](${TARGET})`;
     assert.ok(body.includes(line), 'the post’s HTML names its target (TASK-252)');
+    assert.ok(body.includes(markdownLine), 'and so does its Markdown');
     assert.equal(body.split(element).length - 1, 1, 'and source:inReplyTo names it once');
-    assert.equal(body.replaceAll(line, '').replaceAll(element, '').includes(TARGET), false);
+    assert.equal(
+      body
+        .replaceAll(line, '')
+        .replaceAll(markdownLine, '')
+        .replaceAll(element, '')
+        .includes(TARGET),
+      false,
+    );
   });
 
   it('names the feed the target is in, from its stored context (RSS.chat)', async () => {
@@ -1389,8 +1398,8 @@ describe('a reply to a migrated post’s stored object id', () => {
     // The site-wide one, which resolves the id back to the post it names.
     const siteWide = await rss(cms, '/comments/feed/');
     assert.deepEqual(
-      childrenNamed(siteWide.channel, 'item').map((item) => child(item, 'title').text),
-      ['@ada@remote.example on Old news'],
+      childrenNamed(siteWide.channel, 'item').map((item) => child(item, 'source:inReplyTo').text),
+      ['https://example.com/?p=813'],
     );
 
     // And the count the post feed advertises, which is the same walk again.
@@ -1566,7 +1575,7 @@ describe('a post’s comments feed', () => {
 
     // Newest first, and the name comes from the actor's URL when nothing else
     // is known about them.
-    assert.equal(child(newest, 'title').text, '@bob@remote.example');
+    assert.equal(childrenNamed(newest, 'title').length, 0, 'a comment, like a note, has no title');
     assert.equal(child(newest, 'dc:creator').text, '@bob@remote.example');
     // No `url` on the note, so the note's own id is where it can be read.
     assert.equal(child(newest, 'link').text, 'https://remote.example/notes/2');
@@ -1576,7 +1585,7 @@ describe('a post’s comments feed', () => {
     assert.equal(child(oldest, 'guid').attributes['isPermaLink'], 'false');
     assert.equal(child(newest, 'pubDate').text, 'Wed, 02 Sep 2026 11:00:00 GMT');
 
-    assert.equal(child(oldest, 'title').text, '@ada@remote.example');
+    assert.equal(child(oldest, 'dc:creator').text, '@ada@remote.example');
     assert.equal(child(oldest, 'link').text, 'https://remote.example/@ada/1');
     assert.equal(htmlText(child(oldest, 'description').text), 'Good post.');
     assert.equal(child(oldest, 'content:encoded').text, '<p>Good post.</p>');
@@ -1622,7 +1631,7 @@ describe('a post’s comments feed', () => {
 
     const { channel } = await rss(cms, '/2026/09/hello/feed/');
 
-    assert.equal(child(child(channel, 'item'), 'title').text, 'Ada Lovelace');
+    assert.equal(child(child(channel, 'item'), 'dc:creator').text, 'Ada Lovelace');
   });
 
   it('sanitises the note before it goes anywhere near a reader', async () => {
@@ -1686,8 +1695,14 @@ describe('the site-wide comments feed', () => {
     );
 
     assert.deepEqual(
-      childrenNamed(channel, 'item').map((item) => child(item, 'title').text),
-      ['@bob@remote.example on Second Post', '@ada@remote.example on Hello, World!'],
+      childrenNamed(channel, 'item').map((item) => [
+        child(item, 'dc:creator').text,
+        child(item, 'source:inReplyTo').text,
+      ]),
+      [
+        ['@bob@remote.example', 'https://example.com/2026/09/second/'],
+        ['@ada@remote.example', 'https://example.com/2026/09/hello/'],
+      ],
     );
   });
 

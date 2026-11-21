@@ -116,7 +116,7 @@ describe('a page’s comments feed', () => {
     assert.equal(child(found, 'title').text, 'Comments on: Guestbook');
     const items = childrenNamed(found, 'item');
     assert.deepEqual(
-      items.map((item) => child(item, 'title').text),
+      items.map((item) => child(item, 'dc:creator').text),
       ['Pat'],
     );
     assert.equal(child(items[0] as XmlElement, 'source:inReplyTo').text, `${BASE_URL}/guestbook/`);
@@ -129,7 +129,7 @@ describe('a page’s comments feed', () => {
   it('carries what was said on a page that takes no comments', async () => {
     const found = await channel('/about/feed/');
     assert.deepEqual(
-      childrenNamed(found, 'item').map((item) => child(item, 'title').text),
+      childrenNamed(found, 'item').map((item) => child(item, 'dc:creator').text),
       ['Quinn'],
     );
     assert.deepEqual(childrenNamed(await channel('/shut/feed/'), 'item'), []);
@@ -147,10 +147,15 @@ describe('a page’s comments feed', () => {
 
 describe('the site’s comments feed', () => {
   it('names a page a comment is on as it names a post, a closed page’s included', async () => {
-    const titles = childrenNamed(await channel('/comments/feed/'), 'item').map(
-      (item) => child(item, 'title').text,
-    );
-    assert.deepEqual(titles, ['Quinn on About', 'Pat on Guestbook', 'Ann on Hello']);
+    const answered = childrenNamed(await channel('/comments/feed/'), 'item').map((item) => [
+      child(item, 'dc:creator').text,
+      child(item, 'source:inReplyTo').text,
+    ]);
+    assert.deepEqual(answered, [
+      ['Quinn', `${BASE_URL}/about/`],
+      ['Pat', `${BASE_URL}/guestbook/`],
+      ['Ann', `${BASE_URL}/2026/09/hello/`],
+    ]);
   });
 });
 

@@ -877,7 +877,11 @@ describe('the comments feeds', () => {
 
     const siteWide = await (await cms.app.request('/comments/feed/')).text();
     assert.match(siteWide, /A feed-worthy remark\./);
-    assert.match(siteWide, /Ada Lovelace on Hello world/);
+    assert.match(siteWide, /<dc:creator>Ada Lovelace<\/dc:creator>/);
+    assert.match(
+      siteWide,
+      /<source:inReplyTo[^>]*>https:\/\/blog\.example\/2026\/09\/hello-world\/<\/source:inReplyTo>/,
+    );
 
     // And the post's own feed says how many there are to fetch.
     const posts = await (await cms.app.request('/feed/')).text();

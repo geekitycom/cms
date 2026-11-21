@@ -23,6 +23,7 @@ import { lastModifiedOf } from './negotiate.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import type { AnsweredFeed, ReplyContext } from '../webmention/reply-context.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
+import { feedMarkdown } from './feed-markdown.ts';
 
 /**
  * One post as a feed shows it, in one shape whatever format the feed is.
@@ -114,8 +115,7 @@ export interface FeedItem {
    * JSON Feed writes it as `image`; the XML formats have no such field.
    */
   image?: string | undefined;
-  /** The Markdown the body was written from, for `source:markdown`. */
-  markdown: string;
+  sourceMarkdown: string;
   /**
    * Where this item's comments are, and how many there are, or `undefined`
    * when the feed did not resolve the counts. A feed whose builder did not
@@ -186,7 +186,7 @@ export interface FeedItem {
  * a comment is not a {@link FeedItem}, and their validator has a label of its
  * own in `commentsFeedResponse`.
  */
-export const FEED_ITEM_REVISION = 15;
+export const FEED_ITEM_REVISION = 16;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -247,7 +247,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
       reviewHtml(review, { library: context.altTexts, baseUrl }) +
       photosHtml(photos, context.altTexts ?? new Map(), baseUrl) +
       absoluteHtmlUrls(document.html, link, baseUrl),
-    markdown: document.body,
+    sourceMarkdown: feedMarkdown(document, context, link),
     creator: author ?? siteAuthorName(context.users, context.site),
   };
 

@@ -134,7 +134,7 @@ function markdownSaid(reply: Interaction): MarkdownSaid {
   };
 }
 
-function markdownText(html: string): string {
+export function markdownText(html: string): string {
   if (html.trim() === '') return '';
   return markdownFromHtml(html) ?? escapeMarkdown(textOf(parseHtml(html)));
 }

@@ -1,9 +1,7 @@
 import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
-import { CITATION_VERBS, citationsOf, citedPageName } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
-import { postLabel, replyTarget } from '../content/post-type.ts';
+import { postLabel } from '../content/post-type.ts';
 import { reviewWords } from '../content/review.ts';
-import { RSVP_PHRASES } from '../content/rsvp.ts';
 import { termHref } from '../content/taxonomy.ts';
 import type { Taxonomy } from '../content/taxonomy.ts';
 import { calendarDayIn } from '../content/time.ts';
@@ -12,7 +10,6 @@ import { navigationLinks, navigationMenus } from '../site/navigation.ts';
 import { siteTimezone, permalinkBases } from '../theme/site-data.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { webmentionEndpointFor } from '../webmention/endpoint.ts';
-import type { ReplyContext } from '../webmention/reply-context.ts';
 import type { ArchiveMonth } from './archive.ts';
 import { documentContext, locationContext } from './context.ts';
 import type { MarkdownEnvironment } from './markdown-environment.ts';
@@ -21,11 +18,10 @@ import { bioOf, HOME_LINK, oneLine } from './markdown-page.ts';
 import type {
   MarkdownArchiveMonth,
   MarkdownChrome,
-  MarkdownCite,
   MarkdownEntry,
   MarkdownLink,
 } from './markdown-page.ts';
-import { replyContextFor } from './page-context.ts';
+import { markdownCites } from './markdown-cites.ts';
 import type { PageContexts } from './page-context.ts';
 import type {
   MarkdownChromeOptions,
@@ -201,22 +197,11 @@ function markdownKindContext(
     undefined,
     citedPage,
   );
-  const cite = (verb: string, target: string): MarkdownCite =>
-    markdownCite(verb, target, citedPage?.(target));
-  const target = replyTarget(document);
-  const cites = [
-    ...(target === undefined
-      ? []
-      : [cite(rsvp === undefined ? 'In reply to' : RSVP_PHRASES[rsvp.value], target)]),
-    ...citationsOf(document.extra).map((citation) =>
-      cite(CITATION_VERBS[citation.property], citation.url),
-    ),
-  ];
   const shared = options.location?.(document, requestSite());
   return {
     postType,
     ...(lang === undefined ? {} : { lang }),
-    cites,
+    cites: markdownCites(document, citedPage),
     photos: photos.map(({ url, alt }) => ({ url, alt })),
     ...(enclosure === undefined ? {} : { enclosure }),
     ...(rsvp === undefined ? {} : { rsvp: { value: rsvp.value, label: rsvp.label } }),
@@ -266,34 +251,5 @@ function markdownConversationContext(
       ? {}
       : { contactForm: { url: `${page}#contact` } }),
     ...(webmention === undefined ? {} : { webmention }),
-  };
-}
-
-function markdownCite(
-  verb: string,
-  target: string,
-  context: ReplyContext | undefined,
-): MarkdownCite {
-  const url = context?.original ?? target;
-  const name = citedPageName(url, context);
-  const author = context?.author?.name.trim();
-  const named =
-    author !== undefined &&
-    author !== '' &&
-    name.trim().toLowerCase().endsWith(` by ${author.toLowerCase()}`);
-  const { startDate, startZone, published } = replyContextFor(context ?? { url });
-  return {
-    verb,
-    url,
-    name,
-    ...(author === undefined || named ? {} : { author }),
-    ...(author === undefined && context?.site !== undefined ? { site: context.site } : {}),
-    ...(startDate instanceof Date
-      ? { startDate, ...(typeof startZone === 'string' ? { startZone } : {}) }
-      : published instanceof Date
-        ? { published }
-        : {}),
-    ...(context?.location === undefined ? {} : { location: context.location }),
-    ...(context?.original === undefined ? {} : { copy: target }),
   };
 }

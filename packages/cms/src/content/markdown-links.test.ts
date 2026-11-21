@@ -93,12 +93,43 @@ describe('rewriteMarkdownLinks', () => {
       '[a](</a b/index.md>)',
     );
   });
+
+  it('rewrites images when asked, inside a link too', () => {
+    assert.equal(
+      rewriteMarkdownLinks('![alt](/photo/ "T") and [![a](/p/)](/a/)', toMarkdown, {
+        rewriteImages: true,
+      }),
+      '![alt](/photo/index.md "T") and [![a](/p/index.md)](/a/index.md)',
+    );
+  });
+
+  it('hands raw HTML blocks and inline tags to html when asked, and not code', () => {
+    const body = [
+      '<div><a href="/a/">raw</a></div>',
+      '',
+      'Inline <img src="/b.jpg"> tag and `<a href="/c/">`.',
+      '',
+      '    <a href="/d/">',
+    ].join('\n');
+    assert.equal(
+      rewriteMarkdownLinks(body, () => undefined, { rewriteHtml: (html) => `{${html}}` }),
+      [
+        '{<div><a href="/a/">raw</a></div>}',
+        '',
+        'Inline {<img src="/b.jpg">} tag and `<a href="/c/">`.',
+        '',
+        '    <a href="/d/">',
+      ].join('\n'),
+    );
+  });
 });
 
 describe('rewriteMarkdownLinks over wiki links', () => {
   it('writes each as an ordinary link through the rewrite', () => {
     assert.equal(
-      rewriteMarkdownLinks('See [[Some Page]] and [[Other#Usage|how]].', toMarkdown, 'notes'),
+      rewriteMarkdownLinks('See [[Some Page]] and [[Other#Usage|how]].', toMarkdown, {
+        wikiBase: 'notes',
+      }),
       'See [Some Page](/notes/some-page/index.md) and [how](/notes/other/index.md#usage).',
     );
   });
