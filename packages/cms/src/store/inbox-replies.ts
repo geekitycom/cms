@@ -105,10 +105,6 @@ export function quoteFrom(activity: InboxActivity): Quote | undefined {
   return undefined;
 }
 
-/**
- * The note an `Update` carries, as its author now has it: its id and what it
- * says, or `undefined` when the activity inlines no object with an id.
- */
 export function editedNoteOf(json: string): { id: string; html: string } | undefined {
   const object = activityObject(json);
   if (object === undefined) return undefined;

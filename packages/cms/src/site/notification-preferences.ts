@@ -44,10 +44,6 @@ export const NOTIFICATION_DELIVERY_MODES = ['immediately', 'hourly', 'daily'] as
 /** One of {@link NOTIFICATION_DELIVERY_MODES}. */
 export type NotificationDeliveryMode = (typeof NOTIFICATION_DELIVERY_MODES)[number];
 
-/**
- * The mode of a notice that cannot be batched: one message per thing, sent as
- * it happens. A batched event names its own default instead.
- */
 export const DEFAULT_DELIVERY_MODE: NotificationDeliveryMode = 'immediately';
 
 /**
@@ -62,7 +58,6 @@ export const DELIVERY_WINDOW_MS: Readonly<Record<NotificationDeliveryMode, numbe
   daily: 24 * 60 * 60 * 1000,
 };
 
-/** What the Notifications page calls each mode. */
 export const DELIVERY_MODE_LABELS: Readonly<Record<NotificationDeliveryMode, string>> = {
   immediately: 'As they arrive',
   hourly: 'Hourly digest',
@@ -74,11 +69,8 @@ export function isBatchedMode(mode: NotificationDeliveryMode): boolean {
   return DELIVERY_WINDOW_MS[mode] > 0;
 }
 
-/** What every event says about itself, batched or not. */
 interface NotificationEventBase {
-  /** What it is called in `data/users.json` and in the form. Never renamed. */
   readonly name: string;
-  /** What the Notifications page calls it. */
   readonly label: string;
   /** The sentence under the label, so a switch says what it will send. */
   readonly description: string;
@@ -86,30 +78,14 @@ interface NotificationEventBase {
   readonly byDefault: boolean;
 }
 
-/**
- * One thing a user can be told about.
- *
- * `batched` says whether a user may choose how often it arrives. It is `false`
- * for a notice that is only ever one message about one thing — a password
- * having been changed, say — where "hourly" would mean nothing. A batched
- * event gets a delivery mode beside its switch, names the mode a user who has
- * said nothing gets, and whatever sends it is responsible for honouring one.
- */
 export type NotificationEvent = NotificationEventBase &
   (
     | { readonly batched: false }
     | { readonly batched: true; readonly defaultMode: NotificationDeliveryMode }
   );
 
-/**
- * Every event, in the order the Notifications page offers them.
- *
- * One entry each.
- */
 export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = [
   {
-    // Stored as `comments` since before the queue held anything else; the name
-    // is what saved preferences are keyed by, so it stays.
     name: 'comments',
     label: 'Waiting for review',
     description:
@@ -235,10 +211,6 @@ export function notificationRecipients(
   return wanted;
 }
 
-/**
- * The recipients who take this notice as it happens. A user on an hourly or a
- * daily digest is left out: the digest tells them when their window comes up.
- */
 export function immediateRecipients(
   users: readonly User[],
   name: string,
@@ -299,7 +271,6 @@ export function withNotificationMode(
   return Object.keys(next).length === 0 ? undefined : next;
 }
 
-/** One event as the Notifications page renders it: the switch, and the mode when it has one. */
 export interface NotificationSwitch {
   /** The event's name, which is what the form submits. */
   name: string;
@@ -317,7 +288,6 @@ export interface NotificationSwitch {
   modes: { value: NotificationDeliveryMode; label: string; chosen: boolean }[];
 }
 
-/** Every event with what this user has it set to, for the Notifications page. */
 export function notificationSwitches(
   user: User,
   events: readonly NotificationEvent[] = NOTIFICATION_EVENTS,

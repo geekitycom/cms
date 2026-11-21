@@ -350,9 +350,6 @@ async function discuss(site: Census): Promise<void> {
   assert.ok((await cms.digests.run()) > 0, 'a digest went');
   await settle(cms);
 
-  // Something that is not the queue happening for a user who batches it: a
-  // returning author's comment goes public at once, and the published notice
-  // is logged until a daily digest carries it.
   const daily = await admin.post('/admin/settings/notifications', {
     events: 'comments published',
     notify_comments: '1',

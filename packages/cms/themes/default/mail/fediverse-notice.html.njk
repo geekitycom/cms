@@ -1,6 +1,3 @@
-{# The HTML twin of a like, boost, quote or new follower notice. Deliberately
-   plain: a single column and almost no styling is what survives the widest
-   range of mail readers. #}
 <p>
   {% if notice.actor.url %}<a href="{{ notice.actor.url }}" rel="nofollow ugc">{{ notice.actor.name }}</a>{% else %}<strong>{{ notice.actor.name }}</strong>{% endif %}
   {{ notice.action }}{% if notice.post %} <a href="{{ notice.post.url }}">{{ notice.post.title }}</a>{% endif %}.

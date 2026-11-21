@@ -242,7 +242,6 @@ export interface CreateReplyBackfillOptions {
   readonly config: Pick<ResolvedConfig, 'now' | 'contentDir' | 'dataDir'>;
   readonly settings: Pick<SettingsRegistry, 'values'>;
   readonly load: RepliesLoader;
-  /** What decides whether a reply logged here shows at once or waits for review. */
   readonly review?: Pick<ReplyReview, 'received'> | undefined;
   /** Told the author of every reply logged, so the thread can name them. */
   readonly heard?: ((actorId: string) => void) | undefined;

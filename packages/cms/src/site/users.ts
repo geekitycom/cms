@@ -627,21 +627,9 @@ export async function setUserNotificationMode(input: {
   }));
 }
 
-/**
- * Apply every switch and mode one form submitted for one user, in one write.
- *
- * Each choice goes through {@link withNotification} and
- * {@link withNotificationMode}, so an event this version does not know, a mode
- * it does not know and an answer that is the default all leave nothing in the
- * file. A choice without a mode leaves the stored mode alone. Returns `false`
- * when there is no such user.
- */
 export async function setUserNotifications(input: {
-  /** Which site's users file to write. */
   dataDir: string;
-  /** Whose preferences. */
   userId: number;
-  /** One entry per event the form showed. */
   choices: readonly { event: string; on: boolean; mode?: string | undefined }[];
 }): Promise<boolean> {
   return updateUser(input.dataDir, input.userId, (user) => {

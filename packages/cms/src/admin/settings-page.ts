@@ -80,11 +80,6 @@ export interface SettingsPage {
     settings: SiteSettings,
   ) => Promise<Record<string, unknown>> | Record<string, unknown>;
   reads?: (options: { c: Context<GeekityEnv>; body: SubmittedBody }) => Partial<SettingsForm>;
-  /**
-   * What the page's own form saves, when that is not site settings. Only
-   * Notifications has one: it saves the signed-in user's choices to
-   * `data/users.json`, and carries no site setting at all.
-   */
   save?: (c: Context<GeekityEnv>, body: SubmittedBody) => Promise<Response>;
   /**
    * The page's own endpoints: a credential, a test message. Each is its own

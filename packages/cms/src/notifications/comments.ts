@@ -36,13 +36,6 @@ import {
  * spam is nobody's decision to make today, and one it said to discard was
  * never stored at all.
  *
- * **The published notice.** Something went on a page without passing through
- * a moderator: a form comment from an author approved before, anything a
- * checker called ham, or a fediverse reply the review rule shows. The people
- * who would have moderated it hear about it once, with the words and a link to
- * it on the page. A moderator's own approval sends nothing, because they were
- * there.
- *
  * **The reply notice.** Somebody ticked "tell me about replies" when they
  * commented, and a reply to that comment has just been approved. That is the
  * only moment it goes: an unapproved reply is not something a stranger should
@@ -57,7 +50,6 @@ import {
 /** The message an admin gets when something is waiting. */
 export const COMMENT_PENDING_TEMPLATE = 'comment-pending';
 
-/** The message an admin gets when something went on a page without them. */
 export const COMMENT_PUBLISHED_TEMPLATE = 'comment-published';
 
 /** The message a commenter gets when a reply to them is approved. */
@@ -66,7 +58,6 @@ export const COMMENT_REPLY_TEMPLATE = 'comment-reply';
 /** The event name the users screen switches, from the registry. */
 export const COMMENTS_NOTIFICATION = 'comments';
 
-/** The event name of the published notice, from the registry. */
 export const PUBLISHED_NOTIFICATION = 'published';
 
 /** What {@link createCommentNotifier} needs. */
@@ -172,9 +163,6 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
     const post = postOf(comment, await options.cited?.());
     const link = `${post.url}#${commentAnchor(comment.id)}`;
 
-    // A user on an hourly or daily digest is told from the notice log when
-    // their window comes up; the key is the comment's, so a reply received
-    // twice is listed once.
     await recordNotice({
       dataDir: config.dataDir,
       event: PUBLISHED_NOTIFICATION,
@@ -277,7 +265,6 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
   }
 }
 
-/** What a digest says somebody did, as the words after their name. */
 function publishedAction(comment: Pick<PostComment, 'source' | 'kind'>): string {
   if (comment.source === 'comment') return 'commented on';
   switch (comment.kind) {

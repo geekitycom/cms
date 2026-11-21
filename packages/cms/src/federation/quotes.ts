@@ -86,7 +86,7 @@ function isQuoteAuthorization(value: unknown): value is QuoteAuthorizationRecord
 /**
  * Approve one quote of one user's post, or hand back the approval it already
  * has. Keyed by the quote and the post, so a redelivered or repeated request
- * is one stamp rather than two; `created` says which it was.
+ * is one stamp rather than two.
  */
 export async function authorizeQuote(
   contentDir: string,
@@ -113,7 +113,7 @@ export async function authorizeQuote(
 /**
  * Withdraw every approval `taken` picks out, whichever user gave it: the quote
  * was deleted or its request undone, and a stamp for a quote that no longer
- * stands is one nobody should be shown. Hands back what it withdrew.
+ * stands is one nobody should be shown.
  */
 export async function revokeQuotes(
   contentDir: string,

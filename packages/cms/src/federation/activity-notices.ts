@@ -21,24 +21,8 @@ import type { FederationContextData } from './federation.ts';
 import { profileFrom } from './profiles.ts';
 import type { QuoteAuthorizationRecord } from './quotes.ts';
 
-/**
- * What the inbox tells the activity notices, worked out from what it was
- * sent: who did it, named the way a person knows them, and which of the
- * site's posts or accounts they did it to.
- *
- * Each is called once, where the inbox first knows the thing is new: a like
- * whose id the log has not seen, a follow that added a follower, a quote the
- * site had not approved before. A redelivery is none of those, so it tells
- * nobody twice.
- */
-
 type SiteContext = Context<FederationContextData>;
 
-/**
- * A like or a boost of one of the site's posts, the first time the log holds
- * it. A relay is not somebody boosting a post: it is the subscription doing
- * what it is for.
- */
 export async function noticeReaction(
   context: SiteContext,
   activity: Like | Announce,
@@ -68,7 +52,6 @@ export async function noticeReaction(
   });
 }
 
-/** Somebody who was not following a user of the site now is. */
 export async function noticeFollower(
   context: SiteContext,
   followId: string,
@@ -89,7 +72,6 @@ export async function noticeFollower(
   });
 }
 
-/** A quote the site has just approved for the first time. */
 export async function noticeQuote(
   context: SiteContext,
   record: QuoteAuthorizationRecord,
@@ -123,9 +105,8 @@ export async function noticeQuote(
 }
 
 /**
- * An `Undo` took back a like, a boost or a follow: whichever it was, it
- * leaves any digest that has not gone. Only the sender's own server can name
- * one of its activities, so an `Undo` from anywhere else is ignored.
+ * Only the sender's own server can name one of its activities, so an `Undo`
+ * from anywhere else is ignored.
  */
 export async function withdrawUndone(
   context: SiteContext,
@@ -138,7 +119,6 @@ export async function withdrawUndone(
   await notices.undone(FOLLOWERS_NOTIFICATION, undone);
 }
 
-/** Quotes whose approval was withdrawn leave any digest that has not gone. */
 export async function withdrawQuotes(
   context: SiteContext,
   revoked: readonly QuoteAuthorizationRecord[],
@@ -147,7 +127,6 @@ export async function withdrawQuotes(
     await context.data.notices?.undone(QUOTES_NOTIFICATION, record.quote);
 }
 
-/** Whether this actor is a relay the site subscribes to rather than a person. */
 function isRelay(context: SiteContext, actor: string): boolean {
   return context.data.admin.listRelays().some((relay) => relay.actorId === actor);
 }
@@ -159,10 +138,6 @@ function named(actor: string, profile: ActorProfile | undefined): NoticeItem['ac
   };
 }
 
-/**
- * The profile of an actor the site has heard nothing of yet, read now rather
- * than by the background capture, because the notice is written now.
- */
 async function fetchedProfile(
   context: SiteContext,
   activity: Like | Announce,

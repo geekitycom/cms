@@ -581,7 +581,6 @@ describe('a site served under a path', () => {
 });
 
 describe('a comment that goes public without a moderator', () => {
-  /** Grace's first comment, approved by the moderator from the notice's link. */
   async function graceApproved(box: Site): Promise<void> {
     await submit(box, submission());
     await confirm(box, linkFor(onlyMessage(box.provider), 'approve'));

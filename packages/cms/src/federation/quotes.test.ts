@@ -135,7 +135,6 @@ async function site(settings: Partial<typeof DEFAULT_SITE_SETTINGS> = {}): Promi
       base_url: BASE_URL,
       timezone: 'UTC',
       author: LOCAL_USER,
-      // The quotes here are about display, not about which replies wait.
       fediverse_replies: 'show',
       ...settings,
     },

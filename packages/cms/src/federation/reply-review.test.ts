@@ -32,12 +32,6 @@ import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { repliesKey } from '../content/guids.ts';
 import { appendInboxActivity, readInboxLog } from './records.ts';
 
-/**
- * Which fediverse replies show on a page at once and which wait for review,
- * driven through the inbox with signed deliveries, the mail a held reply
- * sends, its moderation links, and the page a reader is served.
- */
-
 const BASE_URL = 'https://blog.example';
 const NOW = new Date('2026-09-20T12:00:00.000Z');
 const LOCAL_USER = 'blog';
@@ -54,7 +48,6 @@ interface Peer {
   document: unknown;
 }
 
-/** A follower once they have followed, and a stranger who never does. */
 const ADA: Peer = peer('ada');
 const BOB: Peer = peer('bob');
 
@@ -263,7 +256,6 @@ function onlyMessage(provider: MemoryMailProvider): OutgoingMail {
   return message;
 }
 
-/** The one waiting-for-review notice, among whatever published notices went too. */
 function waitingNotice(provider: MemoryMailProvider): OutgoingMail {
   const waiting = provider.sent.filter((message) => /\/_geekity\//.test(message.text));
   assert.equal(waiting.length, 1, `exactly one notice waits, not ${waiting.length}`);
@@ -542,7 +534,6 @@ describe('the other two rules', () => {
   });
 });
 
-/** A reply logged as one that arrived before the rule did: straight into the inbox log. */
 async function loggedEarlier(box: Site, n: number, content: string): Promise<void> {
   await appendInboxActivity(
     { admin: box.cms.admin, contentDir: box.contentDir, dataDir: box.dataDir },

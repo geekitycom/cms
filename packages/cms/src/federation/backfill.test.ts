@@ -209,7 +209,6 @@ async function site(
       'Words.',
       '',
     ].join('\n'),
-    // Every fetched reply shows, so the threads here are the backfill's alone.
     '_data/site.json': JSON.stringify({
       title: 'A Site',
       baseUrl: BASE_URL,

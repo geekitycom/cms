@@ -18,13 +18,6 @@ import { listUsers, setUserNotification, setUserNotificationMode } from '../site
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 
-/**
- * The notices a like, a boost, a quote and a new follower send, driven
- * through the inbox with signed deliveries: the message each sends as it
- * arrives, the digest it waits for otherwise, and the Undo that takes it out
- * of a digest that has not gone yet.
- */
-
 const BASE_URL = 'https://blog.example';
 const NOW = new Date('2026-09-20T12:00:00.000Z');
 const LOCAL_USER = 'blog';
@@ -155,7 +148,6 @@ async function site(): Promise<Site> {
   return { cms, provider, dataDir, userId: user.id };
 }
 
-/** Choose how the one user takes an event, turning it on. */
 async function choose(box: Site, event: string, mode: string): Promise<void> {
   await setUserNotification({ dataDir: box.dataDir, userId: box.userId, event, on: true });
   await setUserNotificationMode({ dataDir: box.dataDir, userId: box.userId, event, mode });
@@ -214,7 +206,6 @@ function undo(from: Peer, object: Like | Announce | Follow): Undo {
 const QUOTE = `${ADA.id}/statuses/99`;
 const REQUEST = `${ADA.id}/quote_requests/1`;
 
-/** A QuoteRequest shaped the way Mastodon writes one, the quote carried inside it. */
 function quoteRequest(id = REQUEST): Record<string, unknown> {
   return {
     '@context': [
@@ -255,7 +246,6 @@ function onlyMessage(provider: MemoryMailProvider): OutgoingMail {
   return message;
 }
 
-/** Send whatever digests are due and hand back the one message that went, if any. */
 async function digest(box: Site): Promise<OutgoingMail | undefined> {
   box.provider.clear();
   await box.cms.digests.run();

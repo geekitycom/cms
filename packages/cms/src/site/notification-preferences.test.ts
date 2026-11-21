@@ -11,7 +11,6 @@ import {
 import type { NotificationEvent } from './notification-preferences.ts';
 import type { User } from './users.ts';
 
-/** A registry with a noisy event that defaults to a digest, beside a quiet one. */
 const EVENTS: readonly NotificationEvent[] = [
   {
     name: 'quiet',

@@ -1,13 +1,3 @@
-/**
- * Notifications: what the site emails the signed-in user about, and how often.
- *
- * A settings page in every way but what it saves. Its form carries no site
- * setting: it saves the signed-in user's own switches to `data/users.json`, so
- * two admins each see and change only their own. The events come from the
- * registry in `site/notification-preferences.ts`, so adding one adds a row
- * here and nothing else.
- */
-
 import type { Context } from 'hono';
 
 import type { GeekityEnv } from '../web/env.ts';
@@ -33,7 +23,6 @@ export const NOTIFICATIONS_FIELDS = {
   mode: (event: string) => `mode_${event}`,
 } as const;
 
-/** The Notifications settings page. */
 export const NOTIFICATIONS_SETTINGS: SettingsPage = {
   child: 'notifications',
   label: 'Notifications',

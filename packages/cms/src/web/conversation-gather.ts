@@ -95,9 +95,7 @@ function fromStored(
   const held = new Map<string, Interaction>();
   for (const record of stored) {
     let comment = interactionOf(record, document.permalink, context.baseUrl, users);
-    // A reply this site held for review is named as the inbox's replies are,
-    // from the profile its author publishes, rather than as it arrived.
-    const actor = record.migrated === true ? undefined : record.actor;
+    const actor = liveActor(record);
     if (actor !== undefined) comment = { ...comment, author: naming(actor) };
     if (record.status !== 'approved') {
       held.set(comment.id, comment);
@@ -251,4 +249,8 @@ function interactionOf(
       ? {}
       : { rsvp: { value: comment.rsvp, label: RSVP_LABELS[comment.rsvp] } }),
   };
+}
+
+function liveActor(record: PostComment): string | undefined {
+  return record.migrated === true ? undefined : record.actor;
 }

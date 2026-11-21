@@ -62,9 +62,7 @@ export type SiteInboxContext = InboxContext<FederationContextData>;
  * Following twice is a no-op beyond refreshing the stored profile: the store
  * is keyed by the pair (user, actor) and keeps the original follow time, so a
  * redelivered or repeated `Follow` cannot turn one follower into two. One
- * actor may follow two of this site's users, and that is two rows. Only a
- * follow that adds a row is news, so only that one sends the new follower
- * notice.
+ * actor may follow two of this site's users, and that is two rows.
  */
 export async function handleFollow(context: SiteInboxContext, follow: Follow): Promise<void> {
   const followed = followedUser(context, follow);
@@ -128,8 +126,7 @@ function followedUser(context: SiteInboxContext, follow: Follow): User | undefin
 
 /**
  * Handle an `Undo`: an undone `Follow` removes the follower, and an undone
- * `QuoteRequest` withdraws the quote approval it was given. Whatever it undid
- * leaves any digest that was to list it.
+ * `QuoteRequest` withdraws the quote approval it was given.
  *
  * Only the actor that sent the `Follow` may undo it. Without that check any
  * signed actor could unfollow the site on somebody else's behalf, since the
@@ -188,7 +185,6 @@ export async function handleDelete(context: SiteInboxContext, activity: Delete):
       (record) => record.quote === object.href && record.actor === actor.href,
     );
     await withdrawQuotes(context, revoked);
-    // Nor is a reply its author deleted waiting for anybody.
     await context.data.replies?.deleted(actor.href, object.href);
     return;
   }
@@ -365,10 +361,8 @@ function answersPost(context: SiteInboxContext, activity: Accept | Reject): bool
 }
 
 /**
- * Handle a `Like`, an `Announce` or a `Create`: record it, ask for the
- * profile of whoever sent it, put a reply that waits for review in the
- * queue, and tell whoever wants to know of a like or a boost of a post. A
- * like or boost the log already held was told about when it first came.
+ * Handle a `Like`, an `Announce` or a `Create`: record it, and ask for the
+ * profile of whoever sent it.
  *
  * Nothing about the activity is interpreted here: the conversation reads it
  * back out of the log, which is why the row keeps the whole JSON-LD rather
@@ -394,13 +388,6 @@ export async function handleLoggedActivity(
   }
 }
 
-/**
- * Handle an `Update`: a note of the sender's that is waiting for review, or
- * was approved, says what its author has changed it to.
- *
- * Nothing else is done with an `Update`, and it is not logged: the reply it
- * edits lives in its comment file, which is what is rewritten.
- */
 export async function handleUpdate(context: SiteInboxContext, update: Update): Promise<void> {
   const actor = update.actorId;
   if (actor === null || context.data.replies === undefined) return;

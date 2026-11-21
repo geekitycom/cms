@@ -354,8 +354,6 @@ export function createServices({
   // screen is written to by the very next comment.
   const notifications = createCommentNotifier({ ...site, mail, cited });
 
-  // Whether a fediverse reply shows at once or waits in the queue, decided as
-  // the inbox logs it or the backfill fetches it.
   const replyReview = createReplyReview({
     admin,
     config: resolved,
@@ -364,8 +362,6 @@ export function createServices({
     notices: notifications,
   });
 
-  // And who hears about a like, a boost, a quote or a new follower, as the
-  // inbox first knows of it.
   const activityNotices = createActivityNotices({ mail, config: resolved });
 
   const federated = {
@@ -408,8 +404,8 @@ export function createServices({
     notices: notifications,
   });
 
-  // And the other half of it: a user who asked for an hourly or a
-  // daily digest hears nothing above and one message per window from here,
+  // A user who asked for an hourly or a daily digest hears nothing from the
+  // notifiers and one message per window from here,
   // listing whatever is still pending when their window comes up and whatever
   // else they batch that happened since. It reads the users file, the notice
   // log and the record of what it has sent per run, for the same reason: a

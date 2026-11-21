@@ -236,7 +236,6 @@ async function confirm(box: Site, link: string): Promise<number> {
   return response.status;
 }
 
-/** A file's text, or `undefined` when there is no such file. */
 function readFileIfPresent(file: string): string | undefined {
   try {
     return readFileSync(file, 'utf8');
@@ -573,11 +572,6 @@ describe('a site served under a path', () => {
   });
 });
 
-/**
- * Two batched events that are not the queue, beside the real registry, so the
- * digest can be shown carrying what happened rather than only what waits. Both
- * are on by default and batched by default, so a user needs no stored choice.
- */
 const QUOTES: NotificationEvent = {
   name: 'test-quotes',
   label: 'Quotes',
@@ -596,7 +590,6 @@ const FOLLOWERS: NotificationEvent = {
 };
 const TEST_EVENTS: readonly NotificationEvent[] = [...NOTIFICATION_EVENTS, QUOTES, FOLLOWERS];
 
-/** A digest over the test registry, sharing the booted site's services. */
 function digestOver(box: Site): CommentDigest {
   return createCommentDigest({
     admin: box.cms.admin,
@@ -607,14 +600,12 @@ function digestOver(box: Site): CommentDigest {
   });
 }
 
-/** Run a digest and let whatever it sent settle. */
 async function runOver(box: Site, digest: CommentDigest = digestOver(box)): Promise<number> {
   const sent = await digest.run();
   await box.cms.mail.settled();
   return sent;
 }
 
-/** Add an admin with an address and nothing stored about notices. */
 async function admin(box: Site, username: string, email: string): Promise<number> {
   const user = await createUser({
     dataDir: box.dataDir,
@@ -625,7 +616,6 @@ async function admin(box: Site, username: string, email: string): Promise<number
   return user.id;
 }
 
-/** A quote of the post by somebody. */
 function quote(who: string, key = who): NoticeItem {
   return {
     key,
@@ -637,7 +627,6 @@ function quote(who: string, key = who): NoticeItem {
   };
 }
 
-/** Log a notice of one of the test events, as an event source would. */
 async function happened(box: Site, event: NotificationEvent, item: NoticeItem): Promise<void> {
   await recordNotice({
     dataDir: box.dataDir,

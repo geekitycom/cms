@@ -19,7 +19,6 @@ after(() => box.cleanup());
 
 const PAGE = '/admin/settings/notifications';
 
-/** The page's HTML and the CSRF token on it. */
 async function page(agent: Browser): Promise<{ html: string; token: string }> {
   const response = await agent.get(PAGE);
   assert.equal(response.status, 200);
@@ -29,13 +28,11 @@ async function page(agent: Browser): Promise<{ html: string; token: string }> {
   return { html, token };
 }
 
-/** Save the form as if it showed only the Waiting for review event, which these tests are about. */
 async function save(agent: Browser, fields: Record<string, string>): Promise<Response> {
   const { token } = await page(agent);
   return agent.post(PAGE, { csrf_token: token, events: 'comments', ...fields });
 }
 
-/** The stored record for a user, exactly as `data/users.json` holds it. */
 function stored(dataDir: string, username: string): Record<string, unknown> | undefined {
   const file = JSON.parse(readFileSync(usersFile(dataDir), 'utf8')) as {
     users: Record<string, unknown>[];

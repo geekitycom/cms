@@ -25,38 +25,6 @@ import type {
 import { markNoticesSent, noticesFor, readNoticeLog } from './notice-log.ts';
 import { NOTIFICATION_DIGESTS, dataPath } from '../files/data-files.ts';
 
-/**
- * One message a window instead of one message a thing.
- *
- * A user who has chosen `hourly` or `daily` for an event on Settings >
- * Notifications is sent nothing when it happens; instead this sends them one
- * message per window with a part for each event that has something in it.
- *
- * Four decisions hold the whole thing up:
- *
- * - **The queue is derived, not queued.** Waiting for review is built from
- *   what `admin.listComments({ status: 'pending' })` says right now, so an item
- *   somebody approved before the run is simply absent, and each item carries
- *   its own approve, spam and delete links.
- * - **Everything else is logged when it happens.** A like or a new follower
- *   is not waiting for anything, so the event's source writes it to the notice
- *   log (`notice-log.ts`) for each user who batches it, and this crosses each
- *   user off once a digest carrying it has gone. Any batched event in the
- *   registry other than the queue is read from there, so an event source only
- *   has to record and withdraw.
- * - **Each event keeps its own window**, in `data/notification-digests.json`
- *   rather than the database, because the database is a cache that may be
- *   deleted whenever the site is stopped — and a forgotten timestamp would mean
- *   either a window silently skipped or a digest sent twice. Every event that
- *   is due goes in the same message, so a user is written to at most once a
- *   run whatever they chose for each.
- * - **Nothing is sent for an empty window, and an empty window records
- *   nothing.** Because its timestamp does not move, the first thing that does
- *   happen goes out on the very next tick rather than waiting out a window that
- *   had nothing in it.
- */
-
-/** The message a batched user gets: everything due, in one. */
 export const COMMENT_DIGEST_TEMPLATE = 'comment-digest';
 
 /** Nobody but the site's own user reads it. */
@@ -177,27 +145,17 @@ export interface CreateCommentDigestOptions {
   maxItems?: number | undefined;
   /** Where failures are reported. Defaults to `console`. */
   logger?: DigestLogger | undefined;
-  /** The registry of events. Defaults to {@link NOTIFICATION_EVENTS}; a test brings its own. */
   events?: readonly NotificationEvent[] | undefined;
 }
 
-/** One event's part of a digest, as the template is handed it. */
 interface DigestSection {
-  /** The event's name in the registry. */
   event: string;
-  /** What the Notifications page calls it. */
   label: string;
-  /** The window this user takes it on. */
   mode: NotificationDeliveryMode;
-  /** How many there are. */
   total: number;
-  /** How many of those are not listed. */
   more: number;
-  /** What is listed: a comment with its moderation links, or a logged notice. */
   items: Record<string, unknown>[];
-  /** Where the rest are, when there is somewhere. */
   url: string | undefined;
-  /** The logged notices it carries, to be crossed off once it has gone. */
   keys: readonly string[];
 }
 
@@ -290,9 +248,6 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
     const queueUrl = absoluteUrl('/admin/comments', config.baseUrl);
     const settingsUrl = absoluteUrl('/admin/settings/notifications', config.baseUrl);
 
-    // Asked at most once a run, and only when somebody is due the queue:
-    // everybody due is due the same list, because the queue is what is waiting
-    // rather than what has happened since.
     let queue: { pending: PostComment[]; cited: CitedPageReader | undefined } | undefined;
     async function waiting() {
       queue ??= {
@@ -345,9 +300,6 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
     for (const user of listUsers(config.dataDir)) {
       if (user.email === undefined || user.email === '') continue;
 
-      // Each event on its own window, and every event that is due and has
-      // something in it in the one message: a user is written to at most once
-      // a run, whatever they chose for each event.
       const sections: DigestSection[] = [];
       for (const event of events) {
         if (!notificationWanted(user, event.name, events)) continue;
@@ -367,12 +319,8 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
         data: {
           sections: sections.map(({ keys: _keys, ...shown }) => shown),
           count: sections.reduce((sum, section) => sum + section.total, 0),
-          // The most often of the windows in it, which is the one the message
-          // is on.
-          mode: sections.some((section) => section.mode === 'hourly') ? 'hourly' : 'daily',
+          mode: busiestWindow(sections),
           settingsUrl,
-          // The waiting-for-review section again at the top, where a theme
-          // written before there were sections reads it.
           items: comments?.items ?? [],
           total: comments?.total ?? 0,
           more: comments?.more ?? 0,
@@ -398,10 +346,6 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
     return messages;
   }
 
-  /**
-   * One run, and the thing `settled()` waits on. Runs take turns, so two at
-   * once cannot both list what neither has yet crossed off.
-   */
   function runOnce(): Promise<number> {
     const started = running.catch(ignore).then(send);
     running = started;
@@ -473,4 +417,10 @@ function digestTimesIn(source: string | undefined): Record<string, Record<string
 
 function ignore(): void {
   // A failed run is already logged; waiting for it must not throw.
+}
+
+function busiestWindow(
+  sections: readonly { mode: NotificationDeliveryMode }[],
+): 'hourly' | 'daily' {
+  return sections.some((section) => section.mode === 'hourly') ? 'hourly' : 'daily';
 }

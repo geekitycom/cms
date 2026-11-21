@@ -171,8 +171,6 @@
   </form>
   {% endcall %}
 
-  {# Only on your own page: Settings > Notifications shows whoever is
-     signed in their own choices, never somebody else's. #}
   {% if account.you %}
     {% call card(title='Notifications') %}
       <p class="text-sm">

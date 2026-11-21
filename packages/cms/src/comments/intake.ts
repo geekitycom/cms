@@ -324,8 +324,7 @@ function announce(notices: CommentNotices | undefined, stored: PostComment): voi
   // and one it said to discard was never stored at all.
   if (stored.status === 'pending') notices.pending(stored);
   // A comment the site let straight through is on the page already, so
-  // whoever it answers hears about it now rather than at a moderator's hand,
-  // and so do the moderators it never reached.
+  // whoever it answers hears about it now rather than at a moderator's hand.
   else if (stored.status === 'approved') {
     notices.published(stored);
     notices.replyApproved(stored);

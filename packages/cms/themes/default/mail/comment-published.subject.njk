@@ -1,2 +1,1 @@
-{# The subject of the message something published without a moderator sends. One line. #}
 {% if comment.source == 'webmention' %}New webmention{% elif comment.source == 'activitypub' %}New reply{% else %}New comment{% endif %} published on “{{ post.title }}”

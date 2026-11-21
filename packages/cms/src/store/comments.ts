@@ -333,11 +333,6 @@ export interface CommentStore {
    * match, so a stranger typing a regular's name is still held.
    */
   hasApprovedAuthor(name: string, email: string | null): boolean;
-  /**
-   * Whether this fediverse actor has had a reply approved before: the
-   * fediverse's half of {@link hasApprovedAuthor}, matched on the actor id a
-   * signed delivery proves.
-   */
   hasApprovedActor(actorId: string): boolean;
   /** Store a comment, replacing whatever was known about that id. */
   putComment(comment: PostComment): PostComment;

@@ -1,7 +1,3 @@
-{# The plain text body of the published notice. It goes when something went on
-   a page without a moderator approving it, so it carries no moderation links:
-   the link is to the thing itself on the page, where it can be read in place
-   and dealt with from the admin like any other comment. -#}
 {% if comment.source == 'webmention' %}A page has linked to{% elif comment.source == 'activitypub' %}A fediverse reply is on{% else %}A comment is on{% endif %} “{{ post.title }}”, published without waiting for you.
 
 {{ link }}

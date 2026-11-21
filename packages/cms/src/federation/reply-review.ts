@@ -26,29 +26,9 @@ import type { Reply } from '../store/inbox-replies.ts';
 import { removeInboxActivities } from './records.ts';
 import type { FederationRecords } from './records.ts';
 
-/**
- * Whether a fediverse reply shows on the page as it arrives or waits for a
- * moderator, under the rule chosen on Settings > Discussion.
- *
- * A reply that shows stays what every fediverse reply has always been: a
- * `Create` in the inbox log, read into the page as it is drawn. A reply that
- * waits is also stored as a pending comment keyed by its note id, with the
- * note as its `origin` and its sender as its `actor`. The page already lets a
- * stored comment with that origin stand for the note and threads the replies
- * under it beneath the stored one, so from there the queue, the notice and
- * its links, the digest and moderation are the ones every comment has.
- *
- * The rule is applied as a reply is received, never as a page is drawn, so a
- * reply already on a page stays there whatever the rule becomes. A delivered
- * reply that shows at once sends the published notice; a fetched one does
- * not, because the backfill finds replies that may be weeks old.
- */
 export interface ReplyReview {
-  /** A `Create` has just been logged, delivered or fetched. */
   received(activity: InboxActivity): Promise<void>;
-  /** An actor deleted something: a held note of theirs leaves the queue. */
   deleted(actorId: string, objectId: string): Promise<void>;
-  /** An actor sent an `Update`: a held note of theirs says its new words. */
   edited(actorId: string, json: string): Promise<void>;
 }
 
@@ -68,11 +48,6 @@ export function createReplyReview(options: CreateReplyReviewOptions): ReplyRevie
     dataDir: config.dataDir,
   };
 
-  /**
-   * Whether the page shows a reply this actor sent before this one: logged,
-   * on one of the site's documents, not held for review and not withdrawn by
-   * its author. Read off the inbox log's index, so it holds after a rebuild.
-   */
   function hasShownReply(actorId: string, except: string): boolean {
     for (let offset = 0; ; offset += SHOWN_PAGE) {
       const { items } = admin.searchInboxActivities(
@@ -106,7 +81,6 @@ export function createReplyReview(options: CreateReplyReviewOptions): ReplyRevie
     }
   }
 
-  /** A held note of this actor's that arrived here, never one imported from elsewhere. */
   function heldFrom(actorId: string, noteId: string): PostComment | undefined {
     const held = heldComment(admin, noteId);
     return held !== undefined && held.migrated !== true && held.actor === actorId
@@ -133,10 +107,8 @@ export function createReplyReview(options: CreateReplyReviewOptions): ReplyRevie
         url: isWebUrl(reply.url) ? reply.url : null,
       };
 
-      // A reply the rule lets through is on the page now, as it is logged.
-      // One the backfill fetched is an old reply only now found, not news.
       if (await showsAtOnce(reply.actorId, reply.id)) {
-        if (!activity.fetched) notices.published(comment);
+        if (isNews(activity)) notices.published(comment);
         return;
       }
 
@@ -167,10 +139,6 @@ export function createReplyReview(options: CreateReplyReviewOptions): ReplyRevie
   };
 }
 
-/**
- * Take a deleted fediverse reply's `Create` out of the inbox log as well, so
- * the copy there does not come back onto the page in the stored one's place.
- */
 export async function forgetDeletedReply(
   records: FederationRecords,
   comment: PostComment,
@@ -185,10 +153,8 @@ export async function forgetDeletedReply(
   );
 }
 
-/** How many of an actor's logged `Create` rows are read at a time. */
 const SHOWN_PAGE = 50;
 
-/** Whether the actor took this note back with a `Delete` or an `Undo`. */
 function withdrawn(admin: AdminStore, actorId: string, noteId: string): boolean {
   return admin
     .listActivitiesAbout([noteId])
@@ -218,11 +184,6 @@ function authorOf(admin: AdminStore, actorId: string): CommentAuthor {
   };
 }
 
-/**
- * What a held reply answers, as a stored comment names it: `null` for the
- * document itself, a stored comment's key, or the id of a fediverse reply
- * that is in the inbox log, which is what that reply is called in a thread.
- */
 function parentOf(admin: AdminStore, baseUrl: string, target: Reply['inReplyTo']): string | null {
   const held = heldComment(admin, target) ?? admin.listCommentsAt(target)[0];
   if (held !== undefined) return held.id;
@@ -237,4 +198,8 @@ function parentOf(admin: AdminStore, baseUrl: string, target: Reply['inReplyTo']
     .listActivitiesAbout([target])
     .some((activity) => replyFrom(activity)?.id === target);
   return logged ? target : null;
+}
+
+function isNews(activity: InboxActivity): boolean {
+  return activity.fetched !== true;
 }

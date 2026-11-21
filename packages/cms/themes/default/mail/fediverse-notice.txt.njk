@@ -1,6 +1,3 @@
-{# The plain text body of a like, boost, quote or new follower notice: who did
-   it, what they did it to, and where to see both. The same fields a digest
-   lists the thing by. -#}
 {{ notice.actor.name }} {{ notice.action }}{{ ' “' + notice.post.title + '”' if notice.post else '' }}.
 
 {% if notice.actor.url %}
