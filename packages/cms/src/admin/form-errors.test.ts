@@ -147,9 +147,12 @@ function syndicationRefused(key: string): Record<string, unknown> {
  * conflict screen draws its two versions in read-only boxes and posts only
  * hidden fields; a refused save there is the editor or the conflict again. An
  * empty reply on the comments screen comes back as a flash over the list.
+ * Settings > Notifications drops an event or a mode it does not know rather
+ * than refusing it, so it has no error to show.
  */
 const NEVER_REFUSED: ReadonlySet<string> = new Set([
   'pages/comments/all.njk',
+  'pages/settings/notifications.njk',
   'pages/indieauth/consent.njk',
   'pages/documents/conflict.njk',
 ]);

@@ -122,7 +122,7 @@ const WORDS: Record<RemainingScreen, readonly string[]> = {
     'Back to all users',
     'Account',
     'Profile',
-    'Email ada about',
+    'Notifications',
     'Connected apps',
     'Change your password',
     'Delete',
@@ -424,7 +424,7 @@ describe('the remaining screens', async () => {
       assert.deepEqual(cards(served.usersEdit).map(cardTitle), [
         'Account',
         'Profile',
-        'Email ada about',
+        'Notifications',
         'Connected apps',
         'Theme',
         'Change your password',
@@ -433,7 +433,6 @@ describe('the remaining screens', async () => {
       assert.deepEqual(cards(served.usersEditOther).map(cardTitle), [
         'Account',
         'Profile',
-        'Email grace about',
         'Delete',
       ]);
       assert.equal(cards(served.usersNew).length, 1);

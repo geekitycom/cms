@@ -147,7 +147,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   ]),
   // Where WordPress keeps Tools: after Users, before Settings. A setting is
   // something you type and save; this is a job you run, so it is not a
-  // seventh settings page — the children of Settings are the settings pages,
+  // settings page — the children of Settings are the settings pages,
   // and nothing else belongs in that list.
   section('tools', 'Tools', [
     { child: 'index', label: 'Content index', url: TOOLS_PATH },
@@ -166,6 +166,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     { child: 'permalinks', label: 'Permalinks', url: settingsPagePath('permalinks') },
     { child: 'discussion', label: 'Discussion', url: settingsPagePath('discussion') },
     { child: 'email', label: 'Email', url: settingsPagePath('email') },
+    { child: 'notifications', label: 'Notifications', url: settingsPagePath('notifications') },
     { child: 'privacy', label: 'Privacy', url: settingsPagePath('privacy') },
   ]),
   // Everything about federation, in the order somebody comes to it: the

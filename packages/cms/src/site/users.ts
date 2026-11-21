@@ -75,7 +75,7 @@ export interface User {
    * Absent for almost everybody, because it holds only what somebody actually
    * changed: an event nothing says anything about is at the default
    * `src/site/notification-preferences.ts` gives it, which is what lets a new
-   * notice start working without anybody visiting the users screen. Keyed by
+   * notice start working without anybody visiting the Notifications page. Keyed by
    * event name, so adding an event adds no field here.
    */
   readonly notifications?: Readonly<Record<string, boolean>> | undefined;
@@ -86,8 +86,8 @@ export interface User {
    * A second map beside {@link User.notifications} rather than a widening of
    * it, because the two answer different questions — whether, and how often —
    * and a user who wants no notice at all is not a user with a delivery mode.
-   * Absent for almost everybody, on the same rule: `immediately` is the
-   * default and the default is never written down. Keyed by event name, so
+   * Absent for almost everybody, on the same rule: each event names its own
+   * default mode and the default is never written down. Keyed by event name, so
    * adding an event adds no field here either.
    */
   readonly notificationModes?: Readonly<Record<string, string>> | undefined;
@@ -625,6 +625,35 @@ export async function setUserNotificationMode(input: {
   return updateUser(input.dataDir, input.userId, (user) => ({
     notificationModes: withNotificationMode(user.notificationModes, input.event, input.mode),
   }));
+}
+
+/**
+ * Apply every switch and mode one form submitted for one user, in one write.
+ *
+ * Each choice goes through {@link withNotification} and
+ * {@link withNotificationMode}, so an event this version does not know, a mode
+ * it does not know and an answer that is the default all leave nothing in the
+ * file. A choice without a mode leaves the stored mode alone. Returns `false`
+ * when there is no such user.
+ */
+export async function setUserNotifications(input: {
+  /** Which site's users file to write. */
+  dataDir: string;
+  /** Whose preferences. */
+  userId: number;
+  /** One entry per event the form showed. */
+  choices: readonly { event: string; on: boolean; mode?: string | undefined }[];
+}): Promise<boolean> {
+  return updateUser(input.dataDir, input.userId, (user) => {
+    let notifications = user.notifications;
+    let notificationModes = user.notificationModes;
+    for (const { event, on, mode } of input.choices) {
+      notifications = withNotification(notifications, event, on);
+      if (mode !== undefined)
+        notificationModes = withNotificationMode(notificationModes, event, mode);
+    }
+    return { notifications, notificationModes };
+  });
 }
 
 /**

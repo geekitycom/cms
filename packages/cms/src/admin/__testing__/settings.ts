@@ -8,7 +8,7 @@ import type { SettingsPage } from '../settings-page.ts';
 /**
  * Saving one settings page the way a browser would.
  *
- * The settings are seven pages now, each posting its own fields to its own URL,
+ * The settings are eight pages now, each posting its own fields to its own URL,
  * so a test says which page it is saving and names only what it cares about.
  * Everything else on that page comes from the defaults below — which is what a
  * browser would send, having rendered the form and had nothing touched.
@@ -73,6 +73,11 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     security_contacts: '',
     security_policy: '',
     security_languages: '',
+  },
+  notifications: {
+    events: 'comments',
+    notify_comments: '1',
+    mode_comments: 'immediately',
   },
   privacy: {
     location_sharing: 'none',

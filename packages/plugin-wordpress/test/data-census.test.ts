@@ -340,12 +340,10 @@ async function discuss(site: Census): Promise<void> {
   );
   await confirm(cms, linkFor(told, 'unsubscribe'));
 
-  const ada = /\/admin\/users\/(\d+)/.exec(await (await admin.get('/admin/users')).text())?.[1];
-  assert.ok(ada !== undefined, 'the users screen links to ada');
-  const hourly = await admin.post('/admin/users/notifications/mode', {
-    user_id: ada,
-    event: 'comments',
-    mode: 'hourly',
+  const hourly = await admin.post('/admin/settings/notifications', {
+    events: 'comments',
+    notify_comments: '1',
+    mode_comments: 'hourly',
   });
   assert.equal(hourly.status, 303);
   await comment(site, { name: 'Pat Doe', email: 'pat@example.com', body: 'Queued.' });

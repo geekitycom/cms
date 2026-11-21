@@ -1,0 +1,48 @@
+{# /admin/settings/notifications: what this site emails the signed-in user
+   about, and how often. Every row comes from the event registry, so adding a
+   notice is one entry there and no change here. #}
+{% extends "layouts/settings-page.njk" %}
+{% import "components/fields.njk" as field %}
+{% from "components/alert.njk" import alert %}
+
+{% block settingsFields %}
+  <p class="max-w-prose text-sm">
+    What this site emails you about{% if noticeEmail %}, at <code>{{ noticeEmail }}</code>{% endif %}.
+    These are your own choices; every other user picks theirs here when signed in.
+  </p>
+
+  {% if not mailConfigured %}
+    {% call alert(color='warning', style='soft') %}
+      <p>
+        This site has no mail provider, so nothing below is sent. Choose one on
+        <a class="link" href="{{ adminUrl }}/settings/email">Settings &rsaquo; Email</a>.
+      </p>
+    {% endcall %}
+  {% endif %}
+  {% if not noticeEmail %}
+    {% call alert(color='warning', style='soft') %}
+      <p>
+        You have no email address, so there is nowhere to send these. Add one on
+        <a class="link" href="{{ accountUrl }}">your account</a>.
+      </p>
+    {% endcall %}
+  {% endif %}
+
+  <input type="hidden" name="{{ eventsField }}" value="{% for notice in notices %}{{ notice.name }}{% if not loop.last %} {% endif %}{% endfor %}" />
+
+  {% for notice in notices %}
+    <div class="mt-4 flex flex-col gap-1 border-t border-base-300 pt-4">
+      <h2 class="text-lg font-semibold">{{ notice.label }}</h2>
+      {{ field.checkbox('notice-' + notice.name, notice.onField, 'Email me about this',
+           checked=notice.on, hint=notice.description) }}
+      {% if notice.batched %}
+        {% call field.select('notice-mode-' + notice.name, notice.modeField, 'How often',
+             hint='A digest sends one message a window listing what happened, and nothing when nothing did.') %}
+          {% for choice in notice.modes %}
+            <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
+          {% endfor %}
+        {% endcall %}
+      {% endif %}
+    </div>
+  {% endfor %}
+{% endblock %}

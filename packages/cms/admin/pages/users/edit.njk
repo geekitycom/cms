@@ -13,7 +13,7 @@
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
 {% from "components/alert.njk" import alert %}
-{% from "components/badge.njk" import badge, status %}
+{% from "components/badge.njk" import badge %}
 {% from "components/button.njk" import button %}
 {% from "components/card.njk" import card, cardActions %}
 {% from "components/upload.njk" import uploadControl %}
@@ -171,84 +171,15 @@
   </form>
   {% endcall %}
 
-  {# Only once there is both somewhere to write to and something to write
-     with. These switches decide what is sent to the address above, so without
-     an address, or without a mail provider on Settings > Email, every one of
-     them could be on and the site would still send this person nothing. The
-     lines below say which is missing where the panel would have been, rather
-     than letting it vanish without explanation. #}
-  {% if account.email and mailConfigured %}
-  {% call card(title='Email ' + account.username + ' about') %}
-
-    <p class="text-sm">
-      What this site writes to {{ account.username }} at <code>{{ account.email }}</code>.
-    </p>
-
-    {# One form per switch, not one form with a checkbox each: a browser sends
-       no field for an unticked box, so a single form could not tell "turned
-       this off" from "left it alone". Adding a notice is one entry in the
-       registry and no change here. #}
-    {% for notice in account.notifications %}
-      <div class="flex flex-col gap-2 border-t border-base-300 pt-4">
-        <h3 class="font-semibold">{{ notice.label }}</h3>
-        <p class="text-sm">{{ notice.description }}</p>
-
-        <form class="flex flex-wrap items-center gap-2" method="post" action="{{ userNotificationsUrl }}">
-          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-          <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
-          <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
-          <input type="hidden" name="{{ fields.on }}" value="{% if notice.on %}{% else %}1{% endif %}" />
-          {% if notice.on %}
-            {{ status('active', 'On') }}
-            {{ button('Turn off', type='submit', style='outline', size='xs') }}
-          {% else %}
-            {{ status('hidden', 'Off') }}
-            {{ button('Turn on', type='submit', style='outline', size='xs') }}
-          {% endif %}
-        </form>
-
-        {# And, for a notice the registry says can be batched, how often it
-           should arrive. A second form because a select needs a Save beside
-           it and the switch above is a button; the registry decides which
-           notices get one. #}
-        {% if notice.batched %}
-          <form class="flex flex-wrap items-end gap-2" method="post" action="{{ userNotificationModeUrl }}">
-            <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-            <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
-            <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
-            {% call field.select('notice-mode-' + notice.name, fields.mode, 'How often') %}
-              {% for choice in notice.modes %}
-                <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
-              {% endfor %}
-            {% endcall %}
-            <div class="pb-1">{{ button('Save', type='submit') }}</div>
-          </form>
-          <p class="text-sm">
-            On an hourly or a daily digest nothing is sent as they arrive;
-            instead one message a window lists everything still waiting, and
-            no message goes at all when nothing is.
-          </p>
-        {% endif %}
-      </div>
-    {% endfor %}
-  {% endcall %}
-  {% else %}
-  {% call card(title='Email ' + account.username + ' about') %}
-
-    {% if not mailConfigured %}
+  {# Only on your own page: Settings > Notifications shows whoever is
+     signed in their own choices, never somebody else's. #}
+  {% if account.you %}
+    {% call card(title='Notifications') %}
       <p class="text-sm">
-        Nothing, while this site has no mail provider: there is nothing to send
-        with. Choose one on <a class="link" href="{{ adminUrl }}/settings/email">Settings
-        &rsaquo; Email</a> and what to send comes back here.
+        What this site emails you about, and how often, is chosen on
+        <a class="link" href="{{ notificationsUrl }}">Settings &rsaquo; Notifications</a>.
       </p>
-    {% else %}
-      <p class="text-sm">
-        Nothing, while the box above is empty: there is nowhere to write to.
-        Give {% if account.you %}yourself{% else %}this account{% endif %} an
-        address and what to send comes back here.
-      </p>
-    {% endif %}
-  {% endcall %}
+    {% endcall %}
   {% endif %}
 
   {# Only on your own page: it asks for the current password, so it is about

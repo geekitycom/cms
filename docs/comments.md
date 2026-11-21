@@ -332,15 +332,16 @@ and the site never emails it about replies again. The comments are not changed.
 
 ### One message an hour instead of one a comment
 
-Beside each switch on a user's `/admin/users/<id>` screen is a frequency
-setting for that notice:
+Beside each switch on Settings > Notifications (`/admin/settings/notifications`)
+is a frequency setting for that notice:
 
 - as they arrive
 - an hourly digest
 - a daily digest
 
-The setting is per user. It starts at "as they arrive", so nothing changes for a
-user who does not touch it.
+The setting is per user: the page shows the signed-in user their own. Each
+notice names its own default. Waiting for review starts at "as they arrive", so
+nothing changes for a user who does not touch it.
 
 On a digest, a comment entering the queue sends nothing. Instead, after each
 window, the server sends one message that lists every item **still waiting**.
@@ -379,10 +380,11 @@ With no mail configured, none of this runs and nothing breaks:
 
 Notices are per user and keyed by event name. To add one, such as a new
 follower or a digest of failed deliveries, add one entry to the registry in
-`src/site/notification-preferences.ts`. Its checkbox appears on the users screen
-automatically. An entry with `batched: true` also gets the frequency select. An
-event a user has not set is at its default, so turning one on for a site needs
-no visit to the users screen.
+`src/site/notification-preferences.ts`. Its checkbox appears on Settings >
+Notifications automatically. An entry with `batched: true` also gets the
+frequency select and names its `defaultMode`. An event a user has not set is at
+its default, so turning one on for a site needs no visit to the page, and only
+choices that differ from a default are written to `data/users.json`.
 
 ### Akismet
 

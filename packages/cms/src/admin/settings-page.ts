@@ -1,8 +1,8 @@
 /**
  * What every settings page is made of.
  *
- * The settings used to be one form with twelve headings. They are seven pages
- * now — General, Reading, Permalinks, Discussion, Email and Privacy under Settings, and
+ * The settings used to be one form with twelve headings. They are eight pages
+ * now — General, Reading, Permalinks, Discussion, Email, Notifications and Privacy under Settings, and
  * Federation under its own section — and this is what they have in
  * common: a description of the page, and the one pair of routes that turns it
  * into a screen you can read and a form you can save. A page module describes
@@ -50,7 +50,7 @@ export interface SettingsPage {
   /**
    * The section it is under, when it is not Settings.
    *
-   * Six of the seven are Settings' own children. Federation's is a child of
+   * Seven of the eight are Settings' own children. Federation's is a child of
    * the Federation section instead: what a settings page is has
    * nothing to do with where the menu files it, so the page says where it is
    * and the rest of this module carries on as before.
@@ -80,6 +80,12 @@ export interface SettingsPage {
     settings: SiteSettings,
   ) => Promise<Record<string, unknown>> | Record<string, unknown>;
   reads?: (options: { c: Context<GeekityEnv>; body: SubmittedBody }) => Partial<SettingsForm>;
+  /**
+   * What the page's own form saves, when that is not site settings. Only
+   * Notifications has one: it saves the signed-in user's choices to
+   * `data/users.json`, and carries no site setting at all.
+   */
+  save?: (c: Context<GeekityEnv>, body: SubmittedBody) => Promise<Response>;
   /**
    * The page's own endpoints: a credential, a test message. Each is its own
    * POST so a refused one cannot lose an edit to a field.
@@ -119,6 +125,8 @@ export function mountSettingsPage(
 
   app.post(page.path, async (c) => {
     const body: SubmittedBody = await c.req.parseBody();
+    if (page.save !== undefined) return await page.save(c, body);
+
     const site = c.var.siteAtRequestStart;
     const elsewhere = await setElsewhereOn(c, page);
     const editable = page.fields.filter((name) => elsewhere[settingOf(name)] === undefined);

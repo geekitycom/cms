@@ -14,7 +14,7 @@ const box = sandbox();
 after(() => box.cleanup());
 
 describe('the settings pages', () => {
-  it('are the six the Settings menu lists, General first (AC #1)', () => {
+  it('are the seven the Settings menu lists, General first (AC #1)', () => {
     const settings = ADMIN_SECTIONS.find((section) => section.section === 'settings');
 
     assert.deepEqual(
@@ -25,6 +25,7 @@ describe('the settings pages', () => {
         ['permalinks', 'Permalinks', '/admin/settings/permalinks'],
         ['discussion', 'Discussion', '/admin/settings/discussion'],
         ['email', 'Email', '/admin/settings/email'],
+        ['notifications', 'Notifications', '/admin/settings/notifications'],
         ['privacy', 'Privacy', '/admin/settings/privacy'],
       ],
       'Settings no longer lists Federation (TASK-109), and lists Privacy (TASK-223)',
