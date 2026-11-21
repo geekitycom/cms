@@ -113,7 +113,8 @@ export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = [
     name: 'comments',
     label: 'Waiting for review',
     description:
-      'A comment or a webmention has arrived and is waiting to be approved. The message carries ' +
+      'A comment, a webmention or a held fediverse reply has arrived and is waiting to be ' +
+      'approved. The message carries ' +
       'approve, spam and delete links that work without signing in.',
     byDefault: true,
     batched: true,

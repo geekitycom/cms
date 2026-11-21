@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
 
+import { forgetDeletedReply } from '../federation/reply-review.ts';
 import { postLabel } from '../content/post-type.ts';
 import { isModerationAction, moderateComment } from '../comments/moderate.ts';
 import { writeReplyPost } from '../comments/reply-post.ts';
@@ -185,6 +186,7 @@ export function mountCommentsScreen(
       checker: c.var.config.commentChecker,
       baseUrl: c.var.config.baseUrl,
     });
+    if (outcome.kind === 'deleted') await forgetDeletedReply(recordsOf(c), outcome.comment);
 
     if (outcome.kind === 'gone') {
       flash(c, 'error', 'That comment is not here any more.');

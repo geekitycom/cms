@@ -69,6 +69,7 @@ export const DISCUSSION_SETTINGS: SettingsPage = {
     'comments_close_after_days',
     'webmentions_send',
     'webmentions_receive',
+    'fediverse_replies',
     'comment_email_retention_days',
     'address_hash_retention_days',
     'contact_message_retention_days',

@@ -66,6 +66,7 @@ describe('content/_data/site.json', () => {
       // were: a page writes the fields it carries and no others.
       webmentionsSend: true,
       webmentionsReceive: true,
+      fediverseReplies: 'known',
       notifyServer: 'https://rpc.rsscloud.io',
       followingOpml: '',
       feedUpdatePeriod: 'hourly',

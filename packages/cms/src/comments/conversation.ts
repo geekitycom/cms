@@ -341,8 +341,8 @@ export function commentNames(id: string, permalink: string, baseUrl: string): st
 
 /**
  * The stored comment holding a fediverse note or activity id as its origin:
- * one imported from the site this one replaced, keyed by that id as it would
- * have been had it arrived here. A delivery or a fetch of the same
+ * one imported from the site this one replaced, or a reply this site held for
+ * review, keyed by that id. A delivery or a fetch of the same
  * id is that comment again, and the stored one wins, since it is the one the
  * moderator decided on and the thread anchors.
  */

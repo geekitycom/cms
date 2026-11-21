@@ -53,7 +53,7 @@ export function gather(
     fediverse.push(fromActivities(context, heard, stored, naming));
     if (isEvent) fediverse.push(fromAnswers(heard, naming));
   }
-  const native = fromStored(context, document, stored);
+  const native = fromStored(context, document, stored, naming);
   const comments = isEvent ? answersApart(native) : native;
   const sources = [...fediverse, comments];
   const replyPosts = fromReplyPosts(context, document, root, seen, [
@@ -84,12 +84,21 @@ function merged(root: string, parts: readonly Part[]): Gathered {
   return { root, ...groups, held, withdrawn };
 }
 
-function fromStored(context: Reading, document: Document, stored: readonly PostComment[]): Part {
+function fromStored(
+  context: Reading,
+  document: Document,
+  stored: readonly PostComment[],
+  naming: (actorId: string) => InteractionAuthor,
+): Part {
   const users = context.users();
   const said: [Group, Interaction][] = [];
   const held = new Map<string, Interaction>();
   for (const record of stored) {
-    const comment = interactionOf(record, document.permalink, context.baseUrl, users);
+    let comment = interactionOf(record, document.permalink, context.baseUrl, users);
+    // A reply this site held for review is named as the inbox's replies are,
+    // from the profile its author publishes, rather than as it arrived.
+    const actor = record.migrated === true ? undefined : record.actor;
+    if (actor !== undefined) comment = { ...comment, author: naming(actor) };
     if (record.status !== 'approved') {
       held.set(comment.id, comment);
       continue;

@@ -41,6 +41,7 @@ const STABLE_SITE_JSON_KEYS = [
   'contactMessageRetentionDays',
   'webmentionsSend',
   'webmentionsReceive',
+  'fediverseReplies',
   'notifyServer',
   'followingOpml',
   'feedUpdatePeriod',

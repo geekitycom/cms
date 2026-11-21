@@ -18,6 +18,8 @@ import { followAllMovedComments, followMovedComments } from '../comments/index.t
 import { createReplyNotices } from '../comments/reply-notices.ts';
 import { createContentSync, createScheduler } from '../content/index.ts';
 import type { ContentEventListener, ContentSync, Scheduler } from '../content/index.ts';
+import { createReplyReview } from '../federation/reply-review.ts';
+import type { ReplyReview } from '../federation/reply-review.ts';
 import { createReplyBackfill, signedRepliesLoader } from '../federation/backfill.ts';
 import type { ReplyBackfill } from '../federation/backfill.ts';
 import type { ConversationSite } from '../comments/conversation.ts';
@@ -129,6 +131,7 @@ export interface Services {
   readonly avatars: AvatarService;
   readonly fonts: FontStore;
   readonly actorProfiles: ActorProfileService;
+  readonly replyReview: ReplyReview;
   readonly replyBackfill: ReplyBackfill;
   readonly retention: RetentionService;
   readonly notifier: FeedNotifier;
@@ -343,7 +346,22 @@ export function createServices({
     load: signedProfileLoader(() => federationContext()),
   });
 
-  const federated = { ...site, actorProfiles, cited: citedWith };
+  // Who hears about a comment. It reads the users file and the mail
+  // settings per message rather than at boot, so an address added on the users
+  // screen is written to by the very next comment.
+  const notifications = createCommentNotifier({ ...site, mail, cited });
+
+  // Whether a fediverse reply shows at once or waits in the queue, decided as
+  // the inbox logs it or the backfill fetches it.
+  const replyReview = createReplyReview({
+    admin,
+    config: resolved,
+    settings,
+    conversation,
+    notices: notifications,
+  });
+
+  const federated = { ...site, actorProfiles, cited: citedWith, replies: replyReview };
   const federationData = async () => {
     const settled = await settings.values(SITE);
     return { ...federated, site: settled, cited: citedWith(settled) };
@@ -357,6 +375,7 @@ export function createServices({
     ...site,
     conversation,
     load: signedRepliesLoader(federationContext),
+    review: replyReview,
     heard: (actorId) => {
       actorProfiles.capture(actorId);
     },
@@ -369,11 +388,6 @@ export function createServices({
     federation,
     citedPagesRead: (document) => replyContexts.whenRead(document),
   });
-
-  // Who hears about a comment. It reads the users file and the mail
-  // settings per message rather than at boot, so an address added on the users
-  // screen is written to by the very next comment.
-  const notifications = createCommentNotifier({ ...site, mail, cited });
 
   const replyNotices = createReplyNotices({
     ...site,
@@ -654,6 +668,7 @@ export function createServices({
     avatars,
     fonts,
     actorProfiles,
+    replyReview,
     replyBackfill,
     retention,
     notifier,

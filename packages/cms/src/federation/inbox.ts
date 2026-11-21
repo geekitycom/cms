@@ -18,10 +18,11 @@ import {
   QuoteRequest,
   Reject,
   Undo,
+  Update,
 } from '@fedify/vocab';
 import type { Actor } from '@fedify/vocab';
 
-import type { NewFollower } from '../store/admin-store.ts';
+import type { InboxActivity, NewFollower } from '../store/admin-store.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import { listUsers, primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
@@ -152,10 +153,10 @@ export async function handleUndo(context: SiteInboxContext, undo: Undo): Promise
 /**
  * Handle a `Delete`: an actor deleting itself stops being a follower.
  *
- * The only `Delete` acted on is the one whose object is its own actor, which
- * is how an instance announces that an account is gone. A `Delete` of a note
- * or an article is logged and left alone; the site holds no copy of a remote
- * object to remove.
+ * A `Delete` whose object is its own actor is how an instance announces that
+ * an account is gone. A `Delete` of a note is logged, which is what takes it
+ * off a page, and a note of the sender's that was waiting for review leaves
+ * the queue with it.
  */
 export async function handleDelete(context: SiteInboxContext, activity: Delete): Promise<void> {
   await logActivity(context, activity, context.recipient ?? undefined);
@@ -170,6 +171,8 @@ export async function handleDelete(context: SiteInboxContext, activity: Delete):
       context.data.config.contentDir,
       (record) => record.quote === object.href && record.actor === actor.href,
     );
+    // Nor is a reply its author deleted waiting for anybody.
+    await context.data.replies?.deleted(actor.href, object.href);
     return;
   }
 
@@ -338,8 +341,9 @@ function answersPost(context: SiteInboxContext, activity: Accept | Reject): bool
 }
 
 /**
- * Handle a `Like`, an `Announce` or a `Create`: record it, and ask for the
- * profile of whoever sent it.
+ * Handle a `Like`, an `Announce` or a `Create`: record it, ask for the
+ * profile of whoever sent it, and put a reply that waits for review in the
+ * queue.
  *
  * Nothing about the activity is interpreted here: the conversation reads it
  * back out of the log, which is why the row keeps the whole JSON-LD rather
@@ -351,8 +355,25 @@ export async function handleLoggedActivity(
   context: SiteInboxContext,
   activity: Like | Announce | Create,
 ): Promise<void> {
-  await logActivity(context, activity);
+  const logged = await logActivity(context, activity);
   if (activity.actorId !== null) context.data.actorProfiles.capture(activity.actorId.href);
+  if (logged !== undefined && activity instanceof Create) {
+    await context.data.replies?.received(logged);
+  }
+}
+
+/**
+ * Handle an `Update`: a note of the sender's that is waiting for review, or
+ * was approved, says what its author has changed it to.
+ *
+ * Nothing else is done with an `Update`, and it is not logged: the reply it
+ * edits lives in its comment file, which is what is rewritten.
+ */
+export async function handleUpdate(context: SiteInboxContext, update: Update): Promise<void> {
+  const actor = update.actorId;
+  if (actor === null || context.data.replies === undefined) return;
+  const json = await update.toJsonLd({ format: 'compact', contextLoader: context.contextLoader });
+  await context.data.replies.edited(actor.href, JSON.stringify(json));
 }
 
 /**
@@ -374,16 +395,16 @@ export async function logActivity(
   context: SiteInboxContext,
   activity: Activity,
   recipient: string | undefined = context.recipient ?? undefined,
-): Promise<void> {
+): Promise<InboxActivity | undefined> {
   const sender = activity.actorId;
-  if (sender === null) return;
+  if (sender === null) return undefined;
 
   const json = await activity.toJsonLd({
     format: 'compact',
     contextLoader: context.contextLoader,
   });
 
-  await appendInboxActivity(recordsOf(context), JSON.stringify(json), { recipient });
+  return await appendInboxActivity(recordsOf(context), JSON.stringify(json), { recipient });
 }
 
 /** The files this inbox writes, and the index over them. */
@@ -451,6 +472,7 @@ export const INBOX_LISTENERS: readonly InboxListener[] = [
   listener(Like, handleLoggedActivity),
   listener(Announce, handleLoggedActivity),
   listener(Create, handleLoggedActivity),
+  listener(Update, handleUpdate),
   listener(QuoteRequest, handleQuoteRequest),
 ];
 

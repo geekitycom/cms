@@ -60,6 +60,7 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     comments_close_after_days: '14',
     webmentions_send: '1',
     webmentions_receive: '1',
+    fediverse_replies: 'known',
     comment_email_retention_days: '0',
     address_hash_retention_days: '0',
     contact_message_retention_days: '0',

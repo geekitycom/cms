@@ -6,6 +6,7 @@ import { parseIconSetting } from '../images/icon-setting.ts';
 import { sourceFile } from '../images/paths.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import { isFileSync } from '../util/files.ts';
+import { FEDIVERSE_REPLY_RULES, isFediverseReplyRule } from '../site/fediverse-replies.ts';
 import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from '../site/feed-settings.ts';
 import { isLicenseUrl } from '../content/license.ts';
 import { canonicalLocale } from '../content/locale.ts';
@@ -98,7 +99,12 @@ type FlagField = {
 }[FormKey];
 
 type ChoiceField =
-  'feed_update_period' | 'ai_crawlers' | ContentSignalField | 'mail_provider' | 'location_sharing';
+  | 'feed_update_period'
+  | 'ai_crawlers'
+  | ContentSignalField
+  | 'mail_provider'
+  | 'location_sharing'
+  | 'fediverse_replies';
 
 type ContentSignalField =
   'content_signal_search' | 'content_signal_ai_input' | 'content_signal_ai_train';
@@ -365,6 +371,14 @@ const SETTING_ROWS: SettingRows = {
   webmentions_send: flag('webmentions_send', 'webmentions_send'),
 
   webmentions_receive: flag('webmentions_receive', 'webmentions_receive'),
+
+  fediverse_replies: choice(
+    'fediverse_replies',
+    'fediverse_replies',
+    isFediverseReplyRule,
+    'known',
+    `A fediverse reply rule is one of ${FEDIVERSE_REPLY_RULES.join(', ')}.`,
+  ),
 
   notify_server: {
     ...text('notify_server', 'notify_server'),

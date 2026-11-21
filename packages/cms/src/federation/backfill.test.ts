@@ -207,7 +207,13 @@ async function site(
       'Words.',
       '',
     ].join('\n'),
-    '_data/site.json': JSON.stringify({ title: 'A Site', baseUrl: BASE_URL, author: LOCAL_USER }),
+    // Every fetched reply shows, so the threads here are the backfill's alone.
+    '_data/site.json': JSON.stringify({
+      title: 'A Site',
+      baseUrl: BASE_URL,
+      author: LOCAL_USER,
+      fediverseReplies: 'show',
+    }),
     '_data/federation/inbox/2026-09.jsonl': log,
     ...extra,
   };
@@ -269,6 +275,24 @@ function creates(cms: Cms, noteId: string) {
     .listActivitiesAbout([noteId])
     .filter((activity) => activity.activityType === 'Create' && activity.objectId === noteId);
 }
+
+describe('a fetched reply under the default review rule', () => {
+  it('waits in the queue when a stranger wrote it, and is not on the page', async () => {
+    serveNote(note(A, POST, 'Ada says hello.'), [B]);
+    serveNote(note(B, A, 'Bob answers Ada.'), []);
+    const { cms, contentDir } = await site(undefined, undefined, {
+      '_data/site.json': JSON.stringify({ title: 'A Site', baseUrl: BASE_URL, author: LOCAL_USER }),
+    });
+
+    await cms.replyBackfill.sweep();
+
+    assert.deepEqual(tree(cms, contentDir), [A]);
+    const [held] = cms.admin.listComments({ status: 'pending' });
+    assert.equal(held?.origin, B);
+    assert.equal(held?.inReplyTo, A);
+    assert.doesNotMatch(await (await cms.app.request(PERMALINK)).text(), /Bob answers Ada\./);
+  });
+});
 
 describe('a reply answering a fediverse reply (AC #1)', () => {
   it('is read off the replies collection and threaded under it, with its own URL', async () => {
