@@ -5,6 +5,7 @@ import { linksTo, sourceEntry } from './microformats.ts';
 
 const SOURCE = 'https://them.example/2026/09/reply/';
 const TARGET = 'https://blog.example/2026/09/hello/';
+const isTarget = (url: string): boolean => url === TARGET;
 
 describe('linksTo', () => {
   it('sees a link to the target', () => {
@@ -46,7 +47,7 @@ describe('sourceEntry', () => {
         <a class="u-url" href="${SOURCE}">permalink</a>
       </article>`;
 
-    const entry = sourceEntry(html, SOURCE, TARGET);
+    const entry = sourceEntry(html, SOURCE, isTarget);
 
     assert.equal(entry.kind, 'reply');
     assert.equal(entry.author.name, 'Ada Lovelace');
@@ -58,12 +59,12 @@ describe('sourceEntry', () => {
 
   it('reads a like', () => {
     const html = `<div class="h-entry"><a class="u-like-of" href="${TARGET}">liked</a></div>`;
-    assert.equal(sourceEntry(html, SOURCE, TARGET).kind, 'like');
+    assert.equal(sourceEntry(html, SOURCE, isTarget).kind, 'like');
   });
 
   it('reads a repost', () => {
     const html = `<div class="h-entry"><a class="u-repost-of" href="${TARGET}">boosted</a></div>`;
-    assert.equal(sourceEntry(html, SOURCE, TARGET).kind, 'repost');
+    assert.equal(sourceEntry(html, SOURCE, isTarget).kind, 'repost');
   });
 
   it('reads a plain link in the content as a mention', () => {
@@ -73,7 +74,7 @@ describe('sourceEntry', () => {
         <div class="e-content"><p>As <a href="${TARGET}">they</a> said.</p></div>
       </div>`;
 
-    const entry = sourceEntry(html, SOURCE, TARGET);
+    const entry = sourceEntry(html, SOURCE, isTarget);
     assert.equal(entry.kind, 'mention');
   });
 
@@ -84,7 +85,7 @@ describe('sourceEntry', () => {
       <div class="h-entry"><a class="p-author h-card" href="https://them.example/two">Two</a>
         <a class="u-in-reply-to" href="${TARGET}">re</a></div>`;
 
-    assert.equal(sourceEntry(html, SOURCE, TARGET).author.name, 'Two');
+    assert.equal(sourceEntry(html, SOURCE, isTarget).author.name, 'Two');
   });
 
   it('takes an author from a page-level h-card when the entry names none', () => {
@@ -93,7 +94,7 @@ describe('sourceEntry', () => {
         <img class="u-photo" src="/me.jpg" alt=""></div>
       <div class="h-entry"><div class="e-content"><a href="${TARGET}">there</a></div></div>`;
 
-    const entry = sourceEntry(html, SOURCE, TARGET);
+    const entry = sourceEntry(html, SOURCE, isTarget);
     assert.equal(entry.author.name, 'Grace');
     assert.equal(entry.author.url, 'https://them.example/');
     assert.equal(entry.author.photo, 'https://them.example/me.jpg');
@@ -102,7 +103,7 @@ describe('sourceEntry', () => {
   it('falls back to the page title and the host when the page has no microformats', () => {
     const html = `<html><head><title>A note</title></head><body><p><a href="${TARGET}">there</a></p></body></html>`;
 
-    const entry = sourceEntry(html, SOURCE, TARGET);
+    const entry = sourceEntry(html, SOURCE, isTarget);
     assert.equal(entry.kind, 'mention');
     assert.equal(entry.author.name, 'them.example');
     assert.equal(entry.content.text, 'A note');
@@ -115,12 +116,12 @@ describe('sourceEntry', () => {
       <div class="h-entry"><a class="p-author h-card" href="me/">Ada</a>
       <a class="u-in-reply-to" href="${TARGET}">re</a></div></body></html>`;
 
-    assert.equal(sourceEntry(html, SOURCE, TARGET).author.url, 'https://them.example/blog/me/');
+    assert.equal(sourceEntry(html, SOURCE, isTarget).author.url, 'https://them.example/blog/me/');
   });
 
   it('leaves the published date null when the page did not say one', () => {
     const html = `<div class="h-entry"><a class="u-like-of" href="${TARGET}">liked</a></div>`;
-    assert.equal(sourceEntry(html, SOURCE, TARGET).published, null);
+    assert.equal(sourceEntry(html, SOURCE, isTarget).published, null);
   });
 
   it('reads a name given as text rather than as an h-card', () => {
@@ -128,7 +129,7 @@ describe('sourceEntry', () => {
       <div class="h-entry"><span class="p-author">Alan Turing</span>
       <a class="u-in-reply-to" href="${TARGET}">re</a></div>`;
 
-    const entry = sourceEntry(html, SOURCE, TARGET);
+    const entry = sourceEntry(html, SOURCE, isTarget);
     assert.equal(entry.author.name, 'Alan Turing');
     assert.equal(entry.author.url, null);
   });
@@ -157,7 +158,7 @@ describe('sourceEntry replies (TASK-320)', () => {
       </div>
       <div class="p-comment h-cite"><div class="e-content">No page of its own.</div></div>`);
 
-    const replies = sourceEntry(html, SOURCE, TARGET).replies;
+    const replies = sourceEntry(html, SOURCE, isTarget).replies;
     assert.equal(replies.length, 1, 'one with no url has no identity and is left out');
     const carol = replies[0];
     assert.equal(carol?.url, 'https://carol.example/1');
@@ -182,7 +183,7 @@ describe('sourceEntry replies (TASK-320)', () => {
         <div class="e-content"><p>Frank answers nothing here.</p></div>
       </article>`);
 
-    const replies = sourceEntry(html, SOURCE, TARGET).replies;
+    const replies = sourceEntry(html, SOURCE, isTarget).replies;
     assert.deepEqual(
       replies.map((reply) => reply.url),
       ['https://erin.example/3'],
@@ -190,14 +191,14 @@ describe('sourceEntry replies (TASK-320)', () => {
   });
 
   it('has no replies when the entry carries none, and stops at a bounded depth', () => {
-    assert.deepEqual(sourceEntry(entry(''), SOURCE, TARGET).replies, []);
+    assert.deepEqual(sourceEntry(entry(''), SOURCE, isTarget).replies, []);
 
     let nested = '';
     for (let depth = 20; depth > 0; depth -= 1) {
       nested = `<div class="p-comment h-cite"><a class="u-url" href="https://deep.example/${String(depth)}">x</a>${nested}</div>`;
     }
     let deepest = 0;
-    let level = sourceEntry(entry(nested), SOURCE, TARGET).replies;
+    let level = sourceEntry(entry(nested), SOURCE, isTarget).replies;
     while (level.length > 0) {
       deepest += 1;
       level = level[0]?.replies ?? [];

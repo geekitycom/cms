@@ -2,7 +2,7 @@ import { rsvpField } from '../store/admin-store.ts';
 import type { PostComment } from '../store/admin-store.ts';
 import { heldWebmention, intakeComment } from '../comments/intake.ts';
 import type { CommentNotices, ProposedComment } from '../comments/intake.ts';
-import { deleteComment } from '../comments/records.ts';
+import { deleteComment, isCarried } from '../comments/records.ts';
 import type { CommentRecords } from '../comments/records.ts';
 import type { CommentChecker } from '../forms/checker.ts';
 import type { Document } from '../content/document.ts';
@@ -13,8 +13,9 @@ import type { ConversationReader, ConversationSite } from '../comments/conversat
 import { sanitizeCommentHtml } from '../content/sanitize.ts';
 import { DISCOVERY_MAX_BYTES } from './discovery.ts';
 import { fetchPublic } from './fetch-public.ts';
-import { linksTo, sourceEntry } from './microformats.ts';
-import type { NestedReply } from './microformats.ts';
+import { linksIn, linksTo, sourceEntry } from './microformats.ts';
+import type { NestedReply, SourceEntry } from './microformats.ts';
+import { handSyndicationOf, syndicationCopies } from './syndication.ts';
 import { isPrivateHost } from '../util/public-address.ts';
 import type { HostLookup } from '../util/public-address.ts';
 
@@ -119,6 +120,7 @@ export function checkWebmentionRequest(
   const to = webUrl(target);
   if (from === undefined) return refuse('source', 'The source is not an http or https URL.');
   if (to === undefined) return refuse('target', 'The target is not an http or https URL.');
+  from.hash = '';
   if (from.href === to.href) {
     return refuse('same', 'The source and the target are the same page.');
   }
@@ -126,13 +128,18 @@ export function checkWebmentionRequest(
   if (isPrivateHost(from.hostname)) return refuse('source', 'The source is not a public URL.');
 
   const site = webUrl(options.baseUrl);
-  if (site === undefined || to.origin !== site.origin) {
+  if (site !== undefined && isThisSite(from, site)) {
+    return refuse('source', 'The source is a page on this site.');
+  }
+  if (site === undefined || !isThisSite(to, site)) {
     const original = options.syndicatedAt?.(to.href);
     if (original !== undefined) {
       return { ok: true, source: from.href, target: to.href, document: original };
     }
     return refuse('elsewhere', 'The target is not a page on this site.');
   }
+
+  if (to.search !== '') return refuse('target', 'There is no page here at that address.');
 
   // A comment's page is a page here, and what is said to it is said on the
   // post it is under.
@@ -147,6 +154,10 @@ export function checkWebmentionRequest(
   return { ok: true, source: from.href, target: to.href, document };
 }
 
+function isThisSite(url: URL, site: URL): boolean {
+  return url.origin === site.origin;
+}
+
 /** What {@link verifyWebmention} needs around it. */
 export interface VerifyWebmentionOptions {
   /** The webmention to check. */
@@ -157,8 +168,8 @@ export interface VerifyWebmentionOptions {
   readonly dataDir: string;
   /** The site's public origin. */
   readonly baseUrl: string;
-  /** What says which reply on the post a source answers. */
-  readonly conversation: Pick<ConversationReader, 'replyNamed'>;
+  /** What says which reply on the post a source answers, and which post a comment's page is on. */
+  readonly conversation: Pick<ConversationReader, 'replyNamed' | 'comment'>;
   readonly site: ConversationSite;
   /** The checker, when the site named one. */
   readonly checker?: CommentChecker | undefined;
@@ -213,20 +224,34 @@ export async function verifyWebmention(
     return { kind: 'unreachable', reason: fetched.reason };
   }
 
+  if (fetched.kind === 'read' && fetched.truncated && !mentions(fetched, incoming)) {
+    const reason = 'the link was not in the part of the page that was read';
+    options.logger.warn(`Could not read all of ${incoming.source} to verify a webmention`);
+    return { kind: 'unreachable', reason };
+  }
+
   if (fetched.kind === 'gone' || !mentions(fetched, incoming)) {
+    if (fetched.kind === 'read' && namesThePost(fetched, options)) {
+      return { kind: 'ignored', why: 'unlinked' };
+    }
     const why = fetched.kind === 'gone' ? 'gone' : 'unlinked';
     await dropCarried(records, incoming, new Set());
-    if (held === undefined) return { kind: 'ignored', why };
+    if (held === undefined || isCarried(held)) return { kind: 'ignored', why };
     await deleteComment(records, held.id);
     return { kind: 'deleted', why };
   }
 
+  const isUrlOfPost = urlOfPost(options);
   const entry = fetched.html
-    ? sourceEntry(fetched.body, fetched.url, incoming.target)
+    ? sourceEntry(fetched.body, fetched.url, (url) => url === incoming.target || isUrlOfPost(url))
     : // A source that is not HTML — plain text, JSON, anything — has no
       // microformats to read, so all that can be said about it is that it
       // links here.
       undefined;
+
+  if (held !== undefined && isCarried(held) && !isOwnPage(incoming.source, fetched.url, entry)) {
+    return { kind: 'stored', comment: held, created: false };
+  }
 
   // The first of the things it answers that is a reply on this post. A source
   // answering one is a reply here even when it never names the post itself.
@@ -262,7 +287,7 @@ export async function verifyWebmention(
     kind,
     author,
     content: { markdown: text, html },
-    submitted: entry?.published ?? now.toISOString(),
+    submitted: entry?.published ?? held?.submitted ?? now.toISOString(),
     inReplyTo,
     // The URL it was sent from rather than the entry's own `u-url`: this is
     // the identity a later webmention is matched against, and the sender is
@@ -300,6 +325,11 @@ export async function verifyWebmention(
   return outcome.kind === 'discarded' && outcome.removed
     ? { kind: 'deleted', why: 'discarded' }
     : { kind: 'ignored', why: 'discarded' };
+}
+
+/** Whether `source` (which has no fragment by now) is the reply's own page. */
+function isOwnPage(source: string, fetchedUrl: string, entry: SourceEntry | undefined): boolean {
+  return fetchedUrl === source || entry?.url === source;
 }
 
 /**
@@ -394,7 +424,10 @@ function carriedComment(
           ? paragraph(reply.content.text)
           : sanitizeCommentHtml(reply.content.html),
     },
-    submitted: reply.published ?? options.now.toISOString(),
+    submitted:
+      reply.published ??
+      heldWebmention(options.records, incoming.document.slug, reply.url)?.submitted ??
+      options.now.toISOString(),
     inReplyTo: parent,
     url: reply.url,
     via: incoming.source,
@@ -412,8 +445,7 @@ export type NotStored = 'gone' | 'unlinked' | 'discarded';
 
 /** What reading a source page came to. */
 type FetchedSource =
-  | { kind: 'read'; body: string; url: string; html: boolean }
-  /** Definitely not there: a 404, a 410, anything a retry will not fix. */
+  | { kind: 'read'; body: string; url: string; html: boolean; truncated: boolean }
   | { kind: 'gone' }
   /** Not readable this time, which is not the same thing at all. */
   | { kind: 'unreachable'; reason: string };
@@ -430,20 +462,33 @@ async function readSource(source: string, lookup: HostLookup): Promise<FetchedSo
   });
 
   if (!fetched.ok) {
-    // A page the server says is not there is a page that is not linking here.
-    // A server that is broken is a different thing and takes nothing with it.
-    if (fetched.status !== undefined && fetched.status >= 400 && fetched.status < 500) {
-      return { kind: 'gone' };
-    }
+    if (fetched.status === 404 || fetched.status === 410) return { kind: 'gone' };
     return { kind: 'unreachable', reason: fetched.reason };
   }
 
   return {
     kind: 'read',
-    body: new TextDecoder().decode(fetched.body),
+    body: decode(fetched.body, fetched.type),
     url: fetched.url,
     html: /^\s*(text\/html|application\/xhtml\+xml)/i.test(fetched.type),
+    truncated: fetched.truncated,
   };
+}
+
+/** How far into a body to look for a `<meta>` charset: the WHATWG prescan window. */
+const META_PRESCAN_BYTES = 1024;
+
+/** The body's text, in the charset its Content-Type or a `<meta>` names, else UTF-8. */
+function decode(body: Uint8Array, type: string): string {
+  const head = new TextDecoder('latin1').decode(body.subarray(0, META_PRESCAN_BYTES));
+  const label =
+    /;\s*charset\s*=\s*["']?([^"';\s]+)/i.exec(type)?.[1] ??
+    /<meta[^>]+charset\s*=\s*["']?([^"'\s/>;]+)/i.exec(head)?.[1];
+  try {
+    return new TextDecoder(label).decode(body);
+  } catch {
+    return new TextDecoder().decode(body);
+  }
 }
 
 /**
@@ -461,6 +506,45 @@ function mentions(
   return fetched.html
     ? linksTo(fetched.body, fetched.url, incoming.target)
     : fetched.body.includes(incoming.target);
+}
+
+function namesThePost(
+  fetched: { body: string; url: string; html: boolean },
+  options: VerifyWebmentionOptions,
+): boolean {
+  const named = fetched.html
+    ? linksIn(fetched.body, fetched.url)
+    : (fetched.body.match(/https?:\/\/[^\s"'<>\\]+/g) ?? []);
+  return [...named].some(urlOfPost(options));
+}
+
+function urlOfPost(options: VerifyWebmentionOptions): (href: string) => boolean {
+  const { document } = options.incoming;
+  const origin = new URL(options.baseUrl).origin;
+  let copies: string[] | undefined;
+
+  return (href) => {
+    const url = webUrl(href);
+    if (url === undefined) return false;
+    url.hash = '';
+
+    if (url.origin === origin) {
+      if (url.search !== '') return false;
+      const key = commentKeyAt(url.pathname);
+      if (key !== undefined) {
+        return options.conversation.comment(key, options.site)?.post.slug === document.slug;
+      }
+      return (
+        url.pathname === document.permalink || (document.redirectFrom ?? []).includes(url.pathname)
+      );
+    }
+
+    copies ??= [
+      ...handSyndicationOf(document.extra),
+      ...Object.values(syndicationCopies(options.records.contentDir).read(document.permalink)),
+    ];
+    return copies.includes(url.href);
+  };
 }
 
 /** A URL, when it is an http or https one, and `undefined` otherwise. */

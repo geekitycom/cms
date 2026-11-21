@@ -15,6 +15,12 @@ import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
+import {
+  addComment,
+  commentsFile,
+  rebuildCommentIndexes,
+  updateComment,
+} from '../comments/records.ts';
 
 /**
  * Webmentions as somebody else's server meets them: an endpoint advertised on
@@ -70,7 +76,7 @@ const NOW = new Date('2026-09-20T12:00:00.000Z');
 /** What the make-believe web answers for one URL. */
 interface Page {
   status?: number;
-  body?: string;
+  body?: string | Uint8Array;
   redirectTo?: string;
   contentType?: string;
 }
@@ -108,7 +114,7 @@ function routeTheWeb(): () => void {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     requested.push(url);
 
-    const page = pages.get(url);
+    const page = pages.get(url.split('#')[0] ?? url);
     if (page === undefined) return new Response('missing', { status: 404 });
     if (page.redirectTo !== undefined) {
       return new Response(null, { status: 302, headers: { location: page.redirectTo } });
@@ -193,10 +199,10 @@ function stored(cms: Cms): PostComment[] {
 }
 
 /** A source page whose h-entry answers the post. */
-function reply(body: string): string {
+function reply(body: string, author = 'Ada Lovelace'): string {
   return `<html><head><title>A reply</title></head><body>
     <article class="h-entry">
-      <a class="p-author h-card" href="https://them.example/">Ada Lovelace
+      <a class="p-author h-card" href="https://them.example/">${author}
         <img class="u-photo" src="/me.jpg" alt=""></a>
       ${body}
       <time class="dt-published" datetime="2026-09-20T09:00:00Z">20 September</time>
@@ -258,6 +264,7 @@ describe('what the endpoint refuses', () => {
     const cms = await site();
 
     assert.equal((await send(cms, { source: POST_URL, target: POST_URL })).status, 400);
+    assert.equal((await send(cms, { source: `${POST_URL}#x`, target: POST_URL })).status, 400);
   });
 
   it('refuses a target that is not on this site', async () => {
@@ -278,6 +285,23 @@ describe('what the endpoint refuses', () => {
       target: `${BASE_URL}/2026/09/nothing-here/`,
     });
     assert.equal(response.status, 400);
+  });
+
+  it('refuses a source on this site, and stores nothing from it', async () => {
+    const cms = await site();
+    pages.set(`${BASE_URL}/`, {
+      body: `<div class="h-card"><a class="u-url p-name" href="${BASE_URL}/">Site Owner</a></div>
+        <a href="${POST_URL}">Hello world</a>`,
+    });
+    pages.set(POST_URL, {
+      body: `<article class="h-entry"><a class="u-url" href="${POST_URL}">self</a></article>`,
+    });
+
+    assert.equal((await sendAndSettle(cms, `${BASE_URL}/`)).status, 400);
+    assert.equal((await sendAndSettle(cms, `${POST_URL}#x`)).status, 400);
+    assert.equal((await sendAndSettle(cms, `${BASE_URL}/2026/09/camp/#top`)).status, 400);
+    assert.deepEqual(stored(cms), []);
+    assert.deepEqual(requested, []);
   });
 
   it('refuses a source on a private address, which is not somebody else’s page', async () => {
@@ -343,11 +367,13 @@ describe('verifying a webmention', () => {
     const cms = await site();
     pages.set('https://them.example/img', { body: `<img src="${POST_URL}" alt="">` });
     pages.set('https://them.example/video', { body: `<video src="${POST_URL}"></video>` });
-    pages.set(`${BASE_URL}/elsewhere/`, { body: '<a href="/2026/09/hello-world/">mine</a>' });
+    pages.set('https://them.example/relative', {
+      body: '<a href="//blog.example/2026/09/hello-world/">yours</a>',
+    });
 
     await sendAndSettle(cms, 'https://them.example/img');
     await sendAndSettle(cms, 'https://them.example/video');
-    await sendAndSettle(cms, `${BASE_URL}/elsewhere/`);
+    await sendAndSettle(cms, 'https://them.example/relative');
 
     assert.equal(stored(cms).length, 3, 'all three link to the target');
   });
@@ -469,6 +495,22 @@ describe('a webmention that comes again', () => {
     assert.equal(held[0]?.content.html, '<p>Second thought.</p>');
   });
 
+  it('takes the source with a fragment as the same page', async () => {
+    const cms = await site();
+    const note = 'https://them.example/note';
+    pages.set(note, {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a><p>Hi.</p>`),
+    });
+
+    await sendAndSettle(cms, note);
+    await sendAndSettle(cms, `${note}#one`);
+    await sendAndSettle(cms, `${note}#two`);
+
+    const held = stored(cms);
+    assert.equal(held.length, 1, 'one comment');
+    assert.equal(held[0]?.url, note);
+  });
+
   it('deletes it when the source no longer links here', async () => {
     const cms = await site();
     pages.set('https://them.example/note', {
@@ -518,6 +560,301 @@ describe('a webmention that comes again', () => {
 
     pages.set('https://them.example/note', { status: 410 });
     await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.deepEqual(stored(cms), []);
+  });
+
+  it('keeps it when the page grows past the read limit with the link after the cut', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+    assert.equal(stored(cms).length, 1);
+
+    const padding = `<!-- ${'x'.repeat(1_200_000)} -->`;
+    pages.set('https://them.example/note', {
+      body: reply(`${padding}<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms).length, 1, 'a page read only in part is not proof the link is gone');
+  });
+
+  for (const status of [401, 403, 408, 429, 451]) {
+    it(`keeps an approved one when the source answers ${status}`, async () => {
+      const cms = await site();
+      pages.set('https://them.example/note', {
+        body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+      });
+      await sendAndSettle(cms, 'https://them.example/note');
+      const first = stored(cms)[0];
+      assert.ok(first !== undefined);
+      await updateComment(
+        { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+        first.id,
+        { status: 'approved' },
+      );
+
+      pages.set('https://them.example/note', { status, body: 'no' });
+      await sendAndSettle(cms, 'https://them.example/note');
+
+      const held = stored(cms);
+      assert.equal(held.length, 1, `a ${status} is not the page saying it is gone`);
+      assert.equal(held[0]?.status, 'approved');
+    });
+  }
+});
+
+describe('a source in another character encoding', () => {
+  const latin1 = (text: string): Uint8Array => Uint8Array.from(text, (char) => char.charCodeAt(0));
+
+  it('reads it by the charset in its content type', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: latin1(reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`, 'René')),
+      contentType: 'text/html; charset=windows-1252',
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms)[0]?.author.name, 'René');
+  });
+
+  it('reads it by a meta charset when the content type names none', async () => {
+    const cms = await site();
+    const html = reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`, 'René').replace(
+      '<head>',
+      '<head><meta charset="iso-8859-1">',
+    );
+    pages.set('https://them.example/note', { body: latin1(html), contentType: 'text/html' });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms)[0]?.author.name, 'René');
+  });
+
+  it('reads it as UTF-8 when the charset is not one it knows', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`, 'René'),
+      contentType: 'text/html; charset=no-such-encoding',
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms)[0]?.author.name, 'René');
+  });
+});
+
+describe('an approved webmention that comes again', () => {
+  const NOTE = 'https://them.example/note';
+  const LOVELY = `<a class="u-in-reply-to" href="${POST_URL}">re</a><div class="e-content"><p>Lovely post.</p></div>`;
+
+  async function approvedReply(cms: Cms, page = reply(LOVELY)): Promise<PostComment> {
+    pages.set(NOTE, { body: page });
+    await sendAndSettle(cms, NOTE);
+    const held = stored(cms)[0];
+    assert.ok(held !== undefined);
+    return (
+      (await updateComment(
+        { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+        held.id,
+        { status: 'approved' },
+      )) ?? held
+    );
+  }
+
+  it('waits for a moderator again when its words and author have changed', async () => {
+    const cms = await site();
+    const first = await approvedReply(cms);
+
+    pages.set(NOTE, {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a>` +
+          '<div class="e-content"><p>Buy cheap pills.</p></div>',
+      ).replace('Ada Lovelace', 'Spam Bot'),
+    });
+    await sendAndSettle(cms, NOTE);
+
+    const [after] = stored(cms);
+    assert.equal(after?.id, first.id, 'the same entry');
+    assert.equal(after?.status, 'pending');
+    assert.equal(after?.content.html, '<p>Buy cheap pills.</p>');
+    const page = await (await cms.app.request('/2026/09/hello-world/')).text();
+    assert.doesNotMatch(page, /Buy cheap pills|Spam Bot/, 'the new version is not on the post');
+  });
+
+  it('waits for a moderator again when it now says it is something else', async () => {
+    const cms = await site();
+    await approvedReply(cms);
+
+    pages.set(NOTE, { body: reply(`<a class="u-like-of" href="${POST_URL}">liked</a>`) });
+    await sendAndSettle(cms, NOTE);
+
+    assert.deepEqual(
+      stored(cms).map((one) => [one.kind, one.status]),
+      [['like', 'pending']],
+    );
+  });
+
+  it('stays approved when the page says the same thing', async () => {
+    const cms = await site();
+    await approvedReply(cms);
+
+    await sendAndSettle(cms, NOTE);
+
+    assert.equal(stored(cms)[0]?.status, 'approved');
+  });
+
+  it('keeps its first date when the page gives none', async () => {
+    let now = new Date('2026-09-20T12:00:00.000Z');
+    const cms = await site({ now: () => now });
+    const undated = reply(LOVELY).replace(/<time class="dt-published"[^>]*>[^<]*<\/time>/, '');
+    const first = await approvedReply(cms, undated);
+    assert.equal(first.submitted, '2026-09-20T12:00:00.000Z');
+
+    now = new Date('2026-10-20T12:00:00.000Z');
+    await sendAndSettle(cms, NOTE);
+
+    assert.equal(stored(cms)[0]?.submitted, first.submitted);
+  });
+});
+
+describe('a webmention sent again to another URL of the same post', () => {
+  const LIKE = 'https://them.example/like';
+
+  async function approvedLike(cms: Cms): Promise<PostComment> {
+    pages.set(LIKE, { body: reply(`<a class="u-like-of" href="${POST_URL}">liked</a>`) });
+    await sendAndSettle(cms, LIKE);
+    const like = stored(cms)[0];
+    assert.ok(like !== undefined);
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      like.id,
+      { status: 'approved' },
+    );
+    return like;
+  }
+
+  function assertKept(cms: Cms, like: PostComment): void {
+    const held = stored(cms).filter((one) => one.url === LIKE);
+    assert.equal(held.length, 1, 'the like is still stored');
+    assert.equal(held[0]?.id, like.id);
+    assert.equal(held[0]?.status, 'approved');
+  }
+
+  it('refuses a target with a query string and keeps the like', async () => {
+    const cms = await site();
+    const like = await approvedLike(cms);
+
+    const response = await sendAndSettle(cms, LIKE, `${POST_URL}?x=1`);
+
+    assert.equal(response.status, 400);
+    assertKept(cms, like);
+  });
+
+  it('keeps the like when the target is the post with a fragment', async () => {
+    const cms = await site();
+    const like = await approvedLike(cms);
+
+    const response = await sendAndSettle(cms, LIKE, `${POST_URL}#elsewhere`);
+
+    assert.equal(response.status, 202);
+    assertKept(cms, like);
+  });
+
+  async function commentPage(cms: Cms): Promise<string> {
+    const note = await addComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      {
+        slug: 'hello-world',
+        permalink: '/2026/09/hello-world/',
+        source: 'comment',
+        kind: 'reply',
+        status: 'approved',
+        author: { name: 'Bob', url: null, email: null, avatar: null },
+        content: { markdown: 'Bob says so.', html: '<p>Bob says so.</p>' },
+        submitted: '2026-09-19T10:00:00.000Z',
+        addressHash: null,
+        inReplyTo: null,
+        url: null,
+        notify: false,
+      },
+    );
+    return `${BASE_URL}/comment/${note.id}/`;
+  }
+
+  it('keeps the like when the target is a comment page on the post', async () => {
+    const cms = await site();
+    const like = await approvedLike(cms);
+
+    const response = await sendAndSettle(cms, LIKE, await commentPage(cms));
+
+    assert.equal(response.status, 202);
+    assertKept(cms, like);
+  });
+
+  it('reads a like that also links a comment page as a like whichever is the target', async () => {
+    const cms = await site();
+    const comment = await commentPage(cms);
+    const page = reply(
+      `<a class="u-like-of" href="${POST_URL}">liked</a> <a href="${comment}">see Bob</a>`,
+    );
+
+    const kinds: string[] = [];
+    for (const target of [comment, POST_URL]) {
+      pages.set(LIKE, { body: page });
+      await sendAndSettle(cms, LIKE, target);
+      kinds.push(stored(cms).find((one) => one.url === LIKE)?.kind ?? 'none');
+    }
+
+    assert.deepEqual(kinds, ['like', 'like']);
+  });
+
+  it('keeps an approved like approved when it is sent again to a comment page it links', async () => {
+    const cms = await site();
+    const comment = await commentPage(cms);
+    pages.set(LIKE, {
+      body: reply(
+        `<a class="u-like-of" href="${POST_URL}">liked</a> <a href="${comment}">see Bob</a>`,
+      ),
+    });
+    await sendAndSettle(cms, LIKE);
+    const like = stored(cms).find((one) => one.url === LIKE);
+    assert.ok(like !== undefined);
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      like.id,
+      { status: 'approved' },
+    );
+
+    await sendAndSettle(cms, LIKE, comment);
+
+    assertKept(cms, like);
+    assert.equal(stored(cms).find((one) => one.url === LIKE)?.kind, 'like');
+  });
+
+  it('keeps the like when the target is a syndicated copy of the post', async () => {
+    const cms = await site();
+    const copy = 'https://social.example/@me/1';
+    await writeFile(
+      path.join(cms.config.contentDir, 'posts', '2026-09-19-hello-world.md'),
+      POST.replace('---\n\nWords.', `syndication:\n  - ${copy}\n---\n\nWords.`),
+      'utf8',
+    );
+    await cms.sync();
+    const like = await approvedLike(cms);
+
+    const response = await sendAndSettle(cms, LIKE, copy);
+
+    assert.equal(response.status, 202);
+    assertKept(cms, like);
+  });
+
+  it('still deletes the like when its source links to no URL of the post', async () => {
+    const cms = await site();
+    await approvedLike(cms);
+
+    pages.set(LIKE, { body: reply('<p>Changed my mind.</p>') });
+    await sendAndSettle(cms, LIKE, `${POST_URL}#elsewhere`);
 
     assert.deepEqual(stored(cms), []);
   });
@@ -571,6 +908,36 @@ describe('the spam checker seam', () => {
       [['https://them.example/one', 'spam']],
     );
   });
+
+  it('tells whoever a reply answers once, though it comes back changed and still approved', async () => {
+    const cms = await site({
+      commentChecker: {
+        check(): CommentVerdict {
+          return 'ham';
+        },
+      },
+    });
+    const approved: PostComment[] = [];
+    cms.notifications.replyApproved = (reply) => {
+      approved.push(reply);
+    };
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a><p class="e-content">Hi.</p>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+    assert.equal(stored(cms)[0]?.status, 'approved');
+
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a><p class="e-content">Bye.</p>`,
+      ),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms)[0]?.status, 'approved');
+    assert.equal(stored(cms)[0]?.content.html.includes('Bye.'), true);
+    assert.equal(approved.length, 1);
+  });
 });
 
 describe('a webmention on the page', () => {
@@ -607,6 +974,91 @@ describe('a webmention on the page', () => {
       'its permalink is the page it was sent from, not an anchor on this one',
     );
     assert.doesNotMatch(after, /reply_to=/, 'and it offers no Reply link, which would go nowhere');
+  });
+});
+
+describe('an author link that is not a web address', () => {
+  function records(cms: Cms) {
+    return { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir };
+  }
+
+  it('is not stored, and the approved webmention links nowhere it does not go', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a>` +
+          '<div class="e-content"><p>Good post.</p></div>',
+      )
+        .replace('href="https://them.example/"', 'href="javascript:alert(document.domain)"')
+        .replace('src="/me.jpg"', 'src="data:image/svg+xml,%3Csvg%2F%3E"'),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    const held = stored(cms)[0];
+    assert.ok(held !== undefined);
+    assert.equal(held.author.url, null);
+    assert.equal(held.author.avatar, null);
+    const file = await readFile(commentsFile(cms.config.contentDir, 'hello-world'), 'utf8');
+    assert.doesNotMatch(file, /javascript:|data:image/);
+
+    await updateComment(records(cms), held.id, { status: 'approved' });
+    const page = await (await cms.app.request('/2026/09/hello-world/')).text();
+    assert.match(page, /Good post\./);
+    assert.doesNotMatch(page, /href="javascript:/);
+  });
+
+  it('keeps an http author link and photo', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(stored(cms)[0]?.author.url, 'https://them.example/');
+    assert.equal(stored(cms)[0]?.author.avatar, 'https://them.example/me.jpg');
+  });
+
+  it('in a comment file already on disk is linked from no page', async () => {
+    const cms = await site();
+    const author = { name: 'Mallory', url: 'javascript:alert(1)', avatar: 'javascript:alert(2)' };
+    const file = commentsFile(cms.config.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(
+      file,
+      `${JSON.stringify({
+        post: '/2026/09/hello-world/',
+        comments: [
+          {
+            id: '0000000000000001',
+            source: 'webmention',
+            kind: 'reply',
+            status: 'approved',
+            author,
+            content: { markdown: 'Mallory says hi.', html: '<p>Mallory says hi.</p>' },
+            submitted: '2026-09-20T09:00:00.000Z',
+            url: 'https://mallory.example/reply',
+          },
+          {
+            id: '0000000000000002',
+            source: 'webmention',
+            kind: 'like',
+            status: 'approved',
+            author,
+            content: { markdown: '', html: '' },
+            submitted: '2026-09-20T09:00:00.000Z',
+            url: null,
+          },
+        ],
+      })}\n`,
+    );
+    rebuildCommentIndexes(records(cms));
+
+    const page = await (await cms.app.request('/2026/09/hello-world/')).text();
+    assert.match(page, /Mallory says hi\./);
+    assert.doesNotMatch(page, /javascript:/);
+    const markdown = await (await cms.app.request('/2026/09/hello-world/index.md')).text();
+    assert.match(markdown, /Mallory/);
+    assert.doesNotMatch(markdown, /javascript:/);
   });
 });
 
@@ -840,6 +1292,54 @@ describe('telling the moderators about it (TASK-55)', () => {
     assert.match(provider.sent[0]?.subject ?? '', /Hello world/);
   });
 
+  it('links no author address that is not a web address', async () => {
+    const { cms, provider } = await siteWithMail();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`).replace(
+        'href="https://them.example/"',
+        'href="javascript:alert(1)"',
+      ),
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note');
+    await cms.notifications.settled();
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 1);
+    assert.doesNotMatch(provider.sent[0]?.html ?? '', /javascript:/);
+    assert.doesNotMatch(provider.sent[0]?.text ?? '', /javascript:/);
+  });
+
+  it('emails them again when an approved one comes back saying something else', async () => {
+    const { cms, provider } = await siteWithMail();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a><p class="e-content">Hi.</p>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+    const [held] = stored(cms);
+    assert.ok(held !== undefined);
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      held.id,
+      { status: 'approved' },
+    );
+    await cms.notifications.settled();
+    await cms.mail.settled();
+    provider.clear();
+
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a><p class="e-content">Bye.</p>`,
+      ),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+    await cms.notifications.settled();
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 1);
+    assert.match(provider.sent[0]?.text ?? '', /Bye\./);
+  });
+
   it('says nothing the second time the same page sends one', async () => {
     const { cms, provider } = await siteWithMail();
     pages.set('https://them.example/note', {
@@ -981,6 +1481,30 @@ describe('a webmention that answers a reply on the post (TASK-319)', () => {
     const second = stored(cms).find((one) => one.url === 'https://them.example/note');
     assert.equal(second?.inReplyTo, first.id);
     assert.equal(second?.kind, 'reply', 'a reply here though it never names the post itself');
+  });
+
+  it('threads under an approved plain mention its source answers', async () => {
+    const cms = await site();
+    pages.set('https://dan.example/2', {
+      body: reply(`<div class="e-content"><p>See <a href="${POST_URL}">this</a>.</p></div>`),
+    });
+    await sendAndSettle(cms, 'https://dan.example/2');
+    const mention = stored(cms)[0];
+    assert.equal(mention?.kind, 'mention');
+    const { updateComment } = await import('../comments/records.ts');
+    await updateComment(records(cms), mention?.id ?? '', { status: 'approved' });
+
+    pages.set('https://eli.example/3', {
+      body: reply(
+        '<a class="u-in-reply-to" href="https://dan.example/2">re</a>' +
+          `<div class="e-content"><p>Eli answers <a href="${POST_URL}">Dan</a>.</p></div>`,
+      ),
+    });
+    await sendAndSettle(cms, 'https://eli.example/3');
+
+    const eli = stored(cms).find((one) => one.url === 'https://eli.example/3');
+    assert.equal(eli?.inReplyTo, mention?.id);
+    assert.equal(eli?.kind, 'reply');
   });
 
   it('threads under a fediverse reply its source answers by the note’s url or id (AC #2)', async () => {

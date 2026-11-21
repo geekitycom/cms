@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+import { isDeepStrictEqual } from 'node:util';
 
 import { openAdminStore } from '../store/admin-store.ts';
 import type { AdminStore, PostComment } from '../store/admin-store.ts';
@@ -652,6 +653,199 @@ describe('a comment file somebody edited by hand', () => {
     assert.equal(held[0]?.kind, 'reply');
     assert.equal(held[0]?.author.email, null);
     assert.equal(held[0]?.content.html, '');
+  });
+
+  it('keeps an entry it cannot read, and that entry’s email, when the next comment lands', async () => {
+    const site = await records();
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    const unread = [
+      { author: { name: 'Idless' }, content: { markdown: 'No id.' }, extra: [1, 2] },
+      { id: '00000000000000b2', author: {}, content: { markdown: 'No name.' } },
+      'a line somebody pasted',
+    ];
+    await writeFile(
+      file,
+      `${JSON.stringify({ post: '/2026/09/hello-world/', comments: unread }, null, 2)}\n`,
+    );
+    const privateFile = commentEmailsFile(site.dataDir, 'hello-world');
+    await mkdir(path.dirname(privateFile), { recursive: true });
+    await writeFile(
+      privateFile,
+      `${JSON.stringify({ comments: { '00000000000000b2': { email: 'nameless@example.com', notify: true } } })}\n`,
+    );
+
+    const added = await addComment(site, ada());
+
+    const written = JSON.parse(await readFile(file, 'utf8')) as { comments: unknown[] };
+    for (const entry of unread)
+      assert.ok(written.comments.some((kept) => isDeepStrictEqual(kept, entry)));
+    assert.ok(
+      written.comments.some((kept) => (kept as { id?: unknown }).id === added.id),
+      'and the new comment is there too',
+    );
+    const emails = await readFile(privateFile, 'utf8');
+    assert.match(emails, /nameless@example\.com/);
+    assert.match(emails, /ada@example\.com/);
+  });
+});
+
+describe('a comment or email file that does not parse', () => {
+  async function damage(file: string): Promise<string> {
+    const damaged = (await readFile(file, 'utf8')).replace(/\n}\n$/, ',\n}\n');
+    assert.throws(() => JSON.parse(damaged));
+    await writeFile(file, damaged);
+    return damaged;
+  }
+
+  function warnings<T>(task: () => T): { result: T; warned: string[] } {
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (line: string) => warned.push(line);
+    try {
+      return { result: task(), warned };
+    } finally {
+      console.warn = warn;
+    }
+  }
+
+  const noEmail = (): NewComment => ada({ author: { ...ada().author, email: null } });
+
+  it('refuses a new comment and leaves the comment file as it was', async () => {
+    const site = await records();
+    await addComment(site, ada());
+    const file = commentsFile(site.contentDir, 'hello-world');
+    const damaged = await damage(file);
+
+    await assert.rejects(addComment(site, noEmail()), (error: Error) =>
+      error.message.includes(file),
+    );
+
+    assert.equal(await readFile(file, 'utf8'), damaged);
+  });
+
+  it('keeps a private email file, byte for byte, when another comment lands on the post', async () => {
+    const site = await records();
+    await addComment(site, ada());
+    const privateFile = commentEmailsFile(site.dataDir, 'hello-world');
+    const damaged = await damage(privateFile);
+
+    await assert.rejects(addComment(site, noEmail()), (error: Error) =>
+      error.message.includes(privateFile),
+    );
+
+    assert.equal(await readFile(privateFile, 'utf8'), damaged);
+  });
+
+  it('refuses a comment file that parses but is not an object of comments', async () => {
+    const site = await records();
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, '{"post": "/2026/09/hello-world/", "comments": {}}\n');
+
+    await assert.rejects(addComment(site, noEmail()));
+
+    assert.equal(
+      await readFile(file, 'utf8'),
+      '{"post": "/2026/09/hello-world/", "comments": {}}\n',
+    );
+  });
+
+  it('is skipped by the index rebuild, which indexes every other post and names the file', async () => {
+    const site = await records();
+    await addComment(site, ada());
+    const other = await addComment(
+      site,
+      ada({ slug: 'second-post', permalink: '/2026/09/second-post/' }),
+    );
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await damage(file);
+
+    const { result: report, warned } = warnings(() => rebuildCommentIndexes(site));
+
+    assert.equal(report.comments, 1);
+    assert.deepEqual(
+      site.admin.listComments({}).map((comment) => comment.id),
+      [other.id],
+    );
+    assert.equal(warned.length, 1);
+    assert.ok(warned[0]?.includes(file));
+  });
+
+  it('is left alone by the boot that moves emails out of a comment file', async () => {
+    const site = await records();
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    const legacy = `${JSON.stringify({
+      post: '/2026/09/hello-world/',
+      comments: [{ id: 'c1', author: { name: 'Ada', email: 'ada@example.com' }, notify: true }],
+    })}\n`;
+    await writeFile(file, legacy);
+    const privateFile = commentEmailsFile(site.dataDir, 'hello-world');
+    await mkdir(path.dirname(privateFile), { recursive: true });
+    await writeFile(privateFile, '{"comments": {"c0": {"email": "grace@example.com"},}}\n');
+
+    const { warned } = warnings(() => migrateCommentEmails(site));
+
+    assert.ok(warned[0]?.includes(privateFile));
+    assert.equal(
+      await readFile(privateFile, 'utf8'),
+      '{"comments": {"c0": {"email": "grace@example.com"},}}\n',
+    );
+    assert.equal(await readFile(file, 'utf8'), legacy);
+  });
+});
+
+describe('an author link in a comment file', () => {
+  it('is read only when it is an http or https address', async () => {
+    const site = await records();
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    const entry = (id: string, url: string, avatar: string) => ({
+      id,
+      author: { name: 'Ada', url, avatar },
+      content: { markdown: 'Hi' },
+      status: 'approved',
+    });
+    await writeFile(
+      file,
+      `${JSON.stringify({
+        post: '/2026/09/hello-world/',
+        comments: [
+          entry('c1', 'javascript:alert(1)', 'data:image/png;base64,AAAA'),
+          entry('c2', 'https://ada.example/', 'http://ada.example/me.jpg'),
+          entry('c3', 'ada.example', '/me.jpg'),
+        ],
+      })}\n`,
+    );
+
+    const held = readComments(site, 'hello-world').map(({ author }) => [author.url, author.avatar]);
+
+    assert.deepEqual(held, [
+      [null, null],
+      ['https://ada.example/', 'http://ada.example/me.jpg'],
+      [null, null],
+    ]);
+  });
+
+  it('is not written, nor indexed, when it is not one', async () => {
+    const site = await records();
+
+    const stored = await addComment(
+      site,
+      ada({ author: { name: 'Ada', url: 'javascript:alert(1)', email: null, avatar: 'data:,x' } }),
+    );
+    await updateComment(site, stored.id, {
+      author: { name: 'Ada', url: 'javascript:alert(2)', email: null, avatar: null },
+    });
+
+    assert.equal(stored.author.url, null);
+    assert.equal(stored.author.avatar, null);
+    assert.equal(site.admin.getComment(stored.id)?.author.url, null);
+    assert.doesNotMatch(
+      await readFile(commentsFile(site.contentDir, 'hello-world'), 'utf8'),
+      /javascript:|data:/,
+    );
   });
 });
 

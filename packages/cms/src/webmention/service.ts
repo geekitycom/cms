@@ -117,7 +117,7 @@ export interface CreateWebmentionServiceOptions {
    * What says which reply on a post an incoming webmention answers,
    * and which pages a salmention goes from.
    */
-  conversation: Pick<ConversationReader, 'replyNamed' | 'upstreams' | 'documentOf'>;
+  conversation: Pick<ConversationReader, 'replyNamed' | 'upstreams' | 'documentOf' | 'comment'>;
 }
 
 /** Sends a site's webmentions, takes the ones sent to it, and remembers both. */
@@ -382,7 +382,11 @@ export function createWebmentionService(
 
     sends
       .run(async () => {
-        if (moved !== undefined) await copies.forget(moved);
+        if (moved !== undefined) {
+          await copies.forget(moved).catch((thrown: unknown) => {
+            logger.warn(`Syndication copies of ${moved} not forgotten: ${messageOf(thrown)}`);
+          });
+        }
         await keepCopies(
           document.permalink,
           [change.previous, change.next],

@@ -18,7 +18,7 @@ import type { FederationRecords } from '../federation/records.ts';
 import { openContentStore } from '../content/index.ts';
 import type { ContentStore } from '../content/store.ts';
 import { parseDocument } from '../content/parser.ts';
-import { localPosts } from './federation.ts';
+import { followerRow, localPosts } from './federation.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 
 /** The site under test. Its origin is what an ActivityStreams id is built on. */
@@ -1119,5 +1119,29 @@ describe('the post a logged id names (TASK-417)', () => {
     assert.equal(post(`${MIGRATED}&v=2`)?.slug, 'old-news');
     assert.equal(post(MIGRATED)?.slug, 'old-news');
     assert.equal(post(`${MIGRATED}&v=3`), null);
+  });
+});
+
+describe('a follower row', () => {
+  const follower = {
+    username: ADA,
+    actorId: 'https://remote.example/users/ada',
+    inboxId: 'https://remote.example/users/ada/inbox',
+    sharedInboxId: null,
+    handle: '@ada@remote.example',
+    name: 'Ada',
+    iconUrl: null,
+    followedAt: '2026-09-20T09:00:00.000Z',
+  };
+
+  it('links the actor id when the stored profile page is not a web address', () => {
+    assert.equal(followerRow({ ...follower, url: 'javascript:alert(1)' }).url, follower.actorId);
+  });
+
+  it('links the stored profile page when it is a web address', () => {
+    assert.equal(
+      followerRow({ ...follower, url: 'https://remote.example/@ada' }).url,
+      'https://remote.example/@ada',
+    );
   });
 });

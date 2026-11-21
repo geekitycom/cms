@@ -299,6 +299,39 @@ describe('the retention sweep', () => {
     assert.equal(readComments(cms.config, 'hello-world')[0]?.author.email, null);
     await cms.close();
   });
+
+  it('sweeps every other post past a comment file that does not parse, and names that file', async () => {
+    const { cms, contentDir, dataDir } = await siteWith([
+      { id: '00000000000000a1', name: 'Ada', email: 'ada@example.com', submitted: OLD },
+    ]);
+    const damaged = path.join(contentDir, '_data', 'comments', 'a-damaged-post.json');
+    await writeFile(damaged, '{"post": "/2026/01/a-damaged-post/", "comments": [,]}\n', 'utf8');
+
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (line: string) => warned.push(line);
+    let report;
+    try {
+      report = await cms.retention.sweep();
+    } finally {
+      console.warn = warn;
+    }
+
+    assert.equal(report.comments, 1, 'the post after it in slug order was swept');
+    assert.equal(readComments(cms.config, 'hello-world')[0]?.author.email, null);
+    assert.doesNotMatch(
+      await readFile(commentEmailsFile(dataDir, 'hello-world'), 'utf8').catch(() => ''),
+      /ada@example\.com/,
+    );
+    assert.ok(
+      warned.some((line) => line.includes(damaged)),
+      `a warning names ${damaged}: ${JSON.stringify(warned)}`,
+    );
+    assert.equal(
+      await readFile(damaged, 'utf8'),
+      '{"post": "/2026/01/a-damaged-post/", "comments": [,]}\n',
+    );
+  });
 });
 
 describe('a comment whose email has been removed', () => {

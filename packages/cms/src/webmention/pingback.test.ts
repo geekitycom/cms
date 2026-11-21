@@ -298,6 +298,26 @@ describe('a valid pingback', () => {
     assert.equal(held[0]?.id, first?.id, 'the same one');
     assert.match(held[0]?.content.html ?? '', /Second thought\./);
   });
+
+  it('leaves an approved entry alone when sent again with a query on the target', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', { body: linkingTo(POST_URL) });
+    await ping(cms, 'https://them.example/note');
+    const first = mentionsOf(cms)[0];
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      first?.id ?? '',
+      { status: 'approved' },
+    );
+
+    const again = await ping(cms, 'https://them.example/note', `${POST_URL}?x=1`);
+
+    assert.equal(await faultOf(again), 0x0020);
+    const held = mentionsOf(cms);
+    assert.equal(held.length, 1, 'still there');
+    assert.equal(held[0]?.id, first?.id);
+    assert.equal(held[0]?.status, 'approved');
+  });
 });
 
 describe('the faults a pingback is answered with', () => {
@@ -308,6 +328,22 @@ describe('the faults a pingback is answered with', () => {
     assert.equal(await faultOf(await ping(cms, 'ftp://them.example/a')), 0x0010);
     assert.equal(await faultOf(await ping(cms, 'http://127.0.0.1/a')), 0x0010);
     assert.equal(mentionsOf(cms).length, 0);
+  });
+
+  it('0x0010, and nothing fetched, for a source on this site', async () => {
+    const cms = await site();
+    pages.set(`${BASE_URL}/`, { body: `<a href="${POST_URL}">Hello world</a>` });
+
+    assert.equal(await faultOf(await ping(cms, `${BASE_URL}/`)), 0x0010);
+    assert.deepEqual(fetched, []);
+    assert.equal(mentionsOf(cms).length, 0);
+  });
+
+  it('0x0000 for a source that refuses to be read but has not gone', async () => {
+    const cms = await site();
+    pages.set('https://them.example/locked', { status: 403, body: 'no' });
+
+    assert.equal(await faultOf(await ping(cms, 'https://them.example/locked')), 0x0000);
   });
 
   it('0x0011 for a source that does not link to the target', async () => {

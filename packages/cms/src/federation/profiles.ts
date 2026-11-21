@@ -2,6 +2,7 @@ import type { Context, DocumentLoader } from '@fedify/fedify';
 import { isActor } from '@fedify/vocab';
 import type { Actor, Link } from '@fedify/vocab';
 
+import { isWebUrl } from '../content/enclosure.ts';
 import type { ActorProfile, AdminStore } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
@@ -227,8 +228,12 @@ export async function profileFrom(
     handle: username === null ? null : `@${username.toString()}@${actor.id.host}`,
     name: actor.name === null ? null : actor.name.toString(),
     iconUrl: linkHref(icon?.url ?? null) ?? actor.iconId?.href ?? null,
-    url: linkHref(actor.url) ?? null,
+    url: webAddress(linkHref(actor.url)),
   };
+}
+
+function webAddress(value: string | null): string | null {
+  return value !== null && isWebUrl(value) ? value : null;
 }
 
 /** A `URL` or a `Link` as a plain href, or `null`. */

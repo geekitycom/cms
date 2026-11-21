@@ -6,6 +6,7 @@ import { syndicateToOf } from '../content/syndicate-to.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
 import { publicDocumentAt } from '../content/permalinks.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
+import { messageOf } from '../util/errors.ts';
 import { isRecord, nonEmptyStrings } from '../util/guards.ts';
 import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../content/locale.ts';
 
@@ -309,7 +310,15 @@ export function syndicationCopies(contentDir: string): SyndicationCopies {
       cached = {};
     } else if (text !== cachedText) {
       cachedText = text;
-      cached = parseCopies(text);
+      const parsed = parseCopies(text);
+      if ('problem' in parsed) {
+        console.warn(
+          `${file} cannot be read (${parsed.problem}), so no syndication copies are shown.`,
+        );
+        cached = {};
+      } else {
+        cached = parsed.copies;
+      }
     }
     return cached;
   }
@@ -322,7 +331,13 @@ export function syndicationCopies(contentDir: string): SyndicationCopies {
   function update(change: (all: Record<string, Record<string, string>>) => boolean): Promise<void> {
     return withFileLock(file, () => {
       const current = readFileIfPresentSync(file);
-      const all = current === undefined ? {} : parseCopies(current);
+      const parsed = current === undefined ? { copies: {} } : parseCopies(current);
+      if ('problem' in parsed) {
+        throw new Error(
+          `${file} cannot be read (${parsed.problem}), so nothing is written to it until it is repaired.`,
+        );
+      }
+      const all = parsed.copies;
       if (change(all)) writeFileAtomicallySync(file, `${JSON.stringify(all, null, 2)}\n`);
     });
   }
@@ -377,14 +392,16 @@ export function postSyndicatedAt(
  * The copies file's entries, each checked, since a person may edit it by hand.
  * An entry that is not a URL is dropped rather than failing a render.
  */
-function parseCopies(text: string): Record<string, Record<string, string>> {
+function parseCopies(
+  text: string,
+): { readonly copies: Record<string, Record<string, string>> } | { readonly problem: string } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
-  } catch {
-    return {};
+  } catch (error) {
+    return { problem: messageOf(error) };
   }
-  if (!isRecord(parsed)) return {};
+  if (!isRecord(parsed)) return { problem: 'it is not a JSON object' };
 
   const all: Record<string, Record<string, string>> = {};
   for (const [permalink, value] of Object.entries(parsed)) {
@@ -396,7 +413,7 @@ function parseCopies(text: string): Record<string, Record<string, string>> {
     }
     if (Object.keys(copies).length > 0) all[permalink] = copies;
   }
-  return all;
+  return { copies: all };
 }
 
 /** A front matter value as a list of strings: a lone string is a list of one. */

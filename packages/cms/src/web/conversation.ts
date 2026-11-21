@@ -26,7 +26,6 @@ import { authorNaming, federatedInteraction, quotesOf } from './activity-folding
 import type { ConversationContext, Reading } from './conversation-context.ts';
 import { newestFirst } from './conversation-feed.ts';
 import { documentAuthor, gather } from './conversation-gather.ts';
-import type { Gathered } from './conversation-gather.ts';
 import {
   commentedPost,
   documentNamed,
@@ -152,14 +151,22 @@ function commentThread(context: Reading, id: string): CommentThread | undefined 
 }
 
 function replyNamed(context: Reading, document: Document, url: string): Interaction | undefined {
-  return namedIn(context, document, gather(context, document), url);
+  const said = gather(context, document);
+  const everything = [
+    ...said.written,
+    ...said.likes,
+    ...said.boosts,
+    ...said.mentions,
+    ...said.answers,
+    ...said.held.values(),
+  ];
+  return namedIn(context, document, everything, url);
 }
 
-/** The entry of a gathered conversation a URL names, held ones included. */
 function namedIn(
   context: Reading,
   document: Document,
-  said: Gathered,
+  entries: readonly Interaction[],
   url: string,
 ): Interaction | undefined {
   let named: URL;
@@ -170,7 +177,7 @@ function namedIn(
   }
   const key = keyNamedBy(named, document, context.baseUrl);
 
-  return [...said.written, ...said.held.values()].find(
+  return entries.find(
     (reply) =>
       reply.key === key ||
       reply.id === named.href ||
@@ -185,7 +192,7 @@ function heldAt(context: Reading, url: string): HeldAt | undefined {
     return { kind: 'document', post, author: documentAuthor(context, post) };
   }
   const said = gather(context, post);
-  const reply = namedIn(context, post, said, url);
+  const reply = namedIn(context, post, [...said.written, ...said.held.values()], url);
   if (reply === undefined || said.withdrawn.has(reply.id) || said.held.has(reply.id)) {
     return undefined;
   }

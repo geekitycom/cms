@@ -165,6 +165,34 @@ describe('Tools > Personal data', () => {
     assert.match(flashed, /Erased 2 comments and 1 contact message/);
   });
 
+  it('erases every other post past a comment file that does not parse, and names that post', async () => {
+    const { cms, agent, token, file } = await erasureSite();
+    const damaged = path.join(path.dirname(file), 'a-damaged-post.json');
+    await writeFile(damaged, '{"post": "/2026/01/a-damaged-post/", "comments": [,]}\n', 'utf8');
+
+    const looked = await (
+      await agent.post(PERSONAL_DATA_PATH, {
+        csrf_token: token,
+        [PERSONAL_DATA_FIELDS.email]: 'ada@example.com',
+      })
+    ).text();
+    assert.match(looked, /2 comments/);
+    assert.match(looked, /a-damaged-post/, 'looking names the post it could not read');
+
+    const response = await agent.post(PERSONAL_DATA_PATH, {
+      csrf_token: token,
+      [PERSONAL_DATA_FIELDS.email]: 'ada@example.com',
+      [PERSONAL_DATA_FIELDS.confirm]: '1',
+    });
+    assert.equal(response.status, 303);
+
+    assert.equal(cms.admin.getComment('0000000000000001')?.author.name, 'Anonymous');
+    assert.equal(cms.admin.getComment('0000000000000003')?.author.name, 'Anonymous');
+    const flashed = await (await agent.get(PERSONAL_DATA_PATH)).text();
+    assert.match(flashed, /Erased 2 comments/);
+    assert.match(flashed, /a-damaged-post/, 'the erasure names the post it could not read');
+  });
+
   it('refuses a cross-site post', async () => {
     const { agent, token, file } = await erasureSite();
     const before = await readFile(file, 'utf8');

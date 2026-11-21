@@ -4,6 +4,7 @@
 {% import "components/fields.njk" as field %}
 {% from "components/button.njk" import button, buttonLink %}
 {% from "components/card.njk" import card, cardActions %}
+{% from "components/alert.njk" import alert %}
 
 {% block title %}{{ heading }}{% endblock %}
 
@@ -35,6 +36,14 @@
               to email about replies
             </li>
           </ul>
+
+          {% if found.unreadable %}
+            <div class="mt-4">
+              {% call alert(color='warning', style='soft') %}
+                <span>{{ found.unreadable }}</span>
+              {% endcall %}
+            </div>
+          {% endif %}
 
           {% if found.anything %}
             <p class="mt-4">

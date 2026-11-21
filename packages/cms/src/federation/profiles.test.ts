@@ -66,6 +66,7 @@ let web: Record<string, (request: Request) => Response | Promise<Response>> = {}
 
 let nicoKeys: CryptoKeyPair;
 let nicoName = 'Nico Peaks';
+let nicoPage = NICO_PAGE;
 let icon: Buffer;
 
 const original = globalThis.fetch;
@@ -92,6 +93,7 @@ after(async () => {
 afterEach(() => {
   requested.length = 0;
   nicoName = 'Nico Peaks';
+  nicoPage = NICO_PAGE;
   web = {};
 });
 
@@ -101,7 +103,7 @@ async function nicoDocument(): Promise<unknown> {
     id: new URL(NICO),
     preferredUsername: 'nicopeaks',
     name: nicoName,
-    url: new URL(NICO_PAGE),
+    url: new URL(nicoPage),
     icon: new Image({ url: new URL(NICO_ICON), mediaType: 'image/png' }),
     inbox: new URL(`${NICO}/inbox`),
     endpoints: new Endpoints({ sharedInbox: new URL('https://mastodon.social/inbox') }),
@@ -292,6 +294,23 @@ describe('an activity from an actor the site does not know (AC #1, #8)', () => {
     assert.match(html, /title="Nico Peaks"/);
     assert.ok(html.includes(`src="${avatarHref(NICO_ICON)}"`), 'the picture is the proxied one');
     assert.ok(!html.includes('117132440785278319'), 'no number is shown anywhere as a name');
+  });
+});
+
+describe('an actor whose profile page is not a web address', () => {
+  it('is stored and shown with no link to it', async () => {
+    nicoPage = 'javascript:alert(document.domain)';
+    serveNico();
+    const { cms } = await site();
+
+    const response = await deliverLike(cms);
+    assert.equal(response.status, 202, await response.text());
+    await cms.actorProfiles.settled();
+
+    assert.equal(cms.admin.getActorProfile(NICO)?.url, null);
+    const html = await page(cms);
+    assert.match(html, /title="Nico Peaks"/);
+    assert.ok(!html.includes('javascript:'), 'no script link is printed');
   });
 });
 

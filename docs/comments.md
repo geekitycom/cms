@@ -29,6 +29,21 @@ published and goes into git, so the email is in `data/comments/{slug}.json`
 the email in the comment file, the next boot moves it there. The next boot also
 moves an email that someone typed into a comment file by hand.
 
+If either file for a post does not parse as JSON, for example after a hand edit
+or a git merge conflict, the server does not write to it or remove it. A new
+comment or webmention on that post is refused, and the error names the file.
+Moderating that post's comments is refused with the same error. The retention
+sweep and an erasure request skip that post, log a warning that names the
+file, and go on to every other post; an erasure also names the post on
+**Tools > Personal data**. On boot, the server leaves that post's comments out
+of the index and logs a warning that names the file, and every other post is
+indexed as usual. Repair the file and restart to bring its comments back.
+
+An entry that parses but is not an object, or has no `id` or no author `name`,
+is not shown or indexed. Every write to that post keeps it in the file,
+unchanged, after the comments it can read, and keeps the email `data/` holds
+under its `id`. Add the missing field to bring it back.
+
 ### Keys
 
 Every comment has one key of 16 lowercase hex digits (decision-51). The key is

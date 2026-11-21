@@ -3,7 +3,7 @@ import { hashClientAddress } from '../forms/protection.ts';
 import { messageOf } from '../util/errors.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { webmentionKey } from '../content/guids.ts';
-import { addComment, deleteComment, updateComment } from './records.ts';
+import { addComment, deleteComment, isCarried, updateComment } from './records.ts';
 import type { CommentRecords } from './records.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import type { ChallengeVerdict } from '../forms/challenge.ts';
@@ -122,17 +122,19 @@ export type CommentIntakeOutcome =
  * | `ham`     | Approved.                            | The moderator's decision stands.     |
  * | `unknown` | Where the site would have put it.    | The moderator's decision stands.     |
  *
- * A source re-sending its webmention must not take an approved mention back
- * into the queue, and must not quietly let a spam one out. A checker that has
- * changed its mind to `spam` is the one thing that moves it, because that is a
- * new fact about the content rather than a repeat of an old one.
+ * A source re-sending its webmention must not quietly let a spam one out, and
+ * a checker that has changed its mind to `spam` is the one thing that moves a
+ * held entry, because that is a new fact about the content. An approved entry
+ * keeps its approval only while it says the same thing: one whose kind,
+ * author or words have changed is decided as a new one would be, because a
+ * moderator approved the old words and not these.
  *
  * **Who hears about it.** A new entry that is waiting sends the moderation
- * notice, once. A webmention that was merely rewritten sends nothing — the
- * moderators heard the first time and it has been in the queue ever since —
- * and neither does one that was approved or filed as spam, because neither is
- * waiting for anybody. A new comment that is approved instead tells whoever it
- * answers, when they asked to be told.
+ * notice, once, and so does an approved one sent back to wait. A webmention
+ * that was merely rewritten sends nothing — the moderators heard the first
+ * time — and neither does one that was approved or filed as spam, because
+ * neither is waiting for anybody. A new comment that is approved instead
+ * tells whoever it answers, when they asked to be told.
  */
 export async function intakeComment(options: IntakeCommentOptions): Promise<CommentIntakeOutcome> {
   const { records, origin, comment } = options;
@@ -147,6 +149,9 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
 
   const held =
     origin === 'webmention' ? heldWebmention(records, comment.slug, comment.url) : undefined;
+  if (held !== undefined && isCarried(comment) && held.via !== comment.via) {
+    return { kind: 'stored', comment: held, created: false };
+  }
 
   const verdict = await ask(options, proposed);
 
@@ -156,7 +161,11 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
     return { kind: 'discarded', removed: true };
   }
 
-  const status = options.challenge === 'fail' ? 'spam' : statusFor(verdict, proposed.status, held);
+  const fresh = held !== undefined && decisionLapses(held, comment);
+  const status =
+    options.challenge === 'fail'
+      ? 'spam'
+      : statusFor(verdict, proposed.status, fresh ? undefined : held);
 
   if (held !== undefined) {
     // Its id, its post and its source never move: that is what makes it the
@@ -172,9 +181,9 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
       rsvp: comment.rsvp ?? null,
       via: comment.via ?? null,
     });
-    return moved === undefined
-      ? { kind: 'gone' }
-      : { kind: 'stored', comment: moved, created: false };
+    if (moved === undefined) return { kind: 'gone' };
+    if (fresh && moved.status === 'pending') announce(options.notices, moved);
+    return { kind: 'stored', comment: moved, created: false };
   }
 
   const stored = await addComment(records, {
@@ -204,6 +213,21 @@ export function heldWebmention(
   return records.admin
     .listCommentsFor(slug)
     .find((comment) => comment.source === 'webmention' && comment.url === source);
+}
+
+function decisionLapses(held: PostComment, comment: ProposedComment): boolean {
+  const handedOver = isCarried(held) && !isCarried(comment);
+  return handedOver || (held.status === 'approved' && saysSomethingElse(held, comment));
+}
+
+function saysSomethingElse(held: PostComment, comment: ProposedComment): boolean {
+  return (
+    held.kind !== comment.kind ||
+    held.author.name !== comment.author.name ||
+    held.author.url !== comment.author.url ||
+    held.author.avatar !== comment.author.avatar ||
+    held.content.html !== comment.content.html
+  );
 }
 
 /** Where this site's own rules put a comment, before a checker has spoken. */
