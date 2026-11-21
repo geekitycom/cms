@@ -630,6 +630,15 @@ describe('the published notice for a reply shown at once', () => {
     );
   });
 
+  it('is sent once when the same reply is delivered twice', async () => {
+    const box = await site('show');
+
+    await reply(box, BOB, 1, 'Said once, delivered twice.');
+    await reply(box, BOB, 1, 'Said once, delivered twice.');
+
+    onlyMessage(box.provider);
+  });
+
   it('is not sent for a held reply a moderator approves', async () => {
     const box = await site();
     await reply(box, BOB, 1, 'A stranger says hello.');
