@@ -173,14 +173,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -209,7 +209,10 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      assert.deepEqual(
+        appliedMigrations(upgraded.file),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+      );
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -238,8 +241,32 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      assert.deepEqual(
+        appliedMigrations(upgraded.file),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+      );
       assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
+    } finally {
+      upgraded.close();
+    }
+  });
+
+  it('empties an index whose words kept named references undecoded', async () => {
+    const dir = await dataDir();
+    const before = openContentStore({ dataDir: dir });
+    before.upsert(post({ html: '<p>Caf&eacute;.</p>' }));
+    before.close();
+
+    const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
+    legacy.exec(`UPDATE documents_fts SET body = 'Caf&eacute;.'`);
+    legacy.exec('DELETE FROM migrations WHERE version = 13');
+    legacy.close();
+
+    const upgraded = openContentStore({ dataDir: dir });
+    try {
+      assert.equal(upgraded.counts().total, 0, 'the undecoded words survived the upgrade');
+      upgraded.upsert(post({ html: '<p>Caf&eacute;.</p>' }));
+      assert.equal(upgraded.countSearch('café'), 1);
     } finally {
       upgraded.close();
     }
@@ -286,7 +313,10 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      assert.deepEqual(
+        appliedMigrations(upgraded.file),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+      );
       assert.equal(upgraded.counts().total, 0, 'a row without tag keys survived the upgrade');
       upgraded.upsert(post({ tags: ['OpenSource'] }));
       assert.equal(upgraded.countByTag('opensource'), 1);
@@ -325,7 +355,10 @@ describe('a reply target', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      assert.deepEqual(
+        appliedMigrations(upgraded.file),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+      );
       assert.equal(upgraded.counts().total, 0, 'a row with in-reply-to in extra survived');
     } finally {
       upgraded.close();
@@ -374,7 +407,10 @@ describe('former permalinks (TASK-127)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      assert.deepEqual(
+        appliedMigrations(upgraded.file),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+      );
       assert.equal(upgraded.counts().total, 0, 'a row with redirect_from in extra survived');
     } finally {
       upgraded.close();
@@ -1498,7 +1534,10 @@ describe('the permalink of a trashed document (TASK-195)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      assert.deepEqual(
+        appliedMigrations(upgraded.file),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+      );
       upgraded.upsert(again);
       assert.equal(upgraded.getByPermalink('/2026/09/hello-world/')?.title, 'Again');
       assert.throws(() => {
@@ -1669,6 +1708,14 @@ describe('search (TASK-22)', () => {
     assert.equal(hit?.snippet, 'The quick \u0002brown\u0003 fox.');
   });
 
+  it('shows named references in the snippet as the characters they stand for', async () => {
+    const index = await store();
+    index.upsert(post({ html: '<p>Andr&eacute;&rsquo;s caf&eacute; and &constructor; here.</p>' }));
+
+    const [hit] = index.search('cafe');
+    assert.equal(hit?.snippet, 'André’s \u0002café\u0003 and &constructor; here.');
+  });
+
   it('pages through the results', async () => {
     const index = await store();
     index.upsertAll(
@@ -1728,7 +1775,10 @@ describe('the search index migration (TASK-22 AC #2)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      assert.deepEqual(
+        appliedMigrations(upgraded.file),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+      );
       assert.equal(upgraded.counts().total, 0, 'a row survived with no words indexed for it');
 
       upgraded.upsert(post());

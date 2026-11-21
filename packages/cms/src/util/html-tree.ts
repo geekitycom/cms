@@ -1,4 +1,4 @@
-import { decodeEntities, escapeAttribute, escapeText } from './html.ts';
+import { decodeAttribute, decodeEntities, escapeAttribute, escapeText } from './html.ts';
 
 /**
  * Somebody else's page, as a tree small enough to ask questions of.
@@ -75,6 +75,20 @@ const VOID_ELEMENTS: ReadonlySet<string> = new Set([
 const RAW_TEXT: ReadonlySet<string> = new Set(['script', 'style']);
 
 /**
+ * Elements whose content is text up to the closing tag, so a link written
+ * inside one is a link nobody can follow. Those that decode character
+ * references map to true.
+ */
+const TEXT_ONLY: ReadonlyMap<string, boolean> = new Map([
+  ['title', true],
+  ['textarea', true],
+  ['xmp', false],
+  ['noembed', false],
+  ['noframes', false],
+  ['iframe', false],
+]);
+
+/**
  * Elements an opening tag of the same name implicitly closes.
  *
  * Without this, a page written as `<p>one<p>two` would nest, and an `h-entry`
@@ -91,6 +105,12 @@ const CLOSED_BY_ITSELF: ReadonlySet<string> = new Set([
   'td',
   'th',
 ]);
+
+/**
+ * How deep elements nest before further ones are kept as siblings at the
+ * deepest level, the limit browsers apply.
+ */
+const MAX_DEPTH = 512;
 
 /** One tag, as the scanner reads it off the source. */
 interface Tag {
@@ -114,6 +134,8 @@ interface Tag {
 export function parseHtml(source: string): HtmlElement {
   const root: HtmlElement = { name: '#document', attributes: {}, children: [] };
   const open: HtmlElement[] = [root];
+  let openByName = new Map<string, number>();
+  const outsideTemplates: Map<string, number>[] = [];
   let at = 0;
 
   /** Where a node goes: inside the innermost element still open. */
@@ -123,9 +145,13 @@ export function parseHtml(source: string): HtmlElement {
 
   /** Close open elements down to and including `name`, if it is open at all. */
   function closeThrough(name: string): void {
-    const index = open.findLastIndex((element) => element.name === name);
-    // Never the root, which nothing closes.
-    if (index > 0) open.length = index;
+    if (!openByName.has(name)) return;
+    for (let element = open.pop(); element !== undefined; element = open.pop()) {
+      const count = openByName.get(element.name) ?? 0;
+      if (count > 1) openByName.set(element.name, count - 1);
+      else openByName.delete(element.name);
+      if (element.name === name) return;
+    }
   }
 
   while (at < source.length) {
@@ -155,21 +181,49 @@ export function parseHtml(source: string): HtmlElement {
     }
     at = tag.end;
 
+    if (tag.closing && tag.name === 'template') {
+      const outside = outsideTemplates.pop();
+      if (outside === undefined) continue;
+      while (open.length > 1 && open.pop()?.name !== 'template');
+      openByName = outside;
+      continue;
+    }
+
     if (tag.closing) {
       closeThrough(tag.name);
       continue;
     }
 
     if (RAW_TEXT.has(tag.name)) {
-      const start = at;
-      at = afterElement(source, tag.name, at);
+      const closing = closingTag(source, tag.name, at);
       if (
         tag.name === 'script' &&
         tag.attributes['type']?.trim().toLowerCase() === 'application/ld+json'
       ) {
-        const data = source.slice(start, at).replace(/<\/script\s*>$/i, '');
+        const data = source.slice(at, closing.start);
         current().children.push({ name: tag.name, attributes: tag.attributes, children: [], data });
       }
+      at = closing.end;
+      continue;
+    }
+
+    const decodes = TEXT_ONLY.get(tag.name);
+    if (decodes !== undefined) {
+      const closing = closingTag(source, tag.name, at);
+      const element: HtmlElement = { name: tag.name, attributes: tag.attributes, children: [] };
+      const text = source.slice(at, closing.start);
+      if (decodes) pushText(element, text);
+      else if (text !== '') element.children.push({ text });
+      current().children.push(element);
+      at = closing.end;
+      continue;
+    }
+
+    if (tag.name === 'template') {
+      current().children.push({ name: tag.name, attributes: tag.attributes, children: [] });
+      open.push({ name: tag.name, attributes: {}, children: [] });
+      outsideTemplates.push(openByName);
+      openByName = new Map();
       continue;
     }
 
@@ -177,7 +231,10 @@ export function parseHtml(source: string): HtmlElement {
 
     const element: HtmlElement = { name: tag.name, attributes: tag.attributes, children: [] };
     current().children.push(element);
-    if (!VOID_ELEMENTS.has(tag.name)) open.push(element);
+    if (!VOID_ELEMENTS.has(tag.name) && open.length < MAX_DEPTH) {
+      open.push(element);
+      openByName.set(tag.name, (openByName.get(tag.name) ?? 0) + 1);
+    }
   }
 
   return root;
@@ -185,10 +242,10 @@ export function parseHtml(source: string): HtmlElement {
 
 /**
  * Elements a browser reads as text up to their closing tag, so a tag written
- * inside one is not a tag. Wider than RAW_TEXT because a browser that runs
- * scripts reads `<noscript>` this way too.
+ * inside one is not a tag. Wider than what {@link parseHtml} reads as text
+ * because a browser that runs scripts reads `<noscript>` this way too.
  */
-const UNPARSED: ReadonlySet<string> = new Set([...RAW_TEXT, 'noscript', 'textarea', 'title']);
+const UNPARSED: ReadonlySet<string> = new Set([...RAW_TEXT, ...TEXT_ONLY.keys(), 'noscript']);
 
 export function findStartTag(
   source: string,
@@ -218,57 +275,121 @@ export function findStartTag(
       return source[tag.end - 1] === '>' ? { start: at, end: tag.end } : undefined;
     }
     at = tag.end;
-    if (!tag.closing && UNPARSED.has(tag.name)) at = afterElement(source, tag.name, at);
+    if (!tag.closing && UNPARSED.has(tag.name)) at = closingTag(source, tag.name, at).end;
   }
 }
 
 /** Every element under `root`, itself excluded, in document order. */
 export function* elementsIn(root: HtmlElement): Generator<HtmlElement> {
-  for (const child of root.children) {
-    if (!isElement(child)) continue;
-    yield child;
-    yield* elementsIn(child);
+  for (const node of nodesIn(root)) if (isElement(node)) yield node;
+}
+
+/** Every node under `root`, itself excluded, in document order. */
+function* nodesIn(root: HtmlElement): Generator<HtmlNode> {
+  const pending = [...root.children].reverse();
+  for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
+    yield node;
+    if (isElement(node)) pushReversed(pending, node.children);
   }
+}
+
+/** Push nodes so that popping them gives them back in order. */
+function pushReversed<T>(stack: T[], nodes: readonly T[]): void {
+  for (let index = nodes.length - 1; index >= 0; index -= 1) stack.push(nodes[index] as T);
 }
 
 /**
  * The text an element holds, everything nested in it included, with runs of
- * whitespace collapsed.
+ * whitespace collapsed, from no more than `limit` characters of it.
  *
  * Collapsed because it is read as a name or a title, and a page that wrote one
  * across three indented lines meant one line.
  */
-export function textOf(node: HtmlNode): string {
-  return rawTextOf(node).replace(/\s+/g, ' ').trim();
-}
-
-/** The text an element holds, exactly as the page spelled it. */
-export function rawTextOf(node: HtmlNode): string {
-  if (!isElement(node)) return node.text;
-  return node.children.map(rawTextOf).join('');
+export function textOf(node: HtmlNode, limit = Infinity): string {
+  return rawTextOf(node, limit).replace(/\s+/g, ' ').trim();
 }
 
 /**
- * An element's inner markup, rebuilt from the tree.
+ * The text an element holds, exactly as the page spelled it, cut off after
+ * `limit` characters.
+ */
+export function rawTextOf(node: HtmlNode, limit = Infinity): string {
+  if (!isElement(node)) return node.text.slice(0, limit);
+  const parts: string[] = [];
+  let length = 0;
+  for (const inner of nodesIn(node)) {
+    if (length >= limit) break;
+    if (isElement(inner)) continue;
+    const text = inner.text.slice(0, limit - length);
+    parts.push(text);
+    length += text.length;
+  }
+  return parts.join('');
+}
+
+/**
+ * An element's inner markup, rebuilt from the tree, with no text or opening
+ * tag past `limit` characters; the closing tags of what it opened still follow.
  *
  * Rebuilt rather than sliced out of the source because the tree is what this
  * module trusts: an unclosed element in the page cannot leave a stray closing
  * tag in the result. It goes through `sanitizeCommentHtml` before it is stored
  * either way, so this only has to be close enough for that to read.
+ *
+ * Given a `base`, every `href` and `src` that resolves against it is written
+ * as the absolute URL, as microformats2 reads an `e-*` property's markup.
  */
-export function innerHtmlOf(element: HtmlElement): string {
-  return element.children.map(markupOf).join('');
+export function innerHtmlOf(element: HtmlElement, limit = Infinity, base?: string): string {
+  const parts: string[] = [];
+  const pending: (HtmlNode | string)[] = [];
+  let length = 0;
+  pushReversed(pending, element.children);
+
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (typeof next === 'string') {
+      parts.push(next);
+      length += next.length;
+    } else if (!isElement(next)) {
+      const text = escapedWithin(next.text, limit - length);
+      parts.push(text);
+      length += text.length;
+    } else {
+      const open = `<${next.name}${attributesOf(next, base)}>`;
+      if (length + open.length > limit) continue;
+      parts.push(open);
+      length += open.length;
+      if (VOID_ELEMENTS.has(next.name)) continue;
+      pending.push(`</${next.name}>`);
+      pushReversed(pending, next.children);
+    }
+  }
+
+  return parts.join('');
 }
 
-/** One node as markup. */
-function markupOf(node: HtmlNode): string {
-  if (!isElement(node)) return escapeText(node.text);
+/** Text escaped as markup, no longer than `room`, never ending part way through a reference. */
+function escapedWithin(text: string, room: number): string {
+  if (room <= 0) return '';
+  const escaped = escapeText(text.slice(0, room));
+  return escaped.length <= room ? escaped : escaped.slice(0, room).replace(/&[^;]*$/, '');
+}
 
-  const attributes = Object.entries(node.attributes)
-    .map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`)
+/** An element's attributes as markup, each with a leading space. */
+function attributesOf(element: HtmlElement, base: string | undefined): string {
+  return Object.entries(element.attributes)
+    .map(([name, value]) => {
+      const written =
+        base !== undefined && URL_ATTRIBUTES.has(name) ? resolved(value, base) : value;
+      return ` ${name}="${escapeAttribute(written)}"`;
+    })
     .join('');
-  if (VOID_ELEMENTS.has(node.name)) return `<${node.name}${attributes}>`;
-  return `<${node.name}${attributes}>${innerHtmlOf(node)}</${node.name}>`;
+}
+
+const URL_ATTRIBUTES: ReadonlySet<string> = new Set(['href', 'src']);
+
+/** A URL resolved against `base`, or as written when it does not resolve. */
+function resolved(value: string, base: string): string {
+  return URL.parse(value.trim(), base)?.href ?? value;
 }
 
 /** The classes an element carries, in the order it wrote them. */
@@ -296,11 +417,12 @@ function after(source: string, marker: string, at: number): number {
   return end < 0 ? source.length : end + marker.length;
 }
 
-/** Where the source continues after this element's closing tag, or its end. */
-function afterElement(source: string, name: string, at: number): number {
-  const closing = new RegExp(`</${name}\\s*>`, 'i');
-  const match = closing.exec(source.slice(at));
-  return match === null ? source.length : at + match.index + match[0].length;
+/** Where this element's closing tag starts and ends, or the source's end for both. */
+function closingTag(source: string, name: string, at: number): { start: number; end: number } {
+  const match = new RegExp(`</${name}\\s*>`, 'i').exec(source.slice(at));
+  if (match === null) return { start: source.length, end: source.length };
+  const start = at + match.index;
+  return { start, end: start + match[0].length };
 }
 
 /** The tag beginning at `at`, or `undefined` when nothing there is a tag. */
@@ -326,8 +448,10 @@ function readTag(source: string, at: number): Tag | undefined {
       return { name, closing, attributes, end: source.length };
     }
     const raw = attribute[3];
-    attributes[(attribute[1] ?? '').toLowerCase()] =
-      raw === undefined ? '' : decodeEntities(unquote(raw));
+    const attributeName = (attribute[1] ?? '').toLowerCase();
+    if (!Object.hasOwn(attributes, attributeName)) {
+      attributes[attributeName] = raw === undefined ? '' : decodeAttribute(unquote(raw));
+    }
     cursor += attribute[0].length;
   }
 }

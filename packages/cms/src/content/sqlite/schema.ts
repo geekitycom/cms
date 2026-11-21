@@ -226,4 +226,17 @@ export const MIGRATIONS: readonly Migration[] = [
       DELETE FROM documents WHERE type = 'wiki';
     `,
   },
+  {
+    version: 13,
+    sql: `
+      -- The body text is now decoded with every named reference HTML
+      -- defines, where before it knew a dozen and left the rest as written.
+      -- The hash covers the file rather than the index, so a scan would keep
+      -- the old words for as long as nobody edited the post. Emptying the
+      -- index is what makes the next scan index them all again; the files
+      -- are the source of truth, so nothing is lost (decision-1).
+      DELETE FROM documents_fts;
+      DELETE FROM documents;
+    `,
+  },
 ];

@@ -1,6 +1,6 @@
 import { elementsIn, hasRel, parseHtml } from '../util/html-tree.ts';
 import { linkTargets } from '../webmention/discovery.ts';
-import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
+import { decodeBody, fetchPublic, webUrl } from '../webmention/fetch-public.ts';
 import { itemsIn } from '../webmention/microformats.ts';
 import type { MicroformatItem } from '../webmention/microformats.ts';
 import type { HostLookup } from '../util/public-address.ts';
@@ -64,7 +64,7 @@ export async function fetchClientInformation(
     },
   });
   if (!fetched.ok) return fetched;
-  const body = new TextDecoder().decode(fetched.body);
+  const body = decodeBody(fetched.body, fetched.type);
   return {
     ok: true,
     client: readClientInformation(body, fetched.type, clientId, fetched.url, fetched.link),

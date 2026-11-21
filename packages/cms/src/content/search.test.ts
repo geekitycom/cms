@@ -66,6 +66,20 @@ describe('htmlToText', () => {
     );
   });
 
+  it('decodes every named reference HTML defines', () => {
+    assert.equal(
+      htmlToText('<p>Andr&eacute;&rsquo;s caf&eacute; &frac12; &Aring;</p>'),
+      'André’s café ½ Å',
+    );
+  });
+
+  it('keeps a name HTML does not define as written, even an object property', () => {
+    assert.equal(
+      htmlToText('<p>&constructor; &toString; &__proto__; &hasOwnProperty;</p>'),
+      '&constructor; &toString; &__proto__; &hasOwnProperty;',
+    );
+  });
+
   it('removes the snippet marks so a document cannot forge one', () => {
     assert.equal(htmlToText('<p>a\u0002b\u0003c</p>'), 'abc');
   });

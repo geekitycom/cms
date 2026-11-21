@@ -116,13 +116,13 @@ function hasDeclarationOrInstruction(body: string): boolean {
   return body.includes('<!') || body.includes('<?');
 }
 
-const PREDEFINED: Record<string, string> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-};
+const PREDEFINED: ReadonlyMap<string, string> = new Map([
+  ['amp', '&'],
+  ['lt', '<'],
+  ['gt', '>'],
+  ['quot', '"'],
+  ['apos', "'"],
+]);
 
 function decodeText(text: string): string | undefined {
   let unknown = false;
@@ -136,7 +136,7 @@ function decodeText(text: string): string | undefined {
 
 function reference(name: string): string | undefined {
   const numeric = /^#(?:x([0-9a-f]+)|([0-9]+))$/i.exec(name);
-  if (numeric === null) return PREDEFINED[name];
+  if (numeric === null) return PREDEFINED.get(name);
   const point = numeric[1] === undefined ? Number(numeric[2]) : parseInt(numeric[1], 16);
   return point > 0 && point <= 0x10ffff ? String.fromCodePoint(point) : undefined;
 }

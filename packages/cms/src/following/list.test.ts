@@ -143,6 +143,31 @@ describe('the following list', () => {
     });
   });
 
+  it('reads a list in the encoding its XML declaration names', async () => {
+    const list = `<?xml version="1.0" encoding="ISO-8859-1"?>
+<opml version="2.0"><body>
+  <outline type="rss" text="Café" xmlUrl="https://cafe.example/feed.xml"/>
+</body></opml>`;
+    answers.set(
+      SOURCE,
+      () =>
+        new Response(
+          Uint8Array.from(list, (char) => char.charCodeAt(0)),
+          {
+            headers: { 'content-type': 'text/x-opml' },
+          },
+        ),
+    );
+    const { service, dataDir } = await siteFollowing(SOURCE);
+
+    await service.refresh();
+
+    assert.deepEqual(
+      servedFollowing(dataDir, SOURCE)?.feeds.map((feed) => feed.text),
+      ['Café'],
+    );
+  });
+
   it('follows the OPML alternate a web page names, once', async () => {
     answers.set(SOURCE, () => new Response(PAGE, { headers: { 'content-type': 'text/html' } }));
     answers.set(ALTERNATE, opml(FRESHRSS));

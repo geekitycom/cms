@@ -11,7 +11,7 @@ import { isRecord } from '../util/guards.ts';
 import { messageOf } from '../util/errors.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { createSerialQueue } from '../util/queue.ts';
-import { readWithin, requestPublic } from '../webmention/fetch-public.ts';
+import { decodeBody, readWithin, requestPublic } from '../webmention/fetch-public.ts';
 import { opmlAlternate, parseOpml } from './opml.ts';
 import type { FollowedFeed } from './opml.ts';
 
@@ -178,11 +178,12 @@ async function get(
     }
     const etag = response.headers.get('etag') ?? undefined;
     const lastModified = response.headers.get('last-modified') ?? undefined;
+    const type = response.headers.get('content-type') ?? '';
     return {
       kind: 'body',
       url: answered.url,
-      type: response.headers.get('content-type') ?? '',
-      text: new TextDecoder().decode(read.body),
+      type,
+      text: decodeBody(read.body, type),
       ...(etag === undefined ? {} : { etag }),
       ...(lastModified === undefined ? {} : { lastModified }),
     };

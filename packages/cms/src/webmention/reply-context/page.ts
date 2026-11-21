@@ -2,7 +2,7 @@ import { discoverPostType } from '../../content/post-type.ts';
 import { elementsIn, hasRel, parseHtml, textOf } from '../../util/html-tree.ts';
 import type { HtmlElement } from '../../util/html-tree.ts';
 import type { PictureSource } from '../cited-picture.ts';
-import { fetchPublic, webUrl } from '../fetch-public.ts';
+import { decodeBody, fetchPublic, webUrl } from '../fetch-public.ts';
 import { citedEntry, citedEvent } from '../microformats.ts';
 import type { CitedEntry, CitedEvent } from '../microformats.ts';
 import { NAMELESS_NOTE, resolved, withoutDirectionControls } from './source.ts';
@@ -40,7 +40,7 @@ export async function readPage(url: string, limits: Limits): Promise<PageRead> {
   });
   if (!fetched.ok) return { ok: false, reason: fetched.reason };
   if (fetched.read === 'headers') return { ok: true, image: fetched.url };
-  const root = parseHtml(new TextDecoder().decode(fetched.body));
+  const root = parseHtml(decodeBody(fetched.body, fetched.type));
   const entry = fetched.truncated ? undefined : citedEntry(root, fetched.url);
   const event = fetched.truncated ? undefined : citedEvent(root, fetched.url);
   return { ok: true, page: { url: fetched.url, root, entry, event } };

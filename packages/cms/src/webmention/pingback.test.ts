@@ -11,7 +11,12 @@ import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { PINGBACK_MAX_BYTES, PINGBACK_PATH } from './pingback.ts';
+import {
+  PINGBACK_FAULTS,
+  PINGBACK_MAX_BYTES,
+  PINGBACK_PATH,
+  readPingbackCall,
+} from './pingback.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
 
@@ -505,4 +510,21 @@ describe('what the endpoint answers, word for word', () => {
 
     assert.equal(await response.text(), 'Send a pingback here as an XML-RPC pingback.ping POST.');
   });
+});
+
+describe('reading a pingback call', () => {
+  for (const name of ['constructor', 'toString', 'valueOf', '__proto__']) {
+    it(`refuses a param holding &${name}; as an unknown reference`, () => {
+      const xml =
+        '<?xml version="1.0"?><methodCall><methodName>pingback.ping</methodName><params>' +
+        `<param><value><string>https://them.example/&${name};</string></value></param>` +
+        '<param><value><string>https://blog.example/2026/09/hello/</string></value></param>' +
+        '</params></methodCall>';
+
+      assert.deepEqual(readPingbackCall(xml), {
+        code: PINGBACK_FAULTS.notWellFormed,
+        message: 'The call is not well formed.',
+      });
+    });
+  }
 });

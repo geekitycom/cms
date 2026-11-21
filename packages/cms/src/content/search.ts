@@ -1,3 +1,4 @@
+import { decodeEntities } from '../util/html.ts';
 import type { Document } from './document.ts';
 
 /**
@@ -134,34 +135,3 @@ function clean(value: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
-
-/** The entities a rendered body holds, named or numeric, resolved to text. */
-function decodeEntities(value: string): string {
-  return value.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (entity, name: string) => {
-    if (name.startsWith('#')) {
-      const code =
-        name[1] === 'x' || name[1] === 'X'
-          ? Number.parseInt(name.slice(2), 16)
-          : Number.parseInt(name.slice(1), 10);
-      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' ';
-    }
-    return NAMED_ENTITIES[name.toLowerCase()] ?? entity;
-  });
-}
-
-/** The named entities Markdown output and hand-written HTML actually use. */
-const NAMED_ENTITIES: Readonly<Record<string, string>> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-  hellip: '…',
-  mdash: '—',
-  ndash: '–',
-  lsquo: '‘',
-  rsquo: '’',
-  ldquo: '“',
-  rdquo: '”',
-};

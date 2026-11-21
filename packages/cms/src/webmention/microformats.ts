@@ -94,6 +94,27 @@ export interface NestedReply {
 const NESTED_DEPTH = 8;
 const NESTED_LIMIT = 200;
 
+/**
+ * How many microformats are read off one page, nested ones counted. A blog's
+ * front page carries a few hundred at most; anything past this is passed over.
+ */
+export const MICROFORMAT_ITEMS_PER_PAGE = 1_000;
+
+/**
+ * How many characters of one value's text, or of its markup, are kept. A reply
+ * is a few paragraphs; a page that sends more is cut short here.
+ */
+export const MICROFORMAT_VALUE_LENGTH = 65_536;
+
+/**
+ * How many of an entry's `in-reply-to` values are kept. A reply answers one
+ * thing, or a few; each one kept is looked for in the post's conversation.
+ */
+const IN_REPLY_TO_PER_ENTRY = 8;
+
+/** How many property classes are read off one element. */
+const PROPERTIES_PER_ELEMENT = 16;
+
 /** The attributes that make an element a link to somewhere. */
 const LINK_ATTRIBUTES: readonly string[] = ['href', 'src', 'data', 'poster', 'cite'];
 
@@ -104,14 +125,15 @@ const LINK_ATTRIBUTES: readonly string[] = ['href', 'src', 'data', 'poster', 'ci
  * text: a page that merely writes the target's address out is not talking to
  * it, and one that links to it in an `<img>`, a `<video>` or a `<link>` is.
  * The comparison is on the whole URL after both sides are resolved and
- * normalised, so a link written relative counts and a link to a different page
- * on the same site does not.
+ * normalised, less any fragment, so a link written relative or to an anchor on
+ * the page counts and a link to a different page on the same site does not.
  */
 export function linksTo(html: string, sourceUrl: string, target: string): boolean {
   const root = parseHtml(html);
   const base = baseOf(root, sourceUrl);
-  const wanted = normalize(target, target);
-  if (wanted === undefined) return false;
+  const resolved = normalize(target, target);
+  if (resolved === undefined) return false;
+  const wanted = withoutFragment(resolved);
 
   return linkedFrom(root, base).has(wanted);
 }
@@ -131,7 +153,7 @@ function linkedFrom(root: HtmlElement, base: string): Set<string> {
       const value = element.attributes[attribute];
       if (value === undefined) continue;
       const resolved = normalize(value, base);
-      if (resolved !== undefined) found.add(resolved);
+      if (resolved !== undefined) found.add(withoutFragment(resolved));
     }
   }
 
@@ -153,17 +175,19 @@ export function sourceEntry(
   html: string,
   sourceUrl: string,
   isTarget: (url: string) => boolean,
+  now: Date,
 ): SourceEntry {
   const root = parseHtml(html);
   const base = baseOf(root, sourceUrl);
   const items = itemsIn(root, base);
   const entries = itemsOfType(items, 'h-entry');
 
-  const chosen = chooseEntry(entries, isTarget, base);
-  const author = authorOf(chosen, items, sourceUrl);
+  const named = (url: string): boolean => isTarget(withoutFragment(url));
+  const chosen = chooseEntry(root, entries, named, base);
+  const author = authorOf(chosen, items, root, sourceUrl, base);
   const content = contentOf(chosen, root);
 
-  const kind = chosen === undefined ? 'mention' : kindOf(chosen, isTarget);
+  const kind = chosen === undefined ? 'mention' : kindOf(chosen, named);
   const url = (chosen === undefined ? undefined : first(chosen, 'url')?.text) ?? sourceUrl;
   const rsvp =
     chosen === undefined || kind !== 'reply' ? undefined : rsvpValue(first(chosen, 'rsvp')?.text);
@@ -172,9 +196,9 @@ export function sourceEntry(
     ...(rsvp === undefined ? {} : { rsvp }),
     author,
     content,
-    published: chosen === undefined ? null : instantOf(first(chosen, 'published')),
+    published: chosen === undefined ? null : instantOf(first(chosen, 'published'), now),
     url,
-    replies: chosen === undefined ? [] : nestedReplies(chosen, url, sourceUrl),
+    replies: chosen === undefined ? [] : nestedReplies(chosen, url, sourceUrl, now),
     inReplyTo:
       chosen === undefined
         ? []
@@ -184,7 +208,9 @@ export function sourceEntry(
                 ? value.text
                 : (first(value.item, 'url')?.text ?? value.text),
             )
-            .filter((url) => url !== ''),
+            .filter((url) => url !== '')
+            .filter((url, index, urls) => urls.indexOf(url) === index)
+            .slice(0, IN_REPLY_TO_PER_ENTRY),
   };
 }
 
@@ -194,7 +220,12 @@ export function sourceEntry(
  * way in turn. A reply is known by its page, so one with no `u-url`, or one
  * already read on this page, is passed over.
  */
-function nestedReplies(entry: MicroformatItem, url: string, sourceUrl: string): NestedReply[] {
+function nestedReplies(
+  entry: MicroformatItem,
+  url: string,
+  sourceUrl: string,
+  now: Date,
+): NestedReply[] {
   const seen = new Set<string>([url, sourceUrl]);
 
   const read = (item: MicroformatItem, itsUrl: string, depth: number): NestedReply[] => {
@@ -222,7 +253,7 @@ function nestedReplies(entry: MicroformatItem, url: string, sourceUrl: string): 
             ? cardOf(author.item)
             : { name: author?.text ?? '', url: null, photo: null },
         content: nestedContent(reply),
-        published: instantOf(first(reply, 'published')),
+        published: instantOf(first(reply, 'published'), now),
         replies: read(reply, at, depth + 1),
       });
     }
@@ -331,6 +362,7 @@ function valuesOf(item: MicroformatItem, property: string): string[] {
 
 /** The entry a webmention is about, or `undefined` when the page has none. */
 function chooseEntry(
+  root: HtmlElement,
   entries: readonly MicroformatItem[],
   isTarget: (url: string) => boolean,
   base: string,
@@ -338,11 +370,64 @@ function chooseEntry(
   for (const entry of entries) {
     if (kindOf(entry, isTarget) !== 'mention') return entry;
   }
-  for (const entry of entries) {
-    if ([...linkedFrom(entry.element, base)].some(isTarget)) return entry;
+  const linking = entriesLinkingTo(root, entries, isTarget, base);
+  return entries.find((entry) => linking.has(entry.element)) ?? entries[0];
+}
+
+/**
+ * The elements of those entries that have a link to the target somewhere
+ * inside them, found in one walk of the page however deeply they nest.
+ */
+function entriesLinkingTo(
+  root: HtmlElement,
+  entries: readonly MicroformatItem[],
+  isTarget: (url: string) => boolean,
+  base: string,
+): Set<HtmlElement> {
+  const isEntry = new Set(entries.map((entry) => entry.element));
+  const linking = new Set<HtmlElement>();
+  const open: HtmlElement[] = [];
+  const pending: { element: HtmlElement; leaving: boolean }[] = [{ element: root, leaving: false }];
+
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    const { element, leaving } = next;
+    if (leaving) {
+      open.pop();
+      continue;
+    }
+
+    if (element !== root && linksToTarget(element, isTarget, base)) {
+      for (let index = open.length - 1; index >= 0; index -= 1) {
+        const enclosing = open[index] as HtmlElement;
+        if (linking.has(enclosing)) break;
+        linking.add(enclosing);
+      }
+    }
+
+    if (isEntry.has(element)) {
+      open.push(element);
+      pending.push({ element, leaving: true });
+    }
+    for (let index = element.children.length - 1; index >= 0; index -= 1) {
+      const child = element.children[index];
+      if (child !== undefined && isElement(child)) pending.push({ element: child, leaving: false });
+    }
   }
 
-  return entries[0];
+  return linking;
+}
+
+/** Whether one element, itself and not what is inside it, links to the target. */
+function linksToTarget(
+  element: HtmlElement,
+  isTarget: (url: string) => boolean,
+  base: string,
+): boolean {
+  return LINK_ATTRIBUTES.some((attribute) => {
+    const value = element.attributes[attribute];
+    const resolved = value === undefined ? undefined : normalize(value, base);
+    return resolved !== undefined && isTarget(resolved);
+  });
 }
 
 /** Which of the four an entry is, given what the target is. */
@@ -363,29 +448,79 @@ function kindOf(entry: MicroformatItem, isTarget: (url: string) => boolean): Web
 /**
  * Who wrote an entry.
  *
- * The entry's own `p-author` first, then a representative `h-card` on the page,
- * then the source's host — which is not a name but is the truest thing the site
- * knows, and is better on a page than an empty byline.
+ * The entry's own `p-author` first, then the `p-author` of the `h-feed` that
+ * holds it, then the page's representative `h-card`, then the source's host —
+ * which is not a name but is the truest thing the site knows, and is better on
+ * a page than an empty byline.
  */
 function authorOf(
   entry: MicroformatItem | undefined,
   items: readonly MicroformatItem[],
+  root: HtmlElement,
   sourceUrl: string,
+  base: string,
 ): SourceEntry['author'] {
-  const named = entry === undefined ? undefined : first(entry, 'author');
+  const feed =
+    entry === undefined
+      ? undefined
+      : items.find((item) => item.types.includes('h-feed') && item.children.includes(entry));
 
-  if (named?.item !== undefined) return cardOf(named.item);
-  if (named !== undefined && named.text !== '') {
-    return { name: named.text, url: null, photo: null };
+  for (const holder of [entry, feed]) {
+    const named = holder === undefined ? undefined : first(holder, 'author');
+    if (named?.item !== undefined) return cardOf(named.item);
+    if (named !== undefined && isWebUrl(named.text)) {
+      const label = named.label ?? '';
+      return {
+        name: label === '' || isWebUrl(label) ? hostOf(named.text) : label,
+        url: named.text,
+        photo: null,
+      };
+    }
+    if (named !== undefined && named.text !== '') {
+      return { name: named.text, url: null, photo: null };
+    }
   }
 
-  const card = itemsOfType(items, 'h-card')[0];
+  const card = representativeCard(items, root, sourceUrl, base);
   if (card !== undefined) {
     const read = cardOf(card);
     if (read.name !== '') return read;
   }
 
   return { name: hostOf(sourceUrl), url: null, photo: null };
+}
+
+/**
+ * The `h-card` that stands for the page's owner: one at the top of the page,
+ * not inside an entry or a citation, whose `u-url` is the page itself or a
+ * page it links `rel=me`.
+ */
+function representativeCard(
+  items: readonly MicroformatItem[],
+  root: HtmlElement,
+  sourceUrl: string,
+  base: string,
+): MicroformatItem | undefined {
+  const page = normalize(sourceUrl, sourceUrl);
+  const me = relMeOf(root, base);
+  return items.find(
+    (item) =>
+      item.types.includes('h-card') &&
+      (item.properties['url'] ?? []).some((url) => url.text === page || me.has(url.text)),
+  );
+}
+
+/** The pages a page links `rel=me`, resolved. */
+function relMeOf(root: HtmlElement, base: string): Set<string> {
+  const me = new Set<string>();
+  for (const element of elementsIn(root)) {
+    if (element.name !== 'a' && element.name !== 'link' && element.name !== 'area') continue;
+    const rels = (element.attributes['rel'] ?? '').toLowerCase().split(/\s+/);
+    if (!rels.includes('me')) continue;
+    const href = normalize(element.attributes['href'] ?? '', base);
+    if (href !== undefined) me.add(href);
+  }
+  return me;
 }
 
 /** One `h-card` as a name, a page and an avatar. */
@@ -419,12 +554,59 @@ function titleOf(root: HtmlElement): string {
   return '';
 }
 
-/** A `dt-published` as an ISO instant, or `null` when it is not a date. */
-function instantOf(value: MicroformatValue | undefined): string | null {
-  if (value === undefined || value.text === '') return null;
+const DATETIME =
+  /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?)?$/i;
 
-  const at = new Date(value.text);
-  return Number.isNaN(at.getTime()) ? null : at.toISOString();
+const EARLIEST_PUBLISHED = Date.UTC(1990, 0, 1);
+
+const PUBLISHED_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A `dt-published` as an ISO instant, or `null` when it is not a date, is
+ * older than the web, or is more than a day after `now`. A time with no
+ * offset is UTC.
+ */
+function instantOf(value: MicroformatValue | undefined, now?: Date): string | null {
+  const match = DATETIME.exec(value?.text.trim() ?? '');
+  if (match === null) return null;
+
+  const [
+    ,
+    year = '',
+    month = '',
+    day = '',
+    hour = '0',
+    minute = '0',
+    second = '0',
+    fraction = '',
+    zone,
+  ] = match;
+  const y = Number(year);
+  const mo = Number(month) - 1;
+  const d = Number(day);
+  const h = Number(hour);
+  const mi = Number(minute);
+  const s = Number(second);
+  const local = Date.UTC(y, mo, d, h, mi, s, Number(fraction.padEnd(3, '0').slice(0, 3)));
+  const date = new Date(local);
+  const sameDay =
+    date.getUTCFullYear() === y && date.getUTCMonth() === mo && date.getUTCDate() === d;
+  if (!sameDay || h > 23 || mi > 59 || s > 59) return null;
+
+  const offset = offsetMinutes(zone);
+  if (offset === null) return null;
+  const at = local - offset * 60 * 1000;
+  if (at < EARLIEST_PUBLISHED) return null;
+  if (now !== undefined && at > now.getTime() + PUBLISHED_CLOCK_SKEW_MS) return null;
+  return new Date(at).toISOString();
+}
+
+function offsetMinutes(zone: string | undefined): number | null {
+  if (zone === undefined || zone.toUpperCase() === 'Z') return 0;
+  const hours = Number(zone.slice(1, 3));
+  const minutes = Number(zone.slice(-2));
+  if (hours > 23 || minutes > 59) return null;
+  return (zone.startsWith('-') ? -1 : 1) * (hours * 60 + minutes);
 }
 
 /** The host a source is on, for a page that never says who wrote it. */
@@ -452,6 +634,8 @@ export interface MicroformatItem {
 export interface MicroformatValue {
   /** The value as text, or as a URL for a `u-` property. */
   readonly text: string;
+  /** The text a `u-` property's element shows, which can name the link. */
+  readonly label?: string;
   /** The markup, for an `e-` property. */
   readonly html?: string;
   /** The microformat the value was, when it was one. */
@@ -463,17 +647,28 @@ function first(item: MicroformatItem, property: string): MicroformatValue | unde
   return item.properties[property]?.[0];
 }
 
-/** Every item of one type, at any depth. */
+/**
+ * Every item of one type, at any depth, in document order. One nested item can
+ * be the value of several properties at once, and it is listed once.
+ */
 function itemsOfType(items: readonly MicroformatItem[], type: string): MicroformatItem[] {
   const found: MicroformatItem[] = [];
+  const seen = new Set<MicroformatItem>();
+  const pending = [...items].reverse();
 
-  for (const item of items) {
+  for (let item = pending.pop(); item !== undefined; item = pending.pop()) {
+    if (seen.has(item)) continue;
+    seen.add(item);
     if (item.types.includes(type)) found.push(item);
-    found.push(...itemsOfType(item.children, type));
-    for (const values of Object.values(item.properties)) {
-      for (const value of values) {
-        if (value.item !== undefined) found.push(...itemsOfType([value.item], type));
-      }
+
+    const inside = [
+      ...item.children,
+      ...Object.values(item.properties).flatMap((values) =>
+        values.flatMap((value) => (value.item === undefined ? [] : [value.item])),
+      ),
+    ];
+    for (let index = inside.length - 1; index >= 0; index -= 1) {
+      pending.push(inside[index] as MicroformatItem);
     }
   }
 
@@ -483,12 +678,17 @@ function itemsOfType(items: readonly MicroformatItem[], type: string): Microform
 /** The microformats at the top of a page: roots that are inside no other root. */
 export function itemsIn(root: HtmlElement, base: string): MicroformatItem[] {
   const items: MicroformatItem[] = [];
+  const reading: Reading = {
+    left: MICROFORMAT_ITEMS_PER_PAGE,
+    texts: new Map(),
+    markup: new Map(),
+  };
 
   const walk = (element: HtmlElement): void => {
     for (const child of element.children) {
       if (!isElement(child)) continue;
-      if (rootTypesOf(child).length > 0) items.push(parseItem(child, base));
-      else walk(child);
+      if (rootTypesOf(child).length === 0) walk(child);
+      else if (reading.left > 0) items.push(parseItem(child, base, reading));
     }
   };
 
@@ -501,16 +701,53 @@ function rootTypesOf(element: HtmlElement): string[] {
   return classesOf(element).filter((name) => name.startsWith('h-') && name.length > 2);
 }
 
-/** The property classes an element carries, as `{prefix, name}` pairs. */
+/**
+ * The property classes an element carries, as `{prefix, name}` pairs, each
+ * once and no more than {@link PROPERTIES_PER_ELEMENT} of them.
+ */
 function propertiesOf(element: HtmlElement): { prefix: string; name: string }[] {
   const found: { prefix: string; name: string }[] = [];
+  const seen = new Set<string>();
 
   for (const value of classesOf(element)) {
+    if (found.length >= PROPERTIES_PER_ELEMENT) break;
     const match = /^(p|u|e|dt)-(.+)$/.exec(value);
-    if (match !== null) found.push({ prefix: match[1] ?? '', name: match[2] ?? '' });
+    if (match === null || seen.has(value)) continue;
+    seen.add(value);
+    found.push({ prefix: match[1] ?? '', name: match[2] ?? '' });
   }
 
   return found;
+}
+
+/**
+ * One page as it is being read: how many more items it may yield, and the text
+ * and markup of each element already read, which several properties can share.
+ */
+interface Reading {
+  left: number;
+  readonly texts: Map<HtmlElement, string>;
+  readonly markup: Map<HtmlElement, string>;
+}
+
+/** An element's text, read once per page and no longer than a value is kept. */
+function textIn(element: HtmlElement, reading: Reading): string {
+  let text = reading.texts.get(element);
+  if (text === undefined) {
+    text = textOf(element, MICROFORMAT_VALUE_LENGTH);
+    reading.texts.set(element, text);
+  }
+  return text;
+}
+
+/** An element's inner markup, read once per page and no longer than a value is kept. */
+function markupIn(element: HtmlElement, base: string, reading: Reading): string {
+  let markup = reading.markup.get(element);
+  if (markup === undefined) {
+    markup = innerHtmlOf(element, MICROFORMAT_VALUE_LENGTH, base);
+    reading.markup.set(element, markup);
+  }
+  return markup;
 }
 
 /**
@@ -521,15 +758,19 @@ function propertiesOf(element: HtmlElement): { prefix: string; name: string }[] 
  * entry's. That one rule is what keeps an author's name out of the entry's
  * title.
  */
-function parseItem(element: HtmlElement, base: string): MicroformatItem {
-  const properties: Record<string, MicroformatValue[]> = {};
+function parseItem(element: HtmlElement, base: string, reading: Reading): MicroformatItem {
+  reading.left -= 1;
+  const found = new Map<string, MicroformatValue[]>();
   const children: MicroformatItem[] = [];
   // Whether anything inside is a `p-` or `e-` property or a microformat of its
   // own, which is when mf2 stops implying a name from the whole text.
   let textual = false;
+  let explicitUrl = false;
 
   const add = (name: string, value: MicroformatValue): void => {
-    (properties[name] ??= []).push(value);
+    const values = found.get(name);
+    if (values === undefined) found.set(name, [value]);
+    else values.push(value);
   };
 
   const walk = (parent: HtmlElement): void => {
@@ -541,11 +782,13 @@ function parseItem(element: HtmlElement, base: string): MicroformatItem {
 
       if (roots.length > 0) {
         textual = true;
-        const nested = parseItem(child, base);
+        if (reading.left <= 0) continue;
+        const nested = parseItem(child, base, reading);
         if (named.length === 0) children.push(nested);
         else {
           for (const { prefix, name } of named) {
-            add(name, { text: nestedText(prefix, nested, child, base), item: nested });
+            if (prefix === 'u') explicitUrl = true;
+            add(name, { text: nestedText(prefix, nested, child, base, reading), item: nested });
           }
         }
         continue;
@@ -553,14 +796,16 @@ function parseItem(element: HtmlElement, base: string): MicroformatItem {
 
       for (const { prefix, name } of named) {
         if (prefix === 'p' || prefix === 'e') textual = true;
-        add(name, valueOf(prefix, child, base));
+        if (prefix === 'u') explicitUrl = true;
+        add(name, valueOf(prefix, child, base, reading));
       }
       walk(child);
     }
   };
 
   walk(element);
-  implied(element, properties, base, !textual);
+  const properties: Record<string, MicroformatValue[]> = Object.fromEntries(found);
+  implied(element, properties, base, reading, !textual, !explicitUrl);
   return { types: rootTypesOf(element), properties, children, element };
 }
 
@@ -570,13 +815,19 @@ function nestedText(
   item: MicroformatItem,
   element: HtmlElement,
   base: string,
+  reading: Reading,
 ): string {
-  if (prefix === 'u') return first(item, 'url')?.text ?? valueOf('u', element, base).text;
-  return first(item, 'name')?.text ?? textOf(element);
+  if (prefix === 'u') return first(item, 'url')?.text ?? valueOf('u', element, base, reading).text;
+  return first(item, 'name')?.text ?? textIn(element, reading);
 }
 
 /** One element as the value of one property. */
-function valueOf(prefix: string, element: HtmlElement, base: string): MicroformatValue {
+function valueOf(
+  prefix: string,
+  element: HtmlElement,
+  base: string,
+  reading: Reading,
+): MicroformatValue {
   const attributes = element.attributes;
 
   if (prefix === 'u') {
@@ -586,8 +837,8 @@ function valueOf(prefix: string, element: HtmlElement, base: string): Microforma
       attributeFor(element, ['object'], 'data') ??
       attributeFor(element, ['video'], 'poster') ??
       attributeFor(element, ['data'], 'value') ??
-      textOf(element);
-    return { text: normalize(raw, base) ?? raw.trim() };
+      textIn(element, reading);
+    return { text: normalize(raw, base) ?? raw.trim(), label: textIn(element, reading) };
   }
 
   if (prefix === 'dt') {
@@ -596,11 +847,13 @@ function valueOf(prefix: string, element: HtmlElement, base: string): Microforma
         attributeFor(element, ['time', 'ins', 'del'], 'datetime') ??
         attributeFor(element, ['abbr'], 'title') ??
         attributeFor(element, ['data'], 'value') ??
-        textOf(element),
+        textIn(element, reading),
     };
   }
 
-  if (prefix === 'e') return { text: textOf(element), html: innerHtmlOf(element) };
+  if (prefix === 'e') {
+    return { text: textIn(element, reading), html: markupIn(element, base, reading) };
+  }
 
   return {
     text:
@@ -608,7 +861,7 @@ function valueOf(prefix: string, element: HtmlElement, base: string): Microforma
       attributeFor(element, ['abbr'], 'title') ??
       attributeFor(element, ['data', 'input'], 'value') ??
       (element.name === 'meta' ? attributes['content'] : undefined) ??
-      textOf(element),
+      textIn(element, reading),
   };
 }
 
@@ -632,61 +885,85 @@ function attributeFor(
  * actually arrives in and stops short of guessing. A name is implied only when
  * nothing inside is a `p-` or `e-` property or a nested microformat, as mf2
  * says, so an entry with an `e-content` and no `p-name` has no name rather
- * than the text of everything around it.
+ * than the text of everything around it. A url is implied from a link inside
+ * only when nothing inside is a `u-` property, so a reply's `u-in-reply-to` is
+ * not read as the page the reply lives at.
  */
 function implied(
   element: HtmlElement,
   properties: Record<string, MicroformatValue[]>,
   base: string,
+  reading: Reading,
   impliesName: boolean,
+  impliesChildUrl: boolean,
 ): void {
   if (impliesName && properties['name'] === undefined) {
     const name =
       attributeFor(element, ['img', 'area'], 'alt') ??
       attributeFor(element, ['abbr'], 'title') ??
-      textOf(element);
+      textIn(element, reading);
     if (name !== '') properties['name'] = [{ text: name }];
   }
 
   if (properties['url'] === undefined) {
     const href =
       attributeFor(element, ['a', 'area', 'link'], 'href') ??
-      onlyAttribute(element, ['a', 'area', 'link'], 'href');
+      (impliesChildUrl ? impliedAttribute(element, ['a', 'area'], 'href') : undefined);
     const url = href === undefined ? undefined : normalize(href, base);
     if (url !== undefined) properties['url'] = [{ text: url }];
   }
 
   if (properties['photo'] === undefined) {
-    const src = attributeFor(element, ['img'], 'src') ?? onlyAttribute(element, ['img'], 'src');
+    const src = attributeFor(element, ['img'], 'src') ?? impliedAttribute(element, ['img'], 'src');
     const photo = src === undefined ? undefined : normalize(src, base);
     if (photo !== undefined) properties['photo'] = [{ text: photo }];
   }
 }
 
 /**
- * The attribute of the one such element inside this one, when there is exactly
- * one and it is not a microformat of its own.
+ * The attribute an item implies from what is directly inside it, as mf2 reads
+ * an implied `url` or `photo`: its only child of one of these types, else the
+ * only child of that type of its only child element. Nothing that is a
+ * microformat of its own counts, and nothing deeper is looked at.
  *
- * Exactly one, because two links inside a card give no reason to prefer
+ * Only one of a type, because two links inside a card give no reason to prefer
  * either, and a guess in a byline is worse than an empty one.
  */
-function onlyAttribute(
+function impliedAttribute(
   element: HtmlElement,
   names: readonly string[],
   attribute: string,
 ): string | undefined {
-  let found: string | undefined;
-
-  for (const candidate of elementsIn(element)) {
-    if (!names.includes(candidate.name)) continue;
-    if (rootTypesOf(candidate).length > 0) continue;
-    const value = candidate.attributes[attribute];
-    if (value === undefined) continue;
-    if (found !== undefined) return undefined;
-    found = value;
+  const sole = onlyChild(element);
+  for (const parent of sole === undefined ? [element] : [element, sole]) {
+    for (const name of names) {
+      const value = onlyOfType(parent, name)?.attributes[attribute];
+      if (value !== undefined) return value;
+    }
   }
+  return undefined;
+}
 
-  return found;
+/** The one child element of this one, when it has exactly one and it is not a microformat. */
+function onlyChild(element: HtmlElement): HtmlElement | undefined {
+  return soleOf(element.children.filter(isElement));
+}
+
+/** The one child element of this name, when there is exactly one and it is not a microformat. */
+function onlyOfType(element: HtmlElement, name: string): HtmlElement | undefined {
+  return soleOf(
+    element.children.filter(
+      (child): child is HtmlElement => isElement(child) && child.name === name,
+    ),
+  );
+}
+
+/** The only element of these, unless there are more or it is a microformat. */
+function soleOf(elements: readonly HtmlElement[]): HtmlElement | undefined {
+  const [only] = elements;
+  return elements.length === 1 && only !== undefined && rootTypesOf(only).length === 0
+    ? only
+    : undefined;
 }
 
 /** The `<base href>` a page declares, or the URL it was fetched from. */
@@ -700,6 +977,11 @@ function baseOf(root: HtmlElement, sourceUrl: string): string {
   }
 
   return sourceUrl;
+}
+
+function withoutFragment(url: string): string {
+  const hash = url.indexOf('#');
+  return hash === -1 ? url : url.slice(0, hash);
 }
 
 /** One href as an absolute URL, or `undefined` when it is not one. */

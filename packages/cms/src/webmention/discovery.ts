@@ -1,5 +1,5 @@
 import { elementsIn, hasRel, parseHtml } from '../util/html-tree.ts';
-import { fetchPublic } from './fetch-public.ts';
+import { decodeBody, fetchPublic } from './fetch-public.ts';
 import type { HostLookup } from '../util/public-address.ts';
 
 /**
@@ -44,7 +44,7 @@ export async function discoverEndpoint(
   const header = endpointInHeader(fetched.link, fetched.url);
   if (header !== undefined || fetched.read === 'headers') return header;
 
-  return endpointInHtml(new TextDecoder().decode(fetched.body), fetched.url);
+  return endpointInHtml(decodeBody(fetched.body, fetched.type), fetched.url);
 }
 
 const HTML = /^\s*(text\/html|application\/xhtml\+xml)/i;

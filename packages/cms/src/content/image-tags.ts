@@ -1,4 +1,4 @@
-import { decodeEntities } from '../util/html.ts';
+import { decodeAttribute } from '../util/html.ts';
 import { decodedRelativePath } from '../util/url.ts';
 import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from './uploads.ts';
 
@@ -58,7 +58,7 @@ export function parseAttributes(attributes: string): Map<string, string> {
   for (const match of attributes.matchAll(ATTRIBUTE)) {
     const name = (match[1] ?? '').toLowerCase();
     if (name === '' || parsed.has(name)) continue;
-    parsed.set(name, decodeEntities(match[2] ?? match[3] ?? match[4] ?? ''));
+    parsed.set(name, decodeAttribute(match[2] ?? match[3] ?? match[4] ?? ''));
   }
 
   return parsed;

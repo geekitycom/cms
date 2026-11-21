@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import type { PostComment } from '../store/admin-store.ts';
+import type { ConversationSite } from '../comments/conversation.ts';
+import type { Document } from '../content/document.ts';
+import { openAdminStore } from '../store/admin-store.ts';
+import type { AdminStore, PostComment } from '../store/admin-store.ts';
 import type { CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -15,6 +18,7 @@ import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
+import { verifyWebmention } from './receive.ts';
 import {
   addComment,
   commentsFile,
@@ -313,6 +317,28 @@ describe('what the endpoint refuses', () => {
 });
 
 describe('verifying a webmention', () => {
+  it('stores a reply whose source links to an anchor on the post', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}#comments">re</a>`),
+    });
+
+    assert.equal((await sendAndSettle(cms, 'https://them.example/note')).status, 202);
+    assert.equal(stored(cms).length, 1);
+    assert.equal(stored(cms)[0]?.kind, 'reply');
+  });
+
+  it('stores a webmention sent to an anchor on the post from a source that links the post', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+    });
+
+    const response = await sendAndSettle(cms, 'https://them.example/note', `${POST_URL}#comments`);
+    assert.equal(response.status, 202);
+    assert.equal(stored(cms)[0]?.kind, 'reply');
+  });
+
   it('stores a reply, held for moderation, with its author and content', async () => {
     const cms = await site();
     pages.set('https://them.example/note', {
@@ -412,6 +438,66 @@ describe('verifying a webmention', () => {
         ['mention', 'them.example'],
       ],
     );
+  });
+
+  it('stores nothing for a text source that names only a longer URL', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note.txt', {
+      body: `See ${POST_URL}more for details.`,
+      contentType: 'text/plain; charset=utf-8',
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note.txt');
+
+    assert.deepEqual(stored(cms), []);
+  });
+
+  it('accepts a text source that names the target at the end of a sentence', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note.txt', {
+      body: `Read (${POST_URL}), then "${POST_URL}#comments".\nOr just ${POST_URL}.`,
+      contentType: 'text/plain; charset=utf-8',
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note.txt');
+
+    assert.equal(stored(cms).length, 1);
+  });
+
+  it('stores nothing for a JSON source that has the target only inside a longer string', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note.json', {
+      body: JSON.stringify({ q: `${POST_URL}?echo=1`, text: `I liked ${POST_URL} a lot.` }),
+      contentType: 'application/json',
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note.json');
+
+    assert.deepEqual(stored(cms), []);
+  });
+
+  it('accepts a JSON source that writes the target with escaped slashes', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note.json', {
+      body: `{"items":[{"url":"${POST_URL.replaceAll('/', '\\/')}"}]}`,
+      contentType: 'application/activity+json',
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note.json');
+
+    assert.equal(stored(cms).length, 1);
+  });
+
+  it('accepts a JSON source whose array holds hundreds of thousands of values', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note.json', {
+      body: `[${'0,'.repeat(300_000)}"${POST_URL}"]`,
+      contentType: 'application/json',
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note.json');
+
+    assert.equal(stored(cms).length, 1);
   });
 
   it('follows a redirect and verifies the page it lands on', async () => {
@@ -716,6 +802,22 @@ describe('an approved webmention that comes again', () => {
 
     assert.equal(stored(cms)[0]?.submitted, first.submitted);
   });
+
+  it('takes the site’s clock, then keeps it, when the page gives a date far in the future', async () => {
+    let now = new Date('2026-09-20T12:00:00.000Z');
+    const cms = await site({ now: () => now });
+    const future = reply(LOVELY).replace(
+      /<time class="dt-published"[^>]*>/,
+      '<time class="dt-published" datetime="9999-01-01T00:00:00Z">',
+    );
+    const first = await approvedReply(cms, future);
+    assert.equal(first.submitted, '2026-09-20T12:00:00.000Z');
+
+    now = new Date('2026-10-20T12:00:00.000Z');
+    await sendAndSettle(cms, NOTE);
+
+    assert.equal(stored(cms)[0]?.submitted, first.submitted);
+  });
 });
 
 describe('a webmention sent again to another URL of the same post', () => {
@@ -790,6 +892,25 @@ describe('a webmention sent again to another URL of the same post', () => {
 
     assert.equal(response.status, 202);
     assertKept(cms, like);
+  });
+
+  it('keeps a JSON mention sent to a comment page when its escaped URL names the post', async () => {
+    const cms = await site();
+    const source = 'https://them.example/note.json';
+    pages.set(source, {
+      body: `{"url":"${POST_URL.replaceAll('/', '\\/')}"}`,
+      contentType: 'application/json',
+    });
+    await sendAndSettle(cms, source);
+    assert.equal(stored(cms).length, 1);
+
+    const response = await sendAndSettle(cms, source, await commentPage(cms));
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(
+      stored(cms).map((one) => one.url),
+      [source],
+    );
   });
 
   it('reads a like that also links a comment page as a like whichever is the target', async () => {
@@ -1605,5 +1726,62 @@ describe('what the endpoint answers, word for word', () => {
       await response.text(),
       'Send a webmention here with a POST carrying source and target.',
     );
+  });
+});
+
+describe('a source that answers many things', () => {
+  const openStores: AdminStore[] = [];
+  after(() => {
+    for (const opened of openStores) opened.close();
+  });
+
+  it('asks the conversation about a few of them, not every one', async () => {
+    const source = 'https://them.example/2026/09/reply/';
+    const values = 2_000;
+    const links = Array.from(
+      { length: values },
+      (_, i) => `<a class="u-in-reply-to" href="https://elsewhere.example/${i}">${i}</a>`,
+    ).join('');
+    pages.set(source, {
+      body: `<article class="h-entry">
+        <a class="u-in-reply-to" href="${POST_URL}">the post</a>${links}
+        <p class="e-content">Hello.</p>
+      </article>`,
+    });
+    const dataDir = await temporaryDir('geekity-webmention-answers-');
+    const contentDir = await temporaryDir('geekity-webmention-answers-content-');
+    const admin = openAdminStore({ dataDir });
+    openStores.push(admin);
+    let asked = 0;
+
+    const outcome = await verifyWebmention({
+      incoming: {
+        source,
+        target: POST_URL,
+        document: {
+          slug: 'hello-world',
+          permalink: '/2026/09/hello-world/',
+          title: 'Hello world',
+          html: '<p>Words.</p>',
+        } as unknown as Document,
+      },
+      records: { admin, contentDir, dataDir },
+      dataDir,
+      baseUrl: BASE_URL,
+      conversation: {
+        replyNamed: () => {
+          asked += 1;
+          return undefined;
+        },
+        comment: () => undefined,
+      },
+      site: {} as ConversationSite,
+      now: NOW,
+      lookup,
+      logger: { warn: () => {} },
+    });
+
+    assert.equal(outcome.kind, 'stored');
+    assert.ok(asked <= 10, `asked about ${asked} of ${values + 1} values`);
   });
 });

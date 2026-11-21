@@ -72,11 +72,38 @@ answers:
 
 1. It fetches the source, up to its first megabyte. It decodes the source in
    the character encoding that its `Content-Type` names. When the header names
-   none, it uses the encoding that a `<meta>` element in the first kilobyte
-   names. Otherwise it uses UTF-8.
-2. It checks that the source links to the target.
+   none, it uses the encoding that an XML declaration or a `<meta>` element in
+   the first kilobyte names. Otherwise it uses UTF-8. The site decodes every
+   other page that it fetches from another site in the same way: reply contexts
+   and their feeds, webmention endpoint discovery, IndieAuth client pages and
+   the following list.
+2. It checks that the source links to the target. Fragments do not count on
+   either side, so a link to `POST#comments` verifies a webmention sent to
+   `POST`, and a link to `POST` verifies one sent to `POST#comments`. A source
+   that is not HTML has no links, so the site looks for the target's whole URL.
+   In JSON (`application/json` or any `application/*+json` type), a string
+   value must be exactly that URL; a longer string that contains it does not
+   count. In plain text and other types, the URL must stand alone, ended by a
+   space, a quote, a bracket, or the end of the text. A full stop or comma
+   straight after it is allowed. A JSON body that does not parse is read as
+   plain text.
 3. It reads the source's microformats: `h-entry`, `h-card`, and whether it is a
-   reply, a like, a repost, or a plain mention.
+   reply, a like, a repost, or a plain mention. It reads at most 1,000
+   microformats from one page and at most 16 property classes from one
+   element. It keeps the first 64 KiB of the text and of the markup of each
+   property value, so a longer `e-content` is cut short. Relative `href` and
+   `src` values in the `e-content` markup are resolved against the source URL,
+   or against the page's `<base href>`, so links in a reply still work on this
+   site.
+   The author is the entry's own `p-author`, or else the `p-author` of the
+   `h-feed` that holds the entry, or else the page's representative `h-card`:
+   an `h-card` that is not inside another microformat and whose `u-url` is the
+   source URL or a link marked `rel="me"`. An `h-card` inside the entry, such as
+   the author of the post it replies to, is not used. An author written as a
+   URL with no `h-card`, such as `<a class="u-author" href="…">Ada</a>`, is the
+   author's page, and the link text, or else that page's host, is the name. The
+   site does not fetch that page. When there is no author, the site shows the
+   source's host.
 4. It files the result as a **pending comment** with `source: "webmention"`.
 
 The comment goes in the same file, the same thread, and the same moderation
@@ -84,7 +111,9 @@ queue as every other comment. It goes through the same `commentChecker` seam.
 A checker can tell a webmention from a form submission by its `source`. The
 site reports a webmention to Akismet as a `webmention`, not as a `comment`.
 
-A reply can name, in `u-in-reply-to`, a reply that is already on the post:
+A reply can name, in `u-in-reply-to`, a reply that is already on the post.
+The site reads the first 8 distinct `u-in-reply-to` values and ignores the
+rest. A named reply can be:
 
 - a comment, by its own page or its `#comment-{key}` anchor
 - an earlier webmention of any kind (a reply, like, repost, mention or RSVP),
@@ -121,6 +150,13 @@ post does not show it, and its replies sit under a placeholder that says the
 comment is no longer shown. A pending entry stays pending and sends no new
 notice. A spam entry stays spam. When the page gives no `dt-published`, the
 entry keeps the date it was first stored with.
+
+The site reads `dt-published` as an ISO 8601 date and time, with `T` or a
+space between the two, an offset such as `Z`, `+01:00` or `+0100`, or a date
+alone. A time with no offset is read as UTC. The site ignores a value it
+cannot read, a date before 1990, and a date more than a day after it reads
+the page. A new entry with no usable date takes the time the site read the
+page as its date; an entry already stored keeps the date it has.
 
 Closing rules do not apply. A post that no longer takes comments still receives
 webmentions, as it still receives fediverse replies.

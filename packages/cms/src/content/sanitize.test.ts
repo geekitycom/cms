@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { sanitizeCommentHtml } from './sanitize.ts';
+import { cleanPostHtml, sanitizeCommentHtml } from './sanitize.ts';
 
 describe('sanitising a comment', () => {
   it('keeps the markup a fediverse note is made of', () => {
@@ -88,6 +88,28 @@ describe('sanitising a comment', () => {
     assert.equal(sanitizeCommentHtml('<em>a</strong>b</em>'), '<em>ab</em>');
   });
 
+  it('sanitises 30,000 unclosed tags followed by 30,000 stray closing tags in well under a second', () => {
+    const note = '<b>'.repeat(30_000) + '</div>'.repeat(30_000);
+    const started = performance.now();
+    const clean = sanitizeCommentHtml(note);
+    const elapsed = performance.now() - started;
+    assert.ok(clean.startsWith('<b><b>'));
+    assert.ok(clean.endsWith('</b></b>'));
+    assert.ok(elapsed < 1_000, `sanitizeCommentHtml took ${Math.round(elapsed)} ms`);
+  });
+
+  it('still closes an element that is open beneath stray closing tags', () => {
+    assert.equal(
+      sanitizeCommentHtml('<em><b>one</a></u><b>two</em><p>three'),
+      '<em><b>one<b>two</b></b></em><p>three</p>',
+    );
+  });
+
+  it('nests no deeper than 512 elements and unwraps the rest', () => {
+    const clean = sanitizeCommentHtml('<b>'.repeat(600) + 'end');
+    assert.equal(clean, '<b>'.repeat(512) + 'end' + '</b>'.repeat(512));
+  });
+
   it('drops a comment, a doctype and a stray angle bracket', () => {
     assert.equal(sanitizeCommentHtml('<!-- <script>x</script> -->ok'), 'ok');
     assert.equal(sanitizeCommentHtml('<!doctype html><p>ok</p>'), '<p>ok</p>');
@@ -98,5 +120,17 @@ describe('sanitising a comment', () => {
     const once = sanitizeCommentHtml('<p onclick="x">Hi <a href="https://a.test">a</a></p>');
 
     assert.equal(sanitizeCommentHtml(once), once);
+  });
+});
+
+describe('tag names that are Object.prototype properties', () => {
+  it('unwraps a <constructor> element in a comment and keeps its words', () => {
+    assert.equal(sanitizeCommentHtml('<constructor onclick="x">hi</constructor>'), 'hi');
+    assert.equal(sanitizeCommentHtml('<tostring>a</tostring><valueof>b</valueof>'), 'ab');
+  });
+
+  it('drops a <constructor> element from a post and keeps its words', () => {
+    assert.equal(cleanPostHtml('<constructor>hi</constructor>'), 'hi');
+    assert.equal(cleanPostHtml('<tostring>a</tostring><valueof>b</valueof>'), 'ab');
   });
 });

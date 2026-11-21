@@ -132,6 +132,25 @@ describe('fetchClientInformation', () => {
     });
   });
 
+  it('reads a client page in the character set it names', async () => {
+    const page = '<a class="h-app" href="https://app.example/">Café</a>';
+    answer = () =>
+      Promise.resolve(
+        new Response(
+          Uint8Array.from(page, (char) => char.charCodeAt(0)),
+          {
+            headers: { 'content-type': 'text/html; charset=windows-1252' },
+          },
+        ),
+      );
+    const result = await fetchClientInformation('https://app.example/', {
+      lookup: PUBLIC,
+      ...LIMITS,
+    });
+    assert.ok(result.ok);
+    assert.equal(result.client.name, 'Café');
+  });
+
   it('reads redirect URLs from the Link header, relative ones against the client_id', async () => {
     answer = () =>
       Promise.resolve(
