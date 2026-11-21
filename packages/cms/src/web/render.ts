@@ -30,7 +30,7 @@ import { createDocumentPages } from './document-render.ts';
 import { createListingPages } from './listing-render.ts';
 import { createMarkdownChrome } from './markdown-chrome.ts';
 import { createMarkdownEnvironment } from './markdown-environment.ts';
-import type { MarkdownChrome, MarkdownUrl } from './markdown-page.ts';
+import type { MarkdownChrome, MarkdownFeed, MarkdownUrl } from './markdown-page.ts';
 import type { TextFormat } from './negotiate.ts';
 import { createPageContexts } from './page-context.ts';
 import type { Pagination } from './pagination.ts';
@@ -87,6 +87,7 @@ export interface MarkdownChromeText {
   readonly footer: ThemeText;
   /** Present when a theme writes this page's layout as text. */
   readonly layout?: TextLayout | undefined;
+  readonly listedFeeds: readonly MarkdownFeed[];
 }
 
 export interface Listing {

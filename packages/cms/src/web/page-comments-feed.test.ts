@@ -176,4 +176,21 @@ describe('a page advertises its comments feed', () => {
     assert.ok((await markdown('/quiet/index.md')).includes('(/quiet/feed/)'));
     assert.ok(!(await markdown('/shut/index.md')).includes('/shut/feed/'));
   });
+
+  it('in its Markdown front matter, with its title and type', async () => {
+    const frontMatter = async (url: string): Promise<string> =>
+      (await markdown(url)).split('\n---\n')[0] ?? '';
+    assert.ok(
+      (await frontMatter('/quiet/index.md')).endsWith(
+        [
+          '  - url: /quiet/feed/',
+          "    title: 'Comments on: Quiet'",
+          '    type: application/rss+xml',
+        ].join('\n'),
+      ),
+    );
+    const shut = await frontMatter('/shut/index.md');
+    assert.match(shut, /^feeds:\n {2}- url: \/feed\/\n {4}title: A Site\n/m);
+    assert.ok(!shut.includes('/shut/feed/'));
+  });
 });

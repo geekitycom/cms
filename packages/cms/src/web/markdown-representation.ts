@@ -381,7 +381,7 @@ function textPage(
   } = {},
 ): string {
   const linkUrl = siteUrlFor(c, chrome.url, format);
-  const { header, footer, layout } = c.var.renderer.renderMarkdownChrome(chrome, {
+  const { header, footer, layout, listedFeeds } = c.var.renderer.renderMarkdownChrome(chrome, {
     markdownUrl: linkUrl,
     format,
     ...pages,
@@ -391,7 +391,7 @@ function textPage(
   );
   if (format === 'markdown') {
     return markdownFile(
-      { ...frontMatter, ...navigationFrontMatter(chrome, linkUrl) },
+      { ...frontMatter, ...navigationFrontMatter(chrome, linkUrl, listedFeeds) },
       layout === undefined
         ? [header, ...body, footer].map(({ text }) => text)
         : [layout.render(markdownParts(header, body, footer))],
