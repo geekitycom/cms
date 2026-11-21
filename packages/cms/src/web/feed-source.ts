@@ -393,9 +393,11 @@ export interface FeedComment {
   published: Date;
   /** What it says, as its own server rendered it and before sanitising. */
   html: string;
+  /** What a form comment's author typed; anything else has only its HTML. */
+  markdown?: string | undefined;
   /**
-   * The post it answers, named on every item of the site-wide feed and on none
-   * of a post's own — there, every item answers the same post.
+   * The post it answers, on every item of the site-wide feed and on none of a
+   * post's own. The RSS item prints no title, so it does not name it.
    */
   post?: { title: string; permalink: string } | undefined;
   /**

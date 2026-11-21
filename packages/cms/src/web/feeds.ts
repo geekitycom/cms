@@ -14,7 +14,7 @@ import { contentEtag, isNotModified, latestModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 import { resolveLicense } from '../content/license.ts';
 
-const COMMENTS_FEED_REVISION = 4;
+const COMMENTS_FEED_REVISION = 5;
 
 /**
  * How a feed is served: its validator, its headers, and which serialiser
@@ -219,7 +219,7 @@ function commentsFingerprint(source: CommentFeedSource): string {
         comment.author,
         comment.published.toISOString(),
         comment.html,
-        comment.post?.title ?? '',
+        comment.markdown ?? '',
         JSON.stringify(comment.inReplyTo ?? null),
         comment.replies === undefined
           ? ''

@@ -72,6 +72,7 @@ export function feedComments(
       author: entry.author.name,
       published: entry.published,
       html: entry.content,
+      ...(entry.markdown === undefined ? {} : { markdown: entry.markdown }),
       ...(answered === undefined ? {} : { inReplyTo: answered }),
       ...(replies.length === 0
         ? {}

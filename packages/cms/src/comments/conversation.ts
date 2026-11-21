@@ -101,6 +101,8 @@ export interface Interaction {
   readonly url: string | null;
   /** What it says, sanitised and ready to print. Empty for a like or a boost. */
   readonly content: string;
+  /** What a form comment's author typed, which {@link content} was rendered from. */
+  readonly markdown?: string;
   /** When it was published, or when it arrived if it did not say. */
   readonly published: Date;
   /** What it answers: the post, or another interaction. `null` for a reaction. */

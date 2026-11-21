@@ -241,6 +241,7 @@ function interactionOf(
         ? commentPageHref(comment.id)
         : `${permalink}#${commentAnchor(comment.id)}`),
     content: comment.content.html,
+    ...(comment.source === 'comment' ? { markdown: comment.content.markdown } : {}),
     published: new Date(comment.submitted),
     inReplyTo: comment.inReplyTo,
     status: comment.status,

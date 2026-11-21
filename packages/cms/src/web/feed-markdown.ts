@@ -12,8 +12,10 @@ import { absoluteFeedUrl, absoluteHtmlUrls } from '../util/absolute-urls.ts';
 import { absoluteUrl } from '../util/url.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import { markdownCites } from './markdown-cites.ts';
+import { markdownText } from './markdown-conversation.ts';
 import { escapeMarkdown } from './markdown-page.ts';
 import type { MarkdownCite } from './markdown-page.ts';
+import type { FeedComment } from './feed-source.ts';
 
 export interface FeedMarkdownContext {
   readonly site: SiteData;
@@ -93,4 +95,30 @@ function reviewLines(document: Document, url: (href: string) => string): string[
       ? ''
       : `Rated ${String(review.rating)} out of ${String(BEST_RATING)}`,
   ];
+}
+
+/**
+ * A comment's `source:markdown`: what a form comment's author typed, else its
+ * sanitised HTML as Markdown. Raw HTML in typed Markdown was text on the page,
+ * whose comment renderer escapes it, so it is escaped here too.
+ */
+export function feedCommentMarkdown(
+  comment: Pick<FeedComment, 'url' | 'markdown'>,
+  sanitizedHtml: string,
+): string {
+  const page = comment.url;
+  const origin = new URL(page).origin;
+  const absolute = (href: string): string | undefined => {
+    const resolved = absoluteFeedUrl(href, page, origin);
+    return resolved === href ? undefined : resolved;
+  };
+  return comment.markdown === undefined
+    ? rewriteMarkdownLinks(markdownText(sanitizedHtml), absolute, {
+        rewriteImages: true,
+        rewriteHtml: (html) => absoluteHtmlUrls(html, page, origin),
+      })
+    : rewriteMarkdownLinks(comment.markdown, absolute, {
+        rewriteImages: true,
+        rewriteHtml: (html) => html.replaceAll('<', '\\<'),
+      });
 }

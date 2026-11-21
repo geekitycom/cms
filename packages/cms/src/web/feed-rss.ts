@@ -32,6 +32,7 @@ import type { AlternateEnclosure, Enclosure } from '../content/enclosure.ts';
 import { escapeText } from '../util/html.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { sanitizeCommentHtml } from '../content/sanitize.ts';
+import { feedCommentMarkdown } from './feed-markdown.ts';
 
 /**
  * RSS 2.0: the post feed, the comments feed, and the channel they share.
@@ -336,15 +337,9 @@ export function commentsRssFeed(source: CommentFeedSource): string {
  */
 function commentItem(comment: FeedComment): string[] {
   const html = sanitizeCommentHtml(comment.html);
-  const replying = comment.replyingTo === undefined ? '' : ` replying to ${comment.replyingTo}`;
-  const title =
-    comment.post === undefined
-      ? comment.author
-      : `${comment.author}${replying} on ${comment.post.title}`;
 
   return [
     '    <item>',
-    element('title', title, 3),
     element('link', comment.url, 3),
     // A native comment's guid is its page. Anything else's is a name rather
     // than an address: some servers publish a note at an id nothing
@@ -364,6 +359,7 @@ function commentItem(comment: FeedComment): string[] {
     // excerpt of what it says.
     element('description', escapeText(excerptFromHtml(html)), 3),
     `      <content:encoded>${cdata(html)}</content:encoded>`,
+    `      <source:markdown>${cdata(feedCommentMarkdown(comment, html))}</source:markdown>`,
     '    </item>',
   ];
 }

@@ -290,13 +290,21 @@ A channel carries the usual `title` (`Comments on: {post}`), `link`,
 `atom:link rel="self"`. It also carries the same notify-server elements as
 every other feed. An item carries:
 
-- the author's name, as its `title` and `dc:creator`
+- no `title`. A comment has no name, so its item is written the way the site
+  feed writes an untitled note: no `title`, and the `description` RSS then
+  requires.
+- the author's name, as its `dc:creator`
 - the reply's `url`, as its `link`. A comment left through the form links to
   its own page at `/comment/{key}/`.
 - a `guid`
 - the `published` time the reply gave, or the time it arrived if it gave none
 - `description`, holding a plain-text excerpt
 - `content:encoded`, holding the reply
+- `source:markdown`, holding the reply as Markdown. A comment left through the
+  form carries the Markdown its author typed, with any raw HTML in it escaped,
+  because the page showed that HTML as text. Any other reply arrived as HTML,
+  so its sanitised HTML is converted to Markdown. Every link and image URL is
+  absolute: a relative one resolves against the reply's own `link`.
 
 The `guid` depends on the kind of reply:
 
@@ -329,9 +337,8 @@ Each item also carries, from the [source namespace][source-ns]:
   site user's author feed `/author/{username}/feed/`. A comment left through
   the form and a fediverse reply carry none.
 
-On the site-wide feed the title also names the post or page: `{author} on
-{post}`, or `{author} replying to {parent author} on {post}` for an answer to
-another visible reply.
+On the site-wide feed, `source:inReplyTo` is what says which post, page, or
+reply an item answers.
 
 A fediverse reply's author is named by the profile the site stored when that
 actor followed the site. Otherwise the name is the `@user@host` that the
