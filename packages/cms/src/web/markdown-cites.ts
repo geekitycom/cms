@@ -6,10 +6,6 @@ import type { ReplyContext } from '../webmention/reply-context.ts';
 import type { MarkdownCite } from './markdown-page.ts';
 import { replyContextFor } from './page-context.ts';
 
-/**
- * What a post answers or cites, each as the line its Markdown opens with: the
- * page Markdown's header and the feed's `source:markdown` both print these.
- */
 export function markdownCites(
   document: Document,
   citedPage: ((url: string) => ReplyContext | undefined) | undefined,

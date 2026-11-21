@@ -21,7 +21,6 @@ interface LinkAt {
   readonly image?: true;
 }
 
-/** Where raw HTML, a block or an inline tag, is written in the source. */
 interface HtmlAt {
   readonly start: number;
   readonly end: number;
@@ -30,12 +29,9 @@ interface HtmlAt {
 type LinkEnv = WikiLinkEnv & { found: LinkAt[]; html: HtmlAt[] };
 
 export interface MarkdownLinkOptions {
-  /** Where a wiki link's page is, under the site root. */
   readonly wikiBase?: string | undefined;
-  /** Rewrite each image's source too. */
-  readonly images?: boolean;
-  /** What each piece of raw HTML is replaced by. */
-  readonly html?: (html: string) => string;
+  readonly rewriteImages?: boolean;
+  readonly rewriteHtml?: (html: string) => string;
 }
 
 /**
@@ -55,30 +51,26 @@ parser.core.ruler.disable(['inline', 'linkify', 'replacements', 'smartquotes', '
 /**
  * A Markdown body with every link destination `rewrite` answers for replaced
  * by its answer: inline links, autolinks, bare URLs and reference definitions.
- * Code, every link `rewrite` returns `undefined` for, and images and raw HTML
- * unless `options` asks for them, are left as written. A wiki link, which no
- * Markdown reader knows, always becomes an inline link: to `rewrite`'s answer,
- * or to its path under `wikiBase`.
  *
  * `rewrite` gets the href as the rendered page would carry it.
  */
 export function rewriteMarkdownLinks(
   body: string,
   rewrite: (href: string) => string | undefined,
-  { wikiBase, images = false, html }: MarkdownLinkOptions = {},
+  { wikiBase, rewriteImages = false, rewriteHtml }: MarkdownLinkOptions = {},
 ): string {
   const source = body.replace(/\r\n?/g, '\n');
   const edits: { start: number; end: number; text: string }[] = [];
   const found = linksIn(source, wikiBase);
 
-  if (html !== undefined) {
+  if (rewriteHtml !== undefined) {
     for (const { start, end } of found.html) {
-      edits.push({ start, end, text: html(source.slice(start, end)) });
+      edits.push({ start, end, text: rewriteHtml(source.slice(start, end)) });
     }
   }
 
   for (const link of found.links) {
-    if (link.image && !images) continue;
+    if (link.image && !rewriteImages) continue;
     const target = rewrite(link.href) ?? (link.wiki ? link.href : undefined);
     if (target === undefined) continue;
     const destination = markdownDestination(target);
@@ -193,7 +185,6 @@ function toSource(offsets: readonly { at: number; offset: number }[], position: 
   return line.offset + position - line.at;
 }
 
-/** A URL as a link destination, in angle brackets when it holds a space, a bracket or an angle. */
 export function markdownDestination(url: string): string {
   return /[\s()<>]/.test(url) ? `<${url}>` : url;
 }

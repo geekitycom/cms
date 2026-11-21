@@ -19,7 +19,6 @@ export function absoluteHtmlUrls(html: string, page: string, baseUrl: string): s
   });
 }
 
-/** A relative URL made absolute on the site's base URL; a fragment or a URL with a scheme is kept. */
 export function absoluteFeedUrl(url: string, page: string, baseUrl: string): string {
   if (url === '' || url.startsWith('#') || SCHEME.test(url)) return url;
   if (url.startsWith('/') && !url.startsWith('//')) return absoluteUrl(url, baseUrl);

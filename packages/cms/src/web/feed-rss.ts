@@ -179,7 +179,7 @@ export function rssItem(item: FeedItem): string[] {
     // The source of the item, per the namespace: a reader that understands
     // Markdown should render from this rather than from the HTML above. It is
     // the same text the ActivityStreams `Article` carries as its `source`.
-    `      <source:markdown>${cdata(item.markdown)}</source:markdown>`,
+    `      <source:markdown>${cdata(item.sourceMarkdown)}</source:markdown>`,
     // What a reply answers, in the same namespace: RSS 2.0 has no
     // element of its own for it.
     ...(item.inReplyTo === undefined

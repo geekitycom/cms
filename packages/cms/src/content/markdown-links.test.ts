@@ -97,7 +97,7 @@ describe('rewriteMarkdownLinks', () => {
   it('rewrites images when asked, inside a link too', () => {
     assert.equal(
       rewriteMarkdownLinks('![alt](/photo/ "T") and [![a](/p/)](/a/)', toMarkdown, {
-        images: true,
+        rewriteImages: true,
       }),
       '![alt](/photo/index.md "T") and [![a](/p/index.md)](/a/index.md)',
     );
@@ -112,7 +112,7 @@ describe('rewriteMarkdownLinks', () => {
       '    <a href="/d/">',
     ].join('\n');
     assert.equal(
-      rewriteMarkdownLinks(body, () => undefined, { html: (html) => `{${html}}` }),
+      rewriteMarkdownLinks(body, () => undefined, { rewriteHtml: (html) => `{${html}}` }),
       [
         '{<div><a href="/a/">raw</a></div>}',
         '',

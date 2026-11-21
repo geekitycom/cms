@@ -22,13 +22,6 @@ export interface FeedMarkdownContext {
   readonly replyContext?: ((target: string) => ReplyContext | undefined) | undefined;
 }
 
-/**
- * A post's `source:markdown`: what `content:encoded` leads with, its citation
- * and RSVP lines, its review and its photos, written as the page Markdown's
- * header writes them, then its body. Every URL is absolute on the base URL,
- * and a page of this site is linked as its HTML permalink, since a feed
- * reader opens it in a browser.
- */
 export function feedMarkdown(
   document: Document,
   context: FeedMarkdownContext,
@@ -57,8 +50,8 @@ export function feedMarkdown(
     },
     {
       wikiBase: permalinkBases(site).wiki,
-      images: true,
-      html: (html) => absoluteHtmlUrls(html, link, baseUrl),
+      rewriteImages: true,
+      rewriteHtml: (html) => absoluteHtmlUrls(html, link, baseUrl),
     },
   );
   return [...cites, ...review, ...photos, body].filter((part) => part !== '').join('\n\n');

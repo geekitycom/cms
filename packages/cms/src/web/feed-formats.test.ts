@@ -29,7 +29,7 @@ const ITEM: FeedItem = {
   terms: ['engineering', 'releases', 'meta'],
   summary: 'A short summary.',
   html: '<p>A <em>file-first</em> CMS.</p>\n',
-  markdown: 'A *file-first* CMS.',
+  sourceMarkdown: 'A *file-first* CMS.',
   comments: {
     page: 'https://example.com/2026/09/hello/#comments',
     feed: 'https://example.com/2026/09/hello/feed/',
@@ -49,7 +49,7 @@ const BARE: FeedItem = {
   terms: [],
   summary: 'Nothing much.',
   html: '<p>Nothing much.</p>\n',
-  markdown: 'Nothing much.',
+  sourceMarkdown: 'Nothing much.',
   creator: 'Example Site',
 };
 

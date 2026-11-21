@@ -149,7 +149,7 @@ describe('a feed item', () => {
     const item = feedItem(post(), CONTEXT);
 
     assert.equal(item.html, '<p>A <em>file-first</em> CMS.</p>\n');
-    assert.equal(item.markdown, 'A *file-first* CMS.');
+    assert.equal(item.sourceMarkdown, 'A *file-first* CMS.');
   });
 
   it('names what a reply answers, and nothing for a post that answers nothing', () => {

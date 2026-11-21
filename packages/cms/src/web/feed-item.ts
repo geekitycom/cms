@@ -115,11 +115,7 @@ export interface FeedItem {
    * JSON Feed writes it as `image`; the XML formats have no such field.
    */
   image?: string | undefined;
-  /**
-   * What `source:markdown` prints: the same lead as {@link FeedItem.html} in
-   * Markdown, then the body it was written from, every URL absolute.
-   */
-  markdown: string;
+  sourceMarkdown: string;
   /**
    * Where this item's comments are, and how many there are, or `undefined`
    * when the feed did not resolve the counts. A feed whose builder did not
@@ -181,9 +177,7 @@ export interface FeedItem {
  * nothing was read from by its host and a cited image as one, and revision 12
  * kept the title of a titled post with no words,
  * and revision 13 escaped the RSS description as HTML text, and revision 14
- * pointed RSS `source:comments` at the direct replies' feed, and revision 16
- * opened `source:markdown` with the post's citations, review and photos and
- * made its URLs absolute —
+ * pointed RSS `source:comments` at the direct replies' feed —
  * would leave the validator where it was, and a reader polling with
  * `If-None-Match` would be handed a 304 that hides the new bytes.
  *
@@ -253,7 +247,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
       reviewHtml(review, { library: context.altTexts, baseUrl }) +
       photosHtml(photos, context.altTexts ?? new Map(), baseUrl) +
       absoluteHtmlUrls(document.html, link, baseUrl),
-    markdown: feedMarkdown(document, context, link),
+    sourceMarkdown: feedMarkdown(document, context, link),
     creator: author ?? siteAuthorName(context.users, context.site),
   };
 
