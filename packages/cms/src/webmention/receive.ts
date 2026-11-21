@@ -11,6 +11,7 @@ import { escapeText } from '../util/html.ts';
 import { commentKeyAt } from '../comments/conversation.ts';
 import type { ConversationReader, ConversationSite } from '../comments/conversation.ts';
 import { sanitizeCommentHtml } from '../content/sanitize.ts';
+import type { AcceptedWebmention } from './checks.ts';
 import { DISCOVERY_MAX_BYTES } from './discovery.ts';
 import { decodeBody, fetchPublic } from './fetch-public.ts';
 import { linksIn, linksTo, sourceEntry } from './microformats.ts';
@@ -18,6 +19,7 @@ import type { NestedReply, SourceEntry } from './microformats.ts';
 import { handSyndicationOf, syndicationCopies } from './syndication.ts';
 import { isPrivateHost } from '../util/public-address.ts';
 import type { HostLookup } from '../util/public-address.ts';
+import { decodedPath } from '../util/url.ts';
 
 /**
  * Taking a webmention somebody sent this site.
@@ -52,20 +54,9 @@ import type { HostLookup } from '../util/public-address.ts';
 /** How long the source is given to answer before it is abandoned. */
 export const VERIFY_TIMEOUT_MS = 15_000;
 
-/** One webmention as it arrived, before anything has been fetched. */
-export interface IncomingWebmention {
-  /** The page claiming to link here. */
-  readonly source: string;
-  /** The page on this site it claims to link to. */
-  readonly target: string;
-  /** The post that target names. */
+/** One accepted webmention, with the post its target names when it is checked. */
+export interface IncomingWebmention extends AcceptedWebmention {
   readonly document: Document;
-  /** Where the request came from, **unhashed**, for the checker. */
-  readonly address?: string | undefined;
-  /** The `User-Agent` the sender sent. */
-  readonly userAgent?: string | undefined;
-  /** The `Referer` the sender sent. */
-  readonly referrer?: string | undefined;
 }
 
 /** What one submitted pair turned out to be. */
@@ -127,6 +118,9 @@ export function checkWebmentionRequest(
   }
 
   if (isPrivateHost(from.hostname)) return refuse('source', 'The source is not a public URL.');
+  if (!onDefaultPort(from)) {
+    return refuse('source', 'The source is not on the default port for http or https.');
+  }
 
   const site = webUrl(options.baseUrl);
   if (site !== undefined && isThisSite(from, site)) {
@@ -144,15 +138,18 @@ export function checkWebmentionRequest(
 
   // A comment's page is a page here, and what is said to it is said on the
   // post it is under.
-  const key = commentKeyAt(to.pathname);
+  const path = decodedPath(to.pathname);
+  const key = commentKeyAt(path);
   const pathname =
-    key === undefined
-      ? to.pathname
-      : options.conversation.comment(key, options.site)?.post.permalink;
+    key === undefined ? path : options.conversation.comment(key, options.site)?.post.permalink;
   const document = pathname === undefined ? undefined : options.documentAt(pathname);
   if (document === undefined) return refuse('target', 'There is no page here at that address.');
 
   return { ok: true, source: from.href, target: to.href, document };
+}
+
+function onDefaultPort(url: URL): boolean {
+  return url.port === '';
 }
 
 function isThisSite(url: URL, site: URL): boolean {
@@ -170,11 +167,14 @@ export interface VerifyWebmentionOptions {
   /** The site's public origin. */
   readonly baseUrl: string;
   /** What says which reply on the post a source answers, and which post a comment's page is on. */
-  readonly conversation: Pick<ConversationReader, 'replyNamed' | 'comment'>;
+  readonly conversation: Pick<ConversationReader, 'replyFinder' | 'comment'>;
   readonly site: ConversationSite;
   /** The checker, when the site named one. */
   readonly checker?: CommentChecker | undefined;
-  /** Who to tell when one lands in the queue, handed to the intake. */
+  /**
+   * Who to tell when one lands in the queue. A source and the replies it
+   * carries are told in one notice.
+   */
   readonly notices?: CommentNotices | undefined;
   /** The clock. */
   readonly now: Date;
@@ -198,7 +198,9 @@ export type WebmentionOutcome =
   /** Nothing is stored from the source, and there was nothing to remove. */
   | { readonly kind: 'ignored'; readonly why: NotStored }
   /** The source could not be read this time; whatever is stored stands. */
-  | { readonly kind: 'unreachable'; readonly reason: string };
+  | { readonly kind: 'unreachable'; readonly reason: string }
+  /** By the time it was checked, the target was no longer a page here that takes them. */
+  | { readonly kind: 'refused'; readonly problem: RequestProblem; readonly message: string };
 
 /**
  * Go and look at the source, and put what it says in the queue.
@@ -214,6 +216,27 @@ export type WebmentionOutcome =
 export async function verifyWebmention(
   options: VerifyWebmentionOptions,
 ): Promise<WebmentionOutcome> {
+  const told = options.notices;
+  if (told === undefined) return await verifyAndStore(options);
+
+  const waiting: PostComment[] = [];
+  try {
+    return await verifyAndStore({
+      ...options,
+      notices: {
+        pending: (comment) => waiting.push(comment),
+        replyApproved: (reply) => {
+          told.replyApproved(reply);
+        },
+      },
+    });
+  } finally {
+    const [first, ...carried] = waiting;
+    if (first !== undefined) told.pending(first, carried);
+  }
+}
+
+async function verifyAndStore(options: VerifyWebmentionOptions): Promise<WebmentionOutcome> {
   const { incoming, records, now } = options;
   const held = heldWebmention(records, incoming.document.slug, incoming.source);
 
@@ -332,9 +355,11 @@ export async function verifyWebmention(
 }
 
 function answered(options: VerifyWebmentionOptions, urls: readonly string[]): string | null {
+  if (urls.length === 0) return null;
+  const named = options.conversation.replyFinder(options.incoming.document, options.site);
   for (const url of urls) {
-    const named = options.conversation.replyNamed(options.incoming.document, url, options.site);
-    if (named !== undefined) return named.id;
+    const reply = named(url);
+    if (reply !== undefined) return reply.id;
   }
   return null;
 }
@@ -349,9 +374,11 @@ function isOwnPage(source: string, fetchedUrl: string, entry: SourceEntry | unde
  * (a salmention), and take away the ones it carried before and
  * carries no longer.
  *
- * Each is a webmention of its own as far as the thread and the moderator are
- * concerned, put through the same intake with its own page as its `url`, and
- * `via` naming the source, which is what lets the source take it away again.
+ * Each is a webmention of its own as far as the thread is concerned, put
+ * through the same intake with its own page as its `url`, and `via` naming
+ * the source, which is what lets the source take it away again. The checker
+ * is not asked about each: the replies a spam source carries are spam, and the
+ * rest wait for a moderator.
  * One this site already has some other way is not copied: a page of this
  * site's, a reply post or a comment's page, or a reply the conversation
  * already names that this source did not bring, such as one held from its own
@@ -365,10 +392,12 @@ async function keepCarried(
   const { incoming, records } = options;
   const site = new URL(options.baseUrl).origin;
   const kept = new Set<string>();
+  const replyNamed = options.conversation.replyFinder(incoming.document, options.site);
+  const verdict = carrier.status === 'spam' ? 'spam' : 'unknown';
 
   const bring = async (nested: readonly NestedReply[], parent: string): Promise<void> => {
     for (const reply of nested) {
-      const named = options.conversation.replyNamed(incoming.document, reply.url, options.site)?.id;
+      const named = replyNamed(reply.url)?.id;
       const theirs =
         named !== undefined && records.admin.getComment(named)?.via === incoming.source;
       let id = named;
@@ -380,7 +409,7 @@ async function keepCarried(
           post: { title: postLabel(incoming.document), url: incoming.target },
           dataDir: options.dataDir,
           baseUrl: options.baseUrl,
-          checker: options.checker,
+          verdict,
           notices: options.notices,
           address: incoming.address,
           userAgent: incoming.userAgent,
@@ -473,6 +502,7 @@ async function readSource(source: string, lookup: HostLookup): Promise<FetchedSo
     overflow: 'truncate',
     accept: 'text/html, */*;q=0.8',
     contentType: { pattern: /^/, name: 'anything' },
+    allowed: onDefaultPort,
   });
 
   if (!fetched.ok) {
@@ -578,13 +608,12 @@ function urlOfPost(options: VerifyWebmentionOptions): (href: string) => boolean 
 
     if (url.origin === origin) {
       if (url.search !== '') return false;
-      const key = commentKeyAt(url.pathname);
+      const path = decodedPath(url.pathname);
+      const key = commentKeyAt(path);
       if (key !== undefined) {
         return options.conversation.comment(key, options.site)?.post.slug === document.slug;
       }
-      return (
-        url.pathname === document.permalink || (document.redirectFrom ?? []).includes(url.pathname)
-      );
+      return path === document.permalink || (document.redirectFrom ?? []).includes(path);
     }
 
     copies ??= [

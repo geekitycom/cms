@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
@@ -401,5 +403,61 @@ describe('a response to one of this site’s syndicated copies (TASK-197)', () =
     );
 
     assert.equal(response.status, 400);
+  });
+
+  it('reads the copies file at most once to refuse a target elsewhere, however many posts there are', async () => {
+    const posts = 25;
+    const files: Record<string, string> = {
+      '_data/syndication.json': JSON.stringify({
+        '/2026/09/post-1/': { 'https://news.example/en': TARGET_COPY },
+      }),
+    };
+    for (let i = 1; i <= posts; i += 1) {
+      files[`posts/post-${String(i)}.md`] =
+        `---\ntitle: Post ${String(i)}\ndate: '2026-09-01T09:00:00Z'\npermalink: /2026/09/post-${String(i)}/\n---\n\nWords.\n`;
+    }
+    const cms = await site(files);
+    const copiesFile = path.join(cms.config.contentDir, '_data', 'syndication.json');
+
+    let reads = 0;
+    const readFileSync = fs.readFileSync;
+    fs.readFileSync = ((file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
+      if (file === copiesFile) reads += 1;
+      return (readFileSync as (...args: unknown[]) => unknown)(file, ...rest);
+    }) as typeof fs.readFileSync;
+    syncBuiltinESMExports();
+
+    let response: Response;
+    try {
+      response = await receive(
+        cms,
+        'https://reader.example/re/4',
+        'https://elsewhere.example/anything/',
+      );
+    } finally {
+      fs.readFileSync = readFileSync;
+      syncBuiltinESMExports();
+    }
+
+    assert.equal(response.status, 400);
+    assert.ok(reads <= 1, `the copies file was read ${String(reads)} times for one request`);
+  });
+
+  it('finds a copy a syndication target answered with after an earlier webmention was refused', async () => {
+    const cms = await site({ 'posts/hello-world.md': POST('') });
+    pages = { 'https://reader.example/re/5': replyTo(TARGET_COPY) };
+
+    const refused = await receive(cms, 'https://reader.example/re/5', TARGET_COPY);
+    assert.equal(refused.status, 400);
+
+    await mkdir(path.join(cms.config.contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(cms.config.contentDir, '_data', 'syndication.json'),
+      JSON.stringify({ '/2026/09/hello-world/': { 'https://news.example/en': TARGET_COPY } }),
+      'utf8',
+    );
+
+    const found = await receive(cms, 'https://reader.example/re/5', TARGET_COPY);
+    assert.equal(found.status, 202);
   });
 });

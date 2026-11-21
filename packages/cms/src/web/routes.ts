@@ -14,7 +14,7 @@ import { advertiseIdentityEndpoints, MCP_SERVER_CARD_PATH } from './indieauth-di
 import { mountNotificationLinks } from './notification-routes.ts';
 import { robotsPolicyOf } from '../site/settings.ts';
 import { mountPingbacks } from './pingback-routes.ts';
-import { mountWebmentions } from './webmention-routes.ts';
+import { mountWebmentions, senderLimit, syndicatedAtLookup } from './webmention-routes.ts';
 import { favicon, imageVariant, themeAsset, upload } from './asset-routes.ts';
 import { THEME_ASSET_PREFIX } from '../theme/assets.ts';
 import { negotiateDocument } from './document-page.ts';
@@ -102,8 +102,10 @@ export function mountPublicSite(
 
   // And where a webmention is sent, for the same reason and under
   // the same prefix.
-  mountWebmentions(app);
-  mountPingbacks(app);
+  const syndicatedAt = syndicatedAtLookup();
+  const limit = senderLimit();
+  mountWebmentions(app, syndicatedAt, limit);
+  mountPingbacks(app, syndicatedAt, limit);
 
   // And where the one-click links in a notification land: the same
   // prefix again, and no session behind either of them.

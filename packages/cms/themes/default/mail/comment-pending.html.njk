@@ -19,6 +19,26 @@
   {% for choice in actions %}<a href="{{ choice.url }}">{{ choice.label }}</a>{% if not loop.last %} &middot; {% endif %}{% endfor %}
 </p>
 
+{% if carried and carried.length %}
+<p>
+  The same page carries {{ carried.length }} more {{ 'reply' if carried.length == 1 else 'replies' }} from other pages, waiting too.
+</p>
+{% for reply in carried %}
+<p>
+  <strong>{{ reply.author }}</strong>{% if reply.website %} &mdash; <a href="{{ reply.website }}" rel="nofollow ugc">{{ reply.website }}</a>{% endif %}<br />
+  {% if reply.url %}<a href="{{ reply.url }}" rel="nofollow ugc">{{ reply.url }}</a>{% endif %}
+</p>
+
+<blockquote>
+  {% if reply.html %}{{ reply.html | safe }}{% else %}<p>(nothing was said)</p>{% endif %}
+</blockquote>
+
+<p>
+  {% for choice in reply.actions %}<a href="{{ choice.url }}">{{ choice.label }}</a>{% if not loop.last %} &middot; {% endif %}{% endfor %}
+</p>
+{% endfor %}
+{% endif %}
+
 <p>
   Each link works once and lasts a week. After that, the queue is at
   <a href="{{ queueUrl }}">{{ queueUrl }}</a>.

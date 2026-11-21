@@ -5,7 +5,7 @@ import { after, before, describe, it } from 'node:test';
 import { Worker } from 'node:worker_threads';
 
 import { publicDispatcher } from '../util/public-address.ts';
-import { decodeBody, requestPublic } from './fetch-public.ts';
+import { decodeBody, fetchPublic, requestPublic } from './fetch-public.ts';
 
 const OUTSIDE_OFFLINE_HARNESS = `
 const dns = require('node:dns');
@@ -108,6 +108,21 @@ describe('a redirect', () => {
 
     assert.equal(dispatchers.length, 2);
     assert.deepEqual(dispatchers, [publicDispatcher(lookup), publicDispatcher(lookup)]);
+  });
+});
+
+describe('a source whose name never resolves', () => {
+  it('is refused once the signal fires', async () => {
+    const started = Date.now();
+    const result = await fetchPublic('https://slow-dns.example/', {
+      lookup: () => new Promise<readonly string[]>(() => {}),
+      signal: AbortSignal.timeout(200),
+      maxBytes: 1024,
+      accept: 'text/html',
+      contentType: { pattern: /^/, name: 'anything' },
+    });
+    assert.ok(Date.now() - started < 2_000);
+    assert.equal(result.ok, false);
   });
 });
 

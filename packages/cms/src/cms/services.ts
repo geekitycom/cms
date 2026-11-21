@@ -320,6 +320,7 @@ export function createServices({
     queue: federationQueue ?? null,
     kv: federationKv,
     refusals: inboxRefusals,
+    hostLookup: resolved.hostLookup,
     federationOptions: {
       manuallyStartQueue: true,
       ...(outbox === undefined ? {} : { onOutboxError: outbox.onOutboxError }),
@@ -587,7 +588,14 @@ export function createServices({
         federationQueue?.close();
       },
     },
-    { name: 'webmentions', settled: () => webmentions.settled() },
+    {
+      name: 'webmentions',
+      start: () => webmentions.start(),
+      stop: () => {
+        webmentions.stop();
+      },
+      settled: () => webmentions.settled(),
+    },
     {
       name: 'reply contexts',
       start: () => {

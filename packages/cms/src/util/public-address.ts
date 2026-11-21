@@ -42,22 +42,29 @@ const LOCAL: readonly Range[] = [
 ];
 
 /**
- * Reserved, plus the IPv6 prefixes that carry an IPv4 address inside them
- * (IPv4-compatible, NAT64, 6to4, Teredo): a gateway or relay turns those
- * into a connection to the embedded address, which may be a private one.
+ * The IANA special-purpose ranges that are not globally reachable, plus the
+ * IPv6 prefixes that carry an IPv4 address inside them (IPv4-compatible,
+ * SIIT, NAT64, 6to4, Teredo): a gateway or relay turns those into a
+ * connection to the embedded address, which may be a private one. The
+ * documentation ranges are left public: nothing routes to them.
  */
 const RESERVED: readonly Range[] = [
   ['0.0.0.0', 8, 'ipv4'],
   ['100.64.0.0', 10, 'ipv4'],
   ['192.0.0.0', 24, 'ipv4'],
+  ['192.88.99.0', 24, 'ipv4'],
   ['198.18.0.0', 15, 'ipv4'],
   ['224.0.0.0', 4, 'ipv4'],
   ['240.0.0.0', 4, 'ipv4'],
   ['::', 96, 'ipv6'],
+  ['::ffff:0:0:0', 96, 'ipv6'],
   ['64:ff9b::', 96, 'ipv6'],
   ['64:ff9b:1::', 48, 'ipv6'],
-  ['2001::', 32, 'ipv6'],
+  ['100::', 64, 'ipv6'],
+  ['100:0:0:1::', 64, 'ipv6'],
+  ['2001::', 23, 'ipv6'],
   ['2002::', 16, 'ipv6'],
+  ['5f00::', 16, 'ipv6'],
   ['fec0::', 10, 'ipv6'],
   ['ff00::', 8, 'ipv6'],
 ];
@@ -80,8 +87,49 @@ function onRanges(ranges: BlockList, address: string): boolean | undefined {
   return ranges.check(address, version === 4 ? 'ipv4' : 'ipv6');
 }
 
-/** Whether an IP address is on a loopback, private, link-local or reserved range. */
-function isPrivateAddress(address: string): boolean {
+const denied = new WeakMap<HostLookup, BlockList>();
+
+/**
+ * `lookup`, carrying addresses the operator denies besides the private ones:
+ * the server's own public addresses, say, which a request from inside
+ * reaches without passing the firewall that hides them from outside. Each
+ * entry is an address or a CIDR range.
+ */
+export function withDeniedAddresses(lookup: HostLookup, entries: readonly string[]): HostLookup {
+  const list = new BlockList();
+  for (const entry of entries) {
+    const range = addressRange(entry);
+    if (range === undefined) {
+      throw new TypeError(`${JSON.stringify(entry)} is not an IP address or a CIDR range`);
+    }
+    list.addSubnet(...range);
+  }
+  const carrying: HostLookup = (hostname) => lookup(hostname);
+  denied.set(carrying, list);
+  return carrying;
+}
+
+export function isAddressOrRange(entry: string): boolean {
+  return addressRange(entry) !== undefined;
+}
+
+function addressRange(entry: string): Range | undefined {
+  const [network = '', prefix, ...rest] = entry.trim().split('/');
+  const version = isIP(network);
+  if (version === 0 || rest.length > 0) return undefined;
+  const longest = version === 4 ? 32 : 128;
+  const bits = prefix === undefined ? longest : Number(prefix);
+  if (!/^\d+$/.test(prefix ?? '0') || bits > longest) return undefined;
+  return [network, bits, version === 4 ? 'ipv4' : 'ipv6'];
+}
+
+/**
+ * Whether an IP address is on a loopback, private, link-local or reserved
+ * range, or one the operator denied on `lookup`.
+ */
+function isPrivateAddress(address: string, lookup?: HostLookup): boolean {
+  const deniedList = lookup === undefined ? undefined : denied.get(lookup);
+  if (deniedList !== undefined && onRanges(deniedList, address) === true) return true;
   return onRanges(PRIVATE_RANGES, address) ?? true;
 }
 
@@ -95,28 +143,54 @@ export function isLocalAddress(address: string): boolean {
  * that merely resolves to one is {@link publicHost}'s to catch.
  */
 export function isPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const host = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true;
   return isIP(host) !== 0 && isPrivateAddress(host);
 }
 
 /**
  * Whether a host is on the public internet: not private as written, and every
- * address it resolves to public. A name that does not resolve is not.
+ * address it resolves to public. A name that does not resolve is not. When
+ * `signal` aborts before the name resolves, this rejects with its reason.
  */
-export async function publicHost(hostname: string, lookup: HostLookup): Promise<boolean> {
+export async function publicHost(
+  hostname: string,
+  lookup: HostLookup,
+  signal?: AbortSignal,
+): Promise<boolean> {
   if (isPrivateHost(hostname)) return false;
 
   const host = hostname.replace(/^\[|\]$/g, '');
-  if (isIP(host) !== 0) return true;
+  if (isIP(host) !== 0) return !isPrivateAddress(host, lookup);
 
   let addresses: readonly string[];
   try {
-    addresses = await lookup(host);
+    addresses = await untilAborted(lookup(host), signal);
   } catch {
+    signal?.throwIfAborted();
     return false;
   }
-  return addresses.length > 0 && !addresses.some(isPrivateAddress);
+  return addresses.length > 0 && !addresses.some((address) => isPrivateAddress(address, lookup));
+}
+
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => {
+      reject(signal.reason as Error);
+    };
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', abort);
+    });
+  });
 }
 
 /**
@@ -146,10 +220,14 @@ export function publicDispatcher(lookup: HostLookup): FetchDispatcher {
 /** The resolver a socket is handed: `lookup`'s answer when every address is public, else an error. */
 export function pinnedLookup(lookup: HostLookup): LookupFunction {
   return (hostname, options, callback) => {
+    if (isPrivateHost(hostname)) {
+      callback(notPublic(hostname), '', undefined);
+      return;
+    }
     lookup(hostname).then(
       (addresses) => {
         const [first, ...rest] = addresses.map((address) => ({ address, family: isIP(address) }));
-        if (first === undefined || addresses.some(isPrivateAddress)) {
+        if (first === undefined || addresses.some((address) => isPrivateAddress(address, lookup))) {
           callback(notPublic(hostname), '', undefined);
         } else if (options.all === true) {
           callback(null, [first, ...rest], undefined);

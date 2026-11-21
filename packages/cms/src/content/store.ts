@@ -406,6 +406,8 @@ export interface ListAllOptions extends ListOptions {
   tag?: string | undefined;
   /** Restrict to documents filed under this category. */
   category?: string | undefined;
+  /** `true` for documents whose front matter lists copies under `syndication`. */
+  syndicated?: true | undefined;
 }
 
 /** What {@link CatalogReader.counts} reports. */

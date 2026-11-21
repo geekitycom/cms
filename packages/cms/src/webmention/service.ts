@@ -19,20 +19,31 @@ import { citationsOf } from '../content/citation.ts';
 import { isMigrated, isMigratedArrival } from '../content/migrated.ts';
 import { replyTarget } from '../content/post-type.ts';
 import { reviewOf } from '../content/review.ts';
-import type { CatalogReader, DocumentLookup } from '../content/store.ts';
+import type { CatalogReader, DocumentLookup, IndexClock } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../content/served.ts';
 import { messageOf } from '../util/errors.ts';
-import { createSerialQueue } from '../util/queue.ts';
+import {
+  createConcurrencyLimit,
+  createKeyedConcurrencyLimit,
+  createSerialQueue,
+} from '../util/queue.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { permalinkOfObjectId } from '../content/permalinks.ts';
+import { permalinkOfObjectId, publicDocumentAt } from '../content/permalinks.ts';
+import { waitingChecks } from './checks.ts';
+import type { AcceptedWebmention, WaitingCheck } from './checks.ts';
 import { discoverEndpoint } from './discovery.ts';
 import { requestPublic } from './fetch-public.ts';
 import { externalLinks, externalTarget } from './links.ts';
-import { verifyWebmention } from './receive.ts';
-import { selectedTargets, syndicationCopies, syndicationTargetsReader } from './syndication.ts';
+import { checkWebmentionRequest, verifyWebmention } from './receive.ts';
+import type { WebmentionOutcome } from './receive.ts';
+import {
+  postSyndicatedAt,
+  selectedTargets,
+  syndicationCopies,
+  syndicationTargetsReader,
+} from './syndication.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
-import type { IncomingWebmention, WebmentionOutcome } from './receive.ts';
 import { isWithheld } from '../comments/conversation.ts';
 import type { ConversationReader, ThreadReply, Upstream } from '../comments/conversation.ts';
 
@@ -68,6 +79,27 @@ export const SEND_TIMEOUT_MS = 10_000;
 export const SALMENTION_LIMIT = 5;
 export const SALMENTION_WINDOW_MS = 60 * 60 * 1000;
 
+/**
+ * How long an accepted webmention whose source could not be read waits before
+ * each further check. After the last, it is given up.
+ */
+export const RETRY_DELAYS_MS: readonly number[] = [
+  60 * 1000,
+  10 * 60 * 1000,
+  60 * 60 * 1000,
+  6 * 60 * 60 * 1000,
+];
+
+/** How many accepted webmentions may wait for their check at once. */
+export const MAX_WAITING_CHECKS = 1000;
+
+/**
+ * How many checks run at once, and how many of those read from one host, so
+ * one slow source holds one check and not every check behind it.
+ */
+export const CHECK_LIMIT = 4;
+export const CHECKS_PER_HOST = 1;
+
 /** What one post's links came to. */
 export interface WebmentionReport {
   /** The post they were in. */
@@ -88,14 +120,15 @@ export interface CreateWebmentionServiceOptions {
   /** Where the outcomes are recorded, and where the comment index lives. */
   admin: AdminStore;
   /** The content index, which a resend reads the post out of. */
-  store: DocumentLookup & CatalogReader;
+  store: DocumentLookup & CatalogReader & IndexClock;
   /**
    * Config after defaults: the base URL, the content and data directories, the
-   * clock, and the checker an incoming webmention is put through.
+   * clock, the checker an incoming webmention is put through, and how one
+   * whose source could not be read is tried again.
    */
   config: Pick<
     ResolvedConfig,
-    'baseUrl' | 'contentDir' | 'dataDir' | 'now' | 'commentChecker' | 'hostLookup'
+    'baseUrl' | 'contentDir' | 'dataDir' | 'now' | 'commentChecker' | 'hostLookup' | 'webmentions'
   >;
   settings: SettingsRegistry;
   /** Where failures are reported. Defaults to `console`. */
@@ -117,7 +150,7 @@ export interface CreateWebmentionServiceOptions {
    * What says which reply on a post an incoming webmention answers,
    * and which pages a salmention goes from.
    */
-  conversation: Pick<ConversationReader, 'replyNamed' | 'upstreams' | 'documentOf' | 'comment'>;
+  conversation: Pick<ConversationReader, 'replyFinder' | 'upstreams' | 'documentOf' | 'comment'>;
 }
 
 /** Sends a site's webmentions, takes the ones sent to it, and remembers both. */
@@ -144,24 +177,40 @@ export interface WebmentionService {
    */
   send(path: string): Promise<WebmentionReport | undefined>;
   /**
-   * Take one webmention the endpoint has accepted and check it, out of the
+   * Record one webmention the endpoint has accepted, then check it out of the
    * request that brought it.
    *
-   * Returns as soon as it is queued — the sender has already had its 202, and
-   * fetching a stranger's page is not something a stranger's connection should
-   * be held open for. The promise it hands back is for a test, or for a caller
-   * that wants to know what became of one; nothing has to look at it.
+   * Resolves once the record is written, which is what a 202 promises: the
+   * check is made from the record, so a restart before it finishes leaves it
+   * for the next start. `checked` is the outcome of the check, for a
+   * pingback, which answers with it, or a test; nothing has to look at it.
+   * It is `undefined` when the source is not read now: the site is stopping,
+   * or the check waits to try again. The record waits for that try.
+   *
+   * The same source and target sent again while its check waits to start
+   * joins that check. Sent while the source is being read, it has the source
+   * read once more afterwards, since the page may have changed. `busy` when
+   * {@link MAX_WAITING_CHECKS} others are waiting and nothing was recorded.
    */
-  receive(incoming: IncomingWebmention): Promise<WebmentionOutcome>;
+  receive(accepted: AcceptedWebmention): Promise<ReceivedWebmention>;
   /**
    * Tell `original` about every public post that replies to `copy`, once its
    * reply context has found that the copy is of it: the post was
    * sent before anybody knew.
    */
   originalFound(copy: string, original: string): void;
+  /** Check, or wait to check again, every accepted webmention a previous run left. */
+  start(): Promise<void>;
+  /** Start no more checks: what is left waits in its record for the next start. */
+  stop(): void;
   /** Resolve once every queued send and check has finished, however it finished. */
   settled(): Promise<void>;
 }
+
+/** An accepted webmention, recorded, or not when too many are waiting. */
+export type ReceivedWebmention =
+  | { readonly busy: false; readonly checked: Promise<WebmentionOutcome | undefined> }
+  | { readonly busy: true };
 
 /** Build the webmention service for one site. */
 export function createWebmentionService(
@@ -177,7 +226,19 @@ export function createWebmentionService(
     dataDir: config.dataDir,
   };
 
-  const checks = createSerialQueue();
+  const checkSlots = createConcurrencyLimit(CHECK_LIMIT);
+  const hostSlots = createKeyedConcurrencyLimit(CHECKS_PER_HOST);
+  const waiting = waitingChecks(
+    config.dataDir,
+    config.webmentions.maxWaiting ?? MAX_WAITING_CHECKS,
+  );
+  const retryDelays = config.webmentions.retryDelaysMs ?? RETRY_DELAYS_MS;
+  const recording = new Set<Promise<WaitingCheck | undefined>>();
+  const queued = new Map<string, Promise<WebmentionOutcome | undefined>>();
+  const reading = new Set<string>();
+  const sentAgain = new Set<string>();
+  const timers = new Map<string, NodeJS.Timeout>();
+  let stopped = false;
 
   const sends = createSerialQueue();
 
@@ -428,6 +489,115 @@ export function createWebmentionService(
       });
   }
 
+  function run(check: WaitingCheck): Promise<WebmentionOutcome | undefined> {
+    const known = queued.get(check.id);
+    if (known !== undefined) {
+      if (reading.has(check.id)) sentAgain.add(check.id);
+      return known;
+    }
+    if (timers.has(check.id)) return Promise.resolve(undefined);
+    const job = hostSlots
+      .run(hostOf(check.source), () => checkSlots.run(() => checkUntilCurrent(check)))
+      .finally(() => {
+        queued.delete(check.id);
+      });
+    queued.set(check.id, job);
+    return job;
+  }
+
+  async function checkUntilCurrent(check: WaitingCheck): Promise<WebmentionOutcome | undefined> {
+    let outcome: WebmentionOutcome | undefined;
+    do {
+      if (stopped) return outcome;
+      sentAgain.delete(check.id);
+      reading.add(check.id);
+      try {
+        outcome = await checkAndRecord(check, () => sentAgain.has(check.id) && !stopped);
+      } finally {
+        reading.delete(check.id);
+      }
+    } while (sentAgain.has(check.id));
+    return outcome;
+  }
+
+  function wait(check: WaitingCheck, delay: number): void {
+    const timer = setTimeout(() => {
+      timers.delete(check.id);
+      void run(check);
+    }, delay);
+    timer.unref();
+    timers.set(check.id, timer);
+  }
+
+  async function checkAndRecord(
+    check: WaitingCheck,
+    again: () => boolean,
+  ): Promise<WebmentionOutcome> {
+    let outcome: WebmentionOutcome;
+    try {
+      outcome = await checkNow(check);
+    } catch (thrown) {
+      const reason = messageOf(thrown);
+      logger.warn(`A webmention from ${check.source} could not be checked: ${reason}`);
+      outcome = { kind: 'unreachable', reason };
+    }
+    try {
+      if (again()) return outcome;
+      if (outcome.kind === 'unreachable') await checkAgainLater(check);
+      else await waiting.remove(check.id);
+    } catch (thrown) {
+      logger.warn(
+        `The check of a webmention from ${check.source} was not recorded: ${messageOf(thrown)}`,
+      );
+    }
+    return outcome;
+  }
+
+  async function checkNow(check: WaitingCheck): Promise<WebmentionOutcome> {
+    const site = await settings.values(SITE);
+    if (!site.webmentions_receive) {
+      return { kind: 'refused', problem: 'target', message: 'This site takes no webmentions.' };
+    }
+    const request = checkWebmentionRequest(check.source, check.target, {
+      baseUrl: config.baseUrl,
+      documentAt: (pathname) => publicDocumentAt(store, pathname),
+      syndicatedAt: (url) => postSyndicatedAt(url, store, copies),
+      conversation: options.conversation,
+      site,
+    });
+    if (!request.ok) return { kind: 'refused', problem: request.problem, message: request.message };
+    return await verifyWebmention({
+      incoming: { ...check, document: request.document },
+      records,
+      dataDir: config.dataDir,
+      baseUrl: config.baseUrl,
+      conversation: options.conversation,
+      site,
+      checker: config.commentChecker,
+      // The intake decides whether this one is news: a page that is
+      // edited and re-sent updates the entry it made, and putting the
+      // moderators through a message every time would make the notice
+      // worth ignoring.
+      notices: options.notifications,
+      now: config.now(),
+      lookup: config.hostLookup,
+      logger,
+    });
+  }
+
+  async function checkAgainLater(check: WaitingCheck): Promise<void> {
+    const delay = retryDelays[check.failures];
+    if (delay === undefined) {
+      logger.warn(
+        `Gave up on a webmention from ${check.source}: it could not be checked ${String(check.failures + 1)} times.`,
+      );
+      await waiting.remove(check.id);
+      return;
+    }
+    const later = await waiting.postpone(check.id, new Date(config.now().getTime() + delay));
+    if (later !== undefined && !stopped) wait(later, delay);
+  }
+
   return {
     handle(change) {
       // A full scan is a rebuild of the index, not news about the site.
@@ -472,37 +642,39 @@ export function createWebmentionService(
       });
     },
 
-    receive(incoming) {
-      return checks.run(async (): Promise<WebmentionOutcome> => {
-        try {
-          const outcome = await verifyWebmention({
-            incoming,
-            records,
-            dataDir: config.dataDir,
-            baseUrl: config.baseUrl,
-            conversation: options.conversation,
-            site: await settings.values(SITE),
-            checker: config.commentChecker,
-            // The intake decides whether this one is news: a page that is
-            // edited and re-sent updates the entry it made, and putting the
-            // moderators through a message every time would make the notice
-            // worth ignoring.
-            notices: options.notifications,
-            now: config.now(),
-            lookup: config.hostLookup,
-            logger,
-          });
+    async receive(accepted) {
+      const adding = waiting.add(accepted, config.now());
+      recording.add(adding);
+      try {
+        const check = await adding;
+        return check === undefined ? { busy: true } : { busy: false, checked: run(check) };
+      } finally {
+        recording.delete(adding);
+      }
+    },
 
-          return outcome;
-        } catch (thrown) {
-          // Nothing is waiting for this: the sender has had its 202, so a
-          // failure has nowhere to go but the log, and it must not become an
-          // unhandled rejection that takes the process down.
-          const reason = messageOf(thrown);
-          logger.warn(`A webmention from ${incoming.source} could not be checked: ${reason}`);
-          return { kind: 'unreachable', reason };
-        }
-      });
+    async start() {
+      stopped = false;
+      let held: WaitingCheck[];
+      try {
+        held = await waiting.list();
+      } catch (thrown) {
+        logger.warn(`The accepted webmentions could not be read: ${messageOf(thrown)}`);
+        return;
+      }
+      const longest = Math.max(0, ...retryDelays);
+      for (const check of held) {
+        if (queued.has(check.id) || timers.has(check.id)) continue;
+        const delay = Date.parse(check.dueAt) - config.now().getTime();
+        if (delay > 0) wait(check, Math.min(delay, longest));
+        else void run(check);
+      }
+    },
+
+    stop() {
+      stopped = true;
+      for (const timer of timers.values()) clearTimeout(timer);
+      timers.clear();
     },
 
     originalFound(copy, original) {
@@ -514,9 +686,19 @@ export function createWebmentionService(
     },
 
     async settled() {
-      await Promise.all([sends.settled(), checks.settled()]);
+      await Promise.allSettled(recording);
+      while (queued.size > 0) await Promise.allSettled(queued.values());
+      await sends.settled();
     },
   };
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
 }
 
 /** What a page last told its target, and when it has told it lately. */

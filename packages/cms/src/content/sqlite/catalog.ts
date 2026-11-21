@@ -92,6 +92,10 @@ function listAll(index: IndexDatabase, options: ListAllOptions): Document[] {
     params.push(nowKey(index));
   }
 
+  if (options.syndicated === true) {
+    where.push("json_extract(extra, '$.syndication') IS NOT NULL");
+  }
+
   if (options.tag !== undefined) {
     where.push(termFilter(TERM_TABLES.tag));
     params.push(TERM_TABLES.tag.match(options.tag));

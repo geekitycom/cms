@@ -45,6 +45,7 @@ directory. Absolute directories are used as given.
 | `loginAttempts`    | `5`                                                  | `GEEKITY_LOGIN_ATTEMPTS`     | Failed sign-ins an address may make, at one username or in all, before it is locked out. A username alone locks at ten times this. See [Login hardening](security.md#login-hardening).                                                                                                                                   |
 | `loginLockout`     | `900` (15 minutes)                                   | `GEEKITY_LOGIN_LOCKOUT`      | How long the first lockout lasts, in seconds. See [Login hardening](security.md#login-hardening).                                                                                                                                                                                                                        |
 | `trustProxy`       | `false`                                              | `GEEKITY_TRUST_PROXY`        | Trust `X-Forwarded-For` to give the address a sign-in came from, and a PROXY protocol header to give a Gemini client's. See [The Gemini listener](#the-gemini-listener).                                                                                                                                                 |
+| `deniedAddresses`  | none                                                 | `GEEKITY_DENIED_ADDRESSES`   | IP addresses and CIDR ranges the site never fetches from, besides the private and reserved ones, as a list (comma-separated in the env). See [Denied addresses](#denied-addresses).                                                                                                                                      |
 | `accessLog`        | `false`; `true` under `geekity serve`                | `GEEKITY_ACCESS_LOG`         | One line per request on stdout: method, path with query, status, duration. See [The access log](#the-access-log).                                                                                                                                                                                                        |
 | `accessLogAddress` | `false`                                              | `GEEKITY_ACCESS_LOG_ADDRESS` | Add the client address to the end of each access-log line. `trustProxy` decides which address is used.                                                                                                                                                                                                                   |
 | `accessLogWriter`  | stdout                                               | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                                                                                                                                                       |
@@ -146,6 +147,34 @@ up with is a localhost one, it prints a warning at boot: until the base URL is
 the https address people use, the session cookie is not marked `Secure`, no
 HSTS header is sent, and password reset links point at localhost. Local
 development can ignore the warning.
+
+## Denied addresses
+
+When the site fetches a page someone else names, such as a webmention source,
+a reply target or a plugin's request, it refuses any host that is or resolves
+to a loopback, private, link-local or reserved address. It does not know the
+server's own public addresses. A request from inside the server to one of
+those reaches services that a cloud firewall hides from the internet, such as
+a dashboard bound to `0.0.0.0`.
+
+List those addresses in `deniedAddresses` to refuse them as well:
+
+```js
+export default defineConfig({
+  deniedAddresses: ['203.0.113.7', '2001:db8:1::/48'],
+});
+```
+
+Or set `GEEKITY_DENIED_ADDRESSES=203.0.113.7,2001:db8:1::/48`. Each entry is
+an IP address or a CIDR range. Any other entry stops the site at startup. A
+host that resolves to a listed address is refused in the same way as a
+private one.
+
+The list also covers ActivityPub fetches: an actor, a key or any other object
+whose URL names a listed address, or a host that resolves to one, is not
+fetched. For ActivityPub, the list is checked against the first URL only. A
+redirect from another host, and a WebFinger lookup of an `@user@host` handle,
+are checked only against the private and reserved ranges.
 
 ## The Gemini certificate
 

@@ -14,7 +14,7 @@ import type { MailProvider, MailLogger } from './mail/provider.ts';
 import type { JobDefinition, JobRecords, MessageTransport } from './jobs/types.ts';
 import type { Plugin } from './plugin.ts';
 import { withoutTrailingSlash } from './util/url.ts';
-import { systemHostLookup } from './util/public-address.ts';
+import { isAddressOrRange, systemHostLookup, withDeniedAddresses } from './util/public-address.ts';
 import type { HostLookup } from './util/public-address.ts';
 
 /**
@@ -163,6 +163,37 @@ export interface IndexNowOverrides {
   backoffMs?: ((attempt: number) => number) | undefined;
   /** Where a batch that could not be sent is reported. Defaults to `console`. */
   logger?: { warn(message: string): void } | undefined;
+}
+
+/**
+ * How the CMS treats webmentions: how many one address may send, how one
+ * whose source could not be read is tried again, how many may wait, and how
+ * long a pingback waits for its answer. A test names short delays so that it
+ * waits for none of the defaults.
+ */
+export interface WebmentionOverrides {
+  /**
+   * How long to wait before each further check, in milliseconds. Defaults to
+   * one minute, then ten, then an hour, then six hours; after the last, the
+   * webmention is given up.
+   */
+  retryDelaysMs?: readonly number[] | undefined;
+  /**
+   * How many accepted webmentions and pingbacks may wait for their check at
+   * once. A new one past this is refused with a 503. Defaults to 1,000.
+   */
+  maxWaiting?: number | undefined;
+  /**
+   * How long a pingback waits for its check before it is answered that the
+   * check is still running, in milliseconds. Defaults to twenty seconds.
+   */
+  pingbackAnswerMs?: number | undefined;
+  /**
+   * How many webmentions and pingbacks one client address may send in a
+   * window of seconds. One past this is answered 429, or a pingback fault.
+   * Defaults to 60 in 600 seconds.
+   */
+  rateLimit?: { readonly requests: number; readonly windowSeconds: number } | undefined;
 }
 
 /**
@@ -461,6 +492,8 @@ export interface GeekityConfig {
    * field has a default; see {@link JobOverrides}.
    */
   jobs?: JobOverrides;
+  /** How accepted webmentions are checked, held and tried again. See {@link WebmentionOverrides}. */
+  webmentions?: WebmentionOverrides;
   /**
    * How a host name is resolved before the CMS fetches a page a reply answers,
    * so a name that resolves to this network is refused. Defaults
@@ -468,6 +501,14 @@ export interface GeekityConfig {
    * a real DNS server.
    */
   hostLookup?: HostLookup;
+  /**
+   * Addresses the CMS refuses to fetch from besides the private and reserved
+   * ranges, each an IP address or a CIDR range: the server's own public
+   * addresses, which a request from inside reaches without passing the
+   * firewall in front of them. Default none. Overridden by
+   * `GEEKITY_DENIED_ADDRESSES`, a comma-separated list.
+   */
+  deniedAddresses?: string[];
   /**
    * The plugins installed on this site. Each is registered at
    * boot and runs only while the `plugins` key of `content/_data/site.json`
@@ -559,6 +600,8 @@ export interface ResolvedConfig {
   readonly loginAttempts: number;
   readonly loginLockout: number;
   readonly trustProxy: boolean;
+  /** Trimmed, each an IP address or a CIDR range. */
+  readonly deniedAddresses: readonly string[];
   readonly accessLog: boolean;
   readonly accessLogAddress: boolean;
   /** The sink, when the site named one; otherwise the log writes to stdout. */
@@ -596,6 +639,8 @@ export interface ResolvedConfig {
   readonly federation: FederationOverrides;
   /** Job queue overrides, empty when the site named none. */
   readonly jobs: JobOverrides;
+  /** Webmention overrides, empty when the site named none. */
+  readonly webmentions: WebmentionOverrides;
   /** How host names are resolved before a stranger's page is fetched. */
   readonly hostLookup: HostLookup;
   /** The installed plugins, empty when the site named none. */
@@ -747,7 +792,8 @@ export function resolveConfig(
     watchDebounce: config.watchDebounce ?? defaultWatchDebounce,
     federation: config.federation ?? {},
     jobs: config.jobs ?? {},
-    hostLookup: config.hostLookup ?? systemHostLookup,
+    webmentions: config.webmentions ?? {},
+    hostLookup: deniedOn(config.hostLookup ?? systemHostLookup, settings.deniedAddresses),
     plugins: config.plugins ?? [],
   });
 }
@@ -856,6 +902,7 @@ const IMAGE_WIDTHS = listKind(
   checkedImageWidths,
 );
 const IMAGE_FORMATS = listKind((text) => text.split(','), checkedImageFormats);
+const DENIED_ADDRESSES = listKind((text) => text.split(','), checkedDeniedAddresses);
 
 interface EnvSetting<In, Out> {
   readonly env: readonly [string, ...string[]];
@@ -893,6 +940,7 @@ const ENV_SETTINGS = {
   loginAttempts: setting('GEEKITY_LOGIN_ATTEMPTS', COUNT, DEFAULT_LOGIN_ATTEMPTS),
   loginLockout: setting('GEEKITY_LOGIN_LOCKOUT', COUNT, DEFAULT_LOGIN_LOCKOUT),
   trustProxy: setting('GEEKITY_TRUST_PROXY', BOOLEAN, false),
+  deniedAddresses: setting('GEEKITY_DENIED_ADDRESSES', DENIED_ADDRESSES, []),
   accessLog: setting('GEEKITY_ACCESS_LOG', BOOLEAN, false),
   accessLogAddress: setting('GEEKITY_ACCESS_LOG_ADDRESS', BOOLEAN, false),
   seedContent: setting('GEEKITY_SEED_CONTENT', BOOLEAN, false),
@@ -1001,6 +1049,21 @@ function checkedUploadTypes(values: string[], source: string): string[] {
     if (!types.includes(normalized)) types.push(normalized);
   }
   return types;
+}
+
+function deniedOn(lookup: HostLookup, entries: readonly string[]): HostLookup {
+  return entries.length === 0 ? lookup : withDeniedAddresses(lookup, entries);
+}
+
+function checkedDeniedAddresses(values: string[], source: string): string[] {
+  const entries = values.map((value) => value.trim()).filter((value) => value !== '');
+  const wrong = entries.find((entry) => !isAddressOrRange(entry));
+  if (wrong !== undefined) {
+    throw new TypeError(
+      `${source} must list IP addresses or CIDR ranges, received ${JSON.stringify(wrong)}`,
+    );
+  }
+  return entries;
 }
 
 /**

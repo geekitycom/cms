@@ -7,6 +7,8 @@ import { isServed } from '../content/served.ts';
 import type { GeekityEnv } from './env.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { challengeTokenOf, withChallenge } from '../forms/challenge.ts';
+import { FORM_MAX_BYTES } from '../forms/protection.ts';
+import { readBoundedForm } from './bounded-body.ts';
 import { sendContactMessage } from '../contact/delivery.ts';
 import {
   CONTACT_ANCHOR,
@@ -57,7 +59,9 @@ export function mountContact(app: Hono<GeekityEnv>): void {
 
   app.post(CONTACT_POST_PATH, async (c) => {
     const { store, config } = c.var;
-    const body = await c.req.parseBody();
+    const body = await readBoundedForm(c.req.raw, FORM_MAX_BYTES);
+    if (body === 'too-large') return c.text('The form is too large.', 413);
+    if (body === 'malformed') return c.text('That form could not be read.', 400);
     const form = formOf(body);
 
     const document = store.getBySlug(form.page);

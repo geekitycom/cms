@@ -154,7 +154,7 @@ export async function requestPublic(
       if (options.allowed !== undefined && !options.allowed(url)) {
         return refuse(`${url.origin} is not a host this fetch may reach`);
       }
-      if (!(await publicHost(url.hostname, options.lookup))) {
+      if (!(await publicHost(url.hostname, options.lookup, options.signal))) {
         return refuse('not a public address');
       }
 

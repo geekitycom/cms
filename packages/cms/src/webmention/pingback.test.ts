@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
 import type { PostComment } from '../store/admin-store.ts';
-import { updateComment } from '../comments/records.ts';
+import { commentsDirectory, updateComment } from '../comments/records.ts';
 import type { CommentVerdict } from '../forms/checker.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -43,6 +43,24 @@ comments: true
 
 Who this is.
 `,
+  'posts/2026-09-19-cafe.md': `---
+title: Café
+date: '2026-09-19T09:00:00Z'
+permalink: /2026/09/café/
+---
+
+Coffee.
+`,
+  'posts/2026-09-18-copied.md': `---
+title: Copied
+date: '2026-09-18T09:00:00Z'
+permalink: /2026/09/copied/
+syndication:
+  - https://social.example/@me/1
+---
+
+Shared elsewhere too.
+`,
   'pages/colophon.md': `---
 title: Colophon
 permalink: /colophon/
@@ -55,6 +73,8 @@ How this is made.
 interface Page {
   status?: number;
   body?: string;
+  /** The answer waits until this settles, or the request is aborted. */
+  gate?: Promise<void>;
 }
 
 const pages = new Map<string, Page>();
@@ -65,10 +85,12 @@ const lookup: HostLookup = (hostname) =>
 const fetched: string[] = [];
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
+const gates: (() => void)[] = [];
 
 const restoreFetch = routeTheWeb();
 
 after(async () => {
+  for (const open of gates) open();
   restoreFetch();
   for (const instance of started) await instance.close();
   await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
@@ -82,10 +104,19 @@ beforeEach(() => {
 function routeTheWeb(): () => void {
   const original = globalThis.fetch;
 
-  globalThis.fetch = ((input: string | URL | Request) => {
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     fetched.push(url);
     const page = pages.get(url);
+    if (page?.gate !== undefined) {
+      const signal = init?.signal;
+      await new Promise<void>((resolve, reject) => {
+        void page.gate?.then(resolve);
+        signal?.addEventListener('abort', () => {
+          reject(signal.reason as Error);
+        });
+      });
+    }
     const response =
       page === undefined
         ? new Response('missing', { status: 404 })
@@ -94,7 +125,7 @@ function routeTheWeb(): () => void {
             headers: { 'content-type': 'text/html; charset=utf-8' },
           });
     Object.defineProperty(response, 'url', { value: url });
-    return Promise.resolve(response);
+    return response;
   }) as typeof fetch;
 
   return () => {
@@ -167,6 +198,22 @@ async function faultOf(response: Response): Promise<number | undefined> {
   assert.match(text, /^<\?xml version="1.0"\?>\s*<methodResponse>/);
   const code = /<name>faultCode<\/name>\s*<value><int>(-?\d+)<\/int><\/value>/.exec(text)?.[1];
   return code === undefined ? undefined : Number(code);
+}
+
+/** A gate that opens when `open` is called, or once the file has run. */
+function gate(): { promise: Promise<void>; open: () => void } {
+  let open = (): void => {};
+  const promise = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  gates.push(open);
+  return { promise, open };
+}
+
+function faultStringOf(text: string): string {
+  return (
+    /<name>faultString<\/name>\s*<value><string>([^<]*)<\/string><\/value>/.exec(text)?.[1] ?? ''
+  );
 }
 
 function mentionsOf(cms: Cms, slug = 'hello-world'): PostComment[] {
@@ -304,6 +351,32 @@ describe('a valid pingback', () => {
     assert.match(held[0]?.content.html ?? '', /Second thought\./);
   });
 
+  it('is filed against a post whose target is the encoded spelling of its permalink', async () => {
+    const cms = await site();
+    const target = `${BASE_URL}/2026/09/caf%C3%A9/`;
+    pages.set('https://them.example/note', { body: linkingTo(target) });
+
+    assert.equal(await faultOf(await ping(cms, 'https://them.example/note', target)), undefined);
+
+    assert.deepEqual(
+      mentionsOf(cms, 'café').map((one) => one.url),
+      ['https://them.example/note'],
+    );
+  });
+
+  it('is filed on the original post when the target is a recorded syndicated copy', async () => {
+    const cms = await site();
+    const copy = 'https://social.example/@me/1';
+    pages.set('https://them.example/note', { body: linkingTo(copy) });
+
+    assert.equal(await faultOf(await ping(cms, 'https://them.example/note', copy)), undefined);
+
+    assert.deepEqual(
+      mentionsOf(cms, 'copied').map((one) => one.url),
+      ['https://them.example/note'],
+    );
+  });
+
   it('leaves an approved entry alone when sent again with a query on the target', async () => {
     const cms = await site();
     pages.set('https://them.example/note', { body: linkingTo(POST_URL) });
@@ -322,6 +395,68 @@ describe('a valid pingback', () => {
     assert.equal(held.length, 1, 'still there');
     assert.equal(held[0]?.id, first?.id);
     assert.equal(held[0]?.status, 'approved');
+  });
+});
+
+describe('a pingback while another source is being checked', () => {
+  it('is answered without waiting for the other source', async () => {
+    const cms = await site();
+    const slow = gate();
+    pages.set('https://slow.example/c', { body: linkingTo(POST_URL), gate: slow.promise });
+    pages.set('https://fast.example/d', { body: linkingTo(POST_URL) });
+
+    const waiting = ping(cms, 'https://slow.example/c');
+    const started = Date.now();
+    const answered = await ping(cms, 'https://fast.example/d');
+    assert.ok(Date.now() - started < 2_000, 'the pingback waited on the other check');
+    assert.equal(await faultOf(answered), undefined);
+
+    slow.open();
+    await waiting;
+    await cms.webmentions.settled();
+  });
+
+  it('answers a generic fault once its deadline passes, and files the pingback when the check ends', async () => {
+    const cms = await site({ webmentions: { pingbackAnswerMs: 100 } });
+    const slow = gate();
+    pages.set('https://slow.example/e', { body: linkingTo(POST_URL), gate: slow.promise });
+
+    const started = Date.now();
+    const text = await (await ping(cms, 'https://slow.example/e')).text();
+    assert.ok(Date.now() - started < 2_000, 'the pingback waited past its deadline');
+    assert.match(text, /<int>0<\/int>/);
+    assert.match(text, /still being checked/);
+
+    slow.open();
+    await cms.webmentions.settled();
+    assert.ok(mentionsOf(cms).some((one) => one.url === 'https://slow.example/e'));
+  });
+});
+
+describe('a pingback the site keeps without reading its source', () => {
+  it('answers a generic fault while the same ping waits to be checked again', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', { status: 503 });
+    assert.equal(await faultOf(await ping(cms, 'https://them.example/note')), 0x0032);
+    fetched.length = 0;
+
+    const text = await (await ping(cms, 'https://them.example/note')).text();
+
+    assert.match(text, /<int>0<\/int>/);
+    assert.match(faultStringOf(text), /kept and checked later/);
+    assert.deepEqual(fetched, []);
+  });
+
+  it('answers a generic fault while the site is stopping', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', { body: linkingTo(POST_URL) });
+    cms.webmentions.stop();
+
+    const text = await (await ping(cms, 'https://them.example/note')).text();
+
+    assert.match(text, /<int>0<\/int>/);
+    assert.match(faultStringOf(text), /kept and checked later/);
+    assert.deepEqual(fetched, []);
   });
 });
 
@@ -344,11 +479,11 @@ describe('the faults a pingback is answered with', () => {
     assert.equal(mentionsOf(cms).length, 0);
   });
 
-  it('0x0000 for a source that refuses to be read but has not gone', async () => {
+  it('0x0032 for a source that refuses to be read but has not gone', async () => {
     const cms = await site();
     pages.set('https://them.example/locked', { status: 403, body: 'no' });
 
-    assert.equal(await faultOf(await ping(cms, 'https://them.example/locked')), 0x0000);
+    assert.equal(await faultOf(await ping(cms, 'https://them.example/locked')), 0x0032);
   });
 
   it('0x0011 for a source that does not link to the target', async () => {
@@ -375,18 +510,27 @@ describe('the faults a pingback is answered with', () => {
     assert.deepEqual(fetched, [], 'nothing was fetched for a target that cannot be pinged');
   });
 
-  it('a generic fault for a source that cannot be read this time', async () => {
+  it('0x0032 for a source that cannot be read this time', async () => {
     const cms = await site();
     pages.set('https://them.example/note', { status: 503 });
 
-    assert.equal(await faultOf(await ping(cms, 'https://them.example/note')), 0);
+    assert.equal(await faultOf(await ping(cms, 'https://them.example/note')), 0x0032);
   });
 
-  it('a generic fault, and nothing fetched, for a source that resolves to a private address', async () => {
+  it('0x0010, and nothing fetched or stored, for a source on a port other than the default', async () => {
+    const cms = await site();
+    pages.set('https://them.example:8443/note', { body: linkingTo(POST_URL) });
+
+    assert.equal(await faultOf(await ping(cms, 'https://them.example:8443/note')), 0x0010);
+    assert.deepEqual(fetched, []);
+    assert.equal(mentionsOf(cms).length, 0);
+  });
+
+  it('0x0032, and nothing fetched, for a source that resolves to a private address', async () => {
     const cms = await site();
     pages.set('https://wiki.internal.example/note', { body: linkingTo(POST_URL) });
 
-    assert.equal(await faultOf(await ping(cms, 'https://wiki.internal.example/note')), 0);
+    assert.equal(await faultOf(await ping(cms, 'https://wiki.internal.example/note')), 0x0032);
     assert.deepEqual(fetched, []);
     assert.equal(mentionsOf(cms).length, 0);
   });
@@ -396,6 +540,70 @@ describe('the faults a pingback is answered with', () => {
 
     assert.equal(await faultOf(await post(cms, call('pingback.extensions.getPingbacks'))), -32601);
     assert.equal(await faultOf(await post(cms, call('pingback.ping', POST_URL))), -32602);
+  });
+});
+
+describe('the words of a fault for a source that could not be read', () => {
+  it('say nothing of how the source answered', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', { status: 503 });
+
+    const message = faultStringOf(await (await ping(cms, 'https://them.example/note')).text());
+
+    assert.doesNotMatch(message, /503|answered/);
+  });
+
+  it('say nothing of an error the site hit while filing it', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', { body: linkingTo(POST_URL) });
+    const directory = commentsDirectory(cms.config.contentDir);
+    await mkdir(directory, { recursive: true });
+    await chmod(directory, 0o500);
+    try {
+      const message = faultStringOf(await (await ping(cms, 'https://them.example/note')).text());
+
+      assert.notEqual(message, '');
+      assert.ok(!message.includes('/'), `fault string: ${message}`);
+    } finally {
+      await chmod(directory, 0o700);
+    }
+  });
+});
+
+describe('one address sending many pings', () => {
+  it('is answered with a fault once it has sent too many, and the webmention endpoint shares the count', async () => {
+    const cms = await site({
+      trustProxy: true,
+      webmentions: { rateLimit: { requests: 2, windowSeconds: 600 } },
+    });
+    pages.set('https://them.example/note', { body: linkingTo(POST_URL) });
+    const from = async (body: string, type: string): Promise<Response> =>
+      await cms.app.request(PINGBACK_PATH, {
+        method: 'POST',
+        headers: { 'content-type': type, 'x-forwarded-for': '198.51.100.9' },
+        body,
+      });
+    const pingFrom = (source: string): Promise<Response> =>
+      from(call('pingback.ping', source, POST_URL), 'text/xml');
+
+    assert.equal(await faultOf(await pingFrom('https://them.example/note')), undefined);
+    const webmention = await cms.app.request('/_geekity/webmention', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-forwarded-for': '198.51.100.9',
+      },
+      body: new URLSearchParams({
+        source: 'https://them.example/other',
+        target: POST_URL,
+      }).toString(),
+    });
+    assert.equal(webmention.status, 202);
+    await cms.webmentions.settled();
+    fetched.length = 0;
+
+    assert.equal(await faultOf(await pingFrom('https://them.example/again')), 0);
+    assert.deepEqual(fetched, [], 'a refused ping reads nothing');
   });
 });
 

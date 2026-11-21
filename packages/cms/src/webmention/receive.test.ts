@@ -16,6 +16,7 @@ import type { MemoryMailProvider } from '../mail/memory.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
+import { nextEvent } from '../__testing__/wait.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
 import { verifyWebmention } from './receive.ts';
@@ -83,6 +84,8 @@ interface Page {
   body?: string | Uint8Array;
   redirectTo?: string;
   contentType?: string;
+  /** The answer waits until this settles, or the request is aborted. */
+  gate?: Promise<void>;
 }
 
 const pages = new Map<string, Page>();
@@ -93,10 +96,13 @@ const lookup: HostLookup = (hostname) =>
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
+const gates: (() => void)[] = [];
+const hearing = new Set<() => void>();
 
 const restoreFetch = routeTheWeb();
 
 after(async () => {
+  for (const open of gates) open();
   restoreFetch();
   for (const instance of started) await instance.close();
   await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
@@ -110,16 +116,25 @@ beforeEach(() => {
 function routeTheWeb(): () => void {
   const original = globalThis.fetch;
 
-  globalThis.fetch = ((input: string | URL | Request) =>
-    Promise.resolve(answer(input))) as typeof fetch;
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) =>
+    answer(input, init?.signal ?? undefined)) as typeof fetch;
 
   /** What the make-believe web answers, with no network anywhere near it. */
-  function answer(input: string | URL | Request): Response {
+  async function answer(input: string | URL | Request, signal?: AbortSignal): Promise<Response> {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     requested.push(url);
+    for (const hear of hearing) hear();
 
     const page = pages.get(url.split('#')[0] ?? url);
     if (page === undefined) return new Response('missing', { status: 404 });
+    if (page.gate !== undefined) {
+      await new Promise<void>((resolve, reject) => {
+        void page.gate?.then(resolve);
+        signal?.addEventListener('abort', () => {
+          reject(signal.reason as Error);
+        });
+      });
+    }
     if (page.redirectTo !== undefined) {
       return new Response(null, { status: 302, headers: { location: page.redirectTo } });
     }
@@ -179,6 +194,72 @@ async function site(
   started.push(instance);
   await instance.sync();
   return instance;
+}
+
+/** Another CMS on the directories `cms` uses, as the next process would be. */
+async function nextProcess(cms: Cms, config: GeekityConfig = {}): Promise<Cms> {
+  const instance = createCms({
+    contentDir: cms.config.contentDir,
+    dataDir: cms.config.dataDir,
+    baseUrl: BASE_URL,
+    watch: false,
+    now: () => NOW,
+    hostLookup: lookup,
+    port: 0,
+    ...config,
+  });
+  started.push(instance);
+  await instance.sync();
+  return instance;
+}
+
+/** A gate that opens when `open` is called, or once the file has run. */
+function gate(): { promise: Promise<void>; open: () => void } {
+  let open = (): void => {};
+  const promise = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  gates.push(open);
+  return { promise, open };
+}
+
+/** Resolve once `url` has been fetched `times` times. */
+function fetched(url: string, times = 1): Promise<void> {
+  return nextEvent(`fetch ${String(times)} of ${url}`, (done) => {
+    const hear = (): void => {
+      if (requested.filter((one) => one === url).length >= times) done();
+    };
+    hearing.add(hear);
+    hear();
+    return () => hearing.delete(hear);
+  });
+}
+
+/** Resolve once a webmention from `url` is stored on the post. */
+function storedFrom(cms: Cms, url: string, timeoutMs?: number): Promise<void> {
+  return nextEvent(
+    `a webmention from ${url}`,
+    (done) => {
+      const look = (): void => {
+        if (stored(cms).some((one) => one.url === url)) done();
+      };
+      look();
+      return cms.admin.onConversationWrite(look);
+    },
+    timeoutMs,
+  );
+}
+
+/** The checks the site has accepted and not finished, as its data file holds them. */
+async function waitingChecks(cms: Cms): Promise<unknown[]> {
+  try {
+    return JSON.parse(
+      await readFile(path.join(cms.config.dataDir, 'webmention-checks.json'), 'utf8'),
+    ) as unknown[];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
 }
 
 /** Send one webmention the way a remote server would. */
@@ -308,11 +389,108 @@ describe('what the endpoint refuses', () => {
     assert.deepEqual(requested, []);
   });
 
+  it('refuses a body of megabytes with 413 and queues nothing', async () => {
+    const cms = await site();
+    pages.set('https://them.example/big', { body: reply(`<a href="${POST_URL}">yes</a>`) });
+    const body =
+      new URLSearchParams({ source: 'https://them.example/big', target: POST_URL }).toString() +
+      '&pad=' +
+      'x'.repeat(4 * 1024 * 1024);
+
+    const response = await cms.app.request(WEBMENTION_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'content-length': String(body.length),
+      },
+      body,
+    });
+    await cms.webmentions.settled();
+
+    assert.equal(response.status, 413);
+    assert.deepEqual(requested, []);
+    assert.deepEqual(stored(cms), []);
+  });
+
+  it('refuses a body over the limit that does not say its length', async () => {
+    const cms = await site();
+    pages.set('https://them.example/big', { body: reply(`<a href="${POST_URL}">yes</a>`) });
+    const form = new URLSearchParams({ source: 'https://them.example/big', target: POST_URL });
+    const chunks = [form.toString(), '&pad=', 'x'.repeat(64 * 1024)];
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const next = chunks.shift();
+        if (next === undefined) controller.close();
+        else controller.enqueue(new TextEncoder().encode(next));
+      },
+    });
+
+    const response = await cms.app.request(WEBMENTION_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+    await cms.webmentions.settled();
+
+    assert.equal(response.status, 413);
+    assert.deepEqual(requested, []);
+  });
+
+  it('refuses a malformed multipart body with 400', async () => {
+    const cms = await site();
+
+    const response = await cms.app.request(WEBMENTION_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=xyz' },
+      body: '--xyz\r\nnot a part at all',
+    });
+
+    assert.equal(response.status, 400);
+  });
+
+  it('refuses a multipart form, which is not the type a webmention is sent as', async () => {
+    const cms = await site();
+    const form = new FormData();
+    form.set('source', 'https://them.example/a');
+    form.set('target', POST_URL);
+
+    const response = await cms.app.request(WEBMENTION_PATH, { method: 'POST', body: form });
+    await cms.webmentions.settled();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(requested, []);
+  });
+
   it('refuses a source on a private address, which is not somebody else’s page', async () => {
     const cms = await site();
 
     const response = await send(cms, { source: 'http://127.0.0.1/x', target: POST_URL });
     assert.equal(response.status, 400);
+  });
+
+  it('refuses a source on a port other than the default, and fetches nothing', async () => {
+    const cms = await site();
+    pages.set('https://them.example:8443/note', { body: reply(`<a href="${POST_URL}">there</a>`) });
+
+    const response = await send(cms, {
+      source: 'https://them.example:8443/note',
+      target: POST_URL,
+    });
+    await cms.webmentions.settled();
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(requested, []);
+    assert.equal(stored(cms).length, 0);
+  });
+
+  it('takes a source that names its default port', async () => {
+    const cms = await site();
+
+    const response = await send(cms, { source: 'https://them.example:443/note', target: POST_URL });
+    await cms.webmentions.settled();
+
+    assert.equal(response.status, 202);
   });
 });
 
@@ -536,6 +714,17 @@ describe('verifying a webmention', () => {
     assert.equal(stored(cms).length, 0);
   });
 
+  it('stops at a redirect to a port other than the default', async () => {
+    const cms = await site();
+    pages.set('https://them.example/moved', { redirectTo: 'https://them.example:8443/note' });
+    pages.set('https://them.example:8443/note', { body: reply(`<a href="${POST_URL}">there</a>`) });
+
+    await sendAndSettle(cms, 'https://them.example/moved');
+
+    assert.deepEqual(requested, ['https://them.example/moved']);
+    assert.equal(stored(cms).length, 0);
+  });
+
   it('stores nothing when the source only writes the target out as text', async () => {
     const cms = await site();
     pages.set('https://them.example/text', { body: `<p>${POST_URL}</p>` });
@@ -690,6 +879,192 @@ describe('a webmention that comes again', () => {
       assert.equal(held[0]?.status, 'approved');
     });
   }
+});
+
+describe('an accepted webmention that has not been checked yet', () => {
+  const SOURCE = 'https://them.example/late';
+  const linking = (): Page => ({
+    body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+  });
+
+  it('is checked by the next process on the same directories without being sent again', async () => {
+    const first = await site();
+    const hang = gate();
+    pages.set(SOURCE, { ...linking(), gate: hang.promise });
+
+    assert.equal((await send(first, { source: SOURCE, target: POST_URL })).status, 202);
+    await fetched(SOURCE);
+
+    pages.set(SOURCE, linking());
+    const second = await nextProcess(first);
+    await second.serve();
+    await storedFrom(second, SOURCE);
+
+    pages.set(SOURCE, { status: 503 });
+    hang.open();
+    await first.webmentions.settled();
+    await second.webmentions.settled();
+
+    assert.ok(stored(second).some((one) => one.url === SOURCE));
+    assert.deepEqual(await waitingChecks(second), [], 'nothing is left waiting once it is stored');
+  });
+
+  it('is forgotten once its check is done', async () => {
+    const cms = await site();
+    pages.set(SOURCE, linking());
+
+    await sendAndSettle(cms, SOURCE);
+
+    assert.equal(stored(cms).length, 1);
+    assert.deepEqual(await waitingChecks(cms), []);
+  });
+
+  it('is checked again later when its source could not be read the first time', async () => {
+    const cms = await site({ webmentions: { retryDelaysMs: [50, 50] } });
+    pages.set(SOURCE, { status: 503 });
+
+    await sendAndSettle(cms, SOURCE);
+    assert.deepEqual(stored(cms), []);
+    assert.equal((await waitingChecks(cms)).length, 1, 'it waits for another try');
+
+    pages.set(SOURCE, linking());
+    await storedFrom(cms, SOURCE);
+    await cms.webmentions.settled();
+    assert.deepEqual(await waitingChecks(cms), []);
+  });
+
+  it('is given up on after the last try', async () => {
+    const cms = await site({ webmentions: { retryDelaysMs: [20, 20] } });
+    pages.set(SOURCE, { status: 503 });
+
+    await sendAndSettle(cms, SOURCE);
+
+    await fetched(SOURCE, 3);
+    await cms.webmentions.settled();
+
+    assert.deepEqual(await waitingChecks(cms), [], 'nothing is left to try again');
+    assert.equal(requested.filter((url) => url === SOURCE).length, 3);
+  });
+
+  it('is filed on the post as the index has it when the check runs', async () => {
+    const cms = await site();
+    const hang = gate();
+    pages.set('https://them.example/first', { ...linking(), gate: hang.promise });
+    pages.set(SOURCE, linking());
+
+    await send(cms, { source: 'https://them.example/first', target: POST_URL });
+    assert.equal((await send(cms, { source: SOURCE, target: POST_URL })).status, 202);
+
+    await rm(path.join(cms.config.contentDir, 'posts', '2026-09-19-hello-world.md'));
+    await cms.sync();
+    hang.open();
+    await cms.webmentions.settled();
+
+    assert.ok(
+      !cms.admin.listCommentsFor('hello-world').some((one) => one.url === SOURCE),
+      'a post gone before the check gets nothing from it',
+    );
+    assert.deepEqual(await waitingChecks(cms), []);
+  });
+});
+
+describe('checks waiting their turn', () => {
+  const SLOW = 'https://slow.example/a';
+  const FAST = 'https://fast.example/b';
+  const linking = (words = 'Good post.'): Page => ({
+    body: reply(
+      `<p class="e-content">${words} <a class="u-in-reply-to" href="${POST_URL}">re</a></p>`,
+    ),
+  });
+
+  it('stores a source that answers at once while another source is still answering', async () => {
+    const cms = await site();
+    const slow = gate();
+    pages.set(SLOW, { ...linking(), gate: slow.promise });
+    pages.set(FAST, linking());
+
+    await send(cms, { source: SLOW, target: POST_URL });
+    await fetched(SLOW);
+    assert.equal((await send(cms, { source: FAST, target: POST_URL })).status, 202);
+    await storedFrom(cms, FAST, 3000);
+
+    slow.open();
+    await cms.webmentions.settled();
+    assert.equal(stored(cms).length, 2);
+  });
+
+  it('fetches a source once for twenty sends of the same pair while its check waits for its host', async () => {
+    const cms = await site();
+    const slow = gate();
+    const same = 'https://slow.example/same';
+    pages.set(SLOW, { ...linking(), gate: slow.promise });
+    pages.set(same, linking());
+
+    await send(cms, { source: SLOW, target: POST_URL });
+    await fetched(SLOW);
+    for (let n = 0; n < 20; n += 1) {
+      assert.equal((await send(cms, { source: same, target: POST_URL })).status, 202);
+    }
+    assert.equal((await waitingChecks(cms)).length, 2, 'one record for the twenty');
+
+    slow.open();
+    await cms.webmentions.settled();
+    assert.equal(requested.filter((url) => url === same).length, 1);
+    assert.deepEqual(await waitingChecks(cms), []);
+  });
+
+  it('reads the source once more after twenty sends that arrive while it is being read', async () => {
+    const cms = await site();
+    const slow = gate();
+    pages.set(SLOW, { ...linking('First words.'), gate: slow.promise });
+
+    await send(cms, { source: SLOW, target: POST_URL });
+    await fetched(SLOW);
+    pages.set(SLOW, linking('Edited words.'));
+    for (let n = 0; n < 20; n += 1) {
+      assert.equal((await send(cms, { source: SLOW, target: POST_URL })).status, 202);
+    }
+
+    slow.open();
+    await cms.webmentions.settled();
+    assert.equal(requested.filter((url) => url === SLOW).length, 2);
+    assert.match(stored(cms)[0]?.content.html ?? '', /Edited words/);
+    assert.deepEqual(await waitingChecks(cms), []);
+  });
+
+  it('leaves a source waiting for another try to that try when it is sent again', async () => {
+    const cms = await site({ webmentions: { retryDelaysMs: [60_000] } });
+    pages.set(SLOW, { status: 503 });
+
+    await sendAndSettle(cms, SLOW);
+    assert.equal((await sendAndSettle(cms, SLOW)).status, 202);
+
+    assert.equal(requested.filter((url) => url === SLOW).length, 1);
+    assert.equal((await waitingChecks(cms)).length, 1);
+  });
+
+  it('answers 503 for a new pair once the waiting checks are full, and still takes a repeat', async () => {
+    const cms = await site({ webmentions: { maxWaiting: 2 } });
+    const slow = gate();
+    pages.set(SLOW, { ...linking(), gate: slow.promise });
+    pages.set(FAST, linking());
+    pages.set('https://other.example/c', linking());
+
+    await send(cms, { source: SLOW, target: POST_URL });
+    await fetched(SLOW);
+    await send(cms, { source: 'https://slow.example/next', target: POST_URL });
+
+    const full = await send(cms, { source: FAST, target: POST_URL });
+    assert.equal(full.status, 503);
+    assert.ok(Number(full.headers.get('retry-after')) > 0, 'it says when to try again');
+    assert.equal((await send(cms, { source: SLOW, target: POST_URL })).status, 202);
+
+    slow.open();
+    await cms.webmentions.settled();
+    assert.equal((await send(cms, { source: FAST, target: POST_URL })).status, 202);
+    await cms.webmentions.settled();
+    assert.ok(stored(cms).some((one) => one.url === FAST));
+  });
 });
 
 describe('a source in another character encoding', () => {
@@ -978,6 +1353,76 @@ describe('a webmention sent again to another URL of the same post', () => {
     await sendAndSettle(cms, LIKE, `${POST_URL}#elsewhere`);
 
     assert.deepEqual(stored(cms), []);
+  });
+});
+
+describe('a post whose permalink is not plain ASCII', () => {
+  const CAFE_URL = `${BASE_URL}/2026/09/caf%C3%A9/`;
+  const LIKE = 'https://them.example/like';
+
+  async function cafeSite(): Promise<Cms> {
+    const cms = await site();
+    await writeFile(
+      path.join(cms.config.contentDir, 'posts', '2026-09-19-cafe.md'),
+      POST.replace('title: Hello world', 'title: Café').replace(
+        'permalink: /2026/09/hello-world/',
+        'permalink: /2026/09/café/',
+      ),
+      'utf8',
+    );
+    await cms.sync();
+    return cms;
+  }
+
+  function onCafe(cms: Cms): PostComment[] {
+    return cms.admin.listCommentsFor('café').filter((one) => one.source === 'webmention');
+  }
+
+  it('takes a webmention sent to the encoded spelling of the permalink', async () => {
+    const cms = await cafeSite();
+    assert.equal((await cms.app.request('/2026/09/caf%C3%A9/')).status, 200);
+    pages.set(LIKE, { body: reply(`<a class="u-like-of" href="${CAFE_URL}">liked</a>`) });
+
+    const response = await sendAndSettle(cms, LIKE, CAFE_URL);
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(
+      onCafe(cms).map((one) => [one.url, one.kind]),
+      [[LIKE, 'like']],
+    );
+  });
+
+  it('keeps a like sent again to a comment page when it names the post by its encoded URL', async () => {
+    const cms = await cafeSite();
+    pages.set(LIKE, { body: reply(`<a class="u-like-of" href="${CAFE_URL}">liked</a>`) });
+    await sendAndSettle(cms, LIKE, CAFE_URL);
+    const records = {
+      admin: cms.admin,
+      contentDir: cms.config.contentDir,
+      dataDir: cms.config.dataDir,
+    };
+    const note = await addComment(records, {
+      slug: 'café',
+      permalink: '/2026/09/café/',
+      source: 'comment',
+      kind: 'reply',
+      status: 'approved',
+      author: { name: 'Bob', url: null, email: null, avatar: null },
+      content: { markdown: 'Bob says so.', html: '<p>Bob says so.</p>' },
+      submitted: '2026-09-19T10:00:00.000Z',
+      addressHash: null,
+      inReplyTo: null,
+      url: null,
+      notify: false,
+    });
+
+    const response = await sendAndSettle(cms, LIKE, `${BASE_URL}/comment/${note.id}/`);
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(
+      onCafe(cms).map((one) => one.url),
+      [LIKE],
+    );
   });
 });
 
@@ -1769,9 +2214,9 @@ describe('a source that answers many things', () => {
       dataDir,
       baseUrl: BASE_URL,
       conversation: {
-        replyNamed: () => {
+        replyFinder: () => {
           asked += 1;
-          return undefined;
+          return () => undefined;
         },
         comment: () => undefined,
       },
@@ -1783,5 +2228,122 @@ describe('a source that answers many things', () => {
 
     assert.equal(outcome.kind, 'stored');
     assert.ok(asked <= 10, `asked about ${asked} of ${values + 1} values`);
+  });
+});
+
+describe('a source that carries many replies', () => {
+  const openStores: AdminStore[] = [];
+  after(() => {
+    for (const opened of openStores) opened.close();
+  });
+
+  it('reads the conversation a few times, not once a reply', async () => {
+    const source = 'https://ada.example/2026/09/reply/';
+    const nested = Array.from(
+      { length: 50 },
+      (_, n) => `<div class="p-comment h-cite">
+        <a class="p-author h-card" href="https://p${String(n)}.example/">P${String(n)}</a>
+        <a class="u-url" href="https://p${String(n)}.example/${String(n)}">then</a>
+        <div class="e-content"><p>Reply ${String(n)}.</p></div>
+      </div>`,
+    ).join('');
+    pages.set(source, {
+      body: `<article class="h-entry">
+        <a class="u-url" href="${source}">permalink</a>
+        <a class="u-in-reply-to" href="${POST_URL}">the post</a>
+        <p class="e-content">Hello.</p>${nested}
+      </article>`,
+    });
+    const dataDir = await temporaryDir('geekity-webmention-carrier-');
+    const contentDir = await temporaryDir('geekity-webmention-carrier-content-');
+    const admin = openAdminStore({ dataDir });
+    openStores.push(admin);
+    let gathered = 0;
+
+    const outcome = await verifyWebmention({
+      incoming: {
+        source,
+        target: POST_URL,
+        document: {
+          slug: 'hello-world',
+          permalink: '/2026/09/hello-world/',
+          title: 'Hello world',
+          html: '<p>Words.</p>',
+        } as unknown as Document,
+      },
+      records: { admin, contentDir, dataDir },
+      dataDir,
+      baseUrl: BASE_URL,
+      conversation: {
+        replyFinder: () => {
+          gathered += 1;
+          return () => undefined;
+        },
+        comment: () => undefined,
+      },
+      site: {} as ConversationSite,
+      now: NOW,
+      lookup,
+      logger: { warn: () => {} },
+    });
+
+    assert.equal(outcome.kind, 'stored');
+    assert.ok(admin.listCommentsFor('hello-world').length > 1, 'the replies were brought in');
+    assert.ok(gathered <= 3, `read the conversation ${String(gathered)} times`);
+  });
+});
+
+describe('one address sending many webmentions', () => {
+  async function sendFrom(cms: Cms, address: string, source: string): Promise<Response> {
+    return await cms.app.request(WEBMENTION_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-forwarded-for': address,
+      },
+      body: new URLSearchParams({ source, target: POST_URL }).toString(),
+    });
+  }
+
+  it('is answered 429 once it has sent too many', async () => {
+    const cms = await site({ trustProxy: true });
+    const statuses: number[] = [];
+    for (let n = 0; n < 100; n += 1) {
+      statuses.push(
+        (await sendFrom(cms, '198.51.100.9', `https://them.example/?n=${String(n)}`)).status,
+      );
+    }
+    await cms.webmentions.settled();
+
+    assert.equal(statuses[0], 202);
+    assert.equal(statuses.at(-1), 429);
+  });
+
+  it('is told when to try again, and another address is not held up', async () => {
+    const cms = await site({
+      trustProxy: true,
+      webmentions: { rateLimit: { requests: 2, windowSeconds: 600 } },
+    });
+
+    assert.equal((await sendFrom(cms, '198.51.100.9', 'https://them.example/1')).status, 202);
+    assert.equal((await sendFrom(cms, '198.51.100.9', 'https://them.example/2')).status, 202);
+    const refused = await sendFrom(cms, '198.51.100.9', 'https://them.example/3');
+    assert.equal(refused.status, 429);
+    assert.equal(refused.headers.get('retry-after'), '600');
+    assert.equal((await sendFrom(cms, '198.51.100.10', 'https://them.example/4')).status, 202);
+    await cms.webmentions.settled();
+    assert.equal((await waitingChecks(cms)).length, 0);
+    assert.ok(!requested.includes('https://them.example/3'), 'the refused source is not read');
+  });
+
+  it('counts addresses in one IPv6 /64 as one', async () => {
+    const cms = await site({
+      trustProxy: true,
+      webmentions: { rateLimit: { requests: 1, windowSeconds: 600 } },
+    });
+
+    assert.equal((await sendFrom(cms, '2001:db8:1:2::1', 'https://them.example/1')).status, 202);
+    assert.equal((await sendFrom(cms, '2001:db8:1:2::9', 'https://them.example/2')).status, 429);
+    await cms.webmentions.settled();
   });
 });

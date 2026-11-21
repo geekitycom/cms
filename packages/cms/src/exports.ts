@@ -8,6 +8,7 @@ export type {
   MailOverrides,
   ResolveConfigContext,
   ResolvedConfig,
+  WebmentionOverrides,
 } from './config.ts';
 export {
   defaultPermalink,

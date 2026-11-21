@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, describe, it, mock } from 'node:test';
+
+import { generateCryptoKeyPair } from '@fedify/fedify';
 
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { NewFollower } from '../store/admin-store.ts';
@@ -15,6 +17,10 @@ import type { UserProfile } from '../site/users.ts';
 import { seedActorKeys } from './__testing__/keys.ts';
 import { FOLLOWERS_PAGE_SIZE, followersPage } from './followers.ts';
 import { attributionDomainOf, federationOrigin } from './paths.ts';
+import { createSiteFederation } from './federation.ts';
+import type { FederationContextData } from './federation.ts';
+import { createInboxRefusals } from './refusals.ts';
+import { withDeniedAddresses } from '../util/public-address.ts';
 import { SITE } from '../site/namespace.ts';
 
 /** The origin every request in this file is sent to; Fedify checks it. */
@@ -877,5 +883,58 @@ describe('attributionDomainOf', () => {
     // which has no port, so a site on a port is still credited by its name.
     assert.equal(attributionDomainOf('http://localhost:3000'), 'localhost');
     assert.equal(attributionDomainOf('https://Blog.Example/notes'), 'blog.example');
+  });
+});
+
+describe('fetching remote documents', () => {
+  const OWN_ADDRESS = '93.184.216.34';
+  const OTHER_ADDRESS = '93.184.216.35';
+
+  function loaders() {
+    const fetched: string[] = [];
+    mock.method(globalThis, 'fetch', (input: Request | URL | string) => {
+      fetched.push(input instanceof Request ? input.url : String(input));
+      return Promise.resolve(
+        new Response(JSON.stringify({ '@context': [], id: 'x', type: 'Person' }), {
+          headers: { 'content-type': 'application/activity+json' },
+        }),
+      );
+    });
+    const names: Record<string, string[]> = { 'own.example': [OWN_ADDRESS] };
+    const federation = createSiteFederation({
+      baseUrl: BASE_URL,
+      queue: null,
+      refusals: createInboxRefusals({ now: () => new Date(), warn: () => undefined }),
+      hostLookup: withDeniedAddresses((name) => Promise.resolve(names[name] ?? []), [OWN_ADDRESS]),
+    });
+    const context = federation.createContext(new URL(BASE_URL), {} as FederationContextData);
+    return { context, fetched };
+  }
+
+  it('refuses an actor on an address the operator denied, without asking it', async (t) => {
+    t.after(() => mock.restoreAll());
+    const { context, fetched } = loaders();
+
+    const refused = /not on a public address/;
+    await assert.rejects(context.documentLoader(`https://${OWN_ADDRESS}/users/ada`), refused);
+    await assert.rejects(context.documentLoader('https://own.example/users/ada'), refused);
+    const { privateKey } = await generateCryptoKeyPair('RSASSA-PKCS1-v1_5');
+    const signed = context.getDocumentLoader({
+      keyId: new URL(`${ACTOR_URL}#main-key`),
+      privateKey,
+    });
+    await assert.rejects(signed(`https://${OWN_ADDRESS}/users/ada`), refused);
+    await assert.rejects(context.contextLoader(`https://${OWN_ADDRESS}/context`), refused);
+    assert.deepEqual(fetched, []);
+  });
+
+  it('still loads an actor on any other public address', async (t) => {
+    t.after(() => mock.restoreAll());
+    const { context, fetched } = loaders();
+
+    const loaded = await context.documentLoader(`https://${OTHER_ADDRESS}/users/ada`);
+
+    assert.equal((loaded.document as { type: string }).type, 'Person');
+    assert.deepEqual(fetched, [`https://${OTHER_ADDRESS}/users/ada`]);
   });
 });

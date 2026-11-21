@@ -73,9 +73,10 @@ export interface CreateCommentNotifierOptions {
 export interface CommentNotifier {
   /**
    * A comment has been stored. Tells the moderators when, and only when, it is
-   * waiting for one of them.
+   * waiting for one of them, in one message with the waiting replies the same
+   * page carried.
    */
-  pending(comment: PostComment): void;
+  pending(comment: PostComment, carried?: readonly PostComment[]): void;
   /**
    * A comment has been approved. Tells whoever it answers, when they asked to
    * be told and are still listening.
@@ -122,9 +123,11 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
   }
 
   return {
-    pending(comment) {
-      if (comment.status !== 'pending') return;
-      void notices.run(() => tellModerators(comment));
+    pending(comment, carried = []) {
+      const waiting = [comment, ...carried].filter((one) => one.status === 'pending');
+      const [first, ...rest] = waiting;
+      if (first === undefined) return;
+      void notices.run(() => tellModerators(first, rest));
     },
 
     replyApproved(reply) {
@@ -138,7 +141,10 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
     },
   };
 
-  async function tellModerators(comment: PostComment): Promise<void> {
+  async function tellModerators(
+    comment: PostComment,
+    carried: readonly PostComment[],
+  ): Promise<void> {
     // Asked before anything else, so a site that sends no mail never mints a
     // signing secret it would have no use for.
     if (!(await mail.configured())) return;
@@ -157,16 +163,18 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
     if (recipients.length === 0) return;
 
     const context = { dataDir: config.dataDir, baseUrl: config.baseUrl, now: config.now() };
-    const actions = MODERATION_ACTIONS.map((action) => ({
-      action,
-      label: action === 'approve' ? 'Approve' : action === 'spam' ? 'Spam' : 'Delete',
-      url: moderationLink(context, comment.id, action),
-    }));
+    const actionsFor = (id: string) =>
+      MODERATION_ACTIONS.map((action) => ({
+        action,
+        label: action === 'approve' ? 'Approve' : action === 'spam' ? 'Spam' : 'Delete',
+        url: moderationLink(context, id, action),
+      }));
 
     const data = {
       comment: commentIn(comment),
       post: postOf(comment, await options.cited?.()),
-      actions,
+      actions: actionsFor(comment.id),
+      carried: carried.map((one) => ({ ...commentIn(one), actions: actionsFor(one.id) })),
       queueUrl: absoluteUrl('/admin/comments', config.baseUrl),
     };
 

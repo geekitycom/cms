@@ -15,6 +15,13 @@ import { webmentionEndpointFor } from './endpoint.ts';
 /** Where a pingback is sent. */
 export const PINGBACK_PATH = '/_geekity/pingback';
 
+/**
+ * How long a ping waits for its check before it is answered that the check
+ * is still running. Longer than one read of the source may take, so only a
+ * check that waited for others runs past it.
+ */
+export const PINGBACK_ANSWER_MS = 20_000;
+
 /** Far more than two URLs in an XML-RPC envelope could need. */
 export const PINGBACK_MAX_BYTES = 16 * 1024;
 
@@ -29,6 +36,7 @@ export const PINGBACK_FAULTS = {
   targetMissing: 0x0020,
   notATarget: 0x0021,
   alreadyRegistered: 0x0030,
+  upstreamError: 0x0032,
   notWellFormed: -32700,
   unknownMethod: -32601,
   badParams: -32602,
@@ -59,10 +67,12 @@ export function pingbackAnswerFor(outcome: WebmentionOutcome): string | Pingback
       return outcome.created
         ? 'Thanks. The pingback is waiting for a moderator.'
         : { code: PINGBACK_FAULTS.alreadyRegistered, message: 'That pingback is already here.' };
+    case 'refused':
+      return { code: PINGBACK_REQUEST_FAULTS[outcome.problem], message: outcome.message };
     case 'unreachable':
       return {
-        code: PINGBACK_FAULTS.generic,
-        message: `The source could not be read: ${outcome.reason}`,
+        code: PINGBACK_FAULTS.upstreamError,
+        message: 'The source could not be read this time.',
       };
     case 'deleted':
     case 'ignored':

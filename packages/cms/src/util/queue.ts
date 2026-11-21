@@ -55,4 +55,27 @@ export function createConcurrencyLimit(limit: number): ConcurrencyLimit {
   };
 }
 
+/** A {@link ConcurrencyLimit} for each key, kept only while it has a job running or waiting. */
+export interface KeyedConcurrencyLimit {
+  run<T>(key: string, job: () => Promise<T>): Promise<T>;
+}
+
+export function createKeyedConcurrencyLimit(limit: number): KeyedConcurrencyLimit {
+  const limits = new Map<string, { limit: ConcurrencyLimit; jobs: number }>();
+
+  return {
+    async run(key, job) {
+      const held = limits.get(key) ?? { limit: createConcurrencyLimit(limit), jobs: 0 };
+      limits.set(key, held);
+      held.jobs += 1;
+      try {
+        return await held.limit.run(job);
+      } finally {
+        held.jobs -= 1;
+        if (held.jobs === 0) limits.delete(key);
+      }
+    },
+  };
+}
+
 function ignore(): void {}

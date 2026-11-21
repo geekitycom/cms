@@ -49,6 +49,7 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `ResolveConfigContext` | type     | Ambient inputs `resolveConfig` reads, injectable so the resolution is testable.                                                                                                               |
 | `ResolvedConfig`       | type     | A `GeekityConfig` with every field filled in and every path absolute, frozen.                                                                                                                 |
 | `ServeContext`         | type     | What `geekity serve` hands the CMS it runs, beyond the site's config.                                                                                                                         |
+| `WebmentionOverrides`  | type     | How accepted webmentions are checked, held and tried again, which a site may set through its config.                                                                                          |
 
 ## Documents
 

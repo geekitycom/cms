@@ -62,6 +62,21 @@ const ALLOWED: readonly Allowance[] = [
     because: DURATION,
   },
   {
+    file: 'webmention/fetch-public.test.ts',
+    line: 'assert.ok(Date.now() - started < 2_000);',
+    because: DURATION,
+  },
+  {
+    file: 'webmention/pingback.test.ts',
+    line: "assert.ok(Date.now() - started < 2_000, 'the pingback waited on the other check');",
+    because: DURATION,
+  },
+  {
+    file: 'webmention/pingback.test.ts',
+    line: "assert.ok(Date.now() - started < 2_000, 'the pingback waited past its deadline');",
+    because: DURATION,
+  },
+  {
     file: 'webmention/reply-context.test.ts',
     line: 'assert.ok(Date.now() - started < 2_000',
     because: DURATION,

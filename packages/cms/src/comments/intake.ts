@@ -40,8 +40,11 @@ export type ProposedComment = Omit<PostComment, 'id' | 'status' | 'addressHash'>
  * to know how a message is rendered or sent; `CommentNotifier` satisfies it.
  */
 export interface CommentNotices {
-  /** Something is waiting for a moderator. */
-  pending(comment: PostComment): void;
+  /**
+   * Something is waiting for a moderator, with the replies that came in on the
+   * same page and are waiting too.
+   */
+  pending(comment: PostComment, carried?: readonly PostComment[]): void;
   /** A reply is on the page, so whoever it answers may want to know. */
   replyApproved(reply: PostComment): void;
 }
@@ -68,6 +71,8 @@ export interface IntakeCommentOptions {
   baseUrl: string;
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
+  /** A verdict already reached, which the checker is then not asked for. */
+  verdict?: CommentVerdict | undefined;
   challenge?: ChallengeVerdict | undefined;
   /** Who to tell, when there is anybody to tell. */
   notices?: CommentNotices | undefined;
@@ -153,7 +158,7 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
     return { kind: 'stored', comment: held, created: false };
   }
 
-  const verdict = await ask(options, proposed);
+  const verdict = options.verdict ?? (await ask(options, proposed));
 
   if (verdict === 'discard') {
     if (held === undefined) return { kind: 'discarded', removed: false };

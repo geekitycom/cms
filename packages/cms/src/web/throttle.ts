@@ -292,7 +292,7 @@ export function signInKeys(attempt: SignInAttempt): { strict: string[]; wide: st
  * whole /64, so counting each address in it separately would give one client
  * more addresses than it could ever be locked out of.
  */
-function addressKey(address: string): string {
+export function addressKey(address: string): string {
   if (isIPv4(address)) return address;
   const groups = ipv6Groups(address);
   if (groups === undefined) return address.slice(0, KEY_PART_LENGTH);

@@ -6,4 +6,5 @@ export type {
   IndexNowOverrides,
   JobOverrides,
   MailOverrides,
+  WebmentionOverrides,
 } from './config.ts';

@@ -2,6 +2,7 @@ import type { Context, Hono } from 'hono';
 
 import { publicDocumentAt } from '../content/permalinks.ts';
 import {
+  PINGBACK_ANSWER_MS,
   PINGBACK_FAULTS,
   PINGBACK_MAX_BYTES,
   PINGBACK_PATH,
@@ -12,18 +13,32 @@ import {
 } from '../webmention/pingback.ts';
 import type { PingbackFault } from '../webmention/pingback.ts';
 import { checkWebmentionRequest } from '../webmention/receive.ts';
+import type { ReceivedWebmention } from '../webmention/service.ts';
+import { messageOf } from '../util/errors.ts';
+import { readBounded } from './bounded-body.ts';
+import type { SenderLimit, SyndicatedAt } from './webmention-routes.ts';
 import type { GeekityEnv } from './env.ts';
 import { escapeXml } from './feed-xml.ts';
 import { clientAddress } from './throttle.ts';
 
 /** Register the pingback endpoint. Mounted by the public site. */
-export function mountPingbacks(app: Hono<GeekityEnv>): void {
+export function mountPingbacks(
+  app: Hono<GeekityEnv>,
+  syndicatedAt: SyndicatedAt,
+  limit: SenderLimit,
+): void {
   app.post(PINGBACK_PATH, async (c) => {
     if (!c.var.siteAtRequestStart.webmentions_receive) {
       return c.text('This site does not take pingbacks.', 404);
     }
 
-    const answer = await answerPing(c);
+    const answer =
+      limit(c) === undefined
+        ? await answerPing(c, syndicatedAt)
+        : {
+            code: PINGBACK_FAULTS.generic,
+            message: 'Too many pings from this address. Send it again later.',
+          };
     return c.body(typeof answer === 'string' ? success(answer) : fault(answer), 200, {
       'content-type': 'text/xml; charset=utf-8',
     });
@@ -35,7 +50,10 @@ export function mountPingbacks(app: Hono<GeekityEnv>): void {
   });
 }
 
-async function answerPing(c: Context<GeekityEnv>): Promise<string | PingbackFault> {
+async function answerPing(
+  c: Context<GeekityEnv>,
+  syndicatedAt: SyndicatedAt,
+): Promise<string | PingbackFault> {
   const { store, config, webmentions, renderer, conversation } = c.var;
 
   const xml = await readBounded(c.req.raw, PINGBACK_MAX_BYTES);
@@ -59,6 +77,7 @@ async function answerPing(c: Context<GeekityEnv>): Promise<string | PingbackFaul
   const checked = checkWebmentionRequest(source, target, {
     baseUrl: config.baseUrl,
     documentAt: (pathname) => publicDocumentAt(store, pathname),
+    syndicatedAt: (url) => syndicatedAt(c, url),
     conversation,
     site: c.var.siteAtRequestStart,
   });
@@ -69,37 +88,58 @@ async function answerPing(c: Context<GeekityEnv>): Promise<string | PingbackFaul
     return { code: PINGBACK_FAULTS.notATarget, message: 'That page takes no pingbacks.' };
   }
 
-  const outcome = await webmentions.receive({
-    source: checked.source,
-    target: checked.target,
-    document: checked.document,
-    address: clientAddress(c, config),
-    userAgent: c.req.header('user-agent'),
-    referrer: c.req.header('referer'),
-  });
+  let received: ReceivedWebmention;
+  try {
+    received = await webmentions.receive({
+      source: checked.source,
+      target: checked.target,
+      address: clientAddress(c, config),
+      userAgent: c.req.header('user-agent'),
+      referrer: c.req.header('referer'),
+    });
+  } catch (thrown) {
+    console.warn(`A pingback from ${checked.source} was not recorded: ${messageOf(thrown)}`);
+    return { code: PINGBACK_FAULTS.generic, message: 'The ping could not be recorded.' };
+  }
+  if (received.busy) {
+    return {
+      code: PINGBACK_FAULTS.generic,
+      message: 'Too many pings are waiting to be checked. Send it again later.',
+    };
+  }
+  const outcome = await within(
+    config.webmentions.pingbackAnswerMs ?? PINGBACK_ANSWER_MS,
+    received.checked,
+  );
+  if (outcome === LATE) {
+    return {
+      code: PINGBACK_FAULTS.generic,
+      message: 'The source is still being checked. The ping is kept and checked to the end.',
+    };
+  }
+  if (outcome === undefined) {
+    return {
+      code: PINGBACK_FAULTS.generic,
+      message: 'The source was not read this time. The ping is kept and checked later.',
+    };
+  }
   return pingbackAnswerFor(outcome);
 }
 
-async function readBounded(request: Request, max: number): Promise<string | undefined> {
-  if (Number(request.headers.get('content-length') ?? 0) > max) return undefined;
-  if (request.body === null) return '';
+const LATE = Symbol('late');
 
-  const reader = (request.body as ReadableStream<Uint8Array>).getReader();
-  const decoder = new TextDecoder();
-  let text = '';
-  let read = 0;
+async function within<T>(ms: number, promise: Promise<T>): Promise<T | typeof LATE> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<typeof LATE>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(LATE);
+    }, ms);
+  });
   try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      read += chunk.value.length;
-      if (read > max) return undefined;
-      text += decoder.decode(chunk.value, { stream: true });
-    }
+    return await Promise.race([promise, late]);
   } finally {
-    await reader.cancel().catch(() => undefined);
+    clearTimeout(timer);
   }
-  return text + decoder.decode();
 }
 
 function success(message: string): string {

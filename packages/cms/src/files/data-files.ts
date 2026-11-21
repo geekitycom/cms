@@ -359,6 +359,12 @@ export const QUEUE_LOG = declareDataFile({
   lost: "The queue's write-ahead log, which goes with the queue.",
 });
 
+export const WEBMENTION_CHECKS = declareDataFile({
+  pattern: 'webmention-checks.json',
+  dataClass: PENDING,
+  lost: 'Webmentions and pingbacks accepted and not yet checked, which are then never checked.',
+});
+
 export const AUTOSAVE = declareDataFile({
   pattern: 'autosave/**',
   dataClass: PENDING,
@@ -402,6 +408,7 @@ export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   FONTS,
   QUEUE,
   QUEUE_LOG,
+  WEBMENTION_CHECKS,
   AUTOSAVE,
 ];
 

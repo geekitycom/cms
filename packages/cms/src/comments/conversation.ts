@@ -249,18 +249,18 @@ export interface ConversationReader {
    */
   readonly comment: (id: string, site: ConversationSite) => CommentThread | undefined;
   /**
-   * The reply on a post that a URL names, or `undefined`:
+   * What finds the reply on a post that a URL names, or `undefined`:
    * a comment by its own page or by the post's `#comment-` anchor, a
    * webmention by the page it was sent from, a fediverse reply by its url or
    * its id. Every stored comment counts whatever its status, because what a
    * reply answers is a fact about it, and whether a reader may see the one it
-   * answers is decided when the thread is read.
+   * answers is decided when the thread is read. The post's conversation is
+   * read once, when the finder is made, however many URLs it is asked about.
    */
-  readonly replyNamed: (
+  readonly replyFinder: (
     document: Document,
-    url: string,
     site: ConversationSite,
-  ) => Interaction | undefined;
+  ) => (url: string) => Interaction | undefined;
   /**
    * What a URL names on this site, while a reader may see it: a reply (a
    * comment by its page or its anchor, a webmention by the page it was sent

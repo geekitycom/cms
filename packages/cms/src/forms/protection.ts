@@ -52,6 +52,15 @@ export const MINIMUM_SUBMIT_SECONDS = 3;
  */
 export const MAXIMUM_FORM_AGE_SECONDS = 24 * 60 * 60;
 
+/**
+ * The most a submitted form may weigh, in bytes.
+ *
+ * The longest text a form takes is 10,000 characters, which is about 90 KB
+ * when every character is percent-encoded from three UTF-8 bytes. The rest of
+ * the form and a challenge token fit in what is left.
+ */
+export const FORM_MAX_BYTES = 256 * 1024;
+
 /** Whether the honeypot was filled in, which no person ever does. */
 export function trapped(value: string): boolean {
   return value.trim() !== '';
