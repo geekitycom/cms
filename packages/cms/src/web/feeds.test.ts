@@ -1852,7 +1852,7 @@ describe('the comment pointers on a post feed', () => {
 
 describe('the comments feeds on an HTML page', () => {
   const files = {
-    '_data/site.json': JSON.stringify({ title: 'Geekity Demo' }),
+    '_data/site.json': JSON.stringify({ title: 'Geekity Demo', commentsCloseAfterDays: 0 }),
     'posts/2026-09-02-hello.md': post('Hello, World!', {
       date: '2026-09-02T09:00:00Z',
       permalink: '/2026/09/hello/',
@@ -1869,7 +1869,7 @@ describe('the comments feeds on an HTML page', () => {
     }
   });
 
-  it('advertises a post’s own comments feed, and a closed page’s', async () => {
+  it('advertises an open post’s own comments feed, not a closed page’s with none', async () => {
     const { cms } = await sharedSite(files);
 
     const post =
@@ -1883,8 +1883,8 @@ describe('the comments feeds on an HTML page', () => {
 
     const page = (await (await cms.app.request('/about/')).text()).split('</head>')[0] ?? '';
     assert.ok(
-      page.includes('href="/about/feed/"'),
-      'a page that takes no comments still has what was said in a feed',
+      !page.includes('href="/about/feed/"'),
+      'a page that takes no comments and has none advertises no feed of them',
     );
   });
 });

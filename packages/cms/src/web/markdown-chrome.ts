@@ -52,11 +52,13 @@ export function createMarkdownChrome(
   const { siteData, users } = deps;
 
   function renderMarkdownChrome(
-    chrome: MarkdownChrome,
+    { commentsFeed, ...chrome }: MarkdownChrome,
     { markdownUrl, frontPage, document, format, layouts = [] }: MarkdownChromeOptions,
   ): MarkdownChromeText {
     const site = siteData.read();
     const soloAuthor = siteAuthorContext(users(), site.author);
+    const responses = markdownConversationContext(deps, document, chrome.url);
+    const answerable = 'conversation' in responses || 'commentForm' in responses;
     const context = {
       site,
       menus: navigationMenus({ site, url: chrome.url }),
@@ -70,9 +72,11 @@ export function createMarkdownChrome(
       ),
       ...markdownLinksContext(deps, document),
       ...markdownKindContext(deps, document),
-      ...markdownConversationContext(deps, document, chrome.url),
+      ...responses,
       home: HOME_LINK,
       ...chrome,
+      feeds:
+        answerable && commentsFeed !== undefined ? [...chrome.feeds, commentsFeed] : chrome.feeds,
       bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
       staticFrontPage: frontPage !== undefined,
       markdownUrl,

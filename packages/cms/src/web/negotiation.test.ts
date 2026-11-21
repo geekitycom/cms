@@ -91,7 +91,6 @@ const HELLO_MARKDOWN = [
   '## Feeds',
   '',
   ...SITE_FEEDS,
-  '- [Comments on: Hello, World! (RSS)](/2026/09/hello/feed/)',
   '',
 ].join('\n');
 
@@ -133,7 +132,6 @@ describe('the Markdown representation', () => {
         '## Feeds',
         '',
         ...SITE_FEEDS,
-        '- [Comments on: Just a thought. (RSS)](/note/feed/)',
       ]),
     );
     assert.equal(
@@ -144,7 +142,6 @@ describe('the Markdown representation', () => {
         '## Feeds',
         '',
         ...SITE_FEEDS,
-        '- [Comments on: Headed (RSS)](/headed/feed/)',
       ]),
     );
   });

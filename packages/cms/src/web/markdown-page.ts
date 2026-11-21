@@ -56,6 +56,8 @@ export interface MarkdownChrome {
   readonly bio?: MarkdownBio | undefined;
   /** The feeds the HTML head advertises, in its order. */
   readonly feeds: readonly MarkdownFeed[];
+  /** A document's own comments feed, listed after `feeds` when it takes or has comments. */
+  readonly commentsFeed?: MarkdownFeed | undefined;
   /** On a comment's own page: the comment and its place in the thread. */
   readonly thread?: MarkdownCommentThread | undefined;
   /** On the wiki index: its pages A to Z, a group for each first letter. */

@@ -554,7 +554,7 @@ describe('what a post links to beyond its words (TASK-473)', () => {
   }
 
   it('lists the feeds the HTML head advertises, on every kind of page', async () => {
-    const cms = await sharedSite({ files: FILED });
+    const cms = await sharedSite({ files: FILED, site: { commentsCloseAfterDays: 0 } });
     const pages = [
       '/2026/09/two/',
       '/about/',
@@ -592,7 +592,7 @@ describe('what a post links to beyond its words (TASK-473)', () => {
     ].join('\n');
     const cms = await sharedSite({
       files: FILED,
-      site: { theme: 'mine' },
+      site: { theme: 'mine', commentsCloseAfterDays: 0 },
       theme: {
         'partials/markdown-header.md.njk': partial,
         'partials/markdown-footer.md.njk': partial,

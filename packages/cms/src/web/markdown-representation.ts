@@ -84,18 +84,14 @@ export function documentMarkdown(
       document.type === 'post' && writer?.url !== undefined
         ? { label: writer.name, url: writer.url }
         : undefined,
-    feeds: [
-      ...siteFeeds(siteTitle),
-      ...(isServed(document, c.var.store.now())
-        ? [
-            feed(
-              'rss',
-              `${COMMENTS_TITLE_PREFIX}${documentLabel(c, document)}`,
-              commentsFeedPath(document.permalink),
-            ),
-          ]
-        : []),
-    ],
+    feeds: siteFeeds(siteTitle),
+    commentsFeed: isServed(document, c.var.store.now())
+      ? feed(
+          'rss',
+          `${COMMENTS_TITLE_PREFIX}${documentLabel(c, document)}`,
+          commentsFeedPath(document.permalink),
+        )
+      : undefined,
   };
 
   return textPage(

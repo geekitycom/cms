@@ -104,6 +104,12 @@ async function head(pathname: string): Promise<string> {
   return (await response.text()).split('</head>')[0] ?? '';
 }
 
+async function markdown(pathname: string): Promise<string> {
+  const response = await cms.app.request(pathname);
+  assert.equal(response.status, 200, pathname);
+  return response.text();
+}
+
 describe('a page’s comments feed', () => {
   it('carries the conversation of a page that takes comments, named as the page', async () => {
     const found = await channel('/guestbook/feed/');
@@ -158,9 +164,16 @@ describe('a page advertises its comments feed', () => {
     assert.ok((await head('/quiet/')).includes('href="/quiet/feed/"'));
   });
 
-  it('when it takes none, too', async () => {
-    for (const url of ['/about/', '/shut/']) {
-      assert.ok((await head(url)).includes(`href="${url}feed/"`), url);
-    }
+  it('when it is closed but has comments', async () => {
+    assert.ok((await head('/about/')).includes('href="/about/feed/"'));
+  });
+
+  it('not when it is closed and has none', async () => {
+    assert.ok(!(await head('/shut/')).includes('href="/shut/feed/"'));
+  });
+
+  it('in its Markdown only when it would in its head', async () => {
+    assert.ok((await markdown('/quiet/index.md')).includes('(/quiet/feed/)'));
+    assert.ok(!(await markdown('/shut/index.md')).includes('/shut/feed/'));
   });
 });
