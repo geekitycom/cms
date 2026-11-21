@@ -25,6 +25,7 @@ import type { ActivityNote } from './indieauth-activity-log.ts';
 import type { IndieAuthState } from '../indieauth/grants.ts';
 import type { ActorProfileService } from '../federation/profiles.ts';
 import type { ReplyReview } from '../federation/reply-review.ts';
+import type { ActivityNotices } from '../notifications/activity.ts';
 import type { RelayService } from '../federation/relays.ts';
 import type { MailService } from '../notifications/mail-service.ts';
 import type { MaintenanceSwitch } from '../maintenance.ts';
@@ -103,6 +104,8 @@ export interface GeekityEnv {
     actorProfiles: ActorProfileService;
     /** Whether a fediverse reply the inbox is sent shows at once or waits for review. */
     replyReview: ReplyReview;
+    /** Who hears about a like, a boost, a quote or a new follower the inbox is sent. */
+    activityNotices: ActivityNotices;
     /**
      * Report a write this request made to the content directory.
      *

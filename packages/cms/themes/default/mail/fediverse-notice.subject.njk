@@ -1,0 +1,2 @@
+{# The subject of a like, boost, quote or new follower notice. One line. #}
+{{ notice.actor.name }} {{ notice.action }}{{ ' “' + notice.post.title + '”' if notice.post else '' }}

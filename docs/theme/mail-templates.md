@@ -15,7 +15,7 @@ If no theme on the search path has the message's `.txt.njk`, sending fails
 with an error. A typo in a template name is reported, and no empty email goes
 out.
 
-The package ships eight messages:
+The package ships nine messages:
 
 | Name                | When it goes                                                                              | What `data` carries                                                                                                                                                                                                                                        |
 | ------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -25,6 +25,7 @@ The package ships eight messages:
 | `email-changed`     | An account's email address was changed. Sent to the previous address.                     | `username`, `email` (the new address, empty when it was removed).                                                                                                                                                                                          |
 | `comment-pending`   | A comment or webmention is waiting for approval.                                          | `comment`, `post` (`title`, `url`), `actions` (one `{ action, label, url }` each for approve, spam and delete), `carried` (the waiting replies that the same webmention source carried, each a comment with its own `actions`; usually empty), `queueUrl`. |
 | `comment-published` | A comment, webmention or fediverse reply went on a page without a moderator approving it. | `comment`, `post` (`title`, `url`), `link` (the comment on the page).                                                                                                                                                                                      |
+| `fediverse-notice`  | A like, boost, quote or new follower, for a user who takes that notice as it arrives.     | `event` (`reactions`, `quotes` or `followers`), `notice` (see below), `settingsUrl`.                                                                                                                                                                       |
 | `comment-digest`    | An hourly or daily digest of what is waiting and what happened.                           | `sections` (see below), `count` across them, the `mode` of the message (`hourly` when any part is hourly), `settingsUrl`. Also `items`, `total`, `more` and `queueUrl` of the waiting-for-review part, for themes written before `sections`.               |
 | `comment-reply`     | A reply to a visitor's comment was approved.                                              | `reply`, `comment` (the one it answers), `post`, `unsubscribeUrl`.                                                                                                                                                                                         |
 | `contact-message`   | A visitor sent a page's contact form.                                                     | `message` (`id`, `subject`, `text`, `received`), `from` (`name`, `email`), `page` (`slug`, `permalink`, `title`, `url`), `messagesUrl`.                                                                                                                    |
@@ -45,8 +46,13 @@ send time. An item moderated before then is not in the digest.
 
 Each item of any other section is `{ actor, action, post, text, url, at }`:
 `actor` is `{ name, url }`, `action` is the words after the name (`quoted`,
-`followed the site`), `post` is `{ title, url }` when there is one, `text` is
+`liked`), `post` is `{ title, url }` when there is one, `text` is
 plain text, `url` links to the thing itself, and `at` is when it was recorded.
+
+The `notice` of a `fediverse-notice` has the same shape, without `at`. Its
+`action` is `liked`, `boosted`, `quoted` or `followed`. For `followed`, `post`
+names the account that was followed: its handle as `title` and its actor URL
+as `url`. For `quoted`, `text` is what the quote says and `url` is the quote.
 
 A recipient with nothing in any section gets no digest.
 

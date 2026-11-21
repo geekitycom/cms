@@ -131,6 +131,35 @@ export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = [
     batched: true,
     defaultMode: 'immediately',
   },
+  {
+    name: 'reactions',
+    label: 'Likes and boosts',
+    description:
+      'Somebody on the fediverse liked or boosted one of your posts. An undone like or boost ' +
+      'is taken out of a digest that has not gone yet.',
+    byDefault: false,
+    batched: true,
+    defaultMode: 'daily',
+  },
+  {
+    name: 'quotes',
+    label: 'Quotes',
+    description:
+      'Somebody on the fediverse quoted one of your posts, with what they said about it.',
+    byDefault: true,
+    batched: true,
+    defaultMode: 'daily',
+  },
+  {
+    name: 'followers',
+    label: 'New followers',
+    description:
+      'Somebody on the fediverse followed one of the site’s accounts. Relays the site ' +
+      'subscribes to are not followers and send nothing.',
+    byDefault: true,
+    batched: true,
+    defaultMode: 'daily',
+  },
 ];
 
 /** The event of that name, or `undefined` for one nothing here knows. */

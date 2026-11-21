@@ -43,7 +43,7 @@ export interface NoticeItem {
   readonly key: string;
   /** Who did it, linked when they have somewhere to link to. */
   readonly actor: { readonly name: string; readonly url?: string | undefined };
-  /** What they did, as the words after their name: `quoted`, `followed the site`. */
+  /** What they did, as the words after their name: `liked`, `quoted`. */
   readonly action: string;
   /** The post they did it to, when there is one. */
   readonly post?: { readonly title: string; readonly url: string } | undefined;

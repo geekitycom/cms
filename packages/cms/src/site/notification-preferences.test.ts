@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   notificationEvent,
   notificationMode,
+  notificationWanted,
   notificationSwitches,
   withNotificationMode,
 } from './notification-preferences.ts';
@@ -100,4 +101,24 @@ describe('the registry', () => {
       'hourly',
     );
   });
+
+  for (const [name, label, on] of [
+    ['reactions', 'Likes and boosts', false],
+    ['quotes', 'Quotes', true],
+    ['followers', 'New followers', true],
+  ] as const) {
+    it(`offers ${label}, ${on ? 'on' : 'off'} and daily when on`, () => {
+      const event = notificationEvent(name);
+      assert.ok(event !== undefined, `there is a ${name} event`);
+      assert.equal(event.label, label);
+      assert.equal(event.batched, true);
+      assert.equal(notificationWanted(user(), name), on);
+      assert.equal(notificationMode(user(), name), 'daily');
+      assert.equal(
+        notificationMode(user({ notifications: { [name]: !on } }), name),
+        'daily',
+        'turning it on or off leaves it daily',
+      );
+    });
+  }
 });

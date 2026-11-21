@@ -173,6 +173,38 @@ describe('mail templates', () => {
       assert.ok(text.includes('From: Grace\nWhen: 4 September 2026\n\nGood post.'), text);
     });
 
+    const notice = {
+      key: 'https://remote.example/users/grace#likes/1',
+      actor: { name: 'Grace', url: 'https://remote.example/@grace' },
+      action: 'quoted',
+      post: { title: 'Hello', url: 'https://blog.example/hello/' },
+      text: 'Worth reading.',
+      url: 'https://remote.example/@grace/99',
+    };
+
+    it('says who did what to which post in a fediverse notice, each link on its own line', async () => {
+      const text = await packaged('fediverse-notice', { event: 'quotes', notice });
+
+      assert.ok(
+        text.startsWith(
+          'Grace quoted “Hello”.\n\nWho: https://remote.example/@grace\nPost: https://blog.example/hello/\nLink: https://remote.example/@grace/99\n\nWorth reading.\n',
+        ),
+        text,
+      );
+    });
+
+    it('leaves out what a fediverse notice does not have', async () => {
+      const text = await packaged('fediverse-notice', {
+        event: 'reactions',
+        notice: { key: 'k', actor: { name: 'Grace' }, action: 'liked', post: notice.post },
+      });
+
+      assert.ok(
+        text.startsWith('Grace liked “Hello”.\n\nPost: https://blog.example/hello/\n\n--'),
+        text,
+      );
+    });
+
     const bodies: Record<string, Record<string, unknown>> = {
       'comment-digest': {
         sections: [
@@ -206,6 +238,11 @@ describe('mail templates', () => {
         messagesUrl: 'https://blog.example/admin/messages',
       },
       'email-changed': { username: 'ada', email: 'ada@example.com' },
+      'fediverse-notice': {
+        event: 'reactions',
+        notice,
+        settingsUrl: 'https://blog.example/admin/settings/notifications',
+      },
       'password-changed': { username: 'ada' },
       'password-reset': {
         username: 'ada',

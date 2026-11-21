@@ -35,6 +35,7 @@ import { loadActorKeyPairs } from './keys.ts';
 import type { InboxRefusals } from './refusals.ts';
 import type { ActorProfileService } from './profiles.ts';
 import type { ReplyReview } from './reply-review.ts';
+import type { ActivityNotices } from '../notifications/activity.ts';
 import {
   ACTOR_PATH,
   FEATURED_PATH,
@@ -84,6 +85,11 @@ export interface FederationContextData {
    * subscription's.
    */
   readonly replies?: ReplyReview | undefined;
+  /**
+   * Who hears about a like, a boost, a quote or a new follower. Absent from a
+   * context that only sends.
+   */
+  readonly notices?: ActivityNotices | undefined;
 }
 
 /** A CMS federation object, with the context data its dispatchers expect. */

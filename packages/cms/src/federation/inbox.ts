@@ -27,7 +27,16 @@ import { holdOutbound } from '../dev-mode.ts';
 import { listUsers, primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { actorId, senderKeyPairs, userByUsername } from './actor.ts';
+import {
+  noticeFollower,
+  noticeQuote,
+  noticeReaction,
+  withdrawQuotes,
+  withdrawUndone,
+} from './activity-notices.ts';
 import { articleObjectId, documentAuthor, postByObjectId } from './article.ts';
+import { postLabel } from '../content/post-type.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { isFederatedDocument } from '../content/served.ts';
 import type { FederationContextData } from './federation.ts';
 import { authorizeQuote, quoteAuthorization, revokeQuotes } from './quotes.ts';
@@ -53,7 +62,9 @@ export type SiteInboxContext = InboxContext<FederationContextData>;
  * Following twice is a no-op beyond refreshing the stored profile: the store
  * is keyed by the pair (user, actor) and keeps the original follow time, so a
  * redelivered or repeated `Follow` cannot turn one follower into two. One
- * actor may follow two of this site's users, and that is two rows.
+ * actor may follow two of this site's users, and that is two rows. Only a
+ * follow that adds a row is news, so only that one sends the new follower
+ * notice.
  */
 export async function handleFollow(context: SiteInboxContext, follow: Follow): Promise<void> {
   const followed = followedUser(context, follow);
@@ -65,7 +76,9 @@ export async function handleFollow(context: SiteInboxContext, follow: Follow): P
   const follower = await followerFrom(actor, dereference(context));
   if (follower === undefined) return;
 
+  const already = context.data.admin.getFollower(followed.username, follower.actorId);
   await addFollower(recordsOf(context), followed.username, follower);
+  if (already === undefined) await noticeFollower(context, follow.id.href, followed, follower);
 
   await reply(
     context,
@@ -115,7 +128,8 @@ function followedUser(context: SiteInboxContext, follow: Follow): User | undefin
 
 /**
  * Handle an `Undo`: an undone `Follow` removes the follower, and an undone
- * `QuoteRequest` withdraws the quote approval it was given.
+ * `QuoteRequest` withdraws the quote approval it was given. Whatever it undid
+ * leaves any digest that was to list it.
  *
  * Only the actor that sent the `Follow` may undo it. Without that check any
  * signed actor could unfollow the site on somebody else's behalf, since the
@@ -128,10 +142,12 @@ export async function handleUndo(context: SiteInboxContext, undo: Undo): Promise
   const undoer = undo.actorId?.href;
   const undone = undo.objectId?.href;
   if (undoer !== undefined && undone !== undefined) {
-    await revokeQuotes(
+    const revoked = await revokeQuotes(
       context.data.config.contentDir,
       (record) => record.request === undone && record.actor === undoer,
     );
+    await withdrawQuotes(context, revoked);
+    await withdrawUndone(context, undoer, undone);
   }
 
   const object = await undo.getObject(dereference(context));
@@ -167,10 +183,11 @@ export async function handleDelete(context: SiteInboxContext, activity: Delete):
 
   if (actor.href !== object.href) {
     // A quote its author deleted is no longer one this site vouches for.
-    await revokeQuotes(
+    const revoked = await revokeQuotes(
       context.data.config.contentDir,
       (record) => record.quote === object.href && record.actor === actor.href,
     );
+    await withdrawQuotes(context, revoked);
     // Nor is a reply its author deleted waiting for anybody.
     await context.data.replies?.deleted(actor.href, object.href);
     return;
@@ -284,7 +301,7 @@ export async function handleQuoteRequest(
     return;
   }
 
-  const record = await authorizeQuote(
+  const { record, created } = await authorizeQuote(
     config.contentDir,
     author.username,
     {
@@ -295,6 +312,13 @@ export async function handleQuoteRequest(
     },
     config.now(),
   );
+  if (created) {
+    const quoted = {
+      title: postLabel(post, context.data.cited),
+      url: absoluteUrl(post.permalink, config.baseUrl),
+    };
+    await noticeQuote(context, record, quoted, requester, request);
+  }
   const stamp = quoteAuthorization(context, author, record);
   await reply(
     context,
@@ -342,8 +366,9 @@ function answersPost(context: SiteInboxContext, activity: Accept | Reject): bool
 
 /**
  * Handle a `Like`, an `Announce` or a `Create`: record it, ask for the
- * profile of whoever sent it, and put a reply that waits for review in the
- * queue.
+ * profile of whoever sent it, put a reply that waits for review in the
+ * queue, and tell whoever wants to know of a like or a boost of a post. A
+ * like or boost the log already held was told about when it first came.
  *
  * Nothing about the activity is interpreted here: the conversation reads it
  * back out of the log, which is why the row keeps the whole JSON-LD rather
@@ -355,7 +380,14 @@ export async function handleLoggedActivity(
   context: SiteInboxContext,
   activity: Like | Announce | Create,
 ): Promise<void> {
+  const seen =
+    activity.id !== null &&
+    context.data.admin.searchInboxActivities({ activityId: activity.id.href }, { limit: 1 }).items
+      .length > 0;
   const logged = await logActivity(context, activity);
+  if (logged !== undefined && !seen && !(activity instanceof Create)) {
+    await noticeReaction(context, activity);
+  }
   if (activity.actorId !== null) context.data.actorProfiles.capture(activity.actorId.href);
   if (logged !== undefined && activity instanceof Create) {
     await context.data.replies?.received(logged);

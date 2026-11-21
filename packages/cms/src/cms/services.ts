@@ -20,6 +20,8 @@ import { createContentSync, createScheduler } from '../content/index.ts';
 import type { ContentEventListener, ContentSync, Scheduler } from '../content/index.ts';
 import { createReplyReview } from '../federation/reply-review.ts';
 import type { ReplyReview } from '../federation/reply-review.ts';
+import { createActivityNotices } from '../notifications/activity.ts';
+import type { ActivityNotices } from '../notifications/activity.ts';
 import { createReplyBackfill, signedRepliesLoader } from '../federation/backfill.ts';
 import type { ReplyBackfill } from '../federation/backfill.ts';
 import type { ConversationSite } from '../comments/conversation.ts';
@@ -132,6 +134,7 @@ export interface Services {
   readonly fonts: FontStore;
   readonly actorProfiles: ActorProfileService;
   readonly replyReview: ReplyReview;
+  readonly activityNotices: ActivityNotices;
   readonly replyBackfill: ReplyBackfill;
   readonly retention: RetentionService;
   readonly notifier: FeedNotifier;
@@ -361,7 +364,17 @@ export function createServices({
     notices: notifications,
   });
 
-  const federated = { ...site, actorProfiles, cited: citedWith, replies: replyReview };
+  // And who hears about a like, a boost, a quote or a new follower, as the
+  // inbox first knows of it.
+  const activityNotices = createActivityNotices({ mail, config: resolved });
+
+  const federated = {
+    ...site,
+    actorProfiles,
+    cited: citedWith,
+    replies: replyReview,
+    notices: activityNotices,
+  };
   const federationData = async () => {
     const settled = await settings.values(SITE);
     return { ...federated, site: settled, cited: citedWith(settled) };
@@ -669,6 +682,7 @@ export function createServices({
     fonts,
     actorProfiles,
     replyReview,
+    activityNotices,
     replyBackfill,
     retention,
     notifier,

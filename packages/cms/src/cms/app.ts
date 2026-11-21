@@ -80,6 +80,7 @@ export function createApp(
     c.set('fonts', services.fonts);
     c.set('actorProfiles', services.actorProfiles);
     c.set('replyReview', services.replyReview);
+    c.set('activityNotices', services.activityNotices);
     c.set('announce', (change) => content.announce(change));
     c.set('rescan', () => content.sync());
     c.set('delivery', services.delivery);

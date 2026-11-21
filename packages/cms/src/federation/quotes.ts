@@ -86,19 +86,19 @@ function isQuoteAuthorization(value: unknown): value is QuoteAuthorizationRecord
 /**
  * Approve one quote of one user's post, or hand back the approval it already
  * has. Keyed by the quote and the post, so a redelivered or repeated request
- * is one stamp rather than two.
+ * is one stamp rather than two; `created` says which it was.
  */
 export async function authorizeQuote(
   contentDir: string,
   username: string,
   asked: QuoteAsked,
   now: Date,
-): Promise<QuoteAuthorizationRecord> {
+): Promise<{ record: QuoteAuthorizationRecord; created: boolean }> {
   const file = quotesFile(contentDir, username);
   return await withFileLock(file, () => {
     const held = readQuoteAuthorizations(contentDir, username);
     const existing = held.find((entry) => entry.quote === asked.quote && entry.post === asked.post);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) return { record: existing, created: false };
 
     const stored: QuoteAuthorizationRecord = {
       id: randomUUID(),
@@ -106,27 +106,31 @@ export async function authorizeQuote(
       authorizedAt: now.toISOString(),
     };
     writeFileAtomicallySync(file, quotesJson([...held, stored]));
-    return stored;
+    return { record: stored, created: true };
   });
 }
 
 /**
  * Withdraw every approval `taken` picks out, whichever user gave it: the quote
  * was deleted or its request undone, and a stamp for a quote that no longer
- * stands is one nobody should be shown.
+ * stands is one nobody should be shown. Hands back what it withdrew.
  */
 export async function revokeQuotes(
   contentDir: string,
   taken: (record: QuoteAuthorizationRecord) => boolean,
-): Promise<void> {
+): Promise<QuoteAuthorizationRecord[]> {
+  const revoked: QuoteAuthorizationRecord[] = [];
   for (const username of federatedUsernames(contentDir)) {
     const file = quotesFile(contentDir, username);
     await withFileLock(file, () => {
       const held = readQuoteAuthorizations(contentDir, username);
-      const kept = held.filter((record) => !taken(record));
-      if (kept.length !== held.length) writeFileAtomicallySync(file, quotesJson(kept));
+      const gone = held.filter(taken);
+      if (gone.length === 0) return;
+      writeFileAtomicallySync(file, quotesJson(held.filter((record) => !gone.includes(record))));
+      revoked.push(...gone);
     });
   }
+  return revoked;
 }
 
 /** One approval as the `QuoteAuthorization` a peer dereferences. */

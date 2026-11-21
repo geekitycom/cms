@@ -8,6 +8,14 @@ export {
 } from './comments.ts';
 export type { CommentNotifier, CreateCommentNotifierOptions } from './comments.ts';
 export {
+  createActivityNotices,
+  FEDIVERSE_NOTICE_TEMPLATE,
+  FOLLOWERS_NOTIFICATION,
+  QUOTES_NOTIFICATION,
+  REACTIONS_NOTIFICATION,
+} from './activity.ts';
+export type { ActivityNotices, CreateActivityNoticesOptions } from './activity.ts';
+export {
   COMMENT_DIGEST_TEMPLATE,
   createCommentDigest,
   DIGEST_MAX_ITEMS,
