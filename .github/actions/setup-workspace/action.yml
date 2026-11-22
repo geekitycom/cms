@@ -18,6 +18,9 @@ runs:
     - uses: actions/setup-node@v7
       with:
         node-version-file: .node-version
+        # .node-version names the major only; without this the runner's cached
+        # Node 26 would be used even when a newer one is out.
+        check-latest: true
         cache: pnpm
 
     # The root `prepare` script is `husky && pnpm build`. husky is happy in a
