@@ -10,6 +10,7 @@
   {{ field.problem('settings-posts-per-page', problems.posts_per_page) }}
   {{ field.problem('settings-notify-server', problems.notify_server) }}
   {{ field.problem('settings-following-opml', problems.following_opml) }}
+  {{ field.problem('settings-feed-size', problems.feed_size) }}
   {{ field.problem('settings-feed-update-period', problems.feed_update_period) }}
   {{ field.problem('settings-feed-update-frequency', problems.feed_update_frequency) }}
   {{ field.problem('settings-ai-crawlers', problems.ai_crawlers) }}
@@ -99,6 +100,10 @@
   {% endset %}
   {{ field.text('settings-following-opml', fields.following_opml, 'Following list (OPML)', form.following_opml,
        error=problems.following_opml, hintHtml=followingHint, inputmode='url') }}
+
+  {{ field.text('settings-feed-size', fields.feed_size, 'Feed size', form.feed_size,
+       error=problems.feed_size, inputmode='numeric', required=true,
+       hint='How many of the newest items every feed holds: posts, archives and comments.') }}
 
   {# TASK-152. The Syndication module's polling hint, which only RSS has an
      element for. #}

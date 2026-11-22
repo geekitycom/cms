@@ -99,7 +99,7 @@ describe('saving one settings page', () => {
     // A key the settings model does not carry: it has to survive both saves.
     await writeFile(
       path.join(contentDir, '_data', 'site.json'),
-      JSON.stringify({ title: 'Before', feedSize: 42 }),
+      JSON.stringify({ title: 'Before', shelf: 42 }),
       'utf8',
     );
 
@@ -133,7 +133,7 @@ describe('saving one settings page', () => {
     const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
     ) as Record<string, unknown>;
-    assert.equal(written['feedSize'], 42, 'and the key neither page manages is still there');
+    assert.equal(written['shelf'], 42, 'and the key neither page manages is still there');
   });
 
   it('comes back on the page it came from when it is refused, having written nothing (AC #3)', async () => {
@@ -201,6 +201,7 @@ const READING: Record<string, string> = {
   posts_per_page: '10',
   navigation: '',
   notify_server: '',
+  feed_size: '20',
   feed_update_period: 'hourly',
   feed_update_frequency: '1',
   ai_crawlers: 'allow',

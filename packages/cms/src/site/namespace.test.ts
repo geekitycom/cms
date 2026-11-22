@@ -44,6 +44,7 @@ const STABLE_SITE_JSON_KEYS = [
   'fediverseReplies',
   'notifyServer',
   'followingOpml',
+  'feedSize',
   'feedUpdatePeriod',
   'feedUpdateFrequency',
   'aiCrawlers',
@@ -142,7 +143,6 @@ describe('the site namespace', () => {
   it('keeps the keys it does not declare through a write', async () => {
     const { settings, file } = await siteWith({
       title: 'Before',
-      feedSize: 20,
       plugins: { '@acme/plugin-x': { enabled: true } },
       shelf: { books: ['Dune'] },
     });
@@ -152,7 +152,6 @@ describe('the site namespace', () => {
     assert.deepEqual(result, { ok: true });
     const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
     assert.equal(written['title'], 'After');
-    assert.equal(written['feedSize'], 20);
     assert.deepEqual(written['plugins'], { '@acme/plugin-x': { enabled: true } });
     assert.deepEqual(written['shelf'], { books: ['Dune'] });
   });

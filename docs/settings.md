@@ -6,7 +6,7 @@ has seven pages under the Settings menu:
 | Page              | What it holds                                                                                                                                                                                                                                                            |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **General**       | Title, tagline, author, base URL, time zone, language, the locale for dates and counts when it differs from the language, site icon, whether the header shows it, and license.                                                                                           |
-| **Reading**       | What the homepage displays, posts per page, the notify server the feeds advertise, and the OPML list of the feeds the site follows.                                                                                                                                      |
+| **Reading**       | What the homepage displays, posts per page, how many items a feed holds, the notify server the feeds advertise, and the OPML list of the feeds the site follows.                                                                                                         |
 | **Permalinks**    | The tag and category archive bases, the wiki base, and the archive redirects already recorded.                                                                                                                                                                           |
 | **Discussion**    | Comments, which types take them by default, and when they close, webmentions sent and received, which fediverse replies wait for review, the Akismet key, the hCaptcha site key and secret, and how long commenter emails, address hashes and contact messages are kept. |
 | **Email**         | How the site sends mail, where a message written to the site goes, and the security contact.                                                                                                                                                                             |
@@ -68,7 +68,7 @@ The file holds these keys:
 - `tagBase`, `categoryBase`, `wikiBase`
 - `comments`, `commentsOnPosts`, `commentsOnPages`, `commentsCloseAfterDays`
   (see [Comments](comments.md))
-- `notifyServer`, `feedUpdatePeriod`, `feedUpdateFrequency`
+- `notifyServer`, `feedSize`, `feedUpdatePeriod`, `feedUpdateFrequency`
 - `followingOpml` (see [Following list](#following-list))
 - `webmentionsSend`, `webmentionsReceive`
 - `fediverseReplies` (see
@@ -87,7 +87,7 @@ The file holds these keys:
 
 A save writes every one of these keys, so the file always holds the whole set
 of values in effect for a theme or an Eleventy build to read. It keeps every
-other key already in the file, including `feedSize` and anything a site added,
+other key already in the file, including anything a site or a plugin added,
 and drops the retired `navigation` and `soloAuthor` keys. A missing key takes its default. A key of the wrong type
 also takes its default, so a hand-edited `site.json` cannot take the site down.
 

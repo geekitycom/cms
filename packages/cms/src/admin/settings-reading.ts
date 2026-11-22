@@ -61,6 +61,7 @@ export const READING_SETTINGS: SettingsPage = {
     'posts_per_page',
     'notify_server',
     'following_opml',
+    'feed_size',
     'feed_update_period',
     'feed_update_frequency',
     'ai_crawlers',
