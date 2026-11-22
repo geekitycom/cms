@@ -9,6 +9,7 @@ import { FEED_ITEM_REVISION } from './feed-item.ts';
 import { jsonFeed } from './feed-json.ts';
 import { rssFeed, commentsRssFeed } from './feed-rss.ts';
 import { FEED_CONTENT_TYPES, feedCadence, feedLanguage, notifyServerOf } from './feed-source.ts';
+export { DEFAULT_FEED_SIZE } from '../site/feed-settings.ts';
 import type { CommentFeedSource, FeedFormat, FeedIdentity, FeedSource } from './feed-source.ts';
 import { contentEtag, isNotModified, latestModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
@@ -34,7 +35,6 @@ export {
   commentsFeedPath,
   contentTypeOf,
   DEFAULT_FEED_LANGUAGE,
-  DEFAULT_FEED_SIZE,
   EMPTY_FEED_UPDATED,
   FEED_ALIASES,
   FEED_CONTENT_TYPES,

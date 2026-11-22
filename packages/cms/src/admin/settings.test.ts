@@ -69,6 +69,7 @@ describe('content/_data/site.json', () => {
       fediverseReplies: 'known',
       notifyServer: 'https://rpc.rsscloud.io',
       followingOpml: '',
+      feedSize: 20,
       feedUpdatePeriod: 'hourly',
       feedUpdateFrequency: 1,
       // What robots.txt says beyond the admin rule and the sitemap (TASK-148).

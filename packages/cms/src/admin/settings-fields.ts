@@ -398,6 +398,18 @@ const SETTING_ROWS: SettingRows = {
         : undefined,
   },
 
+  feed_size: {
+    field: 'feed_size',
+    submitted: (form) => Number(form.feed_size),
+    shown: String,
+    check: (form) => {
+      const size = Number(form.feed_size);
+      return !Number.isInteger(size) || size < 1
+        ? 'Feed size has to be a whole number of one or more.'
+        : undefined;
+    },
+  },
+
   feed_update_period: choice(
     'feed_update_period',
     'feed_update_period',

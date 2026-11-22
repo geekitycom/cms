@@ -579,3 +579,41 @@ describe('the feeds the site follows', () => {
     );
   });
 });
+
+describe('how many items a feed holds', () => {
+  it('shows twenty when the site has not said', async () => {
+    const cms = await box.site({ contentDir: await withPages() });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(html, /name="feed_size"[^>]*value="20"/);
+  });
+
+  it('writes feedSize to site.json and the feeds hold that many', async () => {
+    const contentDir = await withPosts(2);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await saveSettings(agent, 'reading', { feed_size: ' 1 ' });
+    assert.equal(response.status, 303);
+    assert.equal((await siteJson(contentDir))['feedSize'], 1);
+
+    const feed = await (await cms.app.request('/feed/')).text();
+    assert.equal(feed.match(/<item>/g)?.length, 1);
+
+    const back = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(back, /name="feed_size"[^>]*value="1"/);
+  });
+
+  it('refuses a size that is not a whole number of one or more', async () => {
+    const contentDir = await withPages();
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    for (const feed_size of ['0', '-3', '1.5', '']) {
+      const response = await saveSettings(agent, 'reading', { feed_size });
+      assert.equal(response.status, 400, feed_size);
+    }
+    assert.equal((await siteSettingsIn(contentDir)).feed_size, 20, 'nothing was written');
+  });
+});

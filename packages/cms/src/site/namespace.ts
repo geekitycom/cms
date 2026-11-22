@@ -43,7 +43,12 @@ import {
 import { isFontFamilyName } from '../theme/font-family.ts';
 import { isFileSync } from '../util/files.ts';
 import { isRecord } from '../util/guards.ts';
-import { DEFAULT_FEED_CADENCE, DEFAULT_NOTIFY_SERVER, UPDATE_PERIODS } from './feed-settings.ts';
+import {
+  DEFAULT_FEED_CADENCE,
+  DEFAULT_FEED_SIZE,
+  DEFAULT_NOTIFY_SERVER,
+  UPDATE_PERIODS,
+} from './feed-settings.ts';
 import { generateIndexNowKey, isIndexNowKey } from './indexnow-key.ts';
 import { menusOf } from './navigation.ts';
 import type { NavigationMenus } from './navigation.ts';
@@ -425,6 +430,12 @@ export const SITE = declareNamespace({
         value === '' || normalizeWebAddress(value) !== undefined
           ? undefined
           : 'A subscription list is an absolute http:// or https:// URL, or empty.',
+    },
+    feed_size: {
+      fileKey: 'feedSize',
+      type: wholeNumber(1, { coerced: true }),
+      default: DEFAULT_FEED_SIZE,
+      description: 'How many entries every feed holds, comments feeds included.',
     },
     feed_update_period: {
       fileKey: 'feedUpdatePeriod',

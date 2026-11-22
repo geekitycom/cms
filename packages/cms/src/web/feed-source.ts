@@ -1,5 +1,6 @@
 import {
   DEFAULT_FEED_CADENCE,
+  DEFAULT_FEED_SIZE,
   DEFAULT_NOTIFY_SERVER,
   isUpdatePeriod,
 } from '../site/feed-settings.ts';
@@ -252,9 +253,6 @@ export function notifyServerOf(site: SiteData): NotifyServer | undefined {
   if (configured === undefined) return notifyEndpoints(DEFAULT_NOTIFY_SERVER);
   return typeof configured === 'string' ? notifyEndpoints(configured) : undefined;
 }
-
-/** How many entries a feed carries when the site does not say. */
-export const DEFAULT_FEED_SIZE = 20;
 
 /** What the feeds name themselves as. */
 export const FEED_GENERATOR = 'Geekity CMS';

@@ -19,6 +19,9 @@ export function isUpdatePeriod(value: unknown): value is UpdatePeriod {
   return (UPDATE_PERIODS as readonly unknown[]).includes(value);
 }
 
+/** How many entries a feed carries when the site does not say. */
+export const DEFAULT_FEED_SIZE = 20;
+
 /** How often an RSS feed tells a reader to poll it: `frequency` times a `period`. */
 export interface FeedCadence {
   period: UpdatePeriod;
