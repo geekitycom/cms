@@ -44,8 +44,8 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@fedify/fedify": "^2.4.5",
-    "@fedify/vocab": "^2.4.5",
+    "@fedify/fedify": "^2.4.6",
+    "@fedify/vocab": "^2.4.6",
     "entities": "^9.0.0",
     "sax": "^1.6.1",
     "turndown": "^7.2.5"
@@ -54,12 +54,12 @@
     "@geekity/cms": "workspace:^"
   },
   "devDependencies": {
-    "@fedify/cli": "2.4.5",
+    "@fedify/cli": "2.4.6",
     "@geekity/cms": "workspace:*",
     "@geekity/plugin-llm": "workspace:*",
     "@geekity/plugin-post-summary": "workspace:*",
     "@geekity/plugin-tag-suggest": "workspace:*",
-    "@hono/node-server": "^2.1.8",
+    "@hono/node-server": "^2.1.11",
     "@types/node": "^26.6.6",
     "@types/sax": "^1.2.7",
     "esbuild": "^0.28.2",
