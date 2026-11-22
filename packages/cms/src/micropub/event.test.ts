@@ -364,6 +364,8 @@ describe('reading an event back (AC #2)', () => {
 
     const second = await site();
     const again = await created(await postJson(second.cms, second.token, answer));
+    // Each post's activitypub stamp is written once its delivery settles.
+    await Promise.all([first.cms.delivery.settled(), second.cms.delivery.settled()]);
     assert.equal(await fileOf(second.cms, again), await fileOf(first.cms, location));
   });
 });
