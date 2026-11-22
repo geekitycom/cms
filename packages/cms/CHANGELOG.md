@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.59.0](https://github.com/geekitycom/cms/compare/v0.58.0...v0.59.0) (2026-11-21)
+
+
+### Features
+
+* **cms:** carry source:markdown in the comments feeds and drop their item titles ([4b68601](https://github.com/geekitycom/cms/commit/4b6860129876ee4e8210a549528f2d3a08e981ef))
+
+
+### Bug Fixes
+
+* **cms:** lead feed markdown with the citation, review and photos ([b417990](https://github.com/geekitycom/cms/commit/b41799038f0d0931bd4e64bf782fd84d0c45a4de))
+
 ## [0.58.0](https://github.com/geekitycom/cms/compare/v0.57.0...v0.58.0) (2026-11-21)
 
 
