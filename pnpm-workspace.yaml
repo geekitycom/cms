@@ -8,3 +8,9 @@ packages:
 allowBuilds:
   '@parcel/watcher': false
   esbuild: true
+
+# @fedify/fedify pins @opentelemetry/sdk-metrics 2.7.1, which pins
+# @opentelemetry/core 2.7.1 (GHSA-8988-4f7v-96qf). Drop this once Fedify
+# depends on a patched sdk-metrics.
+overrides:
+  '@opentelemetry/core@2.7.1': '^2.8.0'

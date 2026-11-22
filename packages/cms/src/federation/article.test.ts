@@ -677,11 +677,13 @@ describe('photos as attachments (TASK-166 AC #4)', () => {
       '/2026/09/rule/',
     );
 
-    assert.deepEqual(object['attachment'], {
-      type: 'Image',
-      mediaType: 'image/png',
-      url: `${BASE_URL}/uploads/2026/09/rule.png`,
-    });
+    assert.deepEqual(object['attachment'], [
+      {
+        type: 'Image',
+        mediaType: 'image/png',
+        url: `${BASE_URL}/uploads/2026/09/rule.png`,
+      },
+    ]);
   });
 });
 
@@ -1955,12 +1957,14 @@ describe('a cited page in a note (TASK-262)', () => {
       '  length: 4096',
     ]);
 
-    assert.deepEqual(note['attachment'], {
-      type: 'Audio',
-      mediaType: 'audio/mpeg',
-      url: `${BASE_URL}/uploads/2026/10/clip.mp3`,
-      name: 'Liked No No No <GIF> & more',
-    });
+    assert.deepEqual(note['attachment'], [
+      {
+        type: 'Audio',
+        mediaType: 'audio/mpeg',
+        url: `${BASE_URL}/uploads/2026/10/clip.mp3`,
+        name: 'Liked No No No <GIF> & more',
+      },
+    ]);
   });
 });
 

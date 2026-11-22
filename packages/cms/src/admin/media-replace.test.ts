@@ -320,7 +320,7 @@ describe('sending a replaced picture to followers', () => {
       })
     ).json()) as Record<string, unknown>;
     assert.match(
-      String((object['attachment'] as Record<string, unknown>)['url']),
+      String((object['attachment'] as Record<string, unknown>[])[0]?.['url']),
       /\?v=\w{12}$/,
       'the object a peer fetches carries the versioned URL',
     );
