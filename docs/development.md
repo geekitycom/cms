@@ -158,8 +158,11 @@ its reason.
 
 Node 26 or newer and pnpm, for the reason
 [Requirements](getting-started.md#requirements) gives. Node 26 is also the
-development target. `.node-version` pins it, so fnm, nvm and similar tools
-pick it in this checkout. CI and the Docker image use the same version.
+development target. `.node-version` names the major version, 26, so fnm, nvm
+and similar tools pick the newest Node 26 you have in this checkout. CI and the
+Docker image also take the newest Node 26, so each release ships its security
+fixes. To hold Node back while a release is known to be broken, pin a full
+version in `.node-version` and in `NODE_IMAGE` in the `Dockerfile`.
 `packageManager` pins the pnpm version, so Corepack picks the right one. Node
 26 does not include Corepack, so install it from npm first:
 
