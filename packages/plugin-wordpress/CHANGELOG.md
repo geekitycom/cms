@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.15.0...plugin-wordpress-v0.15.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **deps:** update fedify to 2.4.6 and patch vulnerable transitive deps ([d41318e](https://github.com/geekitycom/cms/commit/d41318e67d4b37bef33a5afea509c51e9f0709bb))
+
 ## [0.15.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.14.1...plugin-wordpress-v0.15.0) (2026-11-21)
 
 

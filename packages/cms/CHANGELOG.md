@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.60.0](https://github.com/geekitycom/cms/compare/v0.59.0...v0.60.0) (2026-11-22)
+
+
+### Features
+
+* **cms:** set the feed size on the Reading settings page ([98dc405](https://github.com/geekitycom/cms/commit/98dc405bf5a0a447a8068775a1ffb699f799fd49))
+
+
+### Bug Fixes
+
+* **deps:** update fedify to 2.4.6 and patch vulnerable transitive deps ([d41318e](https://github.com/geekitycom/cms/commit/d41318e67d4b37bef33a5afea509c51e9f0709bb))
+
 ## [0.59.0](https://github.com/geekitycom/cms/compare/v0.58.0...v0.59.0) (2026-11-21)
 
 
