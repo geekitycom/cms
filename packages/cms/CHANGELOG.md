@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.1](https://github.com/geekitycom/cms/compare/v0.60.0...v0.60.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **cms:** serve the page to a client that names text/html beside activity+json ([36c91c3](https://github.com/geekitycom/cms/commit/36c91c30fffaf5a3e5f30161eb65ef75e32c456d))
+
 ## [0.60.0](https://github.com/geekitycom/cms/compare/v0.59.0...v0.60.0) (2026-11-22)
 
 
