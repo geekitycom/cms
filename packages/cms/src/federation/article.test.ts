@@ -1477,6 +1477,18 @@ describe('a post permalink asked for as ActivityStreams', () => {
     assert.match(extension.headers.get('content-type') ?? '', /application\/json/);
   });
 
+  it('serves the page to XRay, which IndieNews reads a submitted post with', async () => {
+    const instance = await sharedSite(HELLO);
+
+    const response = await get(
+      instance,
+      '/2026/09/hello/',
+      'application/mf2+json, application/activity+json, text/html, application/json, application/xml, text/xml',
+    );
+
+    assert.match(response.headers.get('content-type') ?? '', /text\/html/);
+  });
+
   it('does not answer for a draft, a page or a listing', async () => {
     const instance = await site({
       ...HELLO,

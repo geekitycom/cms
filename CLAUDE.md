@@ -72,13 +72,16 @@ else is rejected.
 
 ## Pull request titles
 
-Pull requests land as merge commits, so release-please reads every commit on
-the branch, and those commits carry the version bump and the changelog. A
-pull request title is plain prose that says what the branch delivers, for
-example `Micropub interop: indiebookclub, checkins and kept properties` or
-`M7 Comments: replies on the page`.
+A pull request title follows Conventional Commits, with the same types, scopes
+and subject rules as a commit message. It names the most significant change the
+branch delivers, so a branch with a `feat` and two `fix` commits gets a `feat`
+title, and a branch with a breaking change gets a `!` after the type or scope.
 
-Never start a pull request title with a Conventional Commits type. GitHub puts
-the title in the merge commit's body, and release-please reads any line there
-that parses as a Conventional Commit. A title such as `feat(cms): …` adds a
-second changelog entry for work its commits already list.
+```
+fix(cms): serve the page to a client that names text/html beside activity+json
+feat(cms): replies on the page
+```
+
+GitHub puts the title in the merge commit's body, and release-please reads any
+line there that parses as a Conventional Commit, so the title counts toward the
+version bump and the changelog just as the branch's commits do.
