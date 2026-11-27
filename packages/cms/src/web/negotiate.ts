@@ -123,7 +123,11 @@ export const ACTIVITY_STREAMS_MEDIA_TYPES: readonly string[] = [
  * one side and the document's own on the other. A tie between exact types goes
  * to the object: a peer that names `application/activity+json` and lists
  * `application/json` beside it at the same q, as activitypub-bot does, is asking
- * for the actor or post. Any other tie goes to the document, so
+ * for the actor or post. The one exception is `text/html` named at that q: a
+ * client that will read either, as XRay does when IndieNews fetches a submitted
+ * post, gets the page, since the page carries the microformats such a client
+ * reads and the object does not. Mastodon and other peers never name
+ * `text/html` at the object's q. Any other tie goes to the document, so
  * `Accept: application/*` still gets JSON and a browser's
  * `text/html,…,*\/*;q=0.8` still gets a page.
  */
@@ -143,10 +147,13 @@ export function prefersActivityStreams(accept: string | undefined): boolean {
   if (alternative === undefined || alternative.quality <= 0) return true;
 
   if (wanted.quality !== alternative.quality) return wanted.quality > alternative.quality;
-  return (
-    wanted.specificity > alternative.specificity ||
-    (wanted.specificity === alternative.specificity && wanted.specificity === EXACT)
-  );
+  if (wanted.specificity !== alternative.specificity) {
+    return wanted.specificity > alternative.specificity;
+  }
+  if (wanted.specificity !== EXACT) return false;
+
+  const html = bestRange(ranges, MEDIA_TYPES.html);
+  return !(html?.specificity === EXACT && html.quality === wanted.quality);
 }
 
 /** The best match among several media types, or `undefined` when none match. */

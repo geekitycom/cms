@@ -255,6 +255,22 @@ describe('prefersActivityStreams', () => {
     );
   });
 
+  it('is false when a request names text/html beside an ActivityStreams type at the same q', () => {
+    // XRay, which IndieNews fetches a submitted post with, sends this. It
+    // looks for the post's u-syndication link in the page, so it must get
+    // the page: the object has no such link.
+    assert.equal(
+      prefersActivityStreams(
+        'application/mf2+json, application/activity+json, text/html, application/json, application/xml, text/xml',
+      ),
+      false,
+    );
+    assert.equal(prefersActivityStreams('application/activity+json, text/html'), false);
+    assert.equal(prefersActivityStreams('text/html, application/activity+json'), false);
+    // HTML at a lower q is still the object's, as Mastodon's header shows above.
+    assert.equal(prefersActivityStreams('application/activity+json, text/html;q=0.9'), true);
+  });
+
   it('is false when the ActivityStreams types are refused outright', () => {
     assert.equal(prefersActivityStreams('application/activity+json;q=0'), false);
   });
